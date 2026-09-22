@@ -76,6 +76,17 @@ unsafe fn apply_layer_config(layer: *mut objc2::runtime::AnyObject, scale: f64) 
     }
 }
 
+#[cfg(target_os = "macos")]
+fn flush_metal_transaction() {
+    unsafe {
+        use objc2::{class, msg_send};
+        let _: () = msg_send![class!(CATransaction), flush];
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn flush_metal_transaction() {}
+
 #[cfg(not(target_os = "macos"))]
 fn configure_metal_layer(_window: &Window) {}
 
@@ -209,6 +220,9 @@ impl ViewerApp {
                 self.doc = Some(new_doc);
                 self.layout = new_layout;
                 self.render_frame();
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
             }
             Err(e) => {
                 eprintln!("[HotReload] Layout evaluation error in '{}':\n{e}", path.display());
@@ -321,6 +335,7 @@ impl ViewerApp {
 
         device_handle.queue.submit(Some(encoder.finish()));
         surface_texture.present();
+        flush_metal_transaction();
         self.frame_count += 1;
     }
 }
@@ -557,6 +572,18 @@ fn run_viewer_app(
             .and_then(|p| if p.as_os_str().is_empty() { None } else { Some(p) })
             .unwrap_or_else(|| std::path::Path::new("."));
 
+        let (tx, rx) = std::sync::mpsc::channel::<()>();
+
+        // Debounce worker thread: coalesces rapid bursts of filesystem notifications
+        // (atomic editor swapfiles, temp file renames, metadata updates) into a single reload event.
+        std::thread::spawn(move || {
+            while rx.recv().is_ok() {
+                std::thread::sleep(std::time::Duration::from_millis(40));
+                while rx.try_recv().is_ok() {}
+                let _ = proxy.send_event(ViewerUserEvent::FileModified);
+            }
+        });
+
         let mut watcher = RecommendedWatcher::new(
             move |res: Result<Event, notify::Error>| {
                 if let Ok(event) = res {
@@ -568,7 +595,7 @@ fn run_viewer_app(
                             true
                         };
                         if matches {
-                            let _ = proxy.send_event(ViewerUserEvent::FileModified);
+                            let _ = tx.send(());
                         }
                     }
                 }
