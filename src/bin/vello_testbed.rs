@@ -17,6 +17,38 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
+#[cfg(target_os = "macos")]
+fn configure_metal_layer(window: &Window) {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use std::ffi::CStr;
+
+    if let Ok(handle) = window.window_handle() {
+        if let RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() {
+            unsafe {
+                let view = appkit_handle.ns_view.as_ptr() as *mut AnyObject;
+                let layer: *mut AnyObject = msg_send![view, layer];
+                if !layer.is_null() {
+                    // 1. Set contentsGravity to @"topLeft" to prevent compositor from stretching stale frames
+                    let s: *const CStr = c"topLeft";
+                    let ns_string: *const AnyObject =
+                        msg_send![class!(NSString), stringWithUTF8String: s.cast::<std::ffi::c_char>()];
+                    let _: () = msg_send![layer, setContentsGravity: ns_string];
+
+                    // 2. Set contentsScale to backingScaleFactor for 1:1 Retina mapping
+                    let scale = window.scale_factor();
+                    let _: () = msg_send![layer, setContentsScale: scale];
+                    println!("[METAL] CAMetalLayer configured: contentsGravity=topLeft, contentsScale={scale:.2}");
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn configure_metal_layer(_window: &Window) {}
+
 /// Standalone minimal testbed isolating Winit + Vello rendering from any layout engine logic.
 struct VelloTestbedApp {
     render_cx: RenderContext,
@@ -71,6 +103,13 @@ impl VelloTestbedApp {
         let surface_texture = match surface.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(st)
             | wgpu::CurrentSurfaceTexture::Suboptimal(st) => st,
+            wgpu::CurrentSurfaceTexture::Occluded => {
+                // Window is not visible yet (e.g. initial mapping on macOS) or minimized.
+                // Request redraw so as soon as Cocoa marks it visible, the first frame presents.
+                println!("[SURFACE] get_current_texture -> Occluded. Scheduled redraw.");
+                window.request_redraw();
+                return;
+            }
             wgpu::CurrentSurfaceTexture::Outdated => {
                 println!("[SURFACE] get_current_texture -> Outdated. Reconfiguring surface...");
                 self.render_cx.configure_surface(surface);
@@ -443,13 +482,24 @@ impl ApplicationHandler for VelloTestbedApp {
             }
         };
 
+        // Configure CAMetalLayer: contentsGravity = @"topLeft" and contentsScale = scale_factor
+        configure_metal_layer(&window);
+
         self.renderer = Some(renderer);
         self.surface = Some(surface);
         self.window = Some(window);
 
-        println!("[LIFECYCLE] Rendering initial frame #0 synchronously in resumed()...");
+        println!("[LIFECYCLE] Attempting initial frame #0 in resumed()...");
         self.render_frame();
-        println!("[LIFECYCLE] Initial frame presented.");
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // Keep requesting redraw on startup until the window un-occludes and renders its first frame
+        if self.frame_count == 0 {
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+        }
     }
 
     fn window_event(
@@ -462,6 +512,13 @@ impl ApplicationHandler for VelloTestbedApp {
             WindowEvent::CloseRequested => {
                 println!("[LIFECYCLE] Window close requested. Exiting...");
                 event_loop.exit();
+            }
+
+            WindowEvent::Occluded(is_occluded) => {
+                println!("[EVENT] WindowEvent::Occluded({is_occluded})");
+                if !is_occluded {
+                    self.render_frame();
+                }
             }
 
             WindowEvent::Resized(size) => {
@@ -484,6 +541,7 @@ impl ApplicationHandler for VelloTestbedApp {
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 println!("[EVENT] ScaleFactorChanged -> {:.2}", scale_factor);
                 if let Some(window) = &self.window {
+                    configure_metal_layer(window);
                     let size = window.inner_size();
                     if size.width > 0 && size.height > 0 {
                         if let Some(surface) = &mut self.surface {
