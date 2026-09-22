@@ -527,3 +527,62 @@ fn test_formatted_parse_error_location() {
     assert!(formatted.contains("Parse error at line 3, column"));
 }
 
+#[test]
+fn test_parse_let_bindings() {
+    let input = r#"
+    let global_gap = 24;
+
+    \Component Card(padding: Number = 16) {
+      let inset: Number = padding * 2;
+      let mask = \Rect(width: 100, height: 50)
+      \Rect(x: mask.right + inset)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse document with let bindings");
+    assert_eq!(doc.items.len(), 2);
+
+    // Item 0: Top-level let
+    match &doc.items[0] {
+        Item::Let(l) => {
+            assert_eq!(l.name.as_str(), "global_gap");
+            match &l.value {
+                LetValue::Expr(Expr::Literal(Literal::Number(n, _))) => assert_eq!(*n, 24.0),
+                _ => panic!("Expected number literal for global_gap"),
+            }
+        }
+        _ => panic!("Expected Item::Let"),
+    }
+
+    // Item 1: Component Card
+    match &doc.items[1] {
+        Item::Component(c) => {
+            assert_eq!(c.name.as_str(), "Card");
+            assert_eq!(c.body.len(), 3);
+            match &c.body[0] {
+                ComponentBodyItem::Let(l) => {
+                    assert_eq!(l.name.as_str(), "inset");
+                    assert_eq!(l.type_annotation.as_ref().unwrap().name.as_str(), "Number");
+                }
+                _ => panic!("Expected ComponentBodyItem::Let"),
+            }
+            match &c.body[1] {
+                ComponentBodyItem::Let(l) => {
+                    assert_eq!(l.name.as_str(), "mask");
+                    match &l.value {
+                        LetValue::Node(n) => assert_eq!(n.name.as_str(), "Rect"),
+                        _ => panic!("Expected LetValue::Node for mask"),
+                    }
+                }
+                _ => panic!("Expected ComponentBodyItem::Let for mask"),
+            }
+            match &c.body[2] {
+                ComponentBodyItem::Node(n) => assert_eq!(n.name.as_str(), "Rect"),
+                _ => panic!("Expected ComponentBodyItem::Node"),
+            }
+        }
+        _ => panic!("Expected Item::Component"),
+    }
+}
+
+

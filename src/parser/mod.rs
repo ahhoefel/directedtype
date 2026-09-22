@@ -5,7 +5,7 @@ pub mod node;
 
 use crate::ast::{Document, Item};
 use crate::error::ParseError;
-use crate::parser::component::parse_component_def;
+use crate::parser::component::{parse_component_def, parse_let_binding};
 use crate::parser::cursor::ParserCursor;
 use crate::parser::node::parse_element_node;
 use crate::span::Span;
@@ -19,6 +19,10 @@ pub fn parse_document(source: &str) -> Result<Document, ParseError> {
 
     while let Some((tok, span)) = cursor.peek_token()?.cloned() {
         match tok {
+            Token::Let => {
+                let let_binding = parse_let_binding(&mut cursor)?;
+                items.push(Item::Let(let_binding));
+            }
             Token::Backslash => {
                 let next_tok = cursor.peek_nth(1)?.cloned();
                 match next_tok {
@@ -47,7 +51,7 @@ pub fn parse_document(source: &str) -> Result<Document, ParseError> {
             }
             other => {
                 return Err(ParseError::UnexpectedToken {
-                    expected: "top-level declaration starting with '\\'".to_string(),
+                    expected: "top-level declaration starting with '\\' or 'let'".to_string(),
                     found: other.to_string(),
                     span,
                 });

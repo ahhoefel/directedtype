@@ -31,6 +31,7 @@ pub struct Document {
 pub enum Item {
     Component(ComponentDef),
     Node(ElementNode),
+    Let(LetBinding),
 }
 
 impl Item {
@@ -38,6 +39,7 @@ impl Item {
         match self {
             Item::Component(c) => c.span,
             Item::Node(n) => n.span,
+            Item::Let(l) => l.span,
         }
     }
 }
@@ -55,6 +57,7 @@ pub struct ComponentDef {
 pub enum ComponentBodyItem {
     Node(ElementNode),
     Children(ChildrenDirective),
+    Let(LetBinding),
 }
 
 impl ComponentBodyItem {
@@ -62,6 +65,31 @@ impl ComponentBodyItem {
         match self {
             ComponentBodyItem::Node(n) => n.span,
             ComponentBodyItem::Children(c) => c.span,
+            ComponentBodyItem::Let(l) => l.span,
+        }
+    }
+}
+
+/// Local variable or element binding: `let name = expr;` or `let name = \Node(...);`
+#[derive(Debug, Clone, PartialEq)]
+pub struct LetBinding {
+    pub name: Ident,
+    pub type_annotation: Option<TypeRef>,
+    pub value: LetValue,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LetValue {
+    Expr(Expr),
+    Node(ElementNode),
+}
+
+impl LetValue {
+    pub fn span(&self) -> Span {
+        match self {
+            LetValue::Expr(e) => e.span(),
+            LetValue::Node(n) => n.span,
         }
     }
 }

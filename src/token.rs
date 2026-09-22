@@ -17,6 +17,9 @@ pub enum Token {
     #[token("Children")]
     Children,
 
+    #[token("let")]
+    Let,
+
     #[token("true")]
     True,
 
@@ -45,6 +48,12 @@ pub enum Token {
 
     #[token(".")]
     Dot,
+
+    #[token(";")]
+    Semicolon,
+
+    #[token("=")]
+    Eq,
 
     #[token("?")]
     Question,
@@ -135,6 +144,7 @@ impl fmt::Display for Token {
             Token::Backslash => write!(f, "\\"),
             Token::Component => write!(f, "Component"),
             Token::Children => write!(f, "Children"),
+            Token::Let => write!(f, "let"),
             Token::True => write!(f, "true"),
             Token::False => write!(f, "false"),
             Token::LParen => write!(f, "("),
@@ -144,6 +154,8 @@ impl fmt::Display for Token {
             Token::Colon => write!(f, ":"),
             Token::Comma => write!(f, ","),
             Token::Dot => write!(f, "."),
+            Token::Semicolon => write!(f, ";"),
+            Token::Eq => write!(f, "="),
             Token::Question => write!(f, "?"),
             Token::Plus => write!(f, "+"),
             Token::Minus => write!(f, "-"),

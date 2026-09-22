@@ -208,6 +208,25 @@ pub fn build_variable_graph_with_window(
         }
     }
 
+    // Validate that all referenced VarIds actually exist as defined variables in the graph
+    for (var_id, deps) in &graph.upstream {
+        for dep in deps {
+            if !graph.variables.contains_key(dep) {
+                let node_name = doc
+                    .get_node(dep.node)
+                    .map(|n| n.name.as_str())
+                    .unwrap_or("unknown");
+                return Err(CompileError::Custom {
+                    message: format!(
+                        "Node '{}' has no public port '{}'",
+                        node_name, dep.port
+                    ),
+                    span: graph.variables.get(var_id).map_or(Span::default(), |v| v.span),
+                });
+            }
+        }
+    }
+
     Ok(graph)
 }
 

@@ -815,5 +815,280 @@ fn test_precedence_3_tier_hierarchy() {
     assert_eq!(rects[2].rect.width, 300.0); // Tier 3 wins
 }
 
+#[test]
+fn test_lexical_scope_expression_let() {
+    let input = r#"
+    \Component Card(padding: Number: 16) {
+      let inset = padding * 2
+      \Rect(width: 400 - inset, height: 50)
+    }
+
+    \Card(padding: 20)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    // 400 - (20 * 2) = 360
+    assert_eq!(rect.rect.width, 360.0);
+}
+
+#[test]
+fn test_lexical_scope_node_let() {
+    let input = r#"
+    \Component DualBox {
+      let primary = \Rect(x: 10, y: 15, width: 100, height: 40)
+      \Rect(x: primary.right + 20, y: primary.top, width: 80, height: 40)
+    }
+
+    \DualBox()
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    // Primary: x: 10, y: 15, width: 100
+    assert_eq!(rects[0].rect.x, 10.0);
+    assert_eq!(rects[0].rect.y, 15.0);
+    assert_eq!(rects[0].rect.width, 100.0);
+
+    // Secondary: x: primary.right (10 + 100) + 20 = 130, y: primary.top (15)
+    assert_eq!(rects[1].rect.x, 130.0);
+    assert_eq!(rects[1].rect.y, 15.0);
+    assert_eq!(rects[1].rect.width, 80.0);
+}
+
+#[test]
+fn test_lexical_scope_shadowing() {
+    let input = r#"
+    \Component ShadowBox(x: Number: 10) {
+      let x = self.x + 40
+      \Rect(x: x, y: parent.x, width: 100, height: 40)
+    }
+
+    \ShadowBox()
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    // `x: x` resolves to shadowed `let x = 10 + 40 = 50`
+    assert_eq!(rect.rect.x, 50.0);
+    // `y: parent.x` resolves to component port `ShadowBox.x = 10`
+    assert_eq!(rect.rect.y, 10.0);
+}
+
+#[test]
+fn test_lexical_scope_in_children_directive() {
+    let input = r#"
+    \Component FlowWithMargin {
+      let margin = 35
+      \Children {
+        x: parent.left + margin
+      }
+    }
+
+    \FlowWithMargin {
+      \Rect(width: 50, height: 50)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    // parent.left (0) + margin (35) = 35
+    assert_eq!(rect.rect.x, 35.0);
+}
+
+#[test]
+fn test_top_level_let_binding() {
+    let input = r#"
+    let global_pad = 45;
+
+    \Rect(x: global_pad, y: global_pad, width: 100, height: 100)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert_eq!(rect.rect.x, 45.0);
+    assert_eq!(rect.rect.y, 45.0);
+}
+
+#[test]
+fn test_top_level_node_let_binding() {
+    let input = r#"
+    let sidebar = \Rect(x: 10, y: 10, width: 200, height: 500)
+    \Rect(x: sidebar.right + 20, y: sidebar.top, width: 600, height: 500)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    assert_eq!(rects[0].rect.x, 10.0);
+    assert_eq!(rects[0].rect.width, 200.0);
+
+    // sidebar.right (10 + 200) + 20 = 230
+    assert_eq!(rects[1].rect.x, 230.0);
+    assert_eq!(rects[1].rect.y, 10.0);
+}
+
+#[test]
+fn test_visibility_child_cannot_access_parent_private_local_via_parent_dot() {
+    let input = r#"
+    \Component CustomCard {
+      let card_padding = 16
+      \Children {}
+    }
+
+    \CustomCard {
+      \Rect(x: parent.card_padding)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let result = directedtype::evaluate_document(&doc);
+    assert!(result.is_err(), "Expected error when child accesses parent's private local via parent.p");
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("has no public port 'card_padding'"),
+        "Unexpected error message: {}",
+        err_msg
+    );
+}
+
+#[test]
+fn test_visibility_child_cannot_access_parent_private_local_via_bare_ident() {
+    let input = r#"
+    \Component CustomCard {
+      let card_padding = 16
+      \Children {}
+    }
+
+    \CustomCard {
+      \Rect(x: card_padding)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let result = directedtype::evaluate_document(&doc);
+    assert!(result.is_err(), "Expected error when child accesses parent's private local as bare ident");
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("card_padding"),
+        "Unexpected error message: {}",
+        err_msg
+    );
+}
+
+#[test]
+fn test_visibility_parent_explicit_push_via_children_directive() {
+    let input = r#"
+    \Component CustomCard {
+      let card_padding = 16
+      \Children {
+        x: parent.left + card_padding
+      }
+    }
+
+    \CustomCard {
+      \Rect(width: 100, height: 50)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    // parent.left (0) + card_padding (16) = 16
+    assert_eq!(rect.rect.x, 16.0);
+}
+
+#[test]
+fn test_visibility_child_retains_caller_lexical_scope() {
+    let input = r#"
+    \Component CustomCard {
+      let internal_padding = 10
+      \Children {
+        x: parent.left + internal_padding
+      }
+    }
+
+    let caller_width = 180;
+
+    \CustomCard {
+      \Rect(width: caller_width, height: 50)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    // ambient x from parent: 10
+    assert_eq!(rect.rect.x, 10.0);
+    // caller width: 180
+    assert_eq!(rect.rect.width, 180.0);
+}
+
+#[test]
+fn test_visibility_parent_private_local_does_not_shadow_caller_local() {
+    let input = r#"
+    \Component CustomCard {
+      let my_size = 999
+      \Children {
+        x: parent.left
+      }
+    }
+
+    let my_size = 42;
+
+    \CustomCard {
+      \Rect(width: my_size, height: 50)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    // width should be 42 (from caller's scope), NOT 999 (from parent's private scope)
+    assert_eq!(rect.rect.width, 42.0);
+}
+
+#[test]
+fn test_visibility_child_explicit_parent_port_bypasses_internal_shadow() {
+    let input = r#"
+    \Component CustomCard(clip_offset: Number = 5) {
+      let clip_offset = 100 // internal shadow
+      \Children {
+        x: parent.left
+      }
+    }
+
+    \CustomCard(clip_offset: 25) {
+      // Child explicitly wires to parent's public port, bypassing internal shadow
+      \Rect(width: parent.clip_offset, height: 50)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    // rect.width = parent.clip_offset (which was passed as 25 to CustomCard), NOT 100
+    assert_eq!(rect.rect.width, 25.0);
+}
+
+
+
 
 
