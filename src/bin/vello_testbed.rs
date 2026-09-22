@@ -18,36 +18,70 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 #[cfg(target_os = "macos")]
-fn configure_metal_layer(window: &Window) {
+fn configure_metal_layer(window: &Window, gravity_top_left: bool, presents_with_tx: bool) {
     use objc2::runtime::AnyObject;
-    use objc2::{class, msg_send};
+    use objc2::msg_send;
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    use std::ffi::CStr;
 
     if let Ok(handle) = window.window_handle() {
         if let RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() {
             unsafe {
                 let view = appkit_handle.ns_view.as_ptr() as *mut AnyObject;
-                let layer: *mut AnyObject = msg_send![view, layer];
-                if !layer.is_null() {
-                    // 1. Set contentsGravity to @"topLeft" to prevent compositor from stretching stale frames
-                    let s: *const CStr = c"topLeft";
-                    let ns_string: *const AnyObject =
-                        msg_send![class!(NSString), stringWithUTF8String: s.cast::<std::ffi::c_char>()];
-                    let _: () = msg_send![layer, setContentsGravity: ns_string];
 
-                    // 2. Set contentsScale to backingScaleFactor for 1:1 Retina mapping
+                // 1. Configure NSView:
+                // NSViewLayerContentsRedrawDuringViewResize = 2
+                // NSViewLayerContentsPlacementTopLeft = 11, NSViewLayerContentsPlacementScaleAxesIndependently = 0
+                let redraw_policy = 2isize;
+                let placement = if gravity_top_left { 11isize } else { 0isize };
+                let _: () = msg_send![view, setLayerContentsRedrawPolicy: redraw_policy];
+                let _: () = msg_send![view, setLayerContentsPlacement: placement];
+
+                let root_layer: *mut AnyObject = msg_send![view, layer];
+                if !root_layer.is_null() {
                     let scale = window.scale_factor();
-                    let _: () = msg_send![layer, setContentsScale: scale];
-                    println!("[METAL] CAMetalLayer configured: contentsGravity=topLeft, contentsScale={scale:.2}");
+                    apply_layer_config(root_layer, scale, gravity_top_left, presents_with_tx);
                 }
             }
         }
     }
 }
 
+#[cfg(target_os = "macos")]
+unsafe fn apply_layer_config(
+    layer: *mut objc2::runtime::AnyObject,
+    scale: f64,
+    gravity_top_left: bool,
+    presents_with_tx: bool,
+) {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    use std::ffi::CStr;
+
+    let s: *const CStr = if gravity_top_left { c"topLeft" } else { c"resize" };
+    let ns_gravity: *const AnyObject =
+        msg_send![class!(NSString), stringWithUTF8String: s.cast::<std::ffi::c_char>()];
+
+    let _: () = msg_send![layer, setContentsGravity: ns_gravity];
+    let _: () = msg_send![layer, setContentsScale: scale];
+
+
+    let pwt_sel = objc2::sel!(setPresentsWithTransaction:);
+    if msg_send![layer, respondsToSelector: pwt_sel] {
+        let _: () = msg_send![layer, setPresentsWithTransaction: presents_with_tx];
+    }
+
+    let sublayers: *mut AnyObject = msg_send![layer, sublayers];
+    if !sublayers.is_null() {
+        let count: usize = msg_send![sublayers, count];
+        for i in 0..count {
+            let sublayer: *mut AnyObject = msg_send![sublayers, objectAtIndex: i];
+            apply_layer_config(sublayer, scale, gravity_top_left, presents_with_tx);
+        }
+    }
+}
+
 #[cfg(not(target_os = "macos"))]
-fn configure_metal_layer(_window: &Window) {}
+fn configure_metal_layer(_window: &Window, _gravity_top_left: bool, _presents_with_tx: bool) {}
 
 /// Standalone minimal testbed isolating Winit + Vello rendering from any layout engine logic.
 struct VelloTestbedApp {
@@ -58,9 +92,12 @@ struct VelloTestbedApp {
     font_cx: FontContext,
     layout_cx: LayoutContext<()>,
 
-    // Testbed options
+    // Testbed options & toggles
     apply_dpi_scaling: bool,
     sync_resize_render: bool,
+    presents_with_tx: bool,
+    contents_gravity_top_left: bool,
+    present_mode: wgpu::PresentMode,
     frame_count: u64,
     start_time: Instant,
 }
@@ -76,6 +113,9 @@ impl VelloTestbedApp {
             layout_cx: LayoutContext::new(),
             apply_dpi_scaling: true,
             sync_resize_render: true,
+            presents_with_tx: true,
+            contents_gravity_top_left: true,
+            present_mode: wgpu::PresentMode::AutoNoVsync,
             frame_count: 0,
             start_time: Instant::now(),
         }
@@ -151,7 +191,7 @@ impl VelloTestbedApp {
         let mut scene = Scene::new();
 
         // Background card
-        let card = RoundedRect::new(30.0, 30.0, 750.0, 520.0, 16.0);
+        let card = RoundedRect::new(30.0, 30.0, 780.0, 545.0, 16.0);
         scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
@@ -241,7 +281,7 @@ impl VelloTestbedApp {
             "Vello Standalone Isolation Testbed",
             60.0,
             200.0,
-            28.0,
+            26.0,
             700.0,
             Color::from_rgba8(15, 23, 42, 255),
         );
@@ -254,22 +294,22 @@ impl VelloTestbedApp {
         draw_text(
             &stats_line_1,
             60.0,
-            245.0,
-            16.0,
+            238.0,
+            15.0,
             500.0,
             Color::from_rgba8(51, 65, 85, 255),
         );
 
         let stats_line_2 = format!(
-            "DPI Scaling Mode: {} (effective scale: {:.2}) — [Press 'S' to toggle]",
+            "[S] Retina DPI Scaling: {} (scale: {:.2})",
             if self.apply_dpi_scaling { "ACTIVE" } else { "DISABLED (1:1 px)" },
             effective_scale
         );
         draw_text(
             &stats_line_2,
             60.0,
-            275.0,
-            16.0,
+            263.0,
+            14.0,
             600.0,
             if self.apply_dpi_scaling {
                 Color::from_rgba8(2, 132, 199, 255)
@@ -279,7 +319,7 @@ impl VelloTestbedApp {
         );
 
         let stats_line_3 = format!(
-            "Live Resize Mode: {} — [Press 'M' to toggle]",
+            "[M] Live Resize Presentation: {}",
             if self.sync_resize_render {
                 "SYNCHRONOUS PRESENTATION"
             } else {
@@ -289,8 +329,8 @@ impl VelloTestbedApp {
         draw_text(
             &stats_line_3,
             60.0,
-            305.0,
-            16.0,
+            288.0,
+            14.0,
             600.0,
             if self.sync_resize_render {
                 Color::from_rgba8(22, 163, 74, 255)
@@ -299,31 +339,95 @@ impl VelloTestbedApp {
             },
         );
 
+        let stats_line_4 = format!(
+            "[T] presentsWithTransaction: {}",
+            if self.presents_with_tx {
+                "ENABLED (atomic CoreAnimation transaction)"
+            } else {
+                "DISABLED (uncoordinated GPU presentation)"
+            }
+        );
+        draw_text(
+            &stats_line_4,
+            60.0,
+            313.0,
+            14.0,
+            600.0,
+            if self.presents_with_tx {
+                Color::from_rgba8(22, 163, 74, 255)
+            } else {
+                Color::from_rgba8(220, 38, 38, 255)
+            },
+        );
+
+        let stats_line_5 = format!(
+            "[G] contentsGravity: {}",
+            if self.contents_gravity_top_left {
+                "TOP-LEFT (1:1 pixel pinning, no stretch)"
+            } else {
+                "RESIZE (compositor scales stale frames)"
+            }
+        );
+        draw_text(
+            &stats_line_5,
+            60.0,
+            338.0,
+            14.0,
+            600.0,
+            if self.contents_gravity_top_left {
+                Color::from_rgba8(22, 163, 74, 255)
+            } else {
+                Color::from_rgba8(220, 38, 38, 255)
+            },
+        );
+
+        let stats_line_6 = format!(
+            "[P] Swapchain PresentMode: {:?} ({})",
+            self.present_mode,
+            if matches!(self.present_mode, wgpu::PresentMode::AutoNoVsync | wgpu::PresentMode::Immediate) {
+                "No Vsync lag / Immediate presentation"
+            } else {
+                "Vsync FIFO queue (may buffer stale frames)"
+            }
+        );
+        draw_text(
+            &stats_line_6,
+            60.0,
+            363.0,
+            14.0,
+            600.0,
+            if matches!(self.present_mode, wgpu::PresentMode::AutoNoVsync | wgpu::PresentMode::Immediate) {
+                Color::from_rgba8(22, 163, 74, 255)
+            } else {
+                Color::from_rgba8(217, 119, 6, 255)
+            },
+        );
+
         // Benchmark font sizes
         draw_text(
-            "Size 36px Heading Sample",
+            "Size 28px Heading Sample",
             60.0,
-            350.0,
-            36.0,
+            400.0,
+            28.0,
             700.0,
             Color::from_rgba8(15, 23, 42, 255),
         );
 
         draw_text(
-            "Size 18px Subheading Sample: Directed acyclic graphs eliminate CSS layout thrashing.",
+            "Directed acyclic graphs eliminate CSS layout thrashing and DOM reflow.",
             60.0,
-            405.0,
-            18.0,
+            440.0,
+            16.0,
             400.0,
             Color::from_rgba8(71, 85, 105, 255),
         );
 
         draw_text(
-            "Size 14px Body Sample: Controls -> [S] Toggle DPI Scaling | [M] Toggle Sync Resize | [Q/Esc] Quit",
+            "Keys: [T] Transaction Sync | [G] Gravity | [P] PresentMode | [M] Sync/Async | [S] DPI | [Q] Quit",
             60.0,
-            445.0,
-            14.0,
-            400.0,
+            475.0,
+            13.0,
+            500.0,
             Color::from_rgba8(100, 116, 139, 255),
         );
 
@@ -335,7 +439,7 @@ impl VelloTestbedApp {
         draw_text(
             &footer,
             60.0,
-            485.0,
+            505.0,
             13.0,
             400.0,
             Color::from_rgba8(148, 163, 184, 255),
@@ -478,13 +582,13 @@ impl ApplicationHandler for VelloTestbedApp {
             (600.0 * scale_factor).round() as u32
         }.max(1);
 
-        println!("[LIFECYCLE] Creating surface at physical {}x{}...", width, height);
+        println!("[LIFECYCLE] Creating surface at physical {}x{} with present_mode={:?}...", width, height, self.present_mode);
 
         let surface = match pollster::block_on(self.render_cx.create_surface(
             window.clone(),
             width,
             height,
-            wgpu::PresentMode::AutoVsync,
+            self.present_mode,
         )) {
             Ok(s) => s,
             Err(e) => {
@@ -514,8 +618,8 @@ impl ApplicationHandler for VelloTestbedApp {
             }
         };
 
-        // Configure CAMetalLayer: contentsGravity = @"topLeft" and contentsScale = scale_factor
-        configure_metal_layer(&window);
+        // Configure CAMetalLayer hierarchy: contentsGravity, contentsScale, presentsWithTransaction
+        configure_metal_layer(&window, self.contents_gravity_top_left, self.presents_with_tx);
 
         self.renderer = Some(renderer);
         self.surface = Some(surface);
@@ -573,7 +677,7 @@ impl ApplicationHandler for VelloTestbedApp {
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 println!("[EVENT] ScaleFactorChanged -> {:.2}", scale_factor);
                 if let Some(window) = &self.window {
-                    configure_metal_layer(window);
+                    configure_metal_layer(window, self.contents_gravity_top_left, self.presents_with_tx);
                     let size = window.inner_size();
                     if size.width > 0 && size.height > 0 {
                         if let Some(surface) = &mut self.surface {
@@ -600,18 +704,42 @@ impl ApplicationHandler for VelloTestbedApp {
             } => match logical_key {
                 Key::Character(c) if c.eq_ignore_ascii_case("s") => {
                     self.apply_dpi_scaling = !self.apply_dpi_scaling;
-                    println!(
-                        "[KEY] Toggled apply_dpi_scaling -> {}",
-                        self.apply_dpi_scaling
-                    );
+                    println!("[KEY] Toggled apply_dpi_scaling -> {}", self.apply_dpi_scaling);
                     self.render_frame();
                 }
                 Key::Character(c) if c.eq_ignore_ascii_case("m") => {
                     self.sync_resize_render = !self.sync_resize_render;
-                    println!(
-                        "[KEY] Toggled sync_resize_render -> {}",
-                        self.sync_resize_render
-                    );
+                    println!("[KEY] Toggled sync_resize_render -> {}", self.sync_resize_render);
+                    self.render_frame();
+                }
+                Key::Character(c) if c.eq_ignore_ascii_case("t") => {
+                    self.presents_with_tx = !self.presents_with_tx;
+                    println!("[KEY] Toggled presents_with_tx -> {}", self.presents_with_tx);
+                    if let Some(window) = &self.window {
+                        configure_metal_layer(window, self.contents_gravity_top_left, self.presents_with_tx);
+                    }
+                    self.render_frame();
+                }
+                Key::Character(c) if c.eq_ignore_ascii_case("g") => {
+                    self.contents_gravity_top_left = !self.contents_gravity_top_left;
+                    println!("[KEY] Toggled contents_gravity_top_left -> {}", self.contents_gravity_top_left);
+                    if let Some(window) = &self.window {
+                        configure_metal_layer(window, self.contents_gravity_top_left, self.presents_with_tx);
+                    }
+                    self.render_frame();
+                }
+                Key::Character(c) if c.eq_ignore_ascii_case("p") => {
+                    self.present_mode = match self.present_mode {
+                        wgpu::PresentMode::AutoNoVsync => wgpu::PresentMode::AutoVsync,
+                        _ => wgpu::PresentMode::AutoNoVsync,
+                    };
+                    println!("[KEY] Toggled present_mode -> {:?}", self.present_mode);
+                    if let Some(surface) = &mut self.surface {
+                        self.render_cx.set_present_mode(surface, self.present_mode);
+                        if let Some(window) = &self.window {
+                            configure_metal_layer(window, self.contents_gravity_top_left, self.presents_with_tx);
+                        }
+                    }
                     self.render_frame();
                 }
                 Key::Character(c) if c.eq_ignore_ascii_case("q") => {
@@ -632,9 +760,12 @@ impl ApplicationHandler for VelloTestbedApp {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== DirectedType: Vello Minimal Isolation Testbed ===");
-    println!("Interactive Controls:");
+    println!("Interactive Diagnostic Controls:");
+    println!("  [T] Toggle presentsWithTransaction (Atomic CATransaction sync)");
+    println!("  [G] Toggle contentsGravity (TopLeft vs Resize)");
+    println!("  [P] Toggle PresentMode (AutoNoVsync/Immediate vs AutoVsync/Fifo)");
+    println!("  [M] Toggle Live Resize Render (Synchronous vs Deferred)");
     println!("  [S] Toggle Retina/DPI scaling (1.0 vs scale_factor)");
-    println!("  [M] Toggle Sync Resize Render vs Deferred Redraw");
     println!("  [Q] or [Escape] Exit");
     println!("=====================================================");
 

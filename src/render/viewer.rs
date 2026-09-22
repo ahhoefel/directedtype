@@ -8,12 +8,71 @@ use vello::wgpu;
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::WindowEvent;
+use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 use crate::compiler::layout::ResolvedLayout;
 use crate::render::scene::{build_scene, SceneOptions};
+
+#[cfg(target_os = "macos")]
+fn configure_metal_layer(window: &Window) {
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    if let Ok(handle) = window.window_handle() {
+        if let RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() {
+            unsafe {
+                let view = appkit_handle.ns_view.as_ptr() as *mut AnyObject;
+
+                // 1. Configure NSView:
+                // NSViewLayerContentsRedrawDuringViewResize = 2
+                // NSViewLayerContentsPlacementTopLeft = 11
+                let _: () = msg_send![view, setLayerContentsRedrawPolicy: 2isize];
+                let _: () = msg_send![view, setLayerContentsPlacement: 11isize];
+
+                let root_layer: *mut AnyObject = msg_send![view, layer];
+                if !root_layer.is_null() {
+                    let scale = window.scale_factor();
+                    apply_layer_config(root_layer, scale);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn apply_layer_config(layer: *mut objc2::runtime::AnyObject, scale: f64) {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    use std::ffi::CStr;
+
+    let s: *const CStr = c"topLeft";
+    let ns_gravity: *const AnyObject =
+        msg_send![class!(NSString), stringWithUTF8String: s.cast::<std::ffi::c_char>()];
+
+    let _: () = msg_send![layer, setContentsGravity: ns_gravity];
+    let _: () = msg_send![layer, setContentsScale: scale];
+
+    let pwt_sel = objc2::sel!(setPresentsWithTransaction:);
+    if msg_send![layer, respondsToSelector: pwt_sel] {
+        let _: () = msg_send![layer, setPresentsWithTransaction: true];
+    }
+
+    let sublayers: *mut AnyObject = msg_send![layer, sublayers];
+    if !sublayers.is_null() {
+        let count: usize = msg_send![sublayers, count];
+        for i in 0..count {
+            let sublayer: *mut AnyObject = msg_send![sublayers, objectAtIndex: i];
+            apply_layer_config(sublayer, scale);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn configure_metal_layer(_window: &Window) {}
 
 /// Configuration options for the interactive viewer.
 #[derive(Debug, Clone)]
@@ -48,6 +107,7 @@ pub struct ViewerApp {
     renderer: Option<Renderer>,
     font_cx: FontContext,
     layout_cx: LayoutContext<()>,
+    frame_count: u64,
 }
 
 impl ViewerApp {
@@ -61,6 +121,7 @@ impl ViewerApp {
             renderer: None,
             font_cx: FontContext::new(),
             layout_cx: LayoutContext::new(),
+            frame_count: 0,
         }
     }
 
@@ -81,10 +142,15 @@ impl ViewerApp {
             return;
         }
 
-        // 1. Acquire current surface texture first, handling Outdated gracefully
+        // 1. Acquire current surface texture first, handling Occluded and Outdated gracefully
         let surface_texture = match surface.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(st)
             | wgpu::CurrentSurfaceTexture::Suboptimal(st) => st,
+            wgpu::CurrentSurfaceTexture::Occluded => {
+                // Window is occluded on macOS startup; schedule redraw to present as soon as Cocoa maps it
+                window.request_redraw();
+                return;
+            }
             wgpu::CurrentSurfaceTexture::Outdated => {
                 self.render_cx.configure_surface(surface);
                 match surface.surface.get_current_texture() {
@@ -164,6 +230,7 @@ impl ViewerApp {
 
         device_handle.queue.submit(Some(encoder.finish()));
         surface_texture.present();
+        self.frame_count += 1;
     }
 }
 
@@ -208,7 +275,7 @@ impl ApplicationHandler for ViewerApp {
             window.clone(),
             width,
             height,
-            wgpu::PresentMode::AutoVsync,
+            wgpu::PresentMode::AutoNoVsync,
         )) {
             Ok(s) => s,
             Err(e) => {
@@ -236,13 +303,24 @@ impl ApplicationHandler for ViewerApp {
             }
         };
 
+        // Configure CAMetalLayer: presentsWithTransaction = true, contentsGravity = topLeft, contentsScale
+        configure_metal_layer(&window);
+
         self.renderer = Some(renderer);
         self.surface = Some(surface);
         self.window = Some(window);
 
-        // Render the very first frame immediately!
-        // This ensures the window is painted on its very first display pass (no initial black screen).
+        // Attempt initial frame
         self.render_frame();
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // Keep requesting redraw on startup until window un-occludes and renders initial frame
+        if self.frame_count == 0 {
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+        }
     }
 
     fn window_event(
@@ -254,6 +332,11 @@ impl ApplicationHandler for ViewerApp {
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
+            }
+            WindowEvent::Occluded(is_occluded) => {
+                if !is_occluded {
+                    self.render_frame();
+                }
             }
             WindowEvent::Resized(size) => {
                 if size.width > 0 && size.height > 0 {
@@ -268,6 +351,7 @@ impl ApplicationHandler for ViewerApp {
             }
             WindowEvent::ScaleFactorChanged { .. } => {
                 if let Some(window) = &self.window {
+                    configure_metal_layer(window);
                     let size = window.inner_size();
                     if size.width > 0 && size.height > 0 {
                         if let Some(surface) = &mut self.surface {
@@ -281,6 +365,23 @@ impl ApplicationHandler for ViewerApp {
             WindowEvent::RedrawRequested => {
                 self.render_frame();
             }
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        logical_key,
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                ..
+            } => match logical_key {
+                Key::Character(c) if c.eq_ignore_ascii_case("q") => {
+                    event_loop.exit();
+                }
+                Key::Named(NamedKey::Escape) => {
+                    event_loop.exit();
+                }
+                _ => {}
+            },
             _ => {}
         }
     }

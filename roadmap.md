@@ -1,0 +1,5 @@
+* IOSurface (IOSurfaceRef + CALayer) — Used by Chrome, Safari, and Electron
+How it works: Instead of using CAMetalLayer's swapchain, you allocate an IOSurface (a kernel-managed shared memory buffer). You wrap it in a Metal texture (device.newTextureWithDescriptor:iosurface:plane:), render into it, and then set layer.contents = (__bridge id)myIOSurface.
+Why browsers use it: Web browsers run a separate GPU process. IOSurface allows zero-copy cross-process memory sharing—the GPU process renders into the surface and passes the 32-bit IOSurfaceID to the browser UI process, which assigns it to the layer.
+Resize behavior: Gives explicit control over exactly which surface is attached inside an explicit [CATransaction begin] / [CATransaction commit].
+Downside: Bypasses wgpu’s built-in swapchain abstractions and requires manual Core Animation / Core Video C API plumbing and triple-buffering.
