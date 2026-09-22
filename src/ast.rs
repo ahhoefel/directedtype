@@ -178,6 +178,7 @@ pub enum Expr {
     Binary(BinaryExpr),
     Unary(UnaryExpr),
     Paren(Box<Expr>, Span),
+    Node(Box<ElementNode>),
 }
 
 impl Expr {
@@ -191,6 +192,7 @@ impl Expr {
             Expr::Binary(b) => b.span,
             Expr::Unary(u) => u.span,
             Expr::Paren(_, span) => *span,
+            Expr::Node(n) => n.span,
         }
     }
 }

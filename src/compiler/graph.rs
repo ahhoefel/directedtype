@@ -144,6 +144,11 @@ pub fn build_variable_graph_with_window(
         Expr::Literal(Literal::Number(window_height, window_span)),
         window_span,
     );
+    graph.add_variable(
+        VarId::new(NodeId::WINDOW, "clip"),
+        Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), window_span)),
+        window_span,
+    );
 
     for node in &doc.nodes {
         let is_root = doc.roots.contains(&node.id) || node.parent.is_none_or(|p| p.is_window());
@@ -269,6 +274,6 @@ fn collect_dependencies(expr: &Expr, out: &mut Vec<VarId>) {
         Expr::Paren(p, _) => {
             collect_dependencies(p, out);
         }
-        Expr::Ident(_) | Expr::Literal(_) => {}
+        Expr::Ident(_) | Expr::Literal(_) | Expr::Node(_) => {}
     }
 }

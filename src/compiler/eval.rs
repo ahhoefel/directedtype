@@ -37,27 +37,38 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         Expr::Ident(id) => match id.as_str() {
             "true" => Ok(Value::Bool(true)),
             "false" => Ok(Value::Bool(false)),
-            other => Err(CompileError::Custom {
-                message: format!("Unresolved identifier in expression: '{}'", other),
-                span: id.span,
-            }),
+            other => {
+                if let Some(node_id) = NodeId::from_canonical_name(other) {
+                    return Ok(Value::Node(node_id));
+                }
+                Err(CompileError::Custom {
+                    message: format!("Unresolved identifier in expression: '{}'", other),
+                    span: id.span,
+                })
+            }
         },
 
         Expr::MemberAccess(m) => {
-            if let Expr::Ident(target_id) = m.target.as_ref() {
-                if let Some(node_id) = NodeId::from_canonical_name(target_id.as_str()) {
-                    let var = VarId::new(node_id, m.member.as_str());
-                    if let Some(val) = env.get(&var) {
-                        return Ok(val.clone());
-                    } else {
-                        return Err(CompileError::Custom {
-                            message: format!(
-                                "Variable '{}' evaluated before being set in environment",
-                                var
-                            ),
-                            span: m.span,
-                        });
-                    }
+            let target_node_id = match m.target.as_ref() {
+                Expr::Ident(target_id) => NodeId::from_canonical_name(target_id.as_str()),
+                other => match eval_expr(other, env)? {
+                    Value::Node(id) => Some(id),
+                    _ => None,
+                },
+            };
+
+            if let Some(node_id) = target_node_id {
+                let var = VarId::new(node_id, m.member.as_str());
+                if let Some(val) = env.get(&var) {
+                    return Ok(val.clone());
+                } else {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Variable '{}' evaluated before being set in environment",
+                            var
+                        ),
+                        span: m.span,
+                    });
                 }
             }
             Err(CompileError::Custom {
@@ -225,5 +236,9 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         }
 
         Expr::Paren(inner, _) => eval_expr(inner, env),
+        Expr::Node(n) => Err(CompileError::Custom {
+            message: format!("Unexpanded node in expression: '{}'", n.name.as_str()),
+            span: n.span,
+        }),
     }
 }

@@ -47,9 +47,16 @@ pub struct ResolvedNode {
     pub name: String,
     pub rect: Rect,
     pub z: f64,
+    pub clip: Option<NodeId>,
     pub text_content: Option<String>,
     pub properties: HashMap<String, Value>,
     pub span: Span,
+}
+
+impl ResolvedNode {
+    pub fn is_paint_primitive(&self) -> bool {
+        self.name == "Rect" || self.text_content.is_some()
+    }
 }
 
 /// The final computed layout produced by the DirectedType graph compiler.
@@ -114,11 +121,17 @@ pub fn resolve_layout(
             }
         }
 
+        let clip = values
+            .get(&VarId::new(node.id, "clip"))
+            .and_then(|v| v.as_node())
+            .filter(|id| !id.is_window());
+
         resolved_nodes.push(ResolvedNode {
             id: node.id,
             name: node.name.clone(),
             rect: Rect::new(x, y, width, height),
             z,
+            clip,
             text_content: node.text_content.clone(),
             properties,
             span: node.span,

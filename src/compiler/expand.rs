@@ -42,6 +42,7 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
         "width".to_string(),
         "height".to_string(),
         "z".to_string(),
+        "clip".to_string(),
     ];
 
     // 2. Pre-resolve top-level let expressions so declaration order does not matter
@@ -91,6 +92,8 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                     prev_sibling_id: last_root_id,
                     parent_ports: &window_scope_ports,
                     lexical_scope: &global_scope,
+                    enclosing_component_id: None,
+                    is_let: false,
                 };
                 let root_id = expand_element(node, &elem_ctx, &registry, &mut expanded_doc)?;
                 expanded_doc.roots.push(root_id);
@@ -104,6 +107,8 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                         prev_sibling_id: last_root_id,
                         parent_ports: &window_scope_ports,
                         lexical_scope: &global_scope,
+                        enclosing_component_id: None,
+                        is_let: true,
                     };
                     let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc)?;
                     expanded_doc.roots.push(root_id);
@@ -132,6 +137,8 @@ struct ElementContext<'a> {
     pub prev_sibling_id: Option<NodeId>,
     pub parent_ports: &'a [String],
     pub lexical_scope: &'a HashMap<String, LexicalBinding>,
+    pub enclosing_component_id: Option<NodeId>,
+    pub is_let: bool,
 }
 
 /// Expands a single element node (either a component invocation or a primitive).
@@ -141,6 +148,16 @@ fn expand_element(
     registry: &HashMap<String, ComponentDef>,
     doc: &mut ExpandedDocument,
 ) -> Result<NodeId, CompileError> {
+    for port in &elem.ports {
+        if port.name.as_str() == "parent" {
+            return Err(CompileError::ReservedPort {
+                node: elem.name.as_str().to_string(),
+                port: "parent".to_string(),
+                span: port.name.span,
+            });
+        }
+    }
+
     let node_id = NodeId(doc.nodes.len());
     let mut expanded = ExpandedNode::new(node_id, elem.name.as_str(), elem.span);
     expanded.parent = ctx.parent_id;
@@ -208,11 +225,19 @@ fn expand_component_instance(
         "width".to_string(),
         "height".to_string(),
         "z".to_string(),
+        "clip".to_string(),
     ];
     let mut comp_ports = HashMap::new();
 
     // Register parameters with default values
     for param in &comp_def.params {
+        if param.name.as_str() == "parent" {
+            return Err(CompileError::ReservedPort {
+                node: comp_def.name.as_str().to_string(),
+                port: "parent".to_string(),
+                span: param.name.span,
+            });
+        }
         let name = param.name.as_str().to_string();
         if !comp_scope_ports.contains(&name) {
             comp_scope_ports.push(name.clone());
@@ -228,7 +253,48 @@ fn expand_component_instance(
         if !comp_scope_ports.contains(&name) {
             comp_scope_ports.push(name.clone());
         }
-        comp_ports.insert(name, port.expr.clone());
+        let expr = match &port.expr {
+            Expr::Node(inline_elem) => {
+                let child_ctx = ElementContext {
+                    parent_id: Some(ctx.comp_node_id),
+                    prev_sibling_id: ctx.prev_sibling_id,
+                    parent_ports: ctx.parent_ports,
+                    lexical_scope,
+                    enclosing_component_id: None,
+                    is_let: false,
+                };
+                let child_id = expand_element(inline_elem, &child_ctx, registry, doc)?;
+                Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span))
+            }
+            other => other.clone(),
+        };
+        comp_ports.insert(name, expr);
+    }
+
+    // Default clip port if not explicitly declared
+    if !comp_ports.contains_key("clip") {
+        let default_clip_expr = if let Some(parent) = ctx.parent_id {
+            if parent.is_window() {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), instance.span))),
+                    member: Ident::new("clip", instance.span),
+                    span: instance.span,
+                })
+            } else {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(Expr::Ident(Ident::new(parent.canonical_name(), instance.span))),
+                    member: Ident::new("clip", instance.span),
+                    span: instance.span,
+                })
+            }
+        } else {
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), instance.span))),
+                member: Ident::new("clip", instance.span),
+                span: instance.span,
+            })
+        };
+        comp_ports.insert("clip".to_string(), default_clip_expr);
     }
 
     // Validate that all required parameters (parameters without defaults) have been supplied
@@ -302,9 +368,11 @@ fn expand_component_instance(
                 LetValue::Node(elem) => {
                     let elem_ctx = ElementContext {
                         parent_id: Some(ctx.comp_node_id),
-                        prev_sibling_id: last_child_id,
+                        prev_sibling_id: None,
                         parent_ports: &comp_scope_ports,
                         lexical_scope: &local_scope,
+                        enclosing_component_id: Some(ctx.comp_node_id),
+                        is_let: true,
                     };
                     let node_id = expand_element(
                         elem,
@@ -313,7 +381,6 @@ fn expand_component_instance(
                         doc,
                     )?;
                     all_children_ids.push(node_id);
-                    last_child_id = Some(node_id);
                     local_scope.insert(
                         let_binding.name.as_str().to_string(),
                         LexicalBinding::Node(node_id),
@@ -327,6 +394,8 @@ fn expand_component_instance(
                     prev_sibling_id: last_child_id,
                     parent_ports: &comp_scope_ports,
                     lexical_scope: &local_scope,
+                    enclosing_component_id: Some(ctx.comp_node_id),
+                    is_let: false,
                 };
                 let body_id = expand_element(
                     body_node,
@@ -338,6 +407,16 @@ fn expand_component_instance(
                 last_child_id = Some(body_id);
             }
             ComponentBodyItem::Children(dir) => {
+                for port in &dir.ports {
+                    if port.name.as_str() == "parent" {
+                        return Err(CompileError::ReservedPort {
+                            node: "Children".to_string(),
+                            port: "parent".to_string(),
+                            span: port.name.span,
+                        });
+                    }
+                }
+                let mut last_consumer_child_id = None;
                 for child_elem in &consumer_child_nodes {
                     let mut merged_ports = HashMap::new();
 
@@ -347,7 +426,7 @@ fn expand_component_instance(
                     let ambient_scope_ctx = ScopeContext {
                         current_node: ctx.comp_node_id,
                         parent_node: Some(ctx.comp_node_id),
-                        prev_sibling: last_child_id,
+                        prev_sibling: last_consumer_child_id,
                         child_ids: &empty_children,
                         parent_ports: &comp_scope_ports,
                         current_ports: &comp_scope_ports,
@@ -376,9 +455,11 @@ fn expand_component_instance(
 
                     let elem_ctx = ElementContext {
                         parent_id: Some(ctx.comp_node_id),
-                        prev_sibling_id: last_child_id,
+                        prev_sibling_id: last_consumer_child_id,
                         parent_ports: &comp_scope_ports,
                         lexical_scope, // Pass caller's lexical scope to preserve encapsulation
+                        enclosing_component_id: Some(ctx.comp_node_id),
+                        is_let: false,
                     };
                     let child_id = expand_element(
                         &wired_elem,
@@ -389,7 +470,7 @@ fn expand_component_instance(
 
                     instantiated_children_ids.push(child_id);
                     all_children_ids.push(child_id);
-                    last_child_id = Some(child_id);
+                    last_consumer_child_id = Some(child_id);
                 }
             }
         }
@@ -439,6 +520,8 @@ fn expand_primitive_element(
                     prev_sibling_id: last_child_id,
                     parent_ports: ctx.parent_ports,
                     lexical_scope: ctx.lexical_scope,
+                    enclosing_component_id: ctx.enclosing_component_id,
+                    is_let: false,
                 };
                 let child_id = expand_element(
                     child_elem,
@@ -452,22 +535,135 @@ fn expand_primitive_element(
         }
     }
 
+    // 1b. Expand any inline node element expressions in ports
+    let mut resolved_port_exprs = Vec::with_capacity(elem.ports.len());
+    for port in &elem.ports {
+        match &port.expr {
+            Expr::Node(inline_elem) => {
+                let parent_id = if ctx.is_let {
+                    ctx.parent_id
+                } else {
+                    Some(node_id)
+                };
+                let child_ctx = ElementContext {
+                    parent_id,
+                    prev_sibling_id: last_child_id,
+                    parent_ports: ctx.parent_ports,
+                    lexical_scope: ctx.lexical_scope,
+                    enclosing_component_id: ctx.enclosing_component_id,
+                    is_let: ctx.is_let,
+                };
+                let child_id = expand_element(inline_elem, &child_ctx, registry, doc)?;
+                child_ids.push(child_id);
+                last_child_id = Some(child_id);
+                resolved_port_exprs.push((
+                    port.name.as_str().to_string(),
+                    Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span)),
+                ));
+            }
+            other => {
+                resolved_port_exprs.push((port.name.as_str().to_string(), other.clone()));
+            }
+        }
+    }
+
     // 2. Rewrite element ports
     let empty_ports: [String; 0] = [];
+    let current_node = if ctx.is_let {
+        ctx.enclosing_component_id.unwrap_or(node_id)
+    } else {
+        node_id
+    };
+    let parent_node = if ctx.is_let {
+        if let Some(comp_id) = ctx.enclosing_component_id {
+            doc.get_node(comp_id).and_then(|n| n.parent)
+        } else {
+            ctx.parent_id
+        }
+    } else {
+        ctx.parent_id
+    };
+    let current_ports = if ctx.is_let {
+        ctx.parent_ports
+    } else {
+        &empty_ports
+    };
+
     let scope_ctx = ScopeContext {
-        current_node: node_id,
-        parent_node: ctx.parent_id,
+        current_node,
+        parent_node,
         prev_sibling: ctx.prev_sibling_id,
         child_ids: &child_ids,
         parent_ports: ctx.parent_ports,
-        current_ports: &empty_ports,
+        current_ports,
         lexical_scope: ctx.lexical_scope,
     };
 
     let mut ports = HashMap::new();
-    for port in &elem.ports {
-        let rewritten = rewrite_expr(&port.expr, &scope_ctx);
-        ports.insert(port.name.as_str().to_string(), rewritten);
+    for (port_name, expr) in resolved_port_exprs {
+        let rewritten = rewrite_expr(&expr, &scope_ctx);
+        ports.insert(port_name, rewritten);
+    }
+
+    if elem.name.as_str() == "Clip" {
+        if !ports.contains_key("box") {
+            return Err(CompileError::MissingPort {
+                node: "Clip".to_string(),
+                port: "box".to_string(),
+                span: elem.span,
+            });
+        }
+        if !ports.contains_key("up") {
+            let default_up = if let Some(parent) = ctx.parent_id {
+                if parent.is_window() {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), elem.span))),
+                        member: Ident::new("clip", elem.span),
+                        span: elem.span,
+                    })
+                } else {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(parent.canonical_name(), elem.span))),
+                        member: Ident::new("clip", elem.span),
+                        span: elem.span,
+                    })
+                }
+            } else {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), elem.span))),
+                    member: Ident::new("clip", elem.span),
+                    span: elem.span,
+                })
+            };
+            ports.insert("up".to_string(), default_up);
+        }
+        ports.insert(
+            "clip".to_string(),
+            Expr::Ident(Ident::new(node_id.canonical_name(), elem.span)),
+        );
+    } else if !ports.contains_key("clip") {
+        let default_clip = if let Some(parent) = ctx.parent_id {
+            if parent.is_window() {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), elem.span))),
+                    member: Ident::new("clip", elem.span),
+                    span: elem.span,
+                })
+            } else {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(Expr::Ident(Ident::new(parent.canonical_name(), elem.span))),
+                    member: Ident::new("clip", elem.span),
+                    span: elem.span,
+                })
+            }
+        } else {
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), elem.span))),
+                member: Ident::new("clip", elem.span),
+                span: elem.span,
+            })
+        };
+        ports.insert("clip".to_string(), default_clip);
     }
 
     // Base Spatial Trait defaults for height and width
@@ -822,5 +1018,6 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
         }
 
         Expr::Literal(_) => expr.clone(),
+        Expr::Node(n) => Expr::Node(n.clone()),
     }
 }

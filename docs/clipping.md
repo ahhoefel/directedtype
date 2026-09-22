@@ -1,160 +1,96 @@
-Here is the architectural design specification for implementing **Chained Clipping Contexts** and **Environmental Edges** in the Directed Type (DTML) engine.
+Here is the architectural design specification for **Chained Clipping Contexts** and **Clip Edges** in the DirectedType engine.
 
-This document defines how the parser translates ergonomic, lexically nested markup into a strict, flat mathematical DAG, and how the renderer translates that DAG into optimal GPU instructions.
+This document defines how the compiler translates ergonomic lexical markup into a strict, flat mathematical DAG, and how the renderer translates that DAG into optimal GPU instructions.
 
 ---
 
-# DTML Specification: Clipping & Environmental Edges
+# DirectedType Specification: Clipping & Environmental Clip Contexts
 
 ## 1. The Core Philosophy: Lexical vs. Structural
 
 In HTML/CSS, clipping is structural: if you are physically inside a `<div>` with `overflow: hidden`, you are clipped.
-In DTML, clipping is a **hardware state**. The DAG completely decouples the *layout hierarchy* from the *clipping hierarchy*.
+In DirectedType, clipping is a **hardware state**. The DAG completely decouples the *layout hierarchy* from the *clipping hierarchy*.
 
-* **Clip Contexts are a Linked List:** A clip does not contain children; it points to a geometry, and optionally points to a parent clip.
-* **Environmental Edges are Desugared:** To prevent designers from manually wiring `clip_context` on every single node, the parser uses lexical scoping to *implicitly author* explicit DAG edges. By the time the graph evaluator runs, there are no implicit properties—only hard wires.
+* **Clip Nodes Form a Directed Chain:** A `\Clip` node does not wrap or contain children. Instead, it points to a spatial geometry (`box: \Box(...)`), and optionally points to an upstream clip (`up: self.clip` or `up: window.clip`).
+* **Environmental Inheritance via Parent Ports:** Every visual node (`\Rect`, text nodes) has a universal `clip` port defaulting to `parent.clip` (or `window.clip` at root).
+* **Escape Hatches via Member Access:** Elements can step up the clip chain via `clip: clip.up` (or `self.clip.up`), or unclip entirely to the root viewport via `clip: window.clip`.
+* **Zero Magic / Hard Wires:** By the time the graph evaluator runs, all clip contexts are explicit, strongly typed `NodeId` references in the DAG.
 
 ---
 
-## 2. The `\ClipContext` Primitive
+## 2. Geometry & Clip Primitives: `\Rect`, `\Box`, and `\Clip`
 
-The engine introduces a mathematical primitive for defining a clipping boundary. It does not draw pixels and it does not affect layout geometry.
+### `\Rect` (Visual Paint Primitive)
+`\Rect` is a visual drawing element. It supports spatial layout (`x`, `y`, `width`, `height`, `z`), styling (`color`, `bg_color`, `border_width`, `border_color`, `radius`), and visual clipping (`clip: ...`).
 
-**Signature:**
-`\ClipContext(id: String, geometry: Shape, parent_clip: ClipEdge?)`
+### `\Box` (Mathematical Spatial Primitive)
+`\Box` is a pure mathematical, non-drawing spatial rectangle (`x`, `y`, `width`, `height`, `radius`). It emits **zero draw commands** and is used for non-visual layout regions, bounding calculations, and clip boundaries.
 
-When instantiated inside a component, it registers a node in the Clip Tree. If it is instantiated lexically inside another active clip, the parser automatically wires its `parent_clip` port to the ambient clip, creating an intersection (a linked stack).
+### `\Clip` (Clip Context Primitive)
+`\Clip` is a non-drawing node that establishes a clipping context. It takes:
+* `box`: (Required) The bounding spatial geometry (`\Box` or `\Rect`). Can be passed inline or via a `let` binding.
+* `up`: (Optional) The upstream clip node. Defaults to `parent.clip` (or `window.clip` at the root container).
 
 ```text
 \Component ScrollView(x: Number, y: Number, width: Number, height: Number) {
-  
-  // 1. Define the clipping geometry
-  let mask = \Rect(x: x, y: y, width: width, height: height);
-  
-  // 2. Establish the context. 
-  // (The parser auto-wires `parent_clip` to whatever clip the ScrollView sits inside).
-  \ClipContext(id: "scroll_clip", geometry: mask) {
-    
-    // 3. Yield the children.
-    \Children {
-      x: parent.left,
-      y: prev ? prev.bottom : parent.top
-    }
+  // 1. Establish the clip context with bounding Box
+  let clip = \Clip(up: self.clip, box: \Box(x: self.left, y: self.top, width: self.width, height: self.height))
+
+  // 2. Yield children with ambient clip
+  \Children {
+    clip: clip,
+    x: parent.left,
+    y: prev ? prev.bottom : parent.top
   }
 }
-
 ```
 
 ---
 
-## 3. Environmental Edges: The Parser's Job
+## 3. Escaping the Chain & Multi-Level Clipping
 
-The magic of DTML's ergonomics happens entirely in the **Parse Phase**. The parser maintains an *Environmental Scope Stack* as it reads the text.
+Because `clip` is a standard port on every visual primitive:
 
-### The Auto-Wiring Algorithm
-
-When the parser encounters a visual node (like `\Paragraph` or `\Button`), it performs the following steps:
-
-1. Check the explicitly written ports. Did the designer explicitly wire `clip_context`?
-2. If yes, wire that exact edge.
-3. If no, look at the top of the parser's current Environmental Scope Stack. Draw a hard DAG edge from the active `\ClipContext` to the node's `clip_context` port.
-
-### Example: What the Human Writes vs. What the DAG Sees
-
-**Authored Markup:**
+### Stepping Up One Level (`clip.up`)
+A tooltip or overflow element inside a nested clip can step up to the outer container's clip context:
 
 ```text
-\Modal {                     // Implicitly creates ClipContext A
-  \ScrollView {              // Implicitly creates ClipContext B (parent: A)
-    \Paragraph { "Hello" }   // Inherits Clip B
-  }
-}
-
-```
-
-**Desugared AST (The true mathematical graph):**
-
-```text
-Clip_A = \ClipContext(geometry: ModalMask, parent_clip: none)
-Clip_B = \ClipContext(geometry: ScrollMask, parent_clip: Clip_A)
-
-Paragraph_1 = \Text("Hello")
-Paragraph_1.clip_context = Clip_B
-
-```
-
-*Note: The structural nesting is entirely gone. The DAG is flat, connected only by explicit property edges.*
-
----
-
-## 4. Escaping the Chain (Collision Resolution)
-
-Because `clip_context` is just a standard input port on every visual primitive, escaping a clipping boundary is mathematically trivial. You simply overwrite the ambient edge.
-
-To prevent confusion between the *Layout Parent* and the *Clip Parent*, DTML uses the `inherited` keyword to refer to environmental edges passed down by the parser.
-
-### Scenario: The Footnote Escape Hatch
-
-A footnote inside a `ScrollView` inside a `Modal` needs to escape the `ScrollView`'s clipping box so its tooltip can overflow, but it *must still be clipped by the Modal's rounded corners*.
-
-```text
-\Component Footnote(text: String, body: Node) {
-  
-  // The marker implicitly accepts the ambient edge (Clip B: ScrollView)
+\Component Footnote(text: String) {
   \Text { text }
-  
-  // The body explicitly overwrites the ambient edge.
-  // It steps one level up the clip chain, pointing directly to Clip A (Modal).
-  \Block(clip_context: inherited.clip_context.parent, z: inherited.z + 100) { 
-    body 
-  }
-}
 
+  // Overwrites ambient clip to step one level up the chain
+  \Rect(clip: self.clip.up, z: self.z + 100, width: 200, height: 80)
+}
 ```
 
-### Absolute Escape
-
-If a dropdown menu needs to escape *everything* and render directly on the root glass of the screen, it simply nullifies the port:
+### Unclipped Root Viewport (`window.clip`)
+To escape all clips and render directly in window coordinate space (e.g. for a global modal or full-screen overlay):
 
 ```text
-\Block(clip_context: none, z: 9999) { ... }
-
+\Rect(clip: window.clip, z: 9999, width: 400, height: 300, color: #ffffff)
 ```
-
-The parser sees the explicit `none` and skips the auto-wiring step.
 
 ---
 
-## 5. Renderer Handoff (The State Machine)
+## 4. Reserved Port Validation
 
-Once Kahn's Algorithm has resolved all spatial math (X, Y, Width, Height) for the DAG, the backend Rust engine collects a completely flat array of visual primitives.
+`parent` is strictly reserved as an implicit, immutable tree hierarchy navigation keyword. Any attempt to author `parent: ...` on an element, in a component parameter list, or in a `\Children` directive will produce a compile error:
 
-Each primitive carries its exact coordinates, its Z-index, and a pointer to a specific `ClipContext`.
-
-```rust
-// Flat evaluation output
-[
-  Primitive { type: Text("Marker"), z: 10, clip: Clip_B },
-  Primitive { type: Text("Normal"), z: 10, clip: Clip_B },
-  Primitive { type: Rect(Body),     z: 110, clip: Clip_A } // Escaped!
-]
-
+```text
+CompileError::ReservedPort { node: "Rect", port: "parent", span: ... }
 ```
 
-### The GPU Batching Loop
+---
 
-Modern hardware rendering pipelines (WGPU, Skia) rely on Stencil Buffers or scissor rects to clip, which are managed via `PushClip` and `PopClip` commands.
+## 5. Renderer Execution (Vello GPU Layer Management)
 
-To guarantee zero render-thrashing, the Rust backend executes this pipeline:
+During scene compilation (`build_scene` in `src/render/scene.rs`):
 
-1. **Topological Sort:** Sort the flat array primarily by `z` index (Painter's Algorithm).
-2. **Clip Batching:** Sub-sort elements sharing the exact same `z` index by their `clip_context` ID.
-3. **Draw Loop:**
-* Compare the current item's `clip_context` against the GPU's active clip state.
-* If the target clip is a parent of the active clip, emit `PopClip` until you reach it.
-* If the target clip is a child, emit `PushClip` until you reach it.
-* Draw the primitive.
-
-
-
-Because the Clip Tree is a linked list, the engine perfectly translates `inherited.clip_context.parent` into a single, highly optimized `PopClip` hardware instruction.
+1. **Painter's Order Traversal:** Non-paint primitives (`\Box`, `\Clip`) are skipped; only visual elements (`\Rect`, text) are rendered.
+2. **Lowest Common Ancestor (LCA) Stack Management:**
+   * The renderer tracks the GPU's `active_clip_stack: Vec<NodeId>`.
+   * For each node, it computes the target clip chain from root to leaf.
+   * Layers beyond the common prefix (LCA) are popped via `scene.pop_layer()`.
+   * New layers are pushed via `scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &shape)`.
+   * The shape is automatically instantiated as a `vello::kurbo::Rect` or `vello::kurbo::RoundedRect` based on the `\Box` coordinates and `radius`.
+3. **Clean Teardown:** When all visual elements have been drawn, any remaining open layers on `active_clip_stack` are popped to return the GPU stack to neutral.

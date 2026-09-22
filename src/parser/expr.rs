@@ -103,6 +103,13 @@ fn parse_expr_bp(cursor: &mut ParserCursor<'_>, min_bp: u8) -> Result<Expr, Pars
 }
 
 fn parse_prefix(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
+    if cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Backslash)
+        && cursor.peek_nth(1)?.is_some_and(|(t, _)| t != &Token::Children)
+    {
+        let node = crate::parser::node::parse_element_node(cursor)?;
+        return Ok(Expr::Node(Box::new(node)));
+    }
+
     let (tok, span) = cursor.expect_token("expression")?;
 
     match tok {

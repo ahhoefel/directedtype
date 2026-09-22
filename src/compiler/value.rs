@@ -1,3 +1,4 @@
+use crate::compiler::expanded::NodeId;
 use std::fmt;
 
 /// A runtime value computed during layout graph evaluation.
@@ -7,6 +8,7 @@ pub enum Value {
     String(String),
     Bool(bool),
     Color(String),
+    Node(NodeId),
 }
 
 impl Value {
@@ -31,12 +33,20 @@ impl Value {
         }
     }
 
+    pub fn as_node(&self) -> Option<NodeId> {
+        match self {
+            Value::Node(id) => Some(*id),
+            _ => None,
+        }
+    }
+
     pub fn is_truthy(&self) -> bool {
         match self {
             Value::Bool(b) => *b,
             Value::Number(n) => *n != 0.0,
             Value::String(s) => !s.is_empty(),
             Value::Color(_) => true,
+            Value::Node(_) => true,
         }
     }
 }
@@ -48,6 +58,7 @@ impl fmt::Display for Value {
             Value::String(s) => write!(f, "\"{}\"", s),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Color(c) => write!(f, "{}", c),
+            Value::Node(id) => write!(f, "{}", id.canonical_name()),
         }
     }
 }

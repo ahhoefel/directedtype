@@ -164,3 +164,71 @@ fn test_viewer_hot_reload_document() {
     // Clean up
     let _ = std::fs::remove_file(test_file);
 }
+
+#[test]
+fn test_headless_render_clipping() {
+    let source = r#"
+\Component ScrollPane {
+    let clip = \Clip(up: self.clip, box: \Box(x: 20, y: 20, width: 60, height: 60))
+    \Rect(clip: clip, x: 20, y: 20, width: 200, height: 200, color: #ff0000)
+}
+
+\ScrollPane()
+"#;
+
+    let doc = parse_document(source).expect("Failed to parse document");
+    let layout = evaluate_document(&doc).expect("Failed to evaluate layout");
+
+    let mut renderer = HeadlessRenderer::new().expect("Failed to initialize HeadlessRenderer");
+
+    let options = SceneOptions {
+        background: Some(Color::WHITE),
+        ..Default::default()
+    };
+
+    let img = renderer
+        .render_layout(&layout, 300, 300, &options)
+        .expect("Failed to render layout to image");
+
+    // Pixel at (40, 40) is INSIDE the clip box (20..80, 20..80):
+    // Should be red (R high, G low, B low)
+    let inside_pixel = img.get_pixel(40, 40);
+    assert!(inside_pixel[0] > 200, "Expected red pixel inside clip, got: {:?}", inside_pixel);
+    assert!(inside_pixel[1] < 50, "Expected low green, got: {:?}", inside_pixel);
+    assert!(inside_pixel[2] < 50, "Expected low blue, got: {:?}", inside_pixel);
+
+    // Pixel at (100, 100) is OUTSIDE the clip box (20..80, 20..80),
+    // but INSIDE the Rect's natural boundary (20..220, 20..220):
+    // Because it is clipped, it must NOT be red! It must remain white background!
+    let outside_pixel = img.get_pixel(100, 100);
+    assert!(outside_pixel[0] > 240, "Expected white bg for clipped pixel, got: {:?}", outside_pixel);
+    assert!(outside_pixel[1] > 240, "Expected white bg for clipped pixel, got: {:?}", outside_pixel);
+    assert!(outside_pixel[2] > 240, "Expected white bg for clipped pixel, got: {:?}", outside_pixel);
+}
+
+#[test]
+fn test_clipping_example_file() {
+    let source = std::fs::read_to_string("examples/clipping.dt")
+        .expect("Failed to read examples/clipping.dt");
+    let doc = parse_document(&source).expect("Failed to parse examples/clipping.dt");
+    let layout = evaluate_document(&doc).expect("Failed to evaluate examples/clipping.dt");
+
+    let mut renderer = HeadlessRenderer::new().expect("Failed to initialize HeadlessRenderer");
+    let options = SceneOptions {
+        background: Some(Color::WHITE),
+        ..Default::default()
+    };
+
+    let img = renderer
+        .render_layout(&layout, 600, 600, &options)
+        .expect("Failed to render examples/clipping.dt");
+
+    assert_eq!(img.width(), 600);
+    assert_eq!(img.height(), 600);
+
+    let brain_dir = std::path::Path::new("/Users/hoefel/.gemini/antigravity-ide/brain/c2560240-cb95-4f78-9867-aa0ab7be2601");
+    if brain_dir.exists() {
+        let _ = img.save(brain_dir.join("clipping_render.png"));
+    }
+}
+

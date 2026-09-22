@@ -10,6 +10,13 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Port '{port}' is reserved on node '{node}'")]
+    ReservedPort {
+        node: String,
+        port: String,
+        span: Span,
+    },
+
     #[error("Node '{node}' is missing required port '{port}'")]
     MissingPort {
         node: String,
@@ -41,6 +48,7 @@ impl CompileError {
     pub fn span(&self) -> Span {
         match self {
             CompileError::UndefinedComponent { span, .. }
+            | CompileError::ReservedPort { span, .. }
             | CompileError::MissingPort { span, .. }
             | CompileError::DuplicatePort { span, .. }
             | CompileError::CyclicDependency { span, .. }

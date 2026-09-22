@@ -5,6 +5,7 @@ use vello::kurbo::{Affine, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color, Fill};
 use vello::Scene;
 
+use crate::compiler::expanded::NodeId;
 use crate::compiler::layout::ResolvedLayout;
 use crate::compiler::value::Value;
 use crate::render::color::parse_color;
@@ -25,6 +26,29 @@ impl Default for SceneOptions {
             scale_factor: 1.0,
         }
     }
+}
+
+fn get_clip_chain(
+    clip_id: Option<NodeId>,
+    layout: &ResolvedLayout,
+) -> Vec<NodeId> {
+    let mut chain = Vec::new();
+    let mut curr = clip_id;
+    let mut visited = std::collections::HashSet::new();
+
+    while let Some(id) = curr {
+        if id.is_window() || !visited.insert(id) {
+            break;
+        }
+        chain.push(id);
+        curr = layout
+            .get_value(id, "up")
+            .and_then(|v| v.as_node())
+            .filter(|up_id| !up_id.is_window());
+    }
+
+    chain.reverse(); // root-to-leaf order
+    chain
 }
 
 /// Builds a `vello::Scene` from a `ResolvedLayout`.
@@ -53,8 +77,60 @@ pub fn build_scene(
         }
     }
 
+    let mut active_clip_stack: Vec<NodeId> = Vec::new();
+
     // 2. Iterate in topological painter's order
     for node in layout.render_order() {
+        if !node.is_paint_primitive() {
+            continue;
+        }
+
+        let target_chain = get_clip_chain(node.clip, layout);
+        let common_len = active_clip_stack
+            .iter()
+            .zip(&target_chain)
+            .take_while(|(a, b)| a == b)
+            .count();
+
+        while active_clip_stack.len() > common_len {
+            scene.pop_layer();
+            active_clip_stack.pop();
+        }
+
+        for &clip_node_id in &target_chain[common_len..] {
+            if let Some(box_node_id) = layout.get_value(clip_node_id, "box").and_then(|v| v.as_node()) {
+                let get_box_val = |port: &str| -> f64 {
+                    layout
+                        .get_value(box_node_id, port)
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0)
+                };
+                let x = get_box_val("x");
+                let y = get_box_val("y");
+                let w = get_box_val("width");
+                let h = get_box_val("height");
+                let radius = layout
+                    .get_value(box_node_id, "radius")
+                    .or_else(|| layout.get_value(box_node_id, "corner_radius"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+
+                let x0 = x;
+                let y0 = y;
+                let x1 = x0 + w;
+                let y1 = y0 + h;
+
+                if radius > 0.0 {
+                    let rrect = RoundedRect::new(x0, y0, x1, y1, radius);
+                    scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &rrect);
+                } else {
+                    let rect = Rect::new(x0, y0, x1, y1);
+                    scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &rect);
+                }
+            }
+            active_clip_stack.push(clip_node_id);
+        }
+
         let is_rect = node.name == "Rect";
 
         // Render filled rectangle (only for \Rect paint primitives)
@@ -204,6 +280,11 @@ pub fn build_scene(
                 }
             }
         }
+    }
+
+    while !active_clip_stack.is_empty() {
+        scene.pop_layer();
+        active_clip_stack.pop();
     }
 
     let scale = if options.scale_factor > 0.0 {

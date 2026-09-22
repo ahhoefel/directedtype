@@ -1154,6 +1154,223 @@ fn test_component_literals_preserve_declaration_order_with_interspersed_lets() {
     assert_eq!(render_order[2].rect.width, 200.0);
 }
 
+#[test]
+fn test_forbidden_parent_port_on_element() {
+    let input = r#"
+    \Rect(parent: 10, width: 100, height: 100)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should reject reserved parent port");
+    match err {
+        directedtype::compiler::error::CompileError::ReservedPort { node, port, .. } => {
+            assert_eq!(node, "Rect");
+            assert_eq!(port, "parent");
+        }
+        other => panic!("Expected ReservedPort error, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_forbidden_parent_port_on_component_param() {
+    let input = r#"
+    \Component Container(parent: Number, width: 100) {
+        \Rect(width: self.width)
+    }
+    \Container()
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should reject reserved parent param");
+    match err {
+        directedtype::compiler::error::CompileError::ReservedPort { node, port, .. } => {
+            assert_eq!(node, "Container");
+            assert_eq!(port, "parent");
+        }
+        other => panic!("Expected ReservedPort error, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_forbidden_parent_port_on_children_directive() {
+    let input = r#"
+    \Component Container {
+        \Children {
+            parent: 50
+        }
+    }
+    \Container {
+        \Rect()
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should reject reserved parent port on Children");
+    match err {
+        directedtype::compiler::error::CompileError::ReservedPort { node, port, .. } => {
+            assert_eq!(node, "Children");
+            assert_eq!(port, "parent");
+        }
+        other => panic!("Expected ReservedPort error, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_clip_missing_box_port_error() {
+    let input = r#"
+    let clip = \Clip()
+    \Rect(clip: clip)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should fail when Clip is missing box");
+    match err {
+        directedtype::compiler::error::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "Clip");
+            assert_eq!(port, "box");
+        }
+        other => panic!("Expected MissingPort error for box, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_box_and_clip_non_drawing_primitives() {
+    let input = r#"
+    let viewport = \Box(x: 10, y: 10, width: 200, height: 100)
+    let clip = \Clip(box: viewport)
+    \Rect(clip: clip, width: 50, height: 50)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation should succeed");
+
+    let box_node = layout.nodes.iter().find(|n| n.name == "Box").unwrap();
+    let clip_node = layout.nodes.iter().find(|n| n.name == "Clip").unwrap();
+    let rect_node = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+
+    assert!(!box_node.is_paint_primitive(), "Box should not be a paint primitive");
+    assert!(!clip_node.is_paint_primitive(), "Clip should not be a paint primitive");
+    assert!(rect_node.is_paint_primitive(), "Rect should be a paint primitive");
+}
+
+#[test]
+fn test_clip_with_box_inline_expansion() {
+    let input = r##"
+    \Component ScrollView {
+        let clip = \Clip(up: self.clip, box: \Box(x: self.left + 5, y: self.top + 5, width: self.width - 10, height: self.height - 10))
+        \Rect(clip: clip, width: 300, height: 300, color: #ff0000)
+    }
+
+    \ScrollView(width: 200, height: 150)
+    "##;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation should succeed");
+
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert!(rect.clip.is_some(), "Rect should have an assigned clip node");
+
+    let clip_id = rect.clip.unwrap();
+    let clip_node = layout.get_node(clip_id).unwrap();
+    assert_eq!(clip_node.name, "Clip");
+
+    // Check that Clip's box node was expanded and evaluated with correct dimensions
+    let box_node_id = layout.get_value(clip_id, "box").and_then(|v| v.as_node()).unwrap();
+    let box_node = layout.get_node(box_node_id).unwrap();
+    assert_eq!(box_node.name, "Box");
+    assert_eq!(box_node.rect.x, 5.0);
+    assert_eq!(box_node.rect.y, 5.0);
+    assert_eq!(box_node.rect.width, 190.0); // 200 - 10
+    assert_eq!(box_node.rect.height, 140.0); // 150 - 10
+}
+
+#[test]
+fn test_clip_unclip_with_window_clip() {
+    let input = r##"
+    \Component Modal {
+        let clip = \Clip(box: \Box(width: 100, height: 100))
+        \Rect(clip: clip, color: #aaaaaa)
+        \Rect(clip: window.clip, color: #ffffff)
+    }
+
+    \Modal()
+    "##;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation should succeed");
+
+    let clipped_rect = layout.nodes.iter().find(|n| {
+        n.name == "Rect" && n.properties.get("color").and_then(|v| v.as_str()) == Some("#aaaaaa")
+    }).unwrap();
+    let unclipped_rect = layout.nodes.iter().find(|n| {
+        n.name == "Rect" && n.properties.get("color").and_then(|v| v.as_str()) == Some("#ffffff")
+    }).unwrap();
+
+    assert!(clipped_rect.clip.is_some(), "Clipped rect should have a clip NodeId");
+    assert!(unclipped_rect.clip.is_none(), "Unclipped rect with window.clip should have None clip");
+}
+
+#[test]
+fn test_clip_stepping_up_chain() {
+    let input = r##"
+    \Component MultiLevel {
+        let outer_clip = \Clip(box: \Box(width: 300, height: 300))
+        let inner_clip = \Clip(up: outer_clip, box: \Box(width: 150, height: 150))
+        \Rect(clip: inner_clip, color: #111111)
+        \Rect(clip: inner_clip.up, color: #222222) // stepped up to outer_clip!
+    }
+
+    \MultiLevel()
+    "##;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation should succeed");
+
+    let inner_rect = layout.nodes.iter().find(|n| {
+        n.name == "Rect" && n.properties.get("color").and_then(|v| v.as_str()) == Some("#111111")
+    }).unwrap();
+    let outer_rect = layout.nodes.iter().find(|n| {
+        n.name == "Rect" && n.properties.get("color").and_then(|v| v.as_str()) == Some("#222222")
+    }).unwrap();
+
+    let inner_clip_id = inner_rect.clip.unwrap();
+    let outer_clip_id = outer_rect.clip.unwrap();
+
+    assert_ne!(inner_clip_id, outer_clip_id);
+    let inner_up = layout.get_value(inner_clip_id, "up").and_then(|v| v.as_node()).unwrap();
+    assert_eq!(inner_up, outer_clip_id);
+}
+
+#[test]
+fn test_children_directive_ambient_clip() {
+    let input = r##"
+    \Component ScrollContainer {
+        let clip = \Clip(box: \Box(width: 150, height: 150))
+        \Children {
+            clip: clip
+        }
+    }
+
+    \ScrollContainer {
+        \Rect(color: #333333) // ambient clip
+        \Rect(clip: window.clip, color: #444444) // consumer overrides to window.clip
+    }
+    "##;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation should succeed");
+
+    let ambient_rect = layout.nodes.iter().find(|n| {
+        n.name == "Rect" && n.properties.get("color").and_then(|v| v.as_str()) == Some("#333333")
+    }).unwrap();
+    let override_rect = layout.nodes.iter().find(|n| {
+        n.name == "Rect" && n.properties.get("color").and_then(|v| v.as_str()) == Some("#444444")
+    }).unwrap();
+
+    assert!(ambient_rect.clip.is_some(), "Ambient rect should inherit clip from \\Children");
+    assert!(override_rect.clip.is_none(), "Overridden rect should be unclipped (window.clip)");
+}
+
 
 
 

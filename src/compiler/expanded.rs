@@ -59,6 +59,10 @@ impl ExpandedNode {
             span,
         }
     }
+
+    pub fn is_paint_primitive(&self) -> bool {
+        self.name == "Rect" || self.text_content.is_some()
+    }
 }
 
 /// The collection of all expanded nodes in the document.
