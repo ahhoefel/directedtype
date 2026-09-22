@@ -1371,6 +1371,37 @@ fn test_children_directive_ambient_clip() {
     assert!(override_rect.clip.is_none(), "Overridden rect should be unclipped (window.clip)");
 }
 
+#[test]
+fn test_dom_tree_formatting() {
+    let input = r#"
+    \Component Card(bg: Color: #1e293b, width: 300, height: 150) {
+        \Rect(width: parent.width, height: parent.height, color: parent.bg)
+        \Children {
+            x: parent.left + 16,
+            y: prev ? prev.bottom + 8 : parent.top + 16
+        }
+    }
+
+    \Card {
+        \Text(size: 18) { Hello DOM }
+        \Rect(width: 100, height: 20, color: #3b82f6)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation should succeed");
+
+    let dom_str = layout.format_dom();
+
+    assert!(dom_str.contains("\\Card("));
+    assert!(dom_str.contains("{\n"));
+    assert!(dom_str.contains("\\Rect("));
+    assert!(dom_str.contains("\\Text("));
+    assert!(dom_str.contains("{ Hello DOM }"));
+    assert!(dom_str.contains("color: #1e293b"));
+}
+
+
 
 
 

@@ -518,6 +518,9 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 Key::Named(NamedKey::Escape) => {
                     event_loop.exit();
                 }
+                Key::Character(c) if c.eq_ignore_ascii_case("d") => {
+                    self.layout.print_dom();
+                }
                 _ => {}
             },
             _ => {}

@@ -18,6 +18,7 @@ fn print_usage() {
     println!("  -o, --output <PATH>   Render headless directly to PNG file");
     println!("  -w, --width <INT>     Viewport width in pixels (default: 800)");
     println!("  -h, --height <INT>    Viewport height in pixels (default: 600)");
+    println!("  -d, --dump-dom        Print evaluated DOM tree to stdout and exit");
     println!("      --help            Display this help message");
 }
 
@@ -28,6 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut output_path: Option<PathBuf> = None;
     let mut width: u32 = 800;
     let mut height: u32 = 600;
+    let mut dump_dom = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -35,6 +37,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "--help" => {
                 print_usage();
                 return Ok(());
+            }
+            "-d" | "--dump-dom" => {
+                dump_dom = true;
             }
             "-o" | "--output" => {
                 i += 1;
@@ -89,6 +94,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         layout.nodes.len()
     );
 
+    if dump_dom {
+        println!();
+        layout.print_dom();
+        return Ok(());
+    }
+
     let scene_options = SceneOptions {
         background: Some(Color::from_rgba8(248, 250, 252, 255)),
         ..Default::default()
@@ -106,6 +117,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Headless render complete: {}", out_path.display());
     } else {
         println!("Launching interactive native window viewer ({}x{})...", width, height);
+        println!("  Controls: Press 'd' to dump DOM tree to stdout, 'q' or Esc to exit.");
         let config = ViewerConfig {
             title: format!("DirectedType - {}", file_path.file_name().unwrap_or_default().to_string_lossy()),
             width,
