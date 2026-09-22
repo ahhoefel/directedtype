@@ -1088,6 +1088,73 @@ fn test_visibility_child_explicit_parent_port_bypasses_internal_shadow() {
     assert_eq!(rect.rect.width, 25.0);
 }
 
+#[test]
+fn test_component_let_order_independence_element_before_let() {
+    let input = r#"
+    \Component Card {
+      // Element declared BEFORE the let definition it references
+      \Rect(width: card_width, height: 40)
+      let card_width = 320
+    }
+
+    \Card()
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert_eq!(rect.rect.width, 320.0);
+}
+
+#[test]
+fn test_component_let_order_independence_chained_out_of_order() {
+    let input = r#"
+    \Component ChainedCard {
+      // 'a' references 'b' declared below it
+      let a = b + 15
+      let b = 100
+      \Rect(width: a, height: 50)
+    }
+
+    \ChainedCard()
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    // a = 100 + 15 = 115
+    assert_eq!(rect.rect.width, 115.0);
+}
+
+#[test]
+fn test_component_literals_preserve_declaration_order_with_interspersed_lets() {
+    let input = r#"
+    \Component LayeredCard {
+      let bg_pad = 10
+      \Rect(width: 400, z: 0) // First node: Background (index 1)
+      let inner_pad = bg_pad * 2
+      \Rect(width: 200, z: 0) // Second node: Foreground (index 2)
+    }
+
+    \LayeredCard()
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let render_order = layout.render_order();
+    // Nodes in render order: LayeredCard (0), first Rect (1), second Rect (2)
+    assert_eq!(render_order.len(), 3);
+    assert_eq!(render_order[0].id.0, 0);
+    assert_eq!(render_order[1].id.0, 1);
+    assert_eq!(render_order[1].rect.width, 400.0);
+    assert_eq!(render_order[2].id.0, 2);
+    assert_eq!(render_order[2].rect.width, 200.0);
+}
+
+
 
 
 

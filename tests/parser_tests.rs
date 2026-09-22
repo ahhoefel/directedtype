@@ -585,4 +585,82 @@ fn test_parse_let_bindings() {
     }
 }
 
+#[test]
+fn test_component_definition_rejects_plain_text() {
+    let input = r#"
+    \Component Card {
+      some invalid plain text
+      \Rect(width: 100)
+    }
+    "#;
+    let err = parse(input).expect_err("Component definition should reject plain text");
+    let err_str = err.to_string();
+    assert!(
+        err_str.contains("Expected") || err_str.contains("expected"),
+        "Expected unexpected token error, got: {}",
+        err_str
+    );
+}
+
+#[test]
+fn test_component_literal_treats_let_as_plain_text() {
+    let input = r#"
+    \Paragraph {
+      let x = 10;
+    }
+    "#;
+    let doc = parse(input).expect("Failed to parse component literal with text containing let");
+    assert_eq!(doc.items.len(), 1);
+
+    match &doc.items[0] {
+        Item::Node(node) => {
+            assert_eq!(node.name.as_str(), "Paragraph");
+            let content = node.content.as_ref().expect("Expected content");
+            assert_eq!(content.items.len(), 1);
+            match &content.items[0] {
+                ContentItem::Text(text) => {
+                    assert_eq!(text.text, "let x = 10;");
+                }
+                _ => panic!("Expected ContentItem::Text"),
+            }
+        }
+        _ => panic!("Expected Item::Node"),
+    }
+}
+
+#[test]
+fn test_component_literal_supports_mixed_text_and_nodes() {
+    let input = r#"
+    \Container {
+      Leading text
+      \Button(width: 80) { Click }
+      Trailing text
+    }
+    "#;
+    let doc = parse(input).expect("Failed to parse mixed content");
+    assert_eq!(doc.items.len(), 1);
+
+    match &doc.items[0] {
+        Item::Node(container) => {
+            assert_eq!(container.name.as_str(), "Container");
+            let content = container.content.as_ref().expect("Expected content");
+            assert_eq!(content.items.len(), 3);
+            match &content.items[0] {
+                ContentItem::Text(t) => assert_eq!(t.text.trim(), "Leading text"),
+                _ => panic!("Expected Text"),
+            }
+            match &content.items[1] {
+                ContentItem::Node(b) => assert_eq!(b.name.as_str(), "Button"),
+                _ => panic!("Expected Button node"),
+            }
+            match &content.items[2] {
+                ContentItem::Text(t) => assert_eq!(t.text.trim(), "Trailing text"),
+                _ => panic!("Expected Text"),
+            }
+        }
+        _ => panic!("Expected Container node"),
+    }
+}
+
+
 

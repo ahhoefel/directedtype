@@ -36,7 +36,6 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
 
     let mut expanded_doc = ExpandedDocument::new();
 
-    // 2. Expand root elements and top-level let bindings in document order
     let window_scope_ports = vec![
         "x".to_string(),
         "y".to_string(),
@@ -44,6 +43,43 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
         "height".to_string(),
         "z".to_string(),
     ];
+
+    // 2. Pre-resolve top-level let expressions so declaration order does not matter
+    let empty_ports: [String; 0] = [];
+    let empty_children: [NodeId; 0] = [];
+    let mut changed = true;
+    let mut passes = 0;
+    while changed && passes < 20 {
+        changed = false;
+        passes += 1;
+        for item in &doc.items {
+            if let Item::Let(let_binding) = item {
+                if let LetValue::Expr(raw_expr) = &let_binding.value {
+                    let scope_ctx = ScopeContext {
+                        current_node: NodeId::WINDOW,
+                        parent_node: None,
+                        prev_sibling: None,
+                        child_ids: &empty_children,
+                        parent_ports: &empty_ports,
+                        current_ports: &window_scope_ports,
+                        lexical_scope: &global_scope,
+                    };
+                    let rewritten = rewrite_expr(raw_expr, &scope_ctx);
+                    if let Some(LexicalBinding::Expr(existing)) = global_scope.get(let_binding.name.as_str()) {
+                        if existing != &rewritten {
+                            global_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                            changed = true;
+                        }
+                    } else {
+                        global_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Expand root elements and top-level node bindings in document order
     let mut last_root_id = None;
 
     for item in &doc.items {
@@ -61,24 +97,7 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                 last_root_id = Some(root_id);
             }
             Item::Let(let_binding) => match &let_binding.value {
-                LetValue::Expr(raw_expr) => {
-                    let empty_ports: [String; 0] = [];
-                    let empty_children: [NodeId; 0] = [];
-                    let scope_ctx = ScopeContext {
-                        current_node: NodeId::WINDOW,
-                        parent_node: None,
-                        prev_sibling: None,
-                        child_ids: &empty_children,
-                        parent_ports: &empty_ports,
-                        current_ports: &window_scope_ports,
-                        lexical_scope: &global_scope,
-                    };
-                    let rewritten = rewrite_expr(raw_expr, &scope_ctx);
-                    global_scope.insert(
-                        let_binding.name.as_str().to_string(),
-                        LexicalBinding::Expr(rewritten),
-                    );
-                }
+                LetValue::Expr(_) => {} // Already resolved in pre-pass
                 LetValue::Node(elem) => {
                     let elem_ctx = ElementContext {
                         parent_id: Some(NodeId::WINDOW),
@@ -243,6 +262,40 @@ fn expand_component_instance(
     let mut last_child_id: Option<NodeId> = None;
     let mut local_scope: HashMap<String, LexicalBinding> = lexical_scope.clone();
 
+    // Pre-resolve let expressions in component body so their declaration order does not matter
+    let empty_children: [NodeId; 0] = [];
+    let mut changed = true;
+    let mut passes = 0;
+    while changed && passes < 20 {
+        changed = false;
+        passes += 1;
+        for item in &comp_def.body {
+            if let ComponentBodyItem::Let(let_binding) = item {
+                if let LetValue::Expr(raw_expr) = &let_binding.value {
+                    let scope_ctx = ScopeContext {
+                        current_node: ctx.comp_node_id,
+                        parent_node: ctx.parent_id,
+                        prev_sibling: ctx.prev_sibling_id,
+                        child_ids: &empty_children,
+                        parent_ports: ctx.parent_ports,
+                        current_ports: &comp_scope_ports,
+                        lexical_scope: &local_scope,
+                    };
+                    let rewritten = rewrite_expr(raw_expr, &scope_ctx);
+                    if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
+                        if existing != &rewritten {
+                            local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                            changed = true;
+                        }
+                    } else {
+                        local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
     for item in &comp_def.body {
         match item {
             ComponentBodyItem::Let(let_binding) => match &let_binding.value {
@@ -266,22 +319,7 @@ fn expand_component_instance(
                         LexicalBinding::Node(node_id),
                     );
                 }
-                LetValue::Expr(raw_expr) => {
-                    let scope_ctx = ScopeContext {
-                        current_node: ctx.comp_node_id,
-                        parent_node: ctx.parent_id,
-                        prev_sibling: ctx.prev_sibling_id,
-                        child_ids: &instantiated_children_ids,
-                        parent_ports: ctx.parent_ports,
-                        current_ports: &comp_scope_ports,
-                        lexical_scope: &local_scope,
-                    };
-                    let rewritten = rewrite_expr(raw_expr, &scope_ctx);
-                    local_scope.insert(
-                        let_binding.name.as_str().to_string(),
-                        LexicalBinding::Expr(rewritten),
-                    );
-                }
+                LetValue::Expr(_) => {} // Already resolved in pre-pass
             },
             ComponentBodyItem::Node(body_node) => {
                 let elem_ctx = ElementContext {
