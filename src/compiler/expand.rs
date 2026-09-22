@@ -32,13 +32,20 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
 
     let mut expanded_doc = ExpandedDocument::new();
 
-    // 2. Expand root elements
+    // 2. Expand root elements with NodeId::WINDOW as their ambient parent container
+    let window_scope_ports = vec![
+        "x".to_string(),
+        "y".to_string(),
+        "width".to_string(),
+        "height".to_string(),
+        "z".to_string(),
+    ];
     for root_elem in &root_elements {
         let root_id = expand_element(
             root_elem,
+            Some(NodeId::WINDOW),
             None,
-            None,
-            &[],
+            &window_scope_ports,
             &registry,
             &mut expanded_doc,
         )?;
@@ -392,6 +399,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
                     });
                 }
             }
+            if id.as_str() == "window" {
+                return Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), id.span));
+            }
             if id.as_str() == "self" {
                 return Expr::Ident(Ident::new(ctx.current_node.canonical_name(), id.span));
             }
@@ -435,7 +445,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
                 _ => None,
             };
 
-            // Resolve target (parent, prev, self)
+            // Resolve target (parent, window, prev, self)
             let resolved_target = if let Some(target_name) = &target_ident_name {
                 if target_name == "parent" {
                     if let Some(parent) = ctx.parent_node {
@@ -443,6 +453,8 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
                     } else {
                         rewrite_expr(&m.target, ctx)
                     }
+                } else if target_name == "window" {
+                    Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), m.target.span()))
                 } else if target_name == "prev" {
                     if let Some(prev) = ctx.prev_sibling {
                         Expr::Ident(Ident::new(prev.canonical_name(), m.target.span()))

@@ -530,5 +530,83 @@ fn test_painters_algorithm_and_z_ordering() {
     assert_eq!(render_order[3].id.0, 3);
 }
 
+#[test]
+fn test_global_window_dimensions_access() {
+    let input = r#"
+    \Component Container {
+        \Children {
+            width: window.width / 2,
+            height: window.height - 100
+        }
+    }
 
+    \Container {
+        \Rect(color: #3b82f6)
+    }
+    "#;
 
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document_with_window(&doc, 1024.0, 768.0)
+        .expect("Layout evaluation should succeed");
+
+    assert_eq!(layout.nodes.len(), 2);
+    let rect = &layout.nodes[1];
+    assert_eq!(rect.name, "Rect");
+    assert_eq!(rect.rect.width, 512.0); // 1024 / 2
+    assert_eq!(rect.rect.height, 668.0); // 768 - 100
+}
+
+#[test]
+fn test_top_level_parent_resolves_to_window() {
+    let input = r#"
+    \Rect(
+        x: parent.left + 50,
+        y: parent.top + 30,
+        width: parent.width - 100,
+        height: parent.height - 60
+    )
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document_with_window(&doc, 1440.0, 900.0)
+        .expect("Layout evaluation should succeed");
+
+    assert_eq!(layout.nodes.len(), 1);
+    let rect = &layout.nodes[0];
+    assert_eq!(rect.rect.x, 50.0);
+    assert_eq!(rect.rect.y, 30.0);
+    assert_eq!(rect.rect.width, 1340.0); // 1440 - 100
+    assert_eq!(rect.rect.height, 840.0); // 900 - 60
+}
+
+#[test]
+fn test_responsive_flow_clamped_formula() {
+    let input = r#"
+    \Component Flow {
+        \Children {
+            width: min(max(window.width, 400), 700)
+        }
+    }
+
+    \Flow {
+        \Text { Responsive DirectedType }
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+
+    // Case 1: Below minimum 400 -> clamped to 400
+    let layout_narrow = directedtype::evaluate_document_with_window(&doc, 300.0, 600.0)
+        .expect("Evaluation should succeed");
+    assert_eq!(layout_narrow.nodes[1].rect.width, 400.0);
+
+    // Case 2: Intermediate width -> responsive
+    let layout_mid = directedtype::evaluate_document_with_window(&doc, 550.0, 600.0)
+        .expect("Evaluation should succeed");
+    assert_eq!(layout_mid.nodes[1].rect.width, 550.0);
+
+    // Case 3: Above maximum 700 -> clamped to 700
+    let layout_wide = directedtype::evaluate_document_with_window(&doc, 1200.0, 600.0)
+        .expect("Evaluation should succeed");
+    assert_eq!(layout_wide.nodes[1].rect.width, 700.0);
+}

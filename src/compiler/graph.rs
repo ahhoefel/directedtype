@@ -104,12 +104,49 @@ impl Default for VariableGraph {
     }
 }
 
-/// Builds a `VariableGraph` from an `ExpandedDocument`.
+/// Builds a `VariableGraph` from an `ExpandedDocument` using the default window size (800x600).
 pub fn build_variable_graph(doc: &ExpandedDocument) -> Result<VariableGraph, CompileError> {
+    build_variable_graph_with_window(doc, 800.0, 600.0)
+}
+
+/// Builds a `VariableGraph` from an `ExpandedDocument` with specific viewport/window dimensions.
+pub fn build_variable_graph_with_window(
+    doc: &ExpandedDocument,
+    window_width: f64,
+    window_height: f64,
+) -> Result<VariableGraph, CompileError> {
     let mut graph = VariableGraph::new();
 
+    // 0. Ambient Window Node Variables
+    let window_span = Span::default();
+    graph.add_variable(
+        VarId::new(NodeId::WINDOW, "x"),
+        Expr::Literal(Literal::Number(0.0, window_span)),
+        window_span,
+    );
+    graph.add_variable(
+        VarId::new(NodeId::WINDOW, "y"),
+        Expr::Literal(Literal::Number(0.0, window_span)),
+        window_span,
+    );
+    graph.add_variable(
+        VarId::new(NodeId::WINDOW, "z"),
+        Expr::Literal(Literal::Number(0.0, window_span)),
+        window_span,
+    );
+    graph.add_variable(
+        VarId::new(NodeId::WINDOW, "width"),
+        Expr::Literal(Literal::Number(window_width, window_span)),
+        window_span,
+    );
+    graph.add_variable(
+        VarId::new(NodeId::WINDOW, "height"),
+        Expr::Literal(Literal::Number(window_height, window_span)),
+        window_span,
+    );
+
     for node in &doc.nodes {
-        let is_root = node.parent.is_none();
+        let is_root = doc.roots.contains(&node.id) || node.parent.is_none_or(|p| p.is_window());
         let mut ports = node.ports.clone();
 
         // Base Spatial Trait: Every node has x, y, width, height, z
@@ -125,10 +162,28 @@ pub fn build_variable_graph(doc: &ExpandedDocument) -> Result<VariableGraph, Com
                 .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
             ports
                 .entry("width".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(800.0, node.span)));
+                .or_insert_with(|| {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(
+                            NodeId::WINDOW.canonical_name(),
+                            node.span,
+                        ))),
+                        member: Ident::new("width", node.span),
+                        span: node.span,
+                    })
+                });
             ports
                 .entry("height".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(600.0, node.span)));
+                .or_insert_with(|| {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(
+                            NodeId::WINDOW.canonical_name(),
+                            node.span,
+                        ))),
+                        member: Ident::new("height", node.span),
+                        span: node.span,
+                    })
+                });
         } else {
             ports
                 .entry("x".to_string())

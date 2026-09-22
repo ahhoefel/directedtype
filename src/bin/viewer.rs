@@ -2,10 +2,10 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use directedtype::compiler::evaluate_document;
+use directedtype::compiler::evaluate_document_with_window;
 use directedtype::parser::parse_document;
 use directedtype::render::{
-    run_viewer, HeadlessRenderer, SceneOptions, ViewerConfig,
+    run_viewer_with_document, HeadlessRenderer, SceneOptions, ViewerConfig,
 };
 use vello::peniko::Color;
 
@@ -80,8 +80,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let doc = parse_document(&source)
         .map_err(|e| format!("Parse error in '{}': {e}", file_path.display()))?;
 
-    println!("Evaluating DAG layout...");
-    let layout = evaluate_document(&doc)
+    println!("Evaluating DAG layout ({}x{})...", width, height);
+    let layout = evaluate_document_with_window(&doc, width as f64, height as f64)
         .map_err(|e| format!("Layout evaluation error in '{}': {e}", file_path.display()))?;
 
     println!(
@@ -112,7 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             height,
             scene_options,
         };
-        run_viewer(layout, config)?;
+        run_viewer_with_document(doc, config)?;
     }
 
     Ok(())

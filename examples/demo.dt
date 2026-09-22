@@ -2,7 +2,8 @@
 \Component Flow(gap: Number: 20) {
     \Children {
         x: parent.left,
-        y: prev ? prev.bottom + gap : parent.top
+        y: prev ? prev.bottom + gap : parent.top,
+        width: min(max(window.width, 400), 700)
     }
 }
 
@@ -19,28 +20,29 @@
     )
     \Children {
         x: x + 20,
-        y: y + 20
+        y: y + 20,
+        width: parent.width - 40
     }
 }
 
 \Flow(x: 40, y: 40, gap: 24) {
-    \Text(width: 700, size: 36, weight: 700, color: #0f172a) {
+    \Text(size: 36, weight: 700, color: #0f172a) {
         DirectedType Native Layout Engine
     }
 
-    \Text(width: 700, size: 18, color: #475569) {
+    \Text(size: 18, color: #475569) {
         A pure functional reactive layout engine based on a Directed Acyclic Graph (DAG) of layout equations, powered by Vello GPU rendering and Parley text shaping.
     }
 
     \ShadedBox(bg_color: #0f172a) {
-        \Text(width: 660, size: 16, color: #e2e8f0) {
+        \Text(size: 16, color: #e2e8f0) {
             Layout is Math: Every spatial coordinate (x, y, width, height, z) is an explicit edge in a topological dependency graph. Kahn's algorithm guarantees deterministic evaluation without CSS layout thrashing.
         }
     }
 
-    \Rect(width: 700, height: 4, color: #cbd5e1, radius: 2)
+    \Rect(height: 4, color: #cbd5e1, radius: 2)
 
-    \Text(width: 700, size: 15, color: #64748b) {
+    \Text(size: 15, color: #64748b) {
         Rendered natively with Apple Metal compute shaders via Vello.
     }
 }

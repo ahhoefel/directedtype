@@ -7,14 +7,29 @@ use std::collections::HashMap;
 pub struct NodeId(pub usize);
 
 impl NodeId {
+    /// Sentinel NodeId representing the ambient window root container.
+    pub const WINDOW: NodeId = NodeId(usize::MAX);
+
+    pub fn is_window(&self) -> bool {
+        self.0 == usize::MAX
+    }
+
     pub fn canonical_name(&self) -> String {
-        format!("__node_{}", self.0)
+        if self.is_window() {
+            "__window".to_string()
+        } else {
+            format!("__node_{}", self.0)
+        }
     }
 
     pub fn from_canonical_name(name: &str) -> Option<Self> {
-        name.strip_prefix("__node_")
-            .and_then(|num_str| num_str.parse::<usize>().ok())
-            .map(NodeId)
+        if name == "__window" || name == "window" {
+            Some(NodeId::WINDOW)
+        } else {
+            name.strip_prefix("__node_")
+                .and_then(|num_str| num_str.parse::<usize>().ok())
+                .map(NodeId)
+        }
     }
 }
 

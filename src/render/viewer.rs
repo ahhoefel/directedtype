@@ -13,6 +13,8 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
+use crate::ast::Document;
+use crate::compiler::evaluate_document_with_window;
 use crate::compiler::layout::ResolvedLayout;
 use crate::render::scene::{build_scene, SceneOptions};
 
@@ -100,6 +102,7 @@ impl Default for ViewerConfig {
 /// Interactive window viewer application using Winit and Vello.
 pub struct ViewerApp {
     config: ViewerConfig,
+    doc: Option<Document>,
     layout: ResolvedLayout,
     render_cx: RenderContext,
     surface: Option<RenderSurface<'static>>,
@@ -114,6 +117,7 @@ impl ViewerApp {
     pub fn new(layout: ResolvedLayout, config: ViewerConfig) -> Self {
         Self {
             config,
+            doc: None,
             layout,
             render_cx: RenderContext::new(),
             surface: None,
@@ -123,6 +127,12 @@ impl ViewerApp {
             layout_cx: LayoutContext::new(),
             frame_count: 0,
         }
+    }
+
+    /// Attaches the source AST `Document` to enable dynamic layout re-evaluation on window resize.
+    pub fn with_document(mut self, doc: Document) -> Self {
+        self.doc = Some(doc);
+        self
     }
 
     /// Synchronously renders a frame to the current swapchain texture and presents it.
@@ -306,6 +316,14 @@ impl ApplicationHandler for ViewerApp {
         // Configure CAMetalLayer: presentsWithTransaction = true, contentsGravity = topLeft, contentsScale
         configure_metal_layer(&window);
 
+        let logical_w = width as f64 / scale_factor;
+        let logical_h = height as f64 / scale_factor;
+        if let Some(doc) = &self.doc {
+            if let Ok(new_layout) = evaluate_document_with_window(doc, logical_w, logical_h) {
+                self.layout = new_layout;
+            }
+        }
+
         self.renderer = Some(renderer);
         self.surface = Some(surface);
         self.window = Some(window);
@@ -344,6 +362,14 @@ impl ApplicationHandler for ViewerApp {
                         self.render_cx
                             .resize_surface(surface, size.width, size.height);
                     }
+                    if let (Some(doc), Some(window)) = (&self.doc, &self.window) {
+                        let scale = window.scale_factor();
+                        let logical_w = size.width as f64 / scale;
+                        let logical_h = size.height as f64 / scale;
+                        if let Ok(new_layout) = evaluate_document_with_window(doc, logical_w, logical_h) {
+                            self.layout = new_layout;
+                        }
+                    }
                     // Immediately render frame synchronously on resize!
                     // This prevents macOS CAMetalLayer from stretching the previous frame's texture.
                     self.render_frame();
@@ -357,6 +383,14 @@ impl ApplicationHandler for ViewerApp {
                         if let Some(surface) = &mut self.surface {
                             self.render_cx
                                 .resize_surface(surface, size.width, size.height);
+                        }
+                        if let Some(doc) = &self.doc {
+                            let scale = window.scale_factor();
+                            let logical_w = size.width as f64 / scale;
+                            let logical_h = size.height as f64 / scale;
+                            if let Ok(new_layout) = evaluate_document_with_window(doc, logical_w, logical_h) {
+                                self.layout = new_layout;
+                            }
                         }
                         self.render_frame();
                     }
@@ -389,9 +423,23 @@ impl ApplicationHandler for ViewerApp {
 
 /// Launches an interactive window viewer displaying the given `ResolvedLayout`.
 pub fn run_viewer(layout: ResolvedLayout, config: ViewerConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let mut app = ViewerApp::new(layout, config);
+    run_viewer_app(&mut app)
+}
+
+/// Launches an interactive window viewer displaying a live `Document`, re-evaluating the layout DAG on resize.
+pub fn run_viewer_with_document(
+    doc: Document,
+    config: ViewerConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let initial_layout = evaluate_document_with_window(&doc, config.width as f64, config.height as f64)?;
+    let mut app = ViewerApp::new(initial_layout, config).with_document(doc);
+    run_viewer_app(&mut app)
+}
+
+fn run_viewer_app(app: &mut ViewerApp) -> Result<(), Box<dyn std::error::Error>> {
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Wait);
-    let mut app = ViewerApp::new(layout, config);
-    event_loop.run_app(&mut app)?;
+    event_loop.run_app(app)?;
     Ok(())
 }
