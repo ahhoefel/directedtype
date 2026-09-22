@@ -1,0 +1,46 @@
+// DirectedType (DTML) Showcase Document
+\Component Flow(gap: Number: 20) {
+    \Children {
+        x: parent.left,
+        y: prev ? prev.bottom + gap : parent.top
+    }
+}
+
+\Component ShadedBox(bg_color: Color: #1e222d, width: max(children.width) + 40, height: sum(children.height) + 40) {
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg_color,
+        radius: 12,
+        border_width: 2,
+        border_color: #3b82f6
+    )
+    \Children {
+        x: x + 20,
+        y: y + 20
+    }
+}
+
+\Flow(x: 40, y: 40, gap: 24) {
+    \Text(width: 700, size: 36, weight: 700, color: #0f172a) {
+        DirectedType Native Layout Engine
+    }
+
+    \Text(width: 700, size: 18, color: #475569) {
+        A pure functional reactive layout engine based on a Directed Acyclic Graph (DAG) of layout equations, powered by Vello GPU rendering and Parley text shaping.
+    }
+
+    \ShadedBox(bg_color: #0f172a) {
+        \Text(width: 660, size: 16, color: #e2e8f0) {
+            Layout is Math: Every spatial coordinate (x, y, width, height, z) is an explicit edge in a topological dependency graph. Kahn's algorithm guarantees deterministic evaluation without CSS layout thrashing.
+        }
+    }
+
+    \Rect(width: 700, height: 4, color: #cbd5e1, radius: 2)
+
+    \Text(width: 700, size: 15, color: #64748b) {
+        Rendered natively with Apple Metal compute shaders via Vello.
+    }
+}
