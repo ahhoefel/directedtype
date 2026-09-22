@@ -1,6 +1,8 @@
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use parley::{FontContext, LayoutContext};
 use vello::peniko::Color;
 use vello::util::{RenderContext, RenderSurface};
@@ -16,6 +18,7 @@ use winit::window::{Window, WindowId};
 use crate::ast::Document;
 use crate::compiler::evaluate_document_with_window;
 use crate::compiler::layout::ResolvedLayout;
+use crate::parser::parse_document;
 use crate::render::scene::{build_scene, SceneOptions};
 
 #[cfg(target_os = "macos")]
@@ -99,9 +102,17 @@ impl Default for ViewerConfig {
     }
 }
 
+/// Custom event sent to the Winit event loop from background watcher threads.
+#[derive(Debug, Clone)]
+pub enum ViewerUserEvent {
+    FileModified,
+}
+
 /// Interactive window viewer application using Winit and Vello.
 pub struct ViewerApp {
     config: ViewerConfig,
+    watch_path: Option<PathBuf>,
+    _watcher: Option<RecommendedWatcher>,
     doc: Option<Document>,
     layout: ResolvedLayout,
     render_cx: RenderContext,
@@ -117,6 +128,8 @@ impl ViewerApp {
     pub fn new(layout: ResolvedLayout, config: ViewerConfig) -> Self {
         Self {
             config,
+            watch_path: None,
+            _watcher: None,
             doc: None,
             layout,
             render_cx: RenderContext::new(),
@@ -133,6 +146,74 @@ impl ViewerApp {
     pub fn with_document(mut self, doc: Document) -> Self {
         self.doc = Some(doc);
         self
+    }
+
+    /// Returns a reference to the current resolved layout.
+    pub fn layout(&self) -> &ResolvedLayout {
+        &self.layout
+    }
+
+    /// Returns a reference to the current AST document, if available.
+    pub fn doc(&self) -> Option<&Document> {
+        self.doc.as_ref()
+    }
+
+    /// Attaches a file path to watch for live changes.
+    pub fn with_watch_path(mut self, path: PathBuf) -> Self {
+        self.watch_path = Some(path);
+        self
+    }
+
+    /// Reloads the document from disk and re-renders if parsing and layout evaluation succeed.
+    pub fn reload_document(&mut self) {
+        let path = match &self.watch_path {
+            Some(p) => p.clone(),
+            None => return,
+        };
+
+        let source = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[HotReload] Error reading file '{}': {e}", path.display());
+                return;
+            }
+        };
+
+        let new_doc = match parse_document(&source) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("[HotReload] Parse error in '{}':\n{e}", path.display());
+                return;
+            }
+        };
+
+        let (logical_w, logical_h) = if let Some(window) = &self.window {
+            let scale = window.scale_factor();
+            let size = window.inner_size();
+            if size.width > 0 && size.height > 0 {
+                (size.width as f64 / scale, size.height as f64 / scale)
+            } else {
+                (self.config.width as f64, self.config.height as f64)
+            }
+        } else {
+            (self.config.width as f64, self.config.height as f64)
+        };
+
+        match evaluate_document_with_window(&new_doc, logical_w, logical_h) {
+            Ok(new_layout) => {
+                println!(
+                    "[HotReload] Successfully reloaded '{}' ({} resolved nodes)",
+                    path.display(),
+                    new_layout.nodes.len()
+                );
+                self.doc = Some(new_doc);
+                self.layout = new_layout;
+                self.render_frame();
+            }
+            Err(e) => {
+                eprintln!("[HotReload] Layout evaluation error in '{}':\n{e}", path.display());
+            }
+        }
     }
 
     /// Synchronously renders a frame to the current swapchain texture and presents it.
@@ -244,7 +325,15 @@ impl ViewerApp {
     }
 }
 
-impl ApplicationHandler for ViewerApp {
+impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: ViewerUserEvent) {
+        match event {
+            ViewerUserEvent::FileModified => {
+                self.reload_document();
+            }
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
             return;
@@ -424,7 +513,7 @@ impl ApplicationHandler for ViewerApp {
 /// Launches an interactive window viewer displaying the given `ResolvedLayout`.
 pub fn run_viewer(layout: ResolvedLayout, config: ViewerConfig) -> Result<(), Box<dyn std::error::Error>> {
     let mut app = ViewerApp::new(layout, config);
-    run_viewer_app(&mut app)
+    run_viewer_app(&mut app, None)
 }
 
 /// Launches an interactive window viewer displaying a live `Document`, re-evaluating the layout DAG on resize.
@@ -434,12 +523,64 @@ pub fn run_viewer_with_document(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let initial_layout = evaluate_document_with_window(&doc, config.width as f64, config.height as f64)?;
     let mut app = ViewerApp::new(initial_layout, config).with_document(doc);
-    run_viewer_app(&mut app)
+    run_viewer_app(&mut app, None)
 }
 
-fn run_viewer_app(app: &mut ViewerApp) -> Result<(), Box<dyn std::error::Error>> {
-    let event_loop = EventLoop::new()?;
+/// Launches an interactive window viewer watching a source file on disk, hot-reloading on changes.
+pub fn run_viewer_with_file(
+    file_path: PathBuf,
+    config: ViewerConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let source = std::fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read file '{}': {e}", file_path.display()))?;
+    let doc = parse_document(&source)
+        .map_err(|e| format!("Parse error in '{}': {e}", file_path.display()))?;
+    let initial_layout = evaluate_document_with_window(&doc, config.width as f64, config.height as f64)?;
+    let mut app = ViewerApp::new(initial_layout, config)
+        .with_document(doc)
+        .with_watch_path(file_path.clone());
+    run_viewer_app(&mut app, Some(&file_path))
+}
+
+fn run_viewer_app(
+    app: &mut ViewerApp,
+    watch_file: Option<&PathBuf>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let event_loop: EventLoop<ViewerUserEvent> = EventLoop::with_user_event().build()?;
     event_loop.set_control_flow(ControlFlow::Wait);
+
+    if let Some(path) = watch_file {
+        let proxy = event_loop.create_proxy();
+        let target_filename = path.file_name().map(|n| n.to_os_string());
+        let parent_dir = path
+            .parent()
+            .and_then(|p| if p.as_os_str().is_empty() { None } else { Some(p) })
+            .unwrap_or_else(|| std::path::Path::new("."));
+
+        let mut watcher = RecommendedWatcher::new(
+            move |res: Result<Event, notify::Error>| {
+                if let Ok(event) = res {
+                    if !event.kind.is_access() {
+                        let matches = if let Some(target) = &target_filename {
+                            event.paths.is_empty()
+                                || event.paths.iter().any(|p| p.file_name() == Some(target.as_os_str()))
+                        } else {
+                            true
+                        };
+                        if matches {
+                            let _ = proxy.send_event(ViewerUserEvent::FileModified);
+                        }
+                    }
+                }
+            },
+            notify::Config::default(),
+        )?;
+
+        watcher.watch(parent_dir, RecursiveMode::NonRecursive)?;
+        app._watcher = Some(watcher);
+        println!("[HotReload] Watching for live changes in: {}", path.display());
+    }
+
     event_loop.run_app(app)?;
     Ok(())
 }

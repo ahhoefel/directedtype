@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use directedtype::compiler::evaluate_document_with_window;
 use directedtype::parser::parse_document;
 use directedtype::render::{
-    run_viewer_with_document, HeadlessRenderer, SceneOptions, ViewerConfig,
+    run_viewer_with_file, HeadlessRenderer, SceneOptions, ViewerConfig,
 };
 use vello::peniko::Color;
 
@@ -112,7 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             height,
             scene_options,
         };
-        run_viewer_with_document(doc, config)?;
+        run_viewer_with_file(file_path, config)?;
     }
 
     Ok(())

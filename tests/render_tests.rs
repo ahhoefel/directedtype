@@ -1,6 +1,6 @@
 use directedtype::compiler::evaluate_document;
 use directedtype::parser::parse_document;
-use directedtype::render::{HeadlessRenderer, SceneOptions};
+use directedtype::render::{HeadlessRenderer, SceneOptions, ViewerApp, ViewerConfig};
 use vello::peniko::Color;
 
 #[test]
@@ -101,4 +101,66 @@ fn test_headless_render_to_png_file() {
 
     // Clean up temporary file
     let _ = std::fs::remove_file(png_path);
+}
+
+#[test]
+fn test_viewer_hot_reload_document() {
+    let temp_dir = std::env::temp_dir();
+    let test_file = temp_dir.join(format!("dt_hot_reload_test_{}.dt", std::process::id()));
+
+    // 1. Initial version: Rect with width 100
+    let v1 = r#"\Rect(x: 10, y: 10, width: 100, height: 50, color: #ff0000)"#;
+    std::fs::write(&test_file, v1).expect("Failed to write v1 test file");
+
+    let doc1 = parse_document(v1).expect("Failed to parse v1");
+    let layout1 = evaluate_document(&doc1).expect("Failed to evaluate v1");
+
+    let mut app = ViewerApp::new(layout1, ViewerConfig::default())
+        .with_document(doc1)
+        .with_watch_path(test_file.clone());
+
+    assert_eq!(app.layout().nodes.len(), 1);
+    assert_eq!(app.layout().nodes[0].rect.width, 100.0);
+
+    // 2. Updated version: Rect with width 350
+    let v2 = r#"\Rect(x: 10, y: 10, width: 350, height: 50, color: #00ff00)"#;
+    std::fs::write(&test_file, v2).expect("Failed to write v2 test file");
+
+    app.reload_document();
+
+    assert_eq!(app.layout().nodes.len(), 1);
+    assert_eq!(app.layout().nodes[0].rect.width, 350.0);
+
+    // 3. Invalid syntax version: Must not crash, must retain last valid layout
+    let v_invalid_syntax = r#"\Rect(x: 10, y: 10, width: { invalid syntax"#;
+    std::fs::write(&test_file, v_invalid_syntax).expect("Failed to write invalid syntax");
+
+    app.reload_document();
+
+    // Still retains width 350.0
+    assert_eq!(app.layout().nodes.len(), 1);
+    assert_eq!(app.layout().nodes[0].rect.width, 350.0);
+
+    // 4. Cyclic dependency version: Must not crash, must retain last valid layout
+    let v_cycle = r#"
+\Component ParadoxBox(width: max(children.width)) {
+  \Children {
+    width: parent.width
+  }
+}
+
+\ParadoxBox {
+  \Rect(height: 50)
+}
+"#;
+    std::fs::write(&test_file, v_cycle).expect("Failed to write cyclic layout");
+
+    app.reload_document();
+
+    // Still retains width 350.0
+    assert_eq!(app.layout().nodes.len(), 1);
+    assert_eq!(app.layout().nodes[0].rect.width, 350.0);
+
+    // Clean up
+    let _ = std::fs::remove_file(test_file);
 }
