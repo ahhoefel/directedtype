@@ -350,7 +350,39 @@ impl VelloTestbedApp {
             scene
         };
 
-        // 4. Render to surface target texture
+        let drawable_width = surface_texture.texture.width();
+        let drawable_height = surface_texture.texture.height();
+
+        if drawable_width != width || drawable_height != height {
+            println!(
+                "[RESIZE SYNC] Window requested {}x{}, Metal swapchain delivered {}x{}",
+                width, height, drawable_width, drawable_height
+            );
+        }
+
+        if surface.target_texture.width() != drawable_width
+            || surface.target_texture.height() != drawable_height
+        {
+            let device = &self.render_cx.devices[surface.dev_id].device;
+            let target_texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("DirectedType Synced Target Texture"),
+                size: wgpu::Extent3d {
+                    width: drawable_width,
+                    height: drawable_height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                view_formats: &[],
+            });
+            surface.target_view = target_texture.create_view(&wgpu::TextureViewDescriptor::default());
+            surface.target_texture = target_texture;
+        }
+
+        // 4. Render to surface target texture using actual drawable dimensions
         let device_handle = &self.render_cx.devices[surface.dev_id];
         let render_result = renderer.render_to_texture(
             &device_handle.device,
@@ -359,8 +391,8 @@ impl VelloTestbedApp {
             &surface.target_view,
             &RenderParams {
                 base_color: Color::from_rgba8(241, 245, 249, 255), // light slate #f1f5f9
-                width,
-                height,
+                width: drawable_width,
+                height: drawable_height,
                 antialiasing_method: AaConfig::Area,
             },
         );
