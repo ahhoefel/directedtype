@@ -686,3 +686,134 @@ fn test_parley_intrinsic_text_width_unconstrained() {
     );
 }
 
+#[test]
+fn test_required_port_missing_error() {
+    let input = r#"
+    \Component ProgressBar(progress_percentage: Number) {
+      \Rect(width: progress_percentage, height: 20)
+    }
+
+    \ProgressBar()
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let err = directedtype::compiler::compile_to_graph(&doc)
+        .expect_err("Expected compile error for missing required port");
+
+    match err {
+        directedtype::compiler::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "ProgressBar");
+            assert_eq!(port, "progress_percentage");
+        }
+        other => panic!("Expected MissingPort error, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_required_port_provided_by_instance() {
+    let input = r#"
+    \Component ProgressBar(progress_percentage: Number) {
+      \Rect(width: progress_percentage, height: 20)
+    }
+
+    \ProgressBar(progress_percentage: 75)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    // Node 0: ProgressBar container; Node 1: Inner Rect
+    let rect_node = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert_eq!(rect_node.rect.width, 75.0);
+}
+
+#[test]
+fn test_required_port_provided_by_ambient_parent() {
+    let input = r#"
+    \Component ProgressBar(progress_percentage: Number) {
+      \Rect(width: progress_percentage, height: 20)
+    }
+
+    \Component TaskList {
+      \Children {
+        progress_percentage: 42
+      }
+    }
+
+    \TaskList {
+      \ProgressBar()
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rect_node = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert_eq!(rect_node.rect.width, 42.0);
+}
+
+#[test]
+fn test_required_port_ambient_overridden_by_instance() {
+    let input = r#"
+    \Component ProgressBar(progress_percentage: Number) {
+      \Rect(width: progress_percentage, height: 20)
+    }
+
+    \Component TaskList {
+      \Children {
+        progress_percentage: 42
+      }
+    }
+
+    \TaskList {
+      \ProgressBar(progress_percentage: 88)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    // Explicit instance port (88) overrides ambient parent (42)
+    let rect_node = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert_eq!(rect_node.rect.width, 88.0);
+}
+
+#[test]
+fn test_precedence_3_tier_hierarchy() {
+    // Tier 1: Component signature default (width: 100)
+    // Tier 2: Ambient parent (\Children { width: 200 })
+    // Tier 3: Explicit instance override (width: 300)
+    let input = r#"
+    \Component Button(width: Number: 100) {
+      \Rect(width: width, height: 40)
+    }
+
+    \Component Container {
+      \Children {
+        width: 200
+      }
+    }
+
+    // Instance 1: Uses Tier 1 (Component default = 100)
+    \Button()
+
+    \Container {
+      // Instance 2: Uses Tier 2 (Ambient parent = 200 overrides default 100)
+      \Button()
+      // Instance 3: Uses Tier 3 (Explicit instance = 300 overrides ambient 200 and default 100)
+      \Button(width: 300)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 3);
+    assert_eq!(rects[0].rect.width, 100.0); // Tier 1 wins
+    assert_eq!(rects[1].rect.width, 200.0); // Tier 2 wins
+    assert_eq!(rects[2].rect.width, 300.0); // Tier 3 wins
+}
+
+
+

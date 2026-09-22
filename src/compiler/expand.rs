@@ -161,6 +161,18 @@ fn expand_component_instance(
         comp_ports.insert(name, port.expr.clone());
     }
 
+    // Validate that all required parameters (parameters without defaults) have been supplied
+    for param in &comp_def.params {
+        let name = param.name.as_str();
+        if param.default_edge.is_none() && !comp_ports.contains_key(name) {
+            return Err(CompileError::MissingPort {
+                node: comp_def.name.as_str().to_string(),
+                port: name.to_string(),
+                span: instance.span,
+            });
+        }
+    }
+
     // 2. Expand consumer children passed to this component instance
     let mut consumer_child_nodes = Vec::new();
     if let Some(slot) = &instance.content {
