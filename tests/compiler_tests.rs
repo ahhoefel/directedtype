@@ -610,3 +610,79 @@ fn test_responsive_flow_clamped_formula() {
         .expect("Evaluation should succeed");
     assert_eq!(layout_wide.nodes[1].rect.width, 700.0);
 }
+
+#[test]
+fn test_parley_text_height_wrapping_multiline() {
+    let input = r#"
+    \Component Flow(gap: Number: 24) {
+        \Children {
+            x: parent.left,
+            y: prev ? prev.bottom + gap : parent.top,
+            width: 320
+        }
+    }
+
+    \Flow {
+        \Text(size: 36, weight: 700) {
+            DirectedType Native Layout Engine
+        }
+        \Text(size: 18) {
+            A pure functional reactive layout engine
+        }
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    assert_eq!(layout.nodes.len(), 3);
+    let title = &layout.nodes[1];
+    let subtitle = &layout.nodes[2];
+
+    assert_eq!(title.name, "Text");
+    assert_eq!(title.rect.x, 0.0);
+    assert_eq!(title.rect.y, 0.0);
+    assert_eq!(title.rect.width, 320.0);
+
+    // Parley shapes 3 lines at size 36 bold: height must be > 100px (around ~135px), not 67px
+    assert!(
+        title.rect.height > 100.0,
+        "Expected height > 100px for 3 wrapped lines of size 36, got: {}",
+        title.rect.height
+    );
+
+    // Subtitle must be positioned strictly below the title + gap (y >= title.bottom + 24)
+    assert!(
+        subtitle.rect.y >= title.rect.bottom() + 23.9,
+        "Subtitle y ({}) must be >= title.bottom + 24 ({})",
+        subtitle.rect.y,
+        title.rect.bottom() + 24.0
+    );
+}
+
+#[test]
+fn test_parley_intrinsic_text_width_unconstrained() {
+    let input = r#"
+    \Text(size: 20) { Hello World }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    assert_eq!(layout.nodes.len(), 1);
+    let text_node = &layout.nodes[0];
+
+    // Unconstrained width must be measured via Parley (> 50px, single line)
+    assert!(
+        text_node.rect.width > 50.0 && text_node.rect.width < 250.0,
+        "Expected realistic intrinsic text width, got: {}",
+        text_node.rect.width
+    );
+    // Height must be single line height (~20-30px)
+    assert!(
+        text_node.rect.height > 18.0 && text_node.rect.height < 40.0,
+        "Expected single line height, got: {}",
+        text_node.rect.height
+    );
+}
+

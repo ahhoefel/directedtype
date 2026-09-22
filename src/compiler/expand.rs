@@ -302,57 +302,88 @@ fn expand_primitive_element(
     }
 
     // Base Spatial Trait defaults for height and width
-    let text_len = doc
+    let text_content = doc
         .get_node(node_id)
-        .and_then(|n| n.text_content.as_ref())
-        .map_or(0.0, |t| t.len() as f64);
-    let has_text = text_len > 0.0;
+        .and_then(|n| n.text_content.clone());
+    let has_text = text_content.as_ref().is_some_and(|t| !t.is_empty());
+
+    let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
+    let size_expr = if ports.contains_key("size") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("size", elem.span),
+            span: elem.span,
+        })
+    } else if ports.contains_key("font_size") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("font_size", elem.span),
+            span: elem.span,
+        })
+    } else {
+        Expr::Literal(Literal::Number(16.0, elem.span))
+    };
+
+    let weight_expr = if ports.contains_key("weight") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("weight", elem.span),
+            span: elem.span,
+        })
+    } else if ports.contains_key("font_weight") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("font_weight", elem.span),
+            span: elem.span,
+        })
+    } else {
+        Expr::Literal(Literal::Number(400.0, elem.span))
+    };
+
+    let font_expr = if ports.contains_key("font") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("font", elem.span),
+            span: elem.span,
+        })
+    } else if ports.contains_key("font_family") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("font_family", elem.span),
+            span: elem.span,
+        })
+    } else {
+        Expr::Literal(Literal::String(String::new(), elem.span))
+    };
 
     // Height defaults
     if !ports.contains_key("height") {
-        if elem.name.as_str() == "Text" || (has_text && ports.contains_key("width")) {
-            // Text wrapping: height depends on width and text length
+        if (elem.name.as_str() == "Text" || ports.contains_key("width")) && has_text {
+            // Text wrapping with Parley: height depends on width, size, weight, font
             let width_expr = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::new(node_id.canonical_name(), elem.span))),
+                target: Box::new(self_ident.clone()),
                 member: Ident::new("width", elem.span),
                 span: elem.span,
             });
-            let text_len_expr =
-                Expr::Literal(Literal::Number((text_len * 8.5).max(24.0), elem.span));
-            let div_expr = Expr::Binary(BinaryExpr {
-                op: BinaryOp::Div,
-                left: Box::new(text_len_expr),
-                right: Box::new(width_expr),
+            let text_str = text_content.clone().unwrap_or_default();
+            let height_call = Expr::Call(CallExpr {
+                callee: Ident::new("text_height", elem.span),
+                args: vec![
+                    Expr::Literal(Literal::String(text_str, elem.span)),
+                    size_expr.clone(),
+                    weight_expr.clone(),
+                    font_expr.clone(),
+                    width_expr,
+                ],
                 span: elem.span,
             });
-            let base_height = if ports.contains_key("size") {
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(node_id.canonical_name(), elem.span))),
-                    member: Ident::new("size", elem.span),
-                    span: elem.span,
-                })
-            } else {
-                Expr::Literal(Literal::Number(20.0, elem.span))
-            };
-            let mul_expr = Expr::Binary(BinaryExpr {
-                op: BinaryOp::Mul,
-                left: Box::new(div_expr),
-                right: Box::new(base_height.clone()),
-                span: elem.span,
-            });
-            let final_expr = Expr::Binary(BinaryExpr {
-                op: BinaryOp::Add,
-                left: Box::new(mul_expr),
-                right: Box::new(base_height),
-                span: elem.span,
-            });
-            ports.insert("height".to_string(), final_expr);
+            ports.insert("height".to_string(), height_call);
         } else if ports.contains_key("size") {
             // E.g. \Header(size: 32) -> height: self.size
             ports.insert(
                 "height".to_string(),
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(node_id.canonical_name(), elem.span))),
+                    target: Box::new(self_ident.clone()),
                     member: Ident::new("size", elem.span),
                     span: elem.span,
                 }),
@@ -367,15 +398,30 @@ fn expand_primitive_element(
 
     // Width defaults
     if !ports.contains_key("width") {
-        let default_w = if has_text {
-            (text_len * 8.0).max(100.0)
+        if elem.name.as_str() == "Text" && has_text {
+            let text_str = text_content.clone().unwrap_or_default();
+            let width_call = Expr::Call(CallExpr {
+                callee: Ident::new("text_width", elem.span),
+                args: vec![
+                    Expr::Literal(Literal::String(text_str, elem.span)),
+                    size_expr,
+                    weight_expr,
+                    font_expr,
+                ],
+                span: elem.span,
+            });
+            ports.insert("width".to_string(), width_call);
         } else {
-            100.0
-        };
-        ports.insert(
-            "width".to_string(),
-            Expr::Literal(Literal::Number(default_w, elem.span)),
-        );
+            let default_w = if has_text {
+                (text_content.as_ref().unwrap().len() as f64 * 8.0).max(100.0)
+            } else {
+                100.0
+            };
+            ports.insert(
+                "width".to_string(),
+                Expr::Literal(Literal::Number(default_w, elem.span)),
+            );
+        }
     }
 
     let node = doc.get_node_mut(node_id).unwrap();

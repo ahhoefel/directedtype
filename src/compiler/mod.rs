@@ -4,6 +4,7 @@ pub mod expand;
 pub mod expanded;
 pub mod graph;
 pub mod layout;
+pub mod text;
 pub mod topo;
 pub mod value;
 

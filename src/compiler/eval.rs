@@ -198,6 +198,25 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         })
                     }
                 }
+                "text_height" => {
+                    let text = evaluated_args.first().and_then(|v| v.as_str()).unwrap_or("");
+                    let size = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(16.0);
+                    let weight = evaluated_args.get(2).and_then(|v| v.as_f64()).unwrap_or(400.0);
+                    let family = evaluated_args.get(3).and_then(|v| v.as_str());
+                    let max_width = evaluated_args.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+                    let h = crate::compiler::text::measure_text_height(text, size, weight, family, max_width);
+                    Ok(Value::Number(h))
+                }
+                "text_width" => {
+                    let text = evaluated_args.first().and_then(|v| v.as_str()).unwrap_or("");
+                    let size = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(16.0);
+                    let weight = evaluated_args.get(2).and_then(|v| v.as_f64()).unwrap_or(400.0);
+                    let family = evaluated_args.get(3).and_then(|v| v.as_str());
+
+                    let w = crate::compiler::text::measure_text_width(text, size, weight, family);
+                    Ok(Value::Number(w))
+                }
                 other => Err(CompileError::Custom {
                     message: format!("Unknown math/collection function '{}'", other),
                     span: c.span,

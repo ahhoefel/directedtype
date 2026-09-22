@@ -1,9 +1,15 @@
 // DirectedType (DTML) Showcase Document
-\Component Flow(gap: Number: 20) {
+\Component Flow(
+        x: parent.x, 
+        y: parent.y + self.margin, 
+        gap: Number: 20, 
+        width: Number: min(max(window.width, 400), 700), 
+        margin: Number: 40
+    ) {
     \Children {
-        x: parent.left,
+        x: parent.left + parent.margin,
         y: prev ? prev.bottom + gap : parent.top,
-        width: min(max(window.width, 400), 700)
+        width: parent.width - (2 * parent.margin)
     }
 }
 
@@ -25,7 +31,7 @@
     }
 }
 
-\Flow(x: 40, y: 40, gap: 24) {
+\Flow(gap: 24) {
     \Text(size: 36, weight: 700, color: #0f172a) {
         DirectedType Native Layout Engine
     }
