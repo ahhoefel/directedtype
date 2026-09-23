@@ -1,0 +1,119 @@
+// Environmental Scoping & Lexical Propagation Demo
+// Demonstrates the 2x2 Orthogonal Matrix and Lexical Tombstones
+
+\Component Flow(
+    x: parent.x, 
+    y: parent.y + self.margin, 
+    gap: Number: 20, 
+    width: Number: min(max(window.width, 400), 700), 
+    margin: Number: 30
+) {
+    \Children {
+        x: parent.left + parent.margin,
+        y: prev ? prev.bottom + gap : parent.top,
+        width: parent.width - (2 * parent.margin)
+    }
+}
+
+// 1. Translator / Provider: Takes parameter and exposes as ambient environment
+\Component ThemeProvider(theme: String: "dark") {
+    env text_color = (self.theme == "dark") ? #f8fafc : #0f172a
+    env card_bg = (self.theme == "dark") ? #1e293b : #e2e8f0
+    env accent_color = #3b82f6
+    \Children {
+        x: parent.left,
+        y: prev ? prev.bottom + 20 : parent.top,
+        width: parent.width
+    }
+}
+
+// 2. Interceptor: Intercepts ambient env accent_color and replaces it for subtrees
+\Component AccentInterceptor(new_accent: Color: #ec4899, height: sum(children.height)) {
+    env accent_color = self.new_accent
+    \Children {
+        x: parent.left,
+        y: parent.top,
+        width: parent.width
+    }
+}
+
+// 3. Shield / Swallower: Consumes env card_bg and text_color, swallowing propagation to descendants
+\Component SwallowerShield(
+    env card_bg: Color, 
+    env text_color: Color, 
+    env accent_color: Color, 
+    height: sum(children.height) + 50
+) {
+    // Firewall tombstones: stop ambient theme propagation to children
+    let card_bg;
+    let text_color;
+    // Local let shadows env parameter, creating a firewall that stops accent propagation
+    let accent_color = #94a3b8;
+    \Rect(x: parent.left, y: parent.top, width: parent.width, height: 36, color: accent_color, radius: 8)
+    \Text(x: parent.left + 12, y: parent.top + 10, size: 13, weight: 600, color: #ffffff) {
+        Shield / Swallower Firewall: stopped env propagation below
+    }
+    \Children {
+        x: parent.left,
+        y: parent.top + 50,
+        width: parent.width
+    }
+}
+
+// A leaf card component that automatically consumes ambient text_color, card_bg, and accent_color
+\Component AmbientCard(
+    width: Number: parent.width, 
+    height: Number: 90, 
+    env card_bg: Color: #ffffff, 
+    env text_color: Color: #000000, 
+    env accent_color: Color: #2563eb
+) {
+    \Rect(
+        x: parent.left,
+        y: parent.top,
+        width: parent.width,
+        height: parent.height,
+        color: parent.card_bg,
+        radius: 10,
+        border_width: 2,
+        border_color: parent.accent_color
+    )
+    \Text(
+        x: parent.left + 16,
+        y: parent.top + 20,
+        size: 16,
+        weight: 600,
+        color: parent.text_color
+    ) {
+        Environmental Scoping Active
+    }
+    \Text(
+        x: parent.left + 16,
+        y: parent.top + 48,
+        size: 14,
+        color: parent.accent_color
+    ) {
+        Accent border color inherited via env propagation
+    }
+}
+
+\Flow(margin: 40, gap: 24) {
+    \Text(size: 28, weight: 700, color: #0f172a) {
+        Environmental Scope Showcase
+    }
+
+    // Outer Dark Theme Provider
+    \ThemeProvider(theme: "dark") {
+        \AmbientCard()
+
+        // Nested subtree with Interceptor (Pink Accent)
+        \AccentInterceptor(new_accent: #ec4899) {
+            \AmbientCard()
+        }
+
+        // Nested subtree with Swallower Shield (Reverts to Tier 1 default accent)
+        \SwallowerShield {
+            \AmbientCard()
+        }
+    }
+}

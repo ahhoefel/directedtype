@@ -232,3 +232,30 @@ fn test_clipping_example_file() {
     }
 }
 
+#[test]
+fn test_env_example_file() {
+    let source = std::fs::read_to_string("examples/env_demo.dt")
+        .expect("Failed to read examples/env_demo.dt");
+    let doc = parse_document(&source).expect("Failed to parse examples/env_demo.dt");
+    let layout = evaluate_document(&doc).expect("Failed to evaluate examples/env_demo.dt");
+
+    let mut renderer = HeadlessRenderer::new().expect("Failed to initialize HeadlessRenderer");
+    let options = SceneOptions {
+        background: Some(Color::WHITE),
+        ..Default::default()
+    };
+
+    let img = renderer
+        .render_layout(&layout, 750, 700, &options)
+        .expect("Failed to render examples/env_demo.dt");
+
+    assert_eq!(img.width(), 750);
+    assert_eq!(img.height(), 700);
+
+    let brain_dir = std::path::Path::new("/Users/hoefel/.gemini/antigravity-ide/brain/c2560240-cb95-4f78-9867-aa0ab7be2601");
+    if brain_dir.exists() {
+        let _ = img.save(brain_dir.join("env_demo_render.png"));
+    }
+}
+
+

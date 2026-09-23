@@ -8,6 +8,14 @@ use std::collections::HashMap;
 pub enum LexicalBinding {
     Expr(Expr),
     Node(NodeId),
+    Uninitialized,
+}
+
+/// An environmental entry in the active Lexical Scope Stack.
+#[derive(Debug, Clone, PartialEq)]
+pub enum EnvEntry {
+    Bound(Expr),
+    Tombstone,
 }
 
 /// Context used when rewriting expressions to bind variables to concrete node IDs.
@@ -26,6 +34,17 @@ pub struct ScopeContext<'a> {
 pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError> {
     let mut registry = HashMap::new();
     let mut global_scope = HashMap::new();
+    let mut global_env_scope: HashMap<String, EnvEntry> = HashMap::new();
+
+    // Default universal clip: window.clip
+    global_env_scope.insert(
+        "clip".to_string(),
+        EnvEntry::Bound(Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), doc.span))),
+            member: Ident::new("clip", doc.span),
+            span: doc.span,
+        })),
+    );
 
     // 1. Index all component definitions
     for item in &doc.items {
@@ -45,7 +64,22 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
         "clip".to_string(),
     ];
 
-    // 2. Pre-resolve top-level let expressions so declaration order does not matter
+    // Pre-register uninitialized let and env items
+    for item in &doc.items {
+        match item {
+            Item::Let(l) if l.value.is_none() => {
+                global_scope.insert(l.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                global_env_scope.insert(l.name.as_str().to_string(), EnvEntry::Tombstone);
+            }
+            Item::Env(e) if e.value.is_none() => {
+                global_scope.insert(e.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                global_env_scope.insert(e.name.as_str().to_string(), EnvEntry::Tombstone);
+            }
+            _ => {}
+        }
+    }
+
+    // 2. Pre-resolve top-level let and env expressions
     let empty_ports: [String; 0] = [];
     let empty_children: [NodeId; 0] = [];
     let mut changed = true;
@@ -54,28 +88,63 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
         changed = false;
         passes += 1;
         for item in &doc.items {
-            if let Item::Let(let_binding) = item {
-                if let LetValue::Expr(raw_expr) = &let_binding.value {
-                    let scope_ctx = ScopeContext {
-                        current_node: NodeId::WINDOW,
-                        parent_node: None,
-                        prev_sibling: None,
-                        child_ids: &empty_children,
-                        parent_ports: &empty_ports,
-                        current_ports: &window_scope_ports,
-                        lexical_scope: &global_scope,
-                    };
-                    let rewritten = rewrite_expr(raw_expr, &scope_ctx);
-                    if let Some(LexicalBinding::Expr(existing)) = global_scope.get(let_binding.name.as_str()) {
-                        if existing != &rewritten {
+            match item {
+                Item::Let(let_binding) => {
+                    if let_binding.value.is_none() {
+                        global_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                    } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
+                        let scope_ctx = ScopeContext {
+                            current_node: NodeId::WINDOW,
+                            parent_node: None,
+                            prev_sibling: None,
+                            child_ids: &empty_children,
+                            parent_ports: &empty_ports,
+                            current_ports: &window_scope_ports,
+                            lexical_scope: &global_scope,
+                        };
+                        let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
+                        if let Some(LexicalBinding::Expr(existing)) = global_scope.get(let_binding.name.as_str()) {
+                            if existing != &rewritten {
+                                global_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                                changed = true;
+                            }
+                        } else {
                             global_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
                             changed = true;
                         }
-                    } else {
-                        global_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
-                        changed = true;
                     }
                 }
+                Item::Env(env_binding) => {
+                    if env_binding.value.is_none() {
+                        global_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                        global_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Tombstone);
+                    } else if let Some(raw_expr) = &env_binding.value {
+                        if !matches!(raw_expr, Expr::Node(_)) {
+                            let scope_ctx = ScopeContext {
+                                current_node: NodeId::WINDOW,
+                                parent_node: None,
+                                prev_sibling: None,
+                                child_ids: &empty_children,
+                                parent_ports: &empty_ports,
+                                current_ports: &window_scope_ports,
+                                lexical_scope: &global_scope,
+                            };
+                            let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
+                            if let Some(LexicalBinding::Expr(existing)) = global_scope.get(env_binding.name.as_str()) {
+                                if existing != &rewritten {
+                                    global_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten.clone()));
+                                    global_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(rewritten));
+                                    changed = true;
+                                }
+                            } else {
+                                global_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten.clone()));
+                                global_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(rewritten));
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     }
@@ -86,12 +155,38 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
     for item in &doc.items {
         match item {
             Item::Component(_) => {}
+            Item::Env(env_binding) => {
+                if let Some(Expr::Node(elem)) = &env_binding.value {
+                    let elem_ctx = ElementContext {
+                        parent_id: Some(NodeId::WINDOW),
+                        prev_sibling_id: last_root_id,
+                        parent_ports: &window_scope_ports,
+                        lexical_scope: &global_scope,
+                        env_scope: &global_env_scope,
+                        enclosing_component_id: None,
+                        is_let: true,
+                    };
+                    let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc)?;
+                    expanded_doc.roots.push(root_id);
+                    last_root_id = Some(root_id);
+                    global_scope.insert(
+                        env_binding.name.as_str().to_string(),
+                        LexicalBinding::Node(root_id),
+                    );
+                    let bound_expr = Expr::Ident(Ident::new(root_id.canonical_name(), elem.span));
+                    global_env_scope.insert(
+                        env_binding.name.as_str().to_string(),
+                        EnvEntry::Bound(bound_expr),
+                    );
+                }
+            }
             Item::Node(node) => {
                 let elem_ctx = ElementContext {
                     parent_id: Some(NodeId::WINDOW),
                     prev_sibling_id: last_root_id,
                     parent_ports: &window_scope_ports,
                     lexical_scope: &global_scope,
+                    env_scope: &global_env_scope,
                     enclosing_component_id: None,
                     is_let: false,
                 };
@@ -100,13 +195,14 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                 last_root_id = Some(root_id);
             }
             Item::Let(let_binding) => match &let_binding.value {
-                LetValue::Expr(_) => {} // Already resolved in pre-pass
-                LetValue::Node(elem) => {
+                Some(LetValue::Expr(_)) | None => {} // Already resolved in pre-pass
+                Some(LetValue::Node(elem)) => {
                     let elem_ctx = ElementContext {
                         parent_id: Some(NodeId::WINDOW),
                         prev_sibling_id: last_root_id,
                         parent_ports: &window_scope_ports,
                         lexical_scope: &global_scope,
+                        env_scope: &global_env_scope,
                         enclosing_component_id: None,
                         is_let: true,
                     };
@@ -137,6 +233,7 @@ struct ElementContext<'a> {
     pub prev_sibling_id: Option<NodeId>,
     pub parent_ports: &'a [String],
     pub lexical_scope: &'a HashMap<String, LexicalBinding>,
+    pub env_scope: &'a HashMap<String, EnvEntry>,
     pub enclosing_component_id: Option<NodeId>,
     pub is_let: bool,
 }
@@ -194,6 +291,7 @@ fn expand_element(
             registry,
             doc,
             ctx.lexical_scope,
+            ctx.env_scope,
         )?;
     } else {
         // It's a primitive element (e.g. \Rect, \Text, \Header, etc.)
@@ -217,6 +315,7 @@ fn expand_component_instance(
     registry: &HashMap<String, ComponentDef>,
     doc: &mut ExpandedDocument,
     lexical_scope: &HashMap<String, LexicalBinding>,
+    caller_env_scope: &HashMap<String, EnvEntry>,
 ) -> Result<(), CompileError> {
     // 1. Gather parameter definitions and map consumer arguments
     let mut comp_scope_ports = vec![
@@ -229,7 +328,30 @@ fn expand_component_instance(
     ];
     let mut comp_ports = HashMap::new();
 
-    // Register parameters with default values
+    // Map explicit arguments passed to the component (Tier 4)
+    let mut explicit_ports = HashMap::new();
+    for port in &instance.ports {
+        let name = port.name.as_str().to_string();
+        let expr = match &port.expr {
+            Expr::Node(inline_elem) => {
+                let child_ctx = ElementContext {
+                    parent_id: Some(ctx.comp_node_id),
+                    prev_sibling_id: ctx.prev_sibling_id,
+                    parent_ports: ctx.parent_ports,
+                    lexical_scope,
+                    env_scope: caller_env_scope,
+                    enclosing_component_id: None,
+                    is_let: false,
+                };
+                let child_id = expand_element(inline_elem, &child_ctx, registry, doc)?;
+                Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span))
+            }
+            other => other.clone(),
+        };
+        explicit_ports.insert(name, expr);
+    }
+
+    // Resolve parameters according to 4-Tier Precedence
     for param in &comp_def.params {
         if param.name.as_str() == "parent" {
             return Err(CompileError::ReservedPort {
@@ -242,59 +364,67 @@ fn expand_component_instance(
         if !comp_scope_ports.contains(&name) {
             comp_scope_ports.push(name.clone());
         }
-        if let Some(default_expr) = &param.default_edge {
+
+        // Tier 4: Explicit caller argument
+        if let Some(explicit_expr) = explicit_ports.remove(&name) {
+            comp_ports.insert(name, explicit_expr);
+        }
+        // Tier 2: Lexical Environment (caller_env_scope)
+        else if let Some(env_entry) = caller_env_scope.get(&name) {
+            match env_entry {
+                EnvEntry::Bound(env_expr) => {
+                    comp_ports.insert(name, env_expr.clone());
+                }
+                EnvEntry::Tombstone => {
+                    // Tombstone halts lookup! Fall back to Tier 1 default
+                    if let Some(default_expr) = &param.default_edge {
+                        comp_ports.insert(name, default_expr.clone());
+                    }
+                }
+            }
+        }
+        // Tier 1: Component Signature Default
+        else if let Some(default_expr) = &param.default_edge {
             comp_ports.insert(name, default_expr.clone());
         }
     }
 
-    // Override with explicit arguments passed to the component
-    for port in &instance.ports {
-        let name = port.name.as_str().to_string();
+    // Any remaining explicit ports not defined in signature (e.g. ad-hoc ports)
+    for (name, expr) in explicit_ports {
         if !comp_scope_ports.contains(&name) {
             comp_scope_ports.push(name.clone());
         }
-        let expr = match &port.expr {
-            Expr::Node(inline_elem) => {
-                let child_ctx = ElementContext {
-                    parent_id: Some(ctx.comp_node_id),
-                    prev_sibling_id: ctx.prev_sibling_id,
-                    parent_ports: ctx.parent_ports,
-                    lexical_scope,
-                    enclosing_component_id: None,
-                    is_let: false,
-                };
-                let child_id = expand_element(inline_elem, &child_ctx, registry, doc)?;
-                Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span))
-            }
-            other => other.clone(),
-        };
         comp_ports.insert(name, expr);
     }
 
     // Default clip port if not explicitly declared
     if !comp_ports.contains_key("clip") {
-        let default_clip_expr = if let Some(parent) = ctx.parent_id {
-            if parent.is_window() {
+        if let Some(EnvEntry::Bound(clip_expr)) = caller_env_scope.get("clip") {
+            comp_ports.insert("clip".to_string(), clip_expr.clone());
+        } else {
+            let default_clip_expr = if let Some(parent) = ctx.parent_id {
+                if parent.is_window() {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), instance.span))),
+                        member: Ident::new("clip", instance.span),
+                        span: instance.span,
+                    })
+                } else {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(parent.canonical_name(), instance.span))),
+                        member: Ident::new("clip", instance.span),
+                        span: instance.span,
+                    })
+                }
+            } else {
                 Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), instance.span))),
                     member: Ident::new("clip", instance.span),
                     span: instance.span,
                 })
-            } else {
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(parent.canonical_name(), instance.span))),
-                    member: Ident::new("clip", instance.span),
-                    span: instance.span,
-                })
-            }
-        } else {
-            Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), instance.span))),
-                member: Ident::new("clip", instance.span),
-                span: instance.span,
-            })
-        };
-        comp_ports.insert("clip".to_string(), default_clip_expr);
+            };
+            comp_ports.insert("clip".to_string(), default_clip_expr);
+        }
     }
 
     // Validate that all required parameters (parameters without defaults) have been supplied
@@ -328,7 +458,20 @@ fn expand_component_instance(
     let mut last_child_id: Option<NodeId> = None;
     let mut local_scope: HashMap<String, LexicalBinding> = lexical_scope.clone();
 
-    // Pre-resolve let expressions in component body so their declaration order does not matter
+    // Pre-register uninitialized let and env in component body
+    for item in &comp_def.body {
+        match item {
+            ComponentBodyItem::Let(l) if l.value.is_none() => {
+                local_scope.insert(l.name.as_str().to_string(), LexicalBinding::Uninitialized);
+            }
+            ComponentBodyItem::Env(e) if e.value.is_none() => {
+                local_scope.insert(e.name.as_str().to_string(), LexicalBinding::Uninitialized);
+            }
+            _ => {}
+        }
+    }
+
+    // Pre-resolve let and env expressions in component body so their declaration order does not matter
     let empty_children: [NodeId; 0] = [];
     let mut changed = true;
     let mut passes = 0;
@@ -336,41 +479,132 @@ fn expand_component_instance(
         changed = false;
         passes += 1;
         for item in &comp_def.body {
-            if let ComponentBodyItem::Let(let_binding) = item {
-                if let LetValue::Expr(raw_expr) = &let_binding.value {
-                    let scope_ctx = ScopeContext {
-                        current_node: ctx.comp_node_id,
-                        parent_node: ctx.parent_id,
-                        prev_sibling: ctx.prev_sibling_id,
-                        child_ids: &empty_children,
-                        parent_ports: ctx.parent_ports,
-                        current_ports: &comp_scope_ports,
-                        lexical_scope: &local_scope,
-                    };
-                    let rewritten = rewrite_expr(raw_expr, &scope_ctx);
-                    if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
-                        if existing != &rewritten {
+            match item {
+                ComponentBodyItem::Let(let_binding) => {
+                    if let_binding.value.is_none() {
+                        local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                    } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
+                        let scope_ctx = ScopeContext {
+                            current_node: ctx.comp_node_id,
+                            parent_node: ctx.parent_id,
+                            prev_sibling: ctx.prev_sibling_id,
+                            child_ids: &empty_children,
+                            parent_ports: ctx.parent_ports,
+                            current_ports: &comp_scope_ports,
+                            lexical_scope: &local_scope,
+                        };
+                        let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
+                        if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
+                            if existing != &rewritten {
+                                local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                                changed = true;
+                            }
+                        } else {
                             local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
                             changed = true;
                         }
-                    } else {
-                        local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
-                        changed = true;
                     }
                 }
+                ComponentBodyItem::Env(env_binding) => {
+                    if env_binding.value.is_none() {
+                        local_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                    } else if let Some(raw_expr) = &env_binding.value {
+                        if !matches!(raw_expr, Expr::Node(_)) {
+                            let scope_ctx = ScopeContext {
+                                current_node: ctx.comp_node_id,
+                                parent_node: ctx.parent_id,
+                                prev_sibling: ctx.prev_sibling_id,
+                                child_ids: &empty_children,
+                                parent_ports: ctx.parent_ports,
+                                current_ports: &comp_scope_ports,
+                                lexical_scope: &local_scope,
+                            };
+                            let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
+                            if let Some(LexicalBinding::Expr(existing)) = local_scope.get(env_binding.name.as_str()) {
+                                if existing != &rewritten {
+                                    local_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                                    changed = true;
+                                }
+                            } else {
+                                local_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     }
 
+    // Setup internal_body_env_scope (sealed black box for internal elements)
+    let mut internal_body_env_scope: HashMap<String, EnvEntry> = HashMap::new();
+    internal_body_env_scope.insert(
+        "clip".to_string(),
+        EnvEntry::Bound(Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
+            member: Ident::new("clip", instance.span),
+            span: instance.span,
+        })),
+    );
+    for param in &comp_def.params {
+        if param.is_env {
+            internal_body_env_scope.insert(
+                param.name.as_str().to_string(),
+                EnvEntry::Bound(Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
+                    member: param.name.clone(),
+                    span: instance.span,
+                })),
+            );
+        }
+    }
+
+    // Setup children_env_scope (for \Children)
+    let mut children_env_scope = caller_env_scope.clone();
+    children_env_scope.insert(
+        "clip".to_string(),
+        EnvEntry::Bound(Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
+            member: Ident::new("clip", instance.span),
+            span: instance.span,
+        })),
+    );
+    for param in &comp_def.params {
+        if param.is_env {
+            children_env_scope.insert(
+                param.name.as_str().to_string(),
+                EnvEntry::Bound(Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
+                    member: param.name.clone(),
+                    span: instance.span,
+                })),
+            );
+        }
+    }
+
+    // Process body items in declaration order
     for item in &comp_def.body {
         match item {
-            ComponentBodyItem::Let(let_binding) => match &let_binding.value {
-                LetValue::Node(elem) => {
+            ComponentBodyItem::Let(let_binding) => {
+                let is_env_param_shadow = comp_def
+                    .params
+                    .iter()
+                    .any(|p| p.is_env && p.name.as_str() == let_binding.name.as_str());
+
+                if let_binding.value.is_none() || is_env_param_shadow {
+                    // Shield/Swallower pattern or Firewall Tombstone
+                    children_env_scope.insert(let_binding.name.as_str().to_string(), EnvEntry::Tombstone);
+                    internal_body_env_scope.insert(let_binding.name.as_str().to_string(), EnvEntry::Tombstone);
+                }
+
+                if let Some(LetValue::Node(elem)) = &let_binding.value {
                     let elem_ctx = ElementContext {
                         parent_id: Some(ctx.comp_node_id),
                         prev_sibling_id: None,
                         parent_ports: &comp_scope_ports,
                         lexical_scope: &local_scope,
+                        env_scope: &internal_body_env_scope,
                         enclosing_component_id: Some(ctx.comp_node_id),
                         is_let: true,
                     };
@@ -386,14 +620,68 @@ fn expand_component_instance(
                         LexicalBinding::Node(node_id),
                     );
                 }
-                LetValue::Expr(_) => {} // Already resolved in pre-pass
-            },
+            }
+            ComponentBodyItem::Env(env_binding) => {
+                if let Some(raw_expr) = &env_binding.value {
+                    match raw_expr {
+                        Expr::Node(elem) => {
+                            let elem_ctx = ElementContext {
+                                parent_id: Some(ctx.comp_node_id),
+                                prev_sibling_id: None,
+                                parent_ports: &comp_scope_ports,
+                                lexical_scope: &local_scope,
+                                env_scope: &internal_body_env_scope,
+                                enclosing_component_id: Some(ctx.comp_node_id),
+                                is_let: true,
+                            };
+                            let node_id = expand_element(
+                                elem,
+                                &elem_ctx,
+                                registry,
+                                doc,
+                            )?;
+                            all_children_ids.push(node_id);
+                            local_scope.insert(
+                                env_binding.name.as_str().to_string(),
+                                LexicalBinding::Node(node_id),
+                            );
+                            let bound_expr = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
+                            children_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(bound_expr.clone()));
+                            internal_body_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(bound_expr));
+                        }
+                        _ => {
+                            let scope_ctx = ScopeContext {
+                                current_node: ctx.comp_node_id,
+                                parent_node: ctx.parent_id,
+                                prev_sibling: ctx.prev_sibling_id,
+                                child_ids: &empty_children,
+                                parent_ports: ctx.parent_ports,
+                                current_ports: &comp_scope_ports,
+                                lexical_scope: &local_scope,
+                            };
+                            let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
+                            local_scope.insert(
+                                env_binding.name.as_str().to_string(),
+                                LexicalBinding::Expr(rewritten.clone()),
+                            );
+                            children_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(rewritten.clone()));
+                            internal_body_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(rewritten));
+                        }
+                    }
+                } else {
+                    // Environmental Hole Tombstone
+                    local_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                    children_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Tombstone);
+                    internal_body_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Tombstone);
+                }
+            }
             ComponentBodyItem::Node(body_node) => {
                 let elem_ctx = ElementContext {
                     parent_id: Some(ctx.comp_node_id),
                     prev_sibling_id: last_child_id,
                     parent_ports: &comp_scope_ports,
                     lexical_scope: &local_scope,
+                    env_scope: &internal_body_env_scope,
                     enclosing_component_id: Some(ctx.comp_node_id),
                     is_let: false,
                 };
@@ -420,8 +708,7 @@ fn expand_component_instance(
                 for child_elem in &consumer_child_nodes {
                     let mut merged_ports = HashMap::new();
 
-                    // Ambient rules from \Children are authored inside the component,
-                    // so their expressions are resolved in the component's internal scope.
+                    // Ambient rules from \Children are authored inside the component (Tier 3)
                     let empty_children: [NodeId; 0] = [];
                     let ambient_scope_ctx = ScopeContext {
                         current_node: ctx.comp_node_id,
@@ -434,11 +721,11 @@ fn expand_component_instance(
                     };
 
                     for ambient in &dir.ports {
-                        let rewritten = rewrite_expr(&ambient.expr, &ambient_scope_ctx);
+                        let rewritten = rewrite_expr(&ambient.expr, &ambient_scope_ctx)?;
                         merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
                     }
 
-                    // Explicit child ports override ambient rules (Section 6 Precedence)
+                    // Explicit child ports override ambient rules (Tier 4 > Tier 3)
                     for explicit in &child_elem.ports {
                         merged_ports.insert(explicit.name.as_str().to_string(), explicit.expr.clone());
                     }
@@ -458,6 +745,7 @@ fn expand_component_instance(
                         prev_sibling_id: last_consumer_child_id,
                         parent_ports: &comp_scope_ports,
                         lexical_scope, // Pass caller's lexical scope to preserve encapsulation
+                        env_scope: &children_env_scope,
                         enclosing_component_id: Some(ctx.comp_node_id),
                         is_let: false,
                     };
@@ -490,7 +778,7 @@ fn expand_component_instance(
 
     let mut rewritten_ports = HashMap::new();
     for (port_name, port_expr) in comp_ports {
-        rewritten_ports.insert(port_name, rewrite_expr(&port_expr, &scope_ctx));
+        rewritten_ports.insert(port_name, rewrite_expr(&port_expr, &scope_ctx)?);
     }
 
     let node = doc.get_node_mut(ctx.comp_node_id).unwrap();
@@ -520,6 +808,7 @@ fn expand_primitive_element(
                     prev_sibling_id: last_child_id,
                     parent_ports: ctx.parent_ports,
                     lexical_scope: ctx.lexical_scope,
+                    env_scope: ctx.env_scope,
                     enclosing_component_id: ctx.enclosing_component_id,
                     is_let: false,
                 };
@@ -550,6 +839,7 @@ fn expand_primitive_element(
                     prev_sibling_id: last_child_id,
                     parent_ports: ctx.parent_ports,
                     lexical_scope: ctx.lexical_scope,
+                    env_scope: ctx.env_scope,
                     enclosing_component_id: ctx.enclosing_component_id,
                     is_let: ctx.is_let,
                 };
@@ -601,7 +891,7 @@ fn expand_primitive_element(
 
     let mut ports = HashMap::new();
     for (port_name, expr) in resolved_port_exprs {
-        let rewritten = rewrite_expr(&expr, &scope_ctx);
+        let rewritten = rewrite_expr(&expr, &scope_ctx)?;
         ports.insert(port_name, rewritten);
     }
 
@@ -614,7 +904,9 @@ fn expand_primitive_element(
             });
         }
         if !ports.contains_key("up") {
-            let default_up = if let Some(parent) = ctx.parent_id {
+            let default_up = if let Some(EnvEntry::Bound(clip_expr)) = ctx.env_scope.get("clip") {
+                clip_expr.clone()
+            } else if let Some(parent) = ctx.parent_id {
                 if parent.is_window() {
                     Expr::MemberAccess(MemberAccessExpr {
                         target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), elem.span))),
@@ -642,7 +934,9 @@ fn expand_primitive_element(
             Expr::Ident(Ident::new(node_id.canonical_name(), elem.span)),
         );
     } else if !ports.contains_key("clip") {
-        let default_clip = if let Some(parent) = ctx.parent_id {
+        let default_clip = if let Some(EnvEntry::Bound(clip_expr)) = ctx.env_scope.get("clip") {
+            clip_expr.clone()
+        } else if let Some(parent) = ctx.parent_id {
             if parent.is_window() {
                 Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), elem.span))),
@@ -797,7 +1091,7 @@ fn expand_primitive_element(
 }
 
 /// Recursively rewrites an expression into canonical node variable references and resolves derived aliases.
-pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
+pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, CompileError> {
     match expr {
         Expr::Ident(id) => {
             // Check lexical scope first (let bindings shadow ambient parent ports)
@@ -808,9 +1102,15 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
             {
                 if let Some(binding) = ctx.lexical_scope.get(id.as_str()) {
                     match binding {
-                        LexicalBinding::Expr(e) => return e.clone(),
+                        LexicalBinding::Expr(e) => return Ok(e.clone()),
                         LexicalBinding::Node(node_id) => {
-                            return Expr::Ident(Ident::new(node_id.canonical_name(), id.span));
+                            return Ok(Expr::Ident(Ident::new(node_id.canonical_name(), id.span)));
+                        }
+                        LexicalBinding::Uninitialized => {
+                            return Err(CompileError::UninitializedVariableUse {
+                                name: id.as_str().to_string(),
+                                span: id.span,
+                            });
                         }
                     }
                 }
@@ -818,40 +1118,40 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
 
             // Check if it's a port on the current node (e.g. component parameter in let expression)
             if ctx.current_ports.iter().any(|p| p == id.as_str()) {
-                return Expr::MemberAccess(MemberAccessExpr {
+                return Ok(Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::new(ctx.current_node.canonical_name(), id.span))),
                     member: id.clone(),
                     span: id.span,
-                });
+                }));
             }
 
             // Check if it's a port on the parent container in scope
             if ctx.parent_ports.iter().any(|p| p == id.as_str()) {
                 if let Some(parent) = ctx.parent_node {
-                    return Expr::MemberAccess(MemberAccessExpr {
+                    return Ok(Expr::MemberAccess(MemberAccessExpr {
                         target: Box::new(Expr::Ident(Ident::new(parent.canonical_name(), id.span))),
                         member: id.clone(),
                         span: id.span,
-                    });
+                    }));
                 }
             }
             if id.as_str() == "window" {
-                return Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), id.span));
+                return Ok(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), id.span)));
             }
             if id.as_str() == "self" {
-                return Expr::Ident(Ident::new(ctx.current_node.canonical_name(), id.span));
+                return Ok(Expr::Ident(Ident::new(ctx.current_node.canonical_name(), id.span)));
             }
             if id.as_str() == "parent" {
                 if let Some(parent) = ctx.parent_node {
-                    return Expr::Ident(Ident::new(parent.canonical_name(), id.span));
+                    return Ok(Expr::Ident(Ident::new(parent.canonical_name(), id.span)));
                 }
             }
             if id.as_str() == "prev" {
                 if let Some(prev) = ctx.prev_sibling {
-                    return Expr::Ident(Ident::new(prev.canonical_name(), id.span));
+                    return Ok(Expr::Ident(Ident::new(prev.canonical_name(), id.span)));
                 }
             }
-            expr.clone()
+            Ok(expr.clone())
         }
 
         Expr::Ternary(tern) => {
@@ -867,12 +1167,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
                     }
                 }
             }
-            Expr::Ternary(TernaryExpr {
-                condition: Box::new(rewrite_expr(&tern.condition, ctx)),
-                then_expr: Box::new(rewrite_expr(&tern.then_expr, ctx)),
-                else_expr: Box::new(rewrite_expr(&tern.else_expr, ctx)),
+            Ok(Expr::Ternary(TernaryExpr {
+                condition: Box::new(rewrite_expr(&tern.condition, ctx)?),
+                then_expr: Box::new(rewrite_expr(&tern.then_expr, ctx)?),
+                else_expr: Box::new(rewrite_expr(&tern.else_expr, ctx)?),
                 span: tern.span,
-            })
+            }))
         }
 
         Expr::MemberAccess(m) => {
@@ -891,7 +1191,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
                     if let Some(parent) = ctx.parent_node {
                         Expr::Ident(Ident::new(parent.canonical_name(), m.target.span()))
                     } else {
-                        rewrite_expr(&m.target, ctx)
+                        rewrite_expr(&m.target, ctx)?
                     }
                 } else if target_name == "window" {
                     Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), m.target.span()))
@@ -899,28 +1199,28 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
                     if let Some(prev) = ctx.prev_sibling {
                         Expr::Ident(Ident::new(prev.canonical_name(), m.target.span()))
                     } else {
-                        rewrite_expr(&m.target, ctx)
+                        rewrite_expr(&m.target, ctx)?
                     }
                 } else {
-                    rewrite_expr(&m.target, ctx)
+                    rewrite_expr(&m.target, ctx)?
                 }
             } else {
-                rewrite_expr(&m.target, ctx)
+                rewrite_expr(&m.target, ctx)?
             };
 
             // Resolve derived spatial aliases:
             // left -> x, top -> y, right -> x + width, bottom -> y + height
             match m.member.as_str() {
-                "left" => Expr::MemberAccess(MemberAccessExpr {
+                "left" => Ok(Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(resolved_target),
                     member: Ident::new("x", m.member.span),
                     span: m.span,
-                }),
-                "top" => Expr::MemberAccess(MemberAccessExpr {
+                })),
+                "top" => Ok(Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(resolved_target),
                     member: Ident::new("y", m.member.span),
                     span: m.span,
-                }),
+                })),
                 "right" => {
                     let x = Expr::MemberAccess(MemberAccessExpr {
                         target: Box::new(resolved_target.clone()),
@@ -932,12 +1232,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
                         member: Ident::new("width", m.member.span),
                         span: m.span,
                     });
-                    Expr::Binary(BinaryExpr {
+                    Ok(Expr::Binary(BinaryExpr {
                         op: BinaryOp::Add,
                         left: Box::new(x),
                         right: Box::new(width),
                         span: m.span,
-                    })
+                    }))
                 }
                 "bottom" => {
                     let y = Expr::MemberAccess(MemberAccessExpr {
@@ -950,18 +1250,18 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
                         member: Ident::new("height", m.member.span),
                         span: m.span,
                     });
-                    Expr::Binary(BinaryExpr {
+                    Ok(Expr::Binary(BinaryExpr {
                         op: BinaryOp::Add,
                         left: Box::new(y),
                         right: Box::new(height),
                         span: m.span,
-                    })
+                    }))
                 }
-                _ => Expr::MemberAccess(MemberAccessExpr {
+                _ => Ok(Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(resolved_target),
                     member: m.member.clone(),
                     span: m.span,
-                }),
+                })),
             }
         }
 
@@ -986,38 +1286,38 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Expr {
                         }
                     }
                 }
-                rewritten_args.push(rewrite_expr(arg, ctx));
+                rewritten_args.push(rewrite_expr(arg, ctx)?);
             }
 
             if rewritten_args.is_empty() && !ctx.child_ids.is_empty() {
-                return Expr::Literal(Literal::Number(0.0, call.span));
+                return Ok(Expr::Literal(Literal::Number(0.0, call.span)));
             }
 
-            Expr::Call(CallExpr {
+            Ok(Expr::Call(CallExpr {
                 callee: call.callee.clone(),
                 args: rewritten_args,
                 span: call.span,
-            })
+            }))
         }
 
-        Expr::Binary(bin) => Expr::Binary(BinaryExpr {
+        Expr::Binary(bin) => Ok(Expr::Binary(BinaryExpr {
             op: bin.op,
-            left: Box::new(rewrite_expr(&bin.left, ctx)),
-            right: Box::new(rewrite_expr(&bin.right, ctx)),
+            left: Box::new(rewrite_expr(&bin.left, ctx)?),
+            right: Box::new(rewrite_expr(&bin.right, ctx)?),
             span: bin.span,
-        }),
+        })),
 
-        Expr::Unary(u) => Expr::Unary(UnaryExpr {
+        Expr::Unary(u) => Ok(Expr::Unary(UnaryExpr {
             op: u.op,
-            operand: Box::new(rewrite_expr(&u.operand, ctx)),
+            operand: Box::new(rewrite_expr(&u.operand, ctx)?),
             span: u.span,
-        }),
+        })),
 
         Expr::Paren(inner, span) => {
-            Expr::Paren(Box::new(rewrite_expr(inner, ctx)), *span)
+            Ok(Expr::Paren(Box::new(rewrite_expr(inner, ctx)?), *span))
         }
 
-        Expr::Literal(_) => expr.clone(),
-        Expr::Node(n) => Expr::Node(n.clone()),
+        Expr::Literal(_) => Ok(expr.clone()),
+        Expr::Node(n) => Ok(Expr::Node(n.clone())),
     }
 }

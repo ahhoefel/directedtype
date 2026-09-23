@@ -37,6 +37,12 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Attempted to use explicitly uninitialized variable '{name}'")]
+    UninitializedVariableUse {
+        name: String,
+        span: Span,
+    },
+
     #[error("{message}")]
     Custom {
         message: String,
@@ -52,6 +58,7 @@ impl CompileError {
             | CompileError::MissingPort { span, .. }
             | CompileError::DuplicatePort { span, .. }
             | CompileError::CyclicDependency { span, .. }
+            | CompileError::UninitializedVariableUse { span, .. }
             | CompileError::Custom { span, .. } => *span,
         }
     }

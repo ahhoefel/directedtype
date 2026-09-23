@@ -1,5 +1,5 @@
 use crate::ast::{
-    ComponentBodyItem, ComponentDef, Ident, LetBinding, LetValue, ParamDef, TypeRef,
+    ComponentBodyItem, ComponentDef, EnvBinding, Ident, LetBinding, LetValue, ParamDef, TypeRef,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::ParserCursor;
@@ -11,6 +11,15 @@ use crate::token::Token;
 /// Parses a parameter definition in a component signature:
 /// e.g. `bg_color: Color`, `gap: Number: 16`, `gap: Number = 16`, or `width: max(children.width) + 32`
 pub fn parse_param_def(cursor: &mut ParserCursor<'_>) -> Result<ParamDef, ParseError> {
+    let mut is_env = false;
+    let env_span = if let Some((Token::Env, _)) = cursor.peek_token()? {
+        let span = cursor.consume_token(&Token::Env)?;
+        is_env = true;
+        Some(span)
+    } else {
+        None
+    };
+
     let name = parse_ident(cursor)?;
 
     let mut type_annotation = None;
@@ -70,9 +79,11 @@ pub fn parse_param_def(cursor: &mut ParserCursor<'_>) -> Result<ParamDef, ParseE
         .or_else(|| type_annotation.as_ref().map(|t| t.span))
         .unwrap_or(name.span);
 
-    let span = name.span.merge(end_span);
+    let start_span = env_span.unwrap_or(name.span);
+    let span = start_span.merge(end_span);
 
     Ok(ParamDef {
+        is_env,
         name,
         type_annotation,
         default_edge,
@@ -128,6 +139,12 @@ pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef
             continue;
         }
 
+        if tok == &Token::Env {
+            let env_binding = parse_env_binding(cursor)?;
+            body.push(ComponentBodyItem::Env(env_binding));
+            continue;
+        }
+
         let is_children = tok == &Token::Backslash
             && cursor.peek_nth(1)?.is_some_and(|(t, _)| t == &Token::Children);
 
@@ -151,7 +168,7 @@ pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef
     })
 }
 
-/// Parses a local let binding: `let name = expr;` or `let name: Type = expr;` or `let name = \Node(...);`
+/// Parses a local let binding: `let name = expr;`, `let name: Type = expr;`, `let name = \Node(...);`, or uninitialized `let name;`
 pub fn parse_let_binding(cursor: &mut ParserCursor<'_>) -> Result<LetBinding, ParseError> {
     let let_span = cursor.consume_token(&Token::Let)?;
     let name = parse_ident(cursor)?;
@@ -174,22 +191,76 @@ pub fn parse_let_binding(cursor: &mut ParserCursor<'_>) -> Result<LetBinding, Pa
         }
     }
 
-    cursor.consume_token(&Token::Eq)?;
-
-    let value = if let Some((Token::Backslash, _)) = cursor.peek_token()? {
-        let node = parse_element_node(cursor)?;
-        LetValue::Node(node)
+    let (value, end_span) = if let Some((Token::Eq, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Eq)?;
+        let val = if let Some((Token::Backslash, _)) = cursor.peek_token()? {
+            let node = parse_element_node(cursor)?;
+            LetValue::Node(node)
+        } else {
+            let expr = parse_expr(cursor)?;
+            LetValue::Expr(expr)
+        };
+        let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
+            cursor.consume_token(&Token::Semicolon)?
+        } else {
+            val.span()
+        };
+        (Some(val), semi_span)
     } else {
-        let expr = parse_expr(cursor)?;
-        LetValue::Expr(expr)
+        // Uninitialized `let name;`
+        let semi_span = cursor.consume_token(&Token::Semicolon)?;
+        (None, semi_span)
     };
 
-    if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
-        cursor.consume_token(&Token::Semicolon)?;
+    let span = let_span.merge(end_span);
+    Ok(LetBinding {
+        name,
+        type_annotation,
+        value,
+        span,
+    })
+}
+
+/// Parses an environmental variable binding: `env name = expr;`, `env name: Type = expr;`, or uninitialized `env name;`
+pub fn parse_env_binding(cursor: &mut ParserCursor<'_>) -> Result<EnvBinding, ParseError> {
+    let env_span = cursor.consume_token(&Token::Env)?;
+    let name = parse_ident(cursor)?;
+
+    let mut type_annotation = None;
+    if let Some((Token::Colon, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Colon)?;
+        let (tok, span) = cursor.expect_token("type name")?;
+        if let Token::Ident(type_name) = tok {
+            type_annotation = Some(TypeRef {
+                name: Ident::new(type_name, span),
+                span,
+            });
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                expected: "type name identifier".to_string(),
+                found: tok.to_string(),
+                span,
+            });
+        }
     }
 
-    let span = let_span.merge(value.span());
-    Ok(LetBinding {
+    let (value, end_span) = if let Some((Token::Eq, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Eq)?;
+        let expr = parse_expr(cursor)?;
+        let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
+            cursor.consume_token(&Token::Semicolon)?
+        } else {
+            expr.span()
+        };
+        (Some(expr), semi_span)
+    } else {
+        // Uninitialized `env name;`
+        let semi_span = cursor.consume_token(&Token::Semicolon)?;
+        (None, semi_span)
+    };
+
+    let span = env_span.merge(end_span);
+    Ok(EnvBinding {
         name,
         type_annotation,
         value,

@@ -32,6 +32,7 @@ pub enum Item {
     Component(ComponentDef),
     Node(ElementNode),
     Let(LetBinding),
+    Env(EnvBinding),
 }
 
 impl Item {
@@ -40,6 +41,7 @@ impl Item {
             Item::Component(c) => c.span,
             Item::Node(n) => n.span,
             Item::Let(l) => l.span,
+            Item::Env(e) => e.span,
         }
     }
 }
@@ -58,6 +60,7 @@ pub enum ComponentBodyItem {
     Node(ElementNode),
     Children(ChildrenDirective),
     Let(LetBinding),
+    Env(EnvBinding),
 }
 
 impl ComponentBodyItem {
@@ -66,16 +69,17 @@ impl ComponentBodyItem {
             ComponentBodyItem::Node(n) => n.span,
             ComponentBodyItem::Children(c) => c.span,
             ComponentBodyItem::Let(l) => l.span,
+            ComponentBodyItem::Env(e) => e.span,
         }
     }
 }
 
-/// Local variable or element binding: `let name = expr;` or `let name = \Node(...);`
+/// Local variable or element binding: `let name = expr;`, `let name = \Node(...);`, or uninitialized `let name;`
 #[derive(Debug, Clone, PartialEq)]
 pub struct LetBinding {
     pub name: Ident,
     pub type_annotation: Option<TypeRef>,
-    pub value: LetValue,
+    pub value: Option<LetValue>,
     pub span: Span,
 }
 
@@ -94,10 +98,20 @@ impl LetValue {
     }
 }
 
+/// Environmental variable binding: `env name = expr;` or uninitialized `env name;`
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnvBinding {
+    pub name: Ident,
+    pub type_annotation: Option<TypeRef>,
+    pub value: Option<Expr>,
+    pub span: Span,
+}
+
 /// Parameter definition in a component signature:
-/// e.g. `bg_color: Color`, `gap: Number: 16`, or `width: max(children.width) + 32`
+/// e.g. `bg_color: Color`, `gap: Number: 16`, `env theme: String`, or `width: max(children.width) + 32`
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParamDef {
+    pub is_env: bool,
     pub name: Ident,
     pub type_annotation: Option<TypeRef>,
     pub default_edge: Option<Expr>,

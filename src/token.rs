@@ -20,6 +20,9 @@ pub enum Token {
     #[token("let")]
     Let,
 
+    #[token("env")]
+    Env,
+
     #[token("true")]
     True,
 
@@ -145,6 +148,7 @@ impl fmt::Display for Token {
             Token::Component => write!(f, "Component"),
             Token::Children => write!(f, "Children"),
             Token::Let => write!(f, "let"),
+            Token::Env => write!(f, "env"),
             Token::True => write!(f, "true"),
             Token::False => write!(f, "false"),
             Token::LParen => write!(f, "("),

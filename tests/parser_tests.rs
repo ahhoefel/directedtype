@@ -547,7 +547,7 @@ fn test_parse_let_bindings() {
         Item::Let(l) => {
             assert_eq!(l.name.as_str(), "global_gap");
             match &l.value {
-                LetValue::Expr(Expr::Literal(Literal::Number(n, _))) => assert_eq!(*n, 24.0),
+                Some(LetValue::Expr(Expr::Literal(Literal::Number(n, _)))) => assert_eq!(*n, 24.0),
                 _ => panic!("Expected number literal for global_gap"),
             }
         }
@@ -570,7 +570,7 @@ fn test_parse_let_bindings() {
                 ComponentBodyItem::Let(l) => {
                     assert_eq!(l.name.as_str(), "mask");
                     match &l.value {
-                        LetValue::Node(n) => assert_eq!(n.name.as_str(), "Rect"),
+                        Some(LetValue::Node(n)) => assert_eq!(n.name.as_str(), "Rect"),
                         _ => panic!("Expected LetValue::Node for mask"),
                     }
                 }
@@ -661,6 +661,91 @@ fn test_component_literal_supports_mixed_text_and_nodes() {
         _ => panic!("Expected Container node"),
     }
 }
+
+#[test]
+fn test_parse_env_declarations_and_uninitialized_tombstones() {
+    let input = r#"
+    env theme = "dark";
+    let uninit_let;
+    env uninit_env;
+
+    \Component Card(env padding: Number: 16, border: Number: 1) {
+        let private_state;
+        env local_env = #ffffff;
+        env hole_env;
+
+        \Rect()
+        \Children
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse env declarations and tombstones");
+    assert_eq!(doc.items.len(), 4);
+
+    match &doc.items[0] {
+        Item::Env(e) => {
+            assert_eq!(e.name.as_str(), "theme");
+            assert!(e.value.is_some());
+        }
+        _ => panic!("Expected Item::Env"),
+    }
+
+    match &doc.items[1] {
+        Item::Let(l) => {
+            assert_eq!(l.name.as_str(), "uninit_let");
+            assert!(l.value.is_none());
+        }
+        _ => panic!("Expected Item::Let"),
+    }
+
+    match &doc.items[2] {
+        Item::Env(e) => {
+            assert_eq!(e.name.as_str(), "uninit_env");
+            assert!(e.value.is_none());
+        }
+        _ => panic!("Expected Item::Env"),
+    }
+
+    match &doc.items[3] {
+        Item::Component(c) => {
+            assert_eq!(c.name.as_str(), "Card");
+            assert!(c.params[0].is_env);
+            assert_eq!(c.params[0].name.as_str(), "padding");
+            assert!(!c.params[1].is_env);
+            assert_eq!(c.params[1].name.as_str(), "border");
+
+            match &c.body[0] {
+                ComponentBodyItem::Let(l) => {
+                    assert_eq!(l.name.as_str(), "private_state");
+                    assert!(l.value.is_none());
+                }
+                _ => panic!("Expected uninit let"),
+            }
+            match &c.body[1] {
+                ComponentBodyItem::Env(e) => {
+                    assert_eq!(e.name.as_str(), "local_env");
+                    assert!(e.value.is_some());
+                }
+                _ => panic!("Expected local env"),
+            }
+            match &c.body[2] {
+                ComponentBodyItem::Env(e) => {
+                    assert_eq!(e.name.as_str(), "hole_env");
+                    assert!(e.value.is_none());
+                }
+                _ => panic!("Expected hole env"),
+            }
+            match &c.body[4] {
+                ComponentBodyItem::Children(ch) => {
+                    assert!(ch.ports.is_empty());
+                }
+                _ => panic!("Expected bare Children directive"),
+            }
+        }
+        _ => panic!("Expected Item::Component"),
+    }
+}
+
 
 
 

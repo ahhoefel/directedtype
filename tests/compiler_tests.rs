@@ -1401,6 +1401,373 @@ fn test_dom_tree_formatting() {
     assert!(dom_str.contains("color: #1e293b"));
 }
 
+#[test]
+fn test_parse_env_syntax_and_tombstones() {
+    let input = r#"
+    env global_theme: String = "dark";
+    let uninit_local;
+    env uninit_env;
+
+    \Component Box(width: Number, env theme: String, color: Color: #ffffff) {
+        let private_gap;
+        let shadow_val = 10;
+        env local_env = #ff0000;
+        env hole_env;
+
+        \Rect(color: self.color)
+        \Children
+    }
+    "#;
+    let doc = parse(input).expect("Failed to parse env syntax and tombstones");
+    assert_eq!(doc.items.len(), 4);
+    match &doc.items[0] {
+        Item::Env(e) => {
+            assert_eq!(e.name.as_str(), "global_theme");
+            assert!(e.value.is_some());
+        }
+        _ => panic!("Expected Item::Env"),
+    }
+    match &doc.items[1] {
+        Item::Let(l) => {
+            assert_eq!(l.name.as_str(), "uninit_local");
+            assert!(l.value.is_none());
+        }
+        _ => panic!("Expected Item::Let"),
+    }
+    match &doc.items[2] {
+        Item::Env(e) => {
+            assert_eq!(e.name.as_str(), "uninit_env");
+            assert!(e.value.is_none());
+        }
+        _ => panic!("Expected Item::Env"),
+    }
+    match &doc.items[3] {
+        Item::Component(c) => {
+            assert_eq!(c.name.as_str(), "Box");
+            assert_eq!(c.params[0].name.as_str(), "width");
+            assert!(!c.params[0].is_env);
+            assert_eq!(c.params[1].name.as_str(), "theme");
+            assert!(c.params[1].is_env);
+            assert_eq!(c.params[2].name.as_str(), "color");
+            assert!(!c.params[2].is_env);
+
+            match &c.body[0] {
+                ComponentBodyItem::Let(l) => {
+                    assert_eq!(l.name.as_str(), "private_gap");
+                    assert!(l.value.is_none());
+                }
+                _ => panic!("Expected uninit let"),
+            }
+            match &c.body[2] {
+                ComponentBodyItem::Env(e) => {
+                    assert_eq!(e.name.as_str(), "local_env");
+                    assert!(e.value.is_some());
+                }
+                _ => panic!("Expected initialized env"),
+            }
+            match &c.body[3] {
+                ComponentBodyItem::Env(e) => {
+                    assert_eq!(e.name.as_str(), "hole_env");
+                    assert!(e.value.is_none());
+                }
+                _ => panic!("Expected uninit env hole"),
+            }
+        }
+        _ => panic!("Expected Item::Component"),
+    }
+}
+
+#[test]
+fn test_env_auto_propagation_bypassing_middleman() {
+    let input = r#"
+    \Component Theme(color: Color) {
+        env color = self.color
+        \Children
+    }
+
+    \Component Row() {
+        \Children
+    }
+
+    \Component Button(color: Color: #000000) {
+        \Rect(color: self.color)
+    }
+
+    \Theme(color: #123456) {
+        \Row {
+            \Button()
+        }
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let btn_node = expanded.nodes.iter().find(|n| n.name == "Button").expect("Button not found");
+    let btn_color = btn_node.ports.get("color").expect("Button missing color port");
+    match btn_color {
+        Expr::MemberAccess(m) => {
+            assert_eq!(m.member.as_str(), "color");
+            match m.target.as_ref() {
+                Expr::Ident(id) => assert_eq!(id.as_str(), "__node_0"),
+                _ => panic!("Expected target ident"),
+            }
+        }
+        _ => panic!("Expected member access for Button.color, got {:?}", btn_color),
+    }
+}
+
+#[test]
+fn test_env_component_encapsulation_sealed_black_box() {
+    let input = r#"
+    \Component Theme(color: Color) {
+        env color = self.color
+        \Children
+    }
+
+    \Component CustomCard() {
+        \Rect(color: #999999)
+    }
+
+    \Theme(color: #123456) {
+        \CustomCard()
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let rect_node = expanded.nodes.iter().find(|n| n.name == "Rect").expect("Rect not found");
+    let rect_color = rect_node.ports.get("color").expect("Rect missing color port");
+    match rect_color {
+        Expr::Literal(Literal::Color(c, _)) => assert_eq!(c, "#999999"),
+        _ => panic!("Encapsulation violated: internal Rect received {:?}", rect_color),
+    }
+}
+
+#[test]
+fn test_env_4_tier_precedence_order() {
+    let input = r#"
+    \Component Theme(color: Color) {
+        env color = self.color
+        \Children
+    }
+
+    \Component Container() {
+        \Children {
+            color: #333333
+        }
+    }
+
+    \Component Button(color: Color: #111111) {
+        \Rect(color: self.color)
+    }
+
+    \Theme(color: #222222) {
+        // Case A: Tier 4 beats 3, 2, 1
+        \Container {
+            \Button(color: #444444)
+        }
+        // Case B: Tier 3 beats 2, 1
+        \Container {
+            \Button()
+        }
+        // Case C: Tier 2 beats 1
+        \Button()
+    }
+
+    // Case D: Tier 1 alone
+    \Button()
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let buttons: Vec<_> = expanded.nodes.iter().filter(|n| n.name == "Button").collect();
+    assert_eq!(buttons.len(), 4);
+
+    // Case A: Button 0 has explicit color #444444
+    assert!(matches!(buttons[0].ports.get("color").unwrap(), Expr::Literal(Literal::Color(c, _)) if c == "#444444"));
+
+    // Case B: Button 1 has Tier 3 container color #333333
+    assert!(matches!(buttons[1].ports.get("color").unwrap(), Expr::Literal(Literal::Color(c, _)) if c == "#333333"));
+
+    // Case C: Button 2 inherits Tier 2 Theme color
+    match buttons[2].ports.get("color").unwrap() {
+        Expr::MemberAccess(m) => {
+            assert_eq!(m.member.as_str(), "color");
+            match m.target.as_ref() {
+                Expr::Ident(id) => assert_eq!(id.as_str(), "__node_0"),
+                _ => panic!("Expected target ident"),
+            }
+        }
+        _ => panic!("Expected Theme.color member access"),
+    }
+
+    // Case D: Button 3 has Tier 1 default #111111
+    assert!(matches!(buttons[3].ports.get("color").unwrap(), Expr::Literal(Literal::Color(c, _)) if c == "#111111"));
+}
+
+#[test]
+fn test_env_interceptor() {
+    let input = r#"
+    \Component Surface(env color: Color) {
+        env color = #abcdef
+        \Children
+    }
+
+    \Component Button(color: Color: #000000) {
+        \Rect(color: self.color)
+    }
+
+    \Surface(color: #123456) {
+        \Button()
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let btn_node = expanded.nodes.iter().find(|n| n.name == "Button").expect("Button not found");
+    let btn_color = btn_node.ports.get("color").unwrap();
+    assert!(matches!(btn_color, Expr::Literal(Literal::Color(c, _)) if c == "#abcdef"));
+}
+
+#[test]
+fn test_env_translator_provider() {
+    let input = r#"
+    \Component ThemeProvider(theme: String) {
+        env color = (self.theme == "dark") ? #000000 : #ffffff
+        \Children
+    }
+
+    \Component Button(color: Color: #888888) {
+        \Rect(color: self.color)
+    }
+
+    \ThemeProvider(theme: "dark") {
+        \Button()
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let btn_node = expanded.nodes.iter().find(|n| n.name == "Button").expect("Button not found");
+    let btn_color = btn_node.ports.get("color").unwrap();
+    assert!(matches!(btn_color, Expr::Ternary(_)));
+}
+
+#[test]
+fn test_env_shield_swallower() {
+    let input = r#"
+    \Component AlertBadge(env color: Color) {
+        \Rect(color: self.color)
+        let color = #000000;
+        \Children
+    }
+
+    \Component Button(color: Color: #888888) {
+        \Rect(color: self.color)
+    }
+
+    \AlertBadge(color: #ff0000) {
+        \Button()
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let btn_node = expanded.nodes.iter().find(|n| n.name == "Button").expect("Button not found");
+    let btn_color = btn_node.ports.get("color").unwrap();
+    assert!(matches!(btn_color, Expr::Literal(Literal::Color(c, _)) if c == "#888888"));
+}
+
+#[test]
+fn test_let_tombstone_firewall() {
+    let input = r#"
+    \Component Shield(env color: Color) {
+        let color;
+        \Children
+    }
+
+    \Component Button(color: Color: #888888) {
+        \Rect(color: self.color)
+    }
+
+    \Shield(color: #ff0000) {
+        \Button()
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let btn_node = expanded.nodes.iter().find(|n| n.name == "Button").expect("Button not found");
+    let btn_color = btn_node.ports.get("color").unwrap();
+    assert!(matches!(btn_color, Expr::Literal(Literal::Color(c, _)) if c == "#888888"));
+}
+
+#[test]
+fn test_env_tombstone_hole() {
+    let input = r#"
+    \Component Theme(color: Color) {
+        env color = self.color
+        \Children
+    }
+
+    \Component Hole() {
+        env color;
+        \Children
+    }
+
+    \Component Button(color: Color: #888888) {
+        \Rect(color: self.color)
+    }
+
+    \Theme(color: #123456) {
+        \Hole {
+            \Button()
+        }
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let btn_node = expanded.nodes.iter().find(|n| n.name == "Button").expect("Button not found");
+    let btn_color = btn_node.ports.get("color").unwrap();
+    assert!(matches!(btn_color, Expr::Literal(Literal::Color(c, _)) if c == "#888888"));
+}
+
+#[test]
+fn test_uninitialized_variable_use_error() {
+    let input = r#"
+    \Component Bad() {
+        let color;
+        \Rect(color: color)
+    }
+
+    \Bad()
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let res = compile_to_graph(&doc);
+    assert!(res.is_err());
+    match res.unwrap_err() {
+        directedtype::compiler::error::CompileError::UninitializedVariableUse { name, .. } => {
+            assert_eq!(name, "color");
+        }
+        other => panic!("Expected UninitializedVariableUse, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_env_clip_universal_base_trait() {
+    let input = r#"
+    \Component ScrollView() {
+        env clip = \Clip(box: \Box(width: 200, height: 200))
+        \Children
+    }
+
+    \ScrollView {
+        \Rect(width: 50, height: 50, color: #ff0000)
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let rect_node = expanded.nodes.iter().find(|n| n.name == "Rect").expect("Rect not found");
+    let rect_clip = rect_node.ports.get("clip").expect("Rect missing clip");
+    match rect_clip {
+        Expr::Ident(id) => assert!(id.as_str().starts_with("__node_")),
+        _ => panic!("Expected clip ident, got {:?}", rect_clip),
+    }
+}
+
 
 
 

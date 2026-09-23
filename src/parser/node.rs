@@ -38,27 +38,35 @@ pub fn parse_port_list(cursor: &mut ParserCursor<'_>) -> Result<(Vec<PortBinding
     Ok((ports, span))
 }
 
-/// Parses the `\Children { ... }` directive with port bindings.
+/// Parses the `\Children [ { ... } ]` directive with port bindings.
 pub fn parse_children_directive(cursor: &mut ParserCursor<'_>) -> Result<ChildrenDirective, ParseError> {
     let slash_span = cursor.consume_token(&Token::Backslash)?;
-    cursor.consume_token(&Token::Children)?;
-    let lbrace_span = cursor.consume_token(&Token::LBrace)?;
+    let children_span = cursor.consume_token(&Token::Children)?;
 
-    let mut ports = Vec::new();
-    while let Some((tok, _)) = cursor.peek_token()? {
-        if tok == &Token::RBrace {
-            break;
+    if let Some((Token::LBrace, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::LBrace)?;
+
+        let mut ports = Vec::new();
+        while let Some((tok, _)) = cursor.peek_token()? {
+            if tok == &Token::RBrace {
+                break;
+            }
+            ports.push(parse_port_binding(cursor)?);
+            if let Some((Token::Comma, _)) = cursor.peek_token()? {
+                cursor.consume_token(&Token::Comma)?;
+            }
         }
-        ports.push(parse_port_binding(cursor)?);
-        if let Some((Token::Comma, _)) = cursor.peek_token()? {
-            cursor.consume_token(&Token::Comma)?;
-        }
+
+        let rbrace_span = cursor.consume_token(&Token::RBrace)?;
+        let span = slash_span.merge(rbrace_span);
+        Ok(ChildrenDirective { ports, span })
+    } else {
+        let span = slash_span.merge(children_span);
+        Ok(ChildrenDirective {
+            ports: Vec::new(),
+            span,
+        })
     }
-
-    let rbrace_span = cursor.consume_token(&Token::RBrace)?;
-    let span = slash_span.merge(rbrace_span);
-    let _ = lbrace_span; // used for delimiter span
-    Ok(ChildrenDirective { ports, span })
 }
 
 /// Parses an element node: `\Name [ ( ports ) ] [ { content } ]`
