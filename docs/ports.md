@@ -175,3 +175,4 @@ If not explicitly wired or supplied by a parent, primitive elements receive stan
 - **Root elements**: `x: 0`, `y: 0`, `z: 0`, `width: window.width`, `height: 24`
 - **Child elements**: `x: parent.left`, `y: parent.top`, `z: parent.z`, `width: parent.width`
 - **Text elements (`\Text`)**: `width` measures text intrinsics, and `height` dynamically wraps text across multi-line boundaries via the Parley font engine.
+- **Paint Primitives (`\Rect`)**: As a raw GPU paint primitive, `\Rect` strictly requires `x`, `y`, `width`, `height`, and `color` (or `bg_color`) to be provided either explicitly or injected via an enclosing `\Children` directive. Missing any of these 5 ports generates a `CompileError::MissingPort`.

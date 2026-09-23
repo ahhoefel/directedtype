@@ -142,7 +142,7 @@ pub fn build_scene(
 
             let color = match color_val {
                 Some(Value::Color(c)) | Some(Value::String(c)) => parse_color(c),
-                _ => Color::from_rgba8(200, 200, 200, 255),
+                _ => Color::TRANSPARENT,
             };
 
             let radius = node

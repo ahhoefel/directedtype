@@ -145,12 +145,14 @@ fn test_viewer_hot_reload_document() {
     let v_cycle = r#"
 \Component ParadoxBox(width: max(children.width)) {
   \Children {
+    x: 0,
+    y: 0,
     width: parent.width
   }
 }
 
 \ParadoxBox {
-  \Rect(height: 50)
+  \Rect(height: 50, color: #000)
 }
 "#;
     std::fs::write(&test_file, v_cycle).expect("Failed to write cyclic layout");
@@ -257,5 +259,32 @@ fn test_env_example_file() {
         let _ = img.save(brain_dir.join("env_demo_render.png"));
     }
 }
+
+#[test]
+fn test_binding_example_file() {
+    let source = std::fs::read_to_string("examples/binding.dt")
+        .expect("Failed to read examples/binding.dt");
+    let doc = parse_document(&source).expect("Failed to parse examples/binding.dt");
+    let layout = evaluate_document(&doc).expect("Failed to evaluate examples/binding.dt");
+
+    let mut renderer = HeadlessRenderer::new().expect("Failed to initialize HeadlessRenderer");
+    let options = SceneOptions {
+        background: Some(Color::WHITE),
+        ..Default::default()
+    };
+
+    let img = renderer
+        .render_layout(&layout, 400, 500, &options)
+        .expect("Failed to render examples/binding.dt");
+
+    assert_eq!(img.width(), 400);
+    assert_eq!(img.height(), 500);
+
+    let brain_dir = std::path::Path::new("/Users/hoefel/.gemini/antigravity-ide/brain/c2560240-cb95-4f78-9867-aa0ab7be2601");
+    if brain_dir.exists() {
+        let _ = img.save(brain_dir.join("binding_render.png"));
+    }
+}
+
 
 

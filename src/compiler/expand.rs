@@ -964,6 +964,25 @@ fn expand_primitive_element(
         ports.insert("clip".to_string(), default_clip);
     }
 
+    if elem.name.as_str() == "Rect" {
+        for port in ["x", "y", "width", "height"] {
+            if !ports.contains_key(port) {
+                return Err(CompileError::MissingPort {
+                    node: "Rect".to_string(),
+                    port: port.to_string(),
+                    span: elem.span,
+                });
+            }
+        }
+        if !ports.contains_key("color") && !ports.contains_key("bg_color") {
+            return Err(CompileError::MissingPort {
+                node: "Rect".to_string(),
+                port: "color".to_string(),
+                span: elem.span,
+            });
+        }
+    }
+
     // Base Spatial Trait defaults for height and width
     let text_content = doc
         .get_node(node_id)

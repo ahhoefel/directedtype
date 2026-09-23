@@ -21,7 +21,7 @@ In DirectedType, clipping is a **hardware state**. The DAG completely decouples 
 ## 2. Geometry & Clip Primitives: `\Rect`, `\Box`, and `\Clip`
 
 ### `\Rect` (Visual Paint Primitive)
-`\Rect` is a visual drawing element. It supports spatial layout (`x`, `y`, `width`, `height`, `z`), styling (`color`, `bg_color`, `border_width`, `border_color`, `radius`), and visual clipping (`clip: ...`).
+`\Rect` is a visual drawing element. It strictly requires spatial coordinates (`x`, `y`, `width`, `height`) and color (`color` or `bg_color`). It does not inherit ambient environmental colors. It also supports `z`, `border_width`, `border_color`, `radius`, and visual clipping (`clip: ...`).
 
 ### `\Box` (Mathematical Spatial Primitive)
 `\Box` is a pure mathematical, non-drawing spatial rectangle (`x`, `y`, `width`, `height`, `radius`). It emits **zero draw commands** and is used for non-visual layout regions, bounding calculations, and clip boundaries.

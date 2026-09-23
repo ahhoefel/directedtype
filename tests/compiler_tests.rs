@@ -508,10 +508,10 @@ fn test_end_to_end_shaded_box_bottom_up_evaluation() {
 #[test]
 fn test_painters_algorithm_and_z_ordering() {
     let input = r#"
-    \Rect(z: 0)
-    \Rect(z: 0)
-    \Rect(z: -10)
-    \Rect(z: 100)
+    \Rect(x: 0, y: 0, width: 100, height: 100, z: 0, color: #000)
+    \Rect(x: 0, y: 0, width: 100, height: 100, z: 0, color: #000)
+    \Rect(x: 0, y: 0, width: 100, height: 100, z: -10, color: #000)
+    \Rect(x: 0, y: 0, width: 100, height: 100, z: 100, color: #000)
     "#;
 
     let doc = parse(input).expect("Failed to parse");
@@ -535,6 +535,8 @@ fn test_global_window_dimensions_access() {
     let input = r#"
     \Component Container {
         \Children {
+            x: 0,
+            y: 0,
             width: window.width / 2,
             height: window.height - 100
         }
@@ -563,7 +565,8 @@ fn test_top_level_parent_resolves_to_window() {
         x: parent.left + 50,
         y: parent.top + 30,
         width: parent.width - 100,
-        height: parent.height - 60
+        height: parent.height - 60,
+        color: #000
     )
     "#;
 
@@ -690,7 +693,7 @@ fn test_parley_intrinsic_text_width_unconstrained() {
 fn test_required_port_missing_error() {
     let input = r#"
     \Component ProgressBar(progress_percentage: Number) {
-      \Rect(width: progress_percentage, height: 20)
+      \Rect(width: progress_percentage, height: 20, color: #000)
     }
 
     \ProgressBar()
@@ -713,7 +716,7 @@ fn test_required_port_missing_error() {
 fn test_required_port_provided_by_instance() {
     let input = r#"
     \Component ProgressBar(progress_percentage: Number) {
-      \Rect(width: progress_percentage, height: 20)
+      \Rect(x: 0, y: 0, width: progress_percentage, height: 20, color: #000)
     }
 
     \ProgressBar(progress_percentage: 75)
@@ -731,7 +734,7 @@ fn test_required_port_provided_by_instance() {
 fn test_required_port_provided_by_ambient_parent() {
     let input = r#"
     \Component ProgressBar(progress_percentage: Number) {
-      \Rect(width: progress_percentage, height: 20)
+      \Rect(x: 0, y: 0, width: progress_percentage, height: 20, color: #000)
     }
 
     \Component TaskList {
@@ -756,7 +759,7 @@ fn test_required_port_provided_by_ambient_parent() {
 fn test_required_port_ambient_overridden_by_instance() {
     let input = r#"
     \Component ProgressBar(progress_percentage: Number) {
-      \Rect(width: progress_percentage, height: 20)
+      \Rect(x: 0, y: 0, width: progress_percentage, height: 20, color: #000)
     }
 
     \Component TaskList {
@@ -785,7 +788,7 @@ fn test_precedence_3_tier_hierarchy() {
     // Tier 3: Explicit instance override (width: 300)
     let input = r#"
     \Component Button(width: Number: 100) {
-      \Rect(width: width, height: 40)
+      \Rect(x: 0, y: 0, width: width, height: 40, color: #000)
     }
 
     \Component Container {
@@ -820,7 +823,7 @@ fn test_lexical_scope_expression_let() {
     let input = r#"
     \Component Card(padding: Number: 16) {
       let inset = padding * 2
-      \Rect(width: 400 - inset, height: 50)
+      \Rect(x: 0, y: 0, width: 400 - inset, height: 50, color: #000)
     }
 
     \Card(padding: 20)
@@ -838,8 +841,8 @@ fn test_lexical_scope_expression_let() {
 fn test_lexical_scope_node_let() {
     let input = r#"
     \Component DualBox {
-      let primary = \Rect(x: 10, y: 15, width: 100, height: 40)
-      \Rect(x: primary.right + 20, y: primary.top, width: 80, height: 40)
+      let primary = \Rect(x: 10, y: 15, width: 100, height: 40, color: #000)
+      \Rect(x: primary.right + 20, y: primary.top, width: 80, height: 40, color: #000)
     }
 
     \DualBox()
@@ -866,7 +869,7 @@ fn test_lexical_scope_shadowing() {
     let input = r#"
     \Component ShadowBox(x: Number: 10) {
       let x = self.x + 40
-      \Rect(x: x, y: parent.x, width: 100, height: 40)
+      \Rect(x: x, y: parent.x, width: 100, height: 40, color: #000)
     }
 
     \ShadowBox()
@@ -888,12 +891,13 @@ fn test_lexical_scope_in_children_directive() {
     \Component FlowWithMargin {
       let margin = 35
       \Children {
-        x: parent.left + margin
+        x: parent.left + margin,
+        y: 0
       }
     }
 
     \FlowWithMargin {
-      \Rect(width: 50, height: 50)
+      \Rect(width: 50, height: 50, color: #000)
     }
     "#;
 
@@ -910,7 +914,7 @@ fn test_top_level_let_binding() {
     let input = r#"
     let global_pad = 45;
 
-    \Rect(x: global_pad, y: global_pad, width: 100, height: 100)
+    \Rect(x: global_pad, y: global_pad, width: 100, height: 100, color: #000)
     "#;
 
     let doc = parse(input).expect("Failed to parse");
@@ -924,8 +928,8 @@ fn test_top_level_let_binding() {
 #[test]
 fn test_top_level_node_let_binding() {
     let input = r#"
-    let sidebar = \Rect(x: 10, y: 10, width: 200, height: 500)
-    \Rect(x: sidebar.right + 20, y: sidebar.top, width: 600, height: 500)
+    let sidebar = \Rect(x: 10, y: 10, width: 200, height: 500, color: #000)
+    \Rect(x: sidebar.right + 20, y: sidebar.top, width: 600, height: 500, color: #000)
     "#;
 
     let doc = parse(input).expect("Failed to parse");
@@ -950,7 +954,7 @@ fn test_visibility_child_cannot_access_parent_private_local_via_parent_dot() {
     }
 
     \CustomCard {
-      \Rect(x: parent.card_padding)
+      \Rect(x: parent.card_padding, y: 0, width: 100, height: 100, color: #000)
     }
     "#;
 
@@ -974,7 +978,7 @@ fn test_visibility_child_cannot_access_parent_private_local_via_bare_ident() {
     }
 
     \CustomCard {
-      \Rect(x: card_padding)
+      \Rect(x: card_padding, y: 0, width: 100, height: 100, color: #000)
     }
     "#;
 
@@ -995,12 +999,13 @@ fn test_visibility_parent_explicit_push_via_children_directive() {
     \Component CustomCard {
       let card_padding = 16
       \Children {
-        x: parent.left + card_padding
+        x: parent.left + card_padding,
+        y: 0
       }
     }
 
     \CustomCard {
-      \Rect(width: 100, height: 50)
+      \Rect(width: 100, height: 50, color: #000)
     }
     "#;
 
@@ -1018,14 +1023,15 @@ fn test_visibility_child_retains_caller_lexical_scope() {
     \Component CustomCard {
       let internal_padding = 10
       \Children {
-        x: parent.left + internal_padding
+        x: parent.left + internal_padding,
+        y: 0
       }
     }
 
     let caller_width = 180;
 
     \CustomCard {
-      \Rect(width: caller_width, height: 50)
+      \Rect(width: caller_width, height: 50, color: #000)
     }
     "#;
 
@@ -1045,14 +1051,15 @@ fn test_visibility_parent_private_local_does_not_shadow_caller_local() {
     \Component CustomCard {
       let my_size = 999
       \Children {
-        x: parent.left
+        x: parent.left,
+        y: 0
       }
     }
 
     let my_size = 42;
 
     \CustomCard {
-      \Rect(width: my_size, height: 50)
+      \Rect(width: my_size, height: 50, color: #000)
     }
     "#;
 
@@ -1070,13 +1077,14 @@ fn test_visibility_child_explicit_parent_port_bypasses_internal_shadow() {
     \Component CustomCard(clip_offset: Number = 5) {
       let clip_offset = 100 // internal shadow
       \Children {
-        x: parent.left
+        x: parent.left,
+        y: 0
       }
     }
 
     \CustomCard(clip_offset: 25) {
       // Child explicitly wires to parent's public port, bypassing internal shadow
-      \Rect(width: parent.clip_offset, height: 50)
+      \Rect(width: parent.clip_offset, height: 50, color: #000)
     }
     "#;
 
@@ -1093,7 +1101,7 @@ fn test_component_let_order_independence_element_before_let() {
     let input = r#"
     \Component Card {
       // Element declared BEFORE the let definition it references
-      \Rect(width: card_width, height: 40)
+      \Rect(x: 0, y: 0, width: card_width, height: 40, color: #000)
       let card_width = 320
     }
 
@@ -1114,7 +1122,7 @@ fn test_component_let_order_independence_chained_out_of_order() {
       // 'a' references 'b' declared below it
       let a = b + 15
       let b = 100
-      \Rect(width: a, height: 50)
+      \Rect(x: 0, y: 0, width: a, height: 50, color: #000)
     }
 
     \ChainedCard()
@@ -1133,9 +1141,9 @@ fn test_component_literals_preserve_declaration_order_with_interspersed_lets() {
     let input = r#"
     \Component LayeredCard {
       let bg_pad = 10
-      \Rect(width: 400, z: 0) // First node: Background (index 1)
+      \Rect(x: 0, y: 0, width: 400, height: 100, z: 0, color: #000) // First node: Background (index 1)
       let inner_pad = bg_pad * 2
-      \Rect(width: 200, z: 0) // Second node: Foreground (index 2)
+      \Rect(x: 0, y: 0, width: 200, height: 100, z: 0, color: #000) // Second node: Foreground (index 2)
     }
 
     \LayeredCard()
@@ -1238,7 +1246,7 @@ fn test_box_and_clip_non_drawing_primitives() {
     let input = r#"
     let viewport = \Box(x: 10, y: 10, width: 200, height: 100)
     let clip = \Clip(box: viewport)
-    \Rect(clip: clip, width: 50, height: 50)
+    \Rect(clip: clip, x: 0, y: 0, width: 50, height: 50, color: #000)
     "#;
 
     let doc = parse(input).expect("Failed to parse");
@@ -1258,7 +1266,7 @@ fn test_clip_with_box_inline_expansion() {
     let input = r##"
     \Component ScrollView {
         let clip = \Clip(up: self.clip, box: \Box(x: self.left + 5, y: self.top + 5, width: self.width - 10, height: self.height - 10))
-        \Rect(clip: clip, width: 300, height: 300, color: #ff0000)
+        \Rect(clip: clip, x: 0, y: 0, width: 300, height: 300, color: #ff0000)
     }
 
     \ScrollView(width: 200, height: 150)
@@ -1289,8 +1297,8 @@ fn test_clip_unclip_with_window_clip() {
     let input = r##"
     \Component Modal {
         let clip = \Clip(box: \Box(width: 100, height: 100))
-        \Rect(clip: clip, color: #aaaaaa)
-        \Rect(clip: window.clip, color: #ffffff)
+        \Rect(clip: clip, x: 0, y: 0, width: 100, height: 100, color: #aaaaaa)
+        \Rect(clip: window.clip, x: 100, y: 0, width: 100, height: 100, color: #ffffff)
     }
 
     \Modal()
@@ -1316,8 +1324,8 @@ fn test_clip_stepping_up_chain() {
     \Component MultiLevel {
         let outer_clip = \Clip(box: \Box(width: 300, height: 300))
         let inner_clip = \Clip(up: outer_clip, box: \Box(width: 150, height: 150))
-        \Rect(clip: inner_clip, color: #111111)
-        \Rect(clip: inner_clip.up, color: #222222) // stepped up to outer_clip!
+        \Rect(clip: inner_clip, x: 0, y: 0, width: 50, height: 50, color: #111111)
+        \Rect(clip: inner_clip.up, x: 50, y: 0, width: 50, height: 50, color: #222222) // stepped up to outer_clip!
     }
 
     \MultiLevel()
@@ -1347,7 +1355,11 @@ fn test_children_directive_ambient_clip() {
     \Component ScrollContainer {
         let clip = \Clip(box: \Box(width: 150, height: 150))
         \Children {
-            clip: clip
+            clip: clip,
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100
         }
     }
 
@@ -1375,7 +1387,7 @@ fn test_children_directive_ambient_clip() {
 fn test_dom_tree_formatting() {
     let input = r#"
     \Component Card(bg: Color: #1e293b, width: 300, height: 150) {
-        \Rect(width: parent.width, height: parent.height, color: parent.bg)
+        \Rect(x: parent.left, y: parent.top, width: parent.width, height: parent.height, color: parent.bg)
         \Children {
             x: parent.left + 16,
             y: prev ? prev.bottom + 8 : parent.top + 16
@@ -1490,7 +1502,7 @@ fn test_env_auto_propagation_bypassing_middleman() {
     }
 
     \Component Button(env color: Color: #000000) {
-        \Rect(color: self.color)
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: self.color)
     }
 
     \Theme(color: #123456) {
@@ -1524,7 +1536,7 @@ fn test_env_component_encapsulation_sealed_black_box() {
     }
 
     \Component CustomCard() {
-        \Rect(color: #999999)
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: #999999)
     }
 
     \Theme(color: #123456) {
@@ -1556,7 +1568,7 @@ fn test_env_4_tier_precedence_order() {
     }
 
     \Component Button(env color: Color: #111111) {
-        \Rect(color: self.color)
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: self.color)
     }
 
     \Theme(color: #222222) {
@@ -1611,7 +1623,7 @@ fn test_env_interceptor() {
     }
 
     \Component Button(env color: Color: #000000) {
-        \Rect(color: self.color)
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: self.color)
     }
 
     \Surface(color: #123456) {
@@ -1634,7 +1646,7 @@ fn test_env_translator_provider() {
     }
 
     \Component Button(env color: Color: #888888) {
-        \Rect(color: self.color)
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: self.color)
     }
 
     \ThemeProvider(theme: "dark") {
@@ -1652,13 +1664,13 @@ fn test_env_translator_provider() {
 fn test_env_shield_swallower() {
     let input = r#"
     \Component AlertBadge(env color: Color) {
-        \Rect(color: self.color)
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: self.color)
         let color = #000000;
         \Children
     }
 
     \Component Button(env color: Color: #888888) {
-        \Rect(color: self.color)
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: self.color)
     }
 
     \AlertBadge(color: #ff0000) {
@@ -1681,7 +1693,7 @@ fn test_let_tombstone_firewall() {
     }
 
     \Component Button(env color: Color: #888888) {
-        \Rect(color: self.color)
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: self.color)
     }
 
     \Shield(color: #ff0000) {
@@ -1709,7 +1721,7 @@ fn test_env_tombstone_hole() {
     }
 
     \Component Button(env color: Color: #888888) {
-        \Rect(color: self.color)
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: self.color)
     }
 
     \Theme(color: #123456) {
@@ -1730,7 +1742,7 @@ fn test_uninitialized_variable_use_error() {
     let input = r#"
     \Component Bad() {
         let color;
-        \Rect(color: color)
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: color)
     }
 
     \Bad()
@@ -1755,7 +1767,7 @@ fn test_env_clip_universal_base_trait() {
     }
 
     \ScrollView {
-        \Rect(width: 50, height: 50, color: #ff0000)
+        \Rect(x: 0, y: 0, width: 50, height: 50, color: #ff0000)
     }
     "#;
     let doc = parse(input).expect("Parse error");
@@ -1797,6 +1809,88 @@ fn test_env_does_not_bind_to_non_env_parameter_missing_port_error() {
         other => panic!("Expected MissingPort, got {:?}", other),
     }
 }
+
+#[test]
+fn test_rect_missing_color_port_error() {
+    let input = r#"
+    \Rect(x: 10, y: 10, width: 100, height: 100)
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should fail without color port on Rect");
+    match err {
+        directedtype::compiler::error::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "Rect");
+            assert_eq!(port, "color");
+        }
+        other => panic!("Expected MissingPort for Rect color, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_rect_missing_x_port_error() {
+    let input = r#"
+    \Rect(y: 10, width: 100, height: 100, color: #000)
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should fail without x port on Rect");
+    match err {
+        directedtype::compiler::error::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "Rect");
+            assert_eq!(port, "x");
+        }
+        other => panic!("Expected MissingPort for Rect x, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_rect_missing_y_port_error() {
+    let input = r#"
+    \Rect(x: 10, width: 100, height: 100, color: #000)
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should fail without y port on Rect");
+    match err {
+        directedtype::compiler::error::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "Rect");
+            assert_eq!(port, "y");
+        }
+        other => panic!("Expected MissingPort for Rect y, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_rect_missing_width_port_error() {
+    let input = r#"
+    \Rect(x: 10, y: 10, height: 100, color: #000)
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should fail without width port on Rect");
+    match err {
+        directedtype::compiler::error::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "Rect");
+            assert_eq!(port, "width");
+        }
+        other => panic!("Expected MissingPort for Rect width, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_rect_missing_height_port_error() {
+    let input = r#"
+    \Rect(x: 10, y: 10, width: 100, color: #000)
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should fail without height port on Rect");
+    match err {
+        directedtype::compiler::error::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "Rect");
+            assert_eq!(port, "height");
+        }
+        other => panic!("Expected MissingPort for Rect height, got {:?}", other),
+    }
+}
+
+
 
 
 
