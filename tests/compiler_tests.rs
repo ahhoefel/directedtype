@@ -1489,7 +1489,7 @@ fn test_env_auto_propagation_bypassing_middleman() {
         \Children
     }
 
-    \Component Button(color: Color: #000000) {
+    \Component Button(env color: Color: #000000) {
         \Rect(color: self.color)
     }
 
@@ -1555,7 +1555,7 @@ fn test_env_4_tier_precedence_order() {
         }
     }
 
-    \Component Button(color: Color: #111111) {
+    \Component Button(env color: Color: #111111) {
         \Rect(color: self.color)
     }
 
@@ -1610,7 +1610,7 @@ fn test_env_interceptor() {
         \Children
     }
 
-    \Component Button(color: Color: #000000) {
+    \Component Button(env color: Color: #000000) {
         \Rect(color: self.color)
     }
 
@@ -1633,7 +1633,7 @@ fn test_env_translator_provider() {
         \Children
     }
 
-    \Component Button(color: Color: #888888) {
+    \Component Button(env color: Color: #888888) {
         \Rect(color: self.color)
     }
 
@@ -1657,7 +1657,7 @@ fn test_env_shield_swallower() {
         \Children
     }
 
-    \Component Button(color: Color: #888888) {
+    \Component Button(env color: Color: #888888) {
         \Rect(color: self.color)
     }
 
@@ -1680,7 +1680,7 @@ fn test_let_tombstone_firewall() {
         \Children
     }
 
-    \Component Button(color: Color: #888888) {
+    \Component Button(env color: Color: #888888) {
         \Rect(color: self.color)
     }
 
@@ -1708,7 +1708,7 @@ fn test_env_tombstone_hole() {
         \Children
     }
 
-    \Component Button(color: Color: #888888) {
+    \Component Button(env color: Color: #888888) {
         \Rect(color: self.color)
     }
 
@@ -1767,6 +1767,37 @@ fn test_env_clip_universal_base_trait() {
         _ => panic!("Expected clip ident, got {:?}", rect_clip),
     }
 }
+
+#[test]
+fn test_env_does_not_bind_to_non_env_parameter_missing_port_error() {
+    let input = r#"
+    \Component Foo(env color) {
+        \Children
+    }
+
+    \Component Bar(color) {
+        \Children {
+            color: color
+        }
+    }
+
+    \Foo(color: #F00) {
+        \Bar() {
+            \Rect(x: 100, y: 100, width: 100, height: 100)
+        }
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let err = compile_to_graph(&doc).expect_err("Should fail with missing port for Bar.color");
+    match err {
+        directedtype::compiler::error::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "Bar");
+            assert_eq!(port, "color");
+        }
+        other => panic!("Expected MissingPort, got {:?}", other),
+    }
+}
+
 
 
 

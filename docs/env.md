@@ -50,9 +50,9 @@ Environmental traits flow down to any node authored *lexically* within their blo
 
 ```dtml
 \Theme(color: "dark") {
-    // \Row is a layout component. It does NOT have a `color` port.
+    // \Row is a layout component. It does NOT have an `env color` port.
     \Row {
-        // \Button HAS a `color` port.
+        // \Button explicitly accepts environmental color via `env color`.
         \Button { "Submit" }
     }
 }
@@ -60,11 +60,15 @@ Environmental traits flow down to any node authored *lexically* within their blo
 
 ### Parser Execution & Encapsulation Boundary
 1. The parser evaluates `\Theme` and pushes `color = "dark"` onto the active Lexical Scope Stack.
-2. It evaluates `\Row`, sees no `color` port, and does not pass `color` to `\Row` (preserving `\Row`'s internal encapsulation).
-3. It evaluates `\Button`, sees that `\Button` exposes a `color` port (or `env color`), and draws a direct DAG edge: `Button.color = Theme.color`.
+2. It evaluates `\Row`, sees no `env color` parameter, and does not pass `color` to `\Row` (preserving `\Row`'s internal encapsulation).
+3. It evaluates `\Button`, sees that `\Button` explicitly exposes an `env color` parameter in its signature (`\Component Button(env color: Color)`), and draws a direct DAG edge: `Button.color = Theme.color`.
+
+> [!IMPORTANT]
+> **Strict Opt-In via `env`:**
+> Environmental variables **only** bind to parameters explicitly marked with the `env` keyword. Standard parameters (e.g. `\Component Bar(color)`) do **not** bind to ambient environmental variables. This prevents accidental parameter name collisions and unintended action-at-a-distance. If a non-env parameter has no default and is not supplied by the caller, compilation fails with `CompileError::MissingPort`.
 
 ### Components Are Sealed Black Boxes
-Environmental traits **do not penetrate** into the private internal implementation of a component unless that component explicitly exposes that port in its public signature.
+Environmental traits **do not penetrate** into the private internal implementation of a component unless that component explicitly exposes that port in its public signature as an `env` parameter.
 
 For example:
 ```dtml
@@ -77,7 +81,7 @@ For example:
     \MyCard()
 }
 ```
-`Theme`'s `color` does **not** mutate `MyCard`'s internal `\Text` or `\Rect` because `MyCard` did not declare `color` as an input port. `MyCard` remains completely hermetic.
+`Theme`'s `color` does **not** mutate `MyCard`'s internal `\Text` or `\Rect` because `MyCard` did not declare `env color` as an input port. `MyCard` remains completely hermetic.
 
 ---
 

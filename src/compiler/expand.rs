@@ -369,21 +369,25 @@ fn expand_component_instance(
         if let Some(explicit_expr) = explicit_ports.remove(&name) {
             comp_ports.insert(name, explicit_expr);
         }
-        // Tier 2: Lexical Environment (caller_env_scope)
-        else if let Some(env_entry) = caller_env_scope.get(&name) {
-            match env_entry {
-                EnvEntry::Bound(env_expr) => {
-                    comp_ports.insert(name, env_expr.clone());
-                }
-                EnvEntry::Tombstone => {
-                    // Tombstone halts lookup! Fall back to Tier 1 default
-                    if let Some(default_expr) = &param.default_edge {
-                        comp_ports.insert(name, default_expr.clone());
+        // Tier 2: Lexical Environment (caller_env_scope) - only for env parameters
+        else if param.is_env {
+            if let Some(env_entry) = caller_env_scope.get(&name) {
+                match env_entry {
+                    EnvEntry::Bound(env_expr) => {
+                        comp_ports.insert(name, env_expr.clone());
+                    }
+                    EnvEntry::Tombstone => {
+                        // Tombstone halts lookup! Fall back to Tier 1 default
+                        if let Some(default_expr) = &param.default_edge {
+                            comp_ports.insert(name, default_expr.clone());
+                        }
                     }
                 }
+            } else if let Some(default_expr) = &param.default_edge {
+                comp_ports.insert(name, default_expr.clone());
             }
         }
-        // Tier 1: Component Signature Default
+        // Tier 1: Component Signature Default (for non-env parameters)
         else if let Some(default_expr) = &param.default_edge {
             comp_ports.insert(name, default_expr.clone());
         }
