@@ -43,6 +43,23 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Undefined environmental variable '{name}'")]
+    UndefinedEnvVariable {
+        name: String,
+        span: Span,
+    },
+
+    #[error("Environmental variable '{name}' is firewalled/swallowed and cannot be accessed")]
+    BlockedEnvVariable {
+        name: String,
+        span: Span,
+    },
+
+    #[error("Cannot use bare 'env' as an expression; access an environmental variable via 'env.<name>'")]
+    BareEnvUse {
+        span: Span,
+    },
+
     #[error("{message}")]
     Custom {
         message: String,
@@ -59,6 +76,9 @@ impl CompileError {
             | CompileError::DuplicatePort { span, .. }
             | CompileError::CyclicDependency { span, .. }
             | CompileError::UninitializedVariableUse { span, .. }
+            | CompileError::UndefinedEnvVariable { span, .. }
+            | CompileError::BlockedEnvVariable { span, .. }
+            | CompileError::BareEnvUse { span, .. }
             | CompileError::Custom { span, .. } => *span,
         }
     }

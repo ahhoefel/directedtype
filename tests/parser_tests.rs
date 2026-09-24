@@ -746,6 +746,64 @@ fn test_parse_env_declarations_and_uninitialized_tombstones() {
     }
 }
 
+#[test]
+fn test_parse_env_member_access() {
+    let input = r#"
+    \Foo(color: env.color) {
+        \Children {
+            bg: env.card_bg
+        }
+    }
 
+    let is_dark = env.theme == "dark" ? true : false;
+    "#;
 
+    let doc = parse(input).expect("Failed to parse env member access");
+    assert_eq!(doc.items.len(), 2);
 
+    match &doc.items[0] {
+        Item::Node(elem) => {
+            assert_eq!(elem.name.as_str(), "Foo");
+            assert_eq!(elem.ports.len(), 1);
+            assert_eq!(elem.ports[0].name.as_str(), "color");
+            match &elem.ports[0].expr {
+                Expr::MemberAccess(m) => {
+                    match m.target.as_ref() {
+                        Expr::Ident(id) => assert_eq!(id.as_str(), "env"),
+                        _ => panic!("Expected target to be ident 'env'"),
+                    }
+                    assert_eq!(m.member.as_str(), "color");
+                }
+                _ => panic!("Expected Expr::MemberAccess"),
+            }
+        }
+        _ => panic!("Expected Item::Node"),
+    }
+
+    match &doc.items[1] {
+        Item::Let(l) => {
+            assert_eq!(l.name.as_str(), "is_dark");
+            match &l.value {
+                Some(LetValue::Expr(Expr::Ternary(tern))) => {
+                    match tern.condition.as_ref() {
+                        Expr::Binary(bin) => {
+                            match bin.left.as_ref() {
+                                Expr::MemberAccess(m) => {
+                                    match m.target.as_ref() {
+                                        Expr::Ident(id) => assert_eq!(id.as_str(), "env"),
+                                        _ => panic!("Expected target 'env'"),
+                                    }
+                                    assert_eq!(m.member.as_str(), "theme");
+                                }
+                                _ => panic!("Expected member access"),
+                            }
+                        }
+                        _ => panic!("Expected binary condition"),
+                    }
+                }
+                _ => panic!("Expected ternary expr"),
+            }
+        }
+        _ => panic!("Expected Item::Let"),
+    }
+}

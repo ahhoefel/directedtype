@@ -97,6 +97,43 @@
     }
 }
 
+// A leaf card component that automatically consumes ambient text_color, card_bg, and accent_color
+\Component DirectCard(
+    width: Number: parent.width, 
+    height: Number: 90, 
+    card_bg: Color: #ff0000, 
+    text_color: Color: #009900, 
+    accent_color: Color: #009900
+) {
+    \Rect(
+        x: parent.left,
+        y: parent.top,
+        width: parent.width,
+        height: parent.height,
+        color: parent.card_bg,
+        radius: 10,
+        border_width: 2,
+        border_color: parent.accent_color
+    )
+    \Text(
+        x: parent.left + 16,
+        y: parent.top + 20,
+        size: 16,
+        weight: 600,
+        color: parent.text_color
+    ) {
+        No environmental scoping.
+    }
+    \Text(
+        x: parent.left + 16,
+        y: parent.top + 48,
+        size: 14,
+        color: parent.accent_color
+    ) {
+        Accent color not taken from environment. card_bg set from env.card_bg.
+    }
+}
+
 \Flow(margin: 40, gap: 24) {
     \Text(size: 28, weight: 700, color: #0f172a) {
         Environmental Scope Showcase
@@ -115,5 +152,7 @@
         \SwallowerShield {
             \AmbientCard()
         }
+
+        \DirectCard(card_bg: env.card_bg)
     }
 }

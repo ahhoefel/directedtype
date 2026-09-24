@@ -1890,12 +1890,174 @@ fn test_rect_missing_height_port_error() {
     }
 }
 
+#[test]
+fn test_env_manual_wiring_to_component_param() {
+    let input = r#"
+    \Component Theme(env color: Color) {
+        \Children
+    }
 
+    \Component Card(bg: Color) {
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: bg)
+    }
 
+    \Theme(color: #ff0000) {
+        \Card(bg: env.color)
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let card = expanded.nodes.iter().find(|n| n.name == "Card").expect("Card not found");
+    match card.ports.get("bg").unwrap() {
+        Expr::MemberAccess(m) => {
+            assert_eq!(m.member.as_str(), "color");
+        }
+        _ => panic!("Expected member access to Theme.color"),
+    }
+}
 
+#[test]
+fn test_env_manual_wiring_to_primitive_rect() {
+    let input = r#"
+    \Component Theme(env color: Color) {
+        \Children
+    }
 
+    \Theme(color: #00ff00) {
+        \Rect(x: 10, y: 20, width: 200, height: 100, color: env.color)
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let rect = expanded.nodes.iter().find(|n| n.name == "Rect").expect("Rect not found");
+    match rect.ports.get("color").unwrap() {
+        Expr::MemberAccess(m) => {
+            assert_eq!(m.member.as_str(), "color");
+        }
+        _ => panic!("Expected member access to Theme.color"),
+    }
+}
 
+#[test]
+fn test_env_manual_wiring_in_children_directive() {
+    let input = r#"
+    \Component Theme(env accent: Color) {
+        \Children
+    }
 
+    \Component Container {
+        \Children {
+            border_color: env.accent
+        }
+    }
 
+    \Component Box(border_color: Color) {
+        \Rect(x: 0, y: 0, width: 50, height: 50, color: border_color)
+    }
 
+    \Theme(accent: #123456) {
+        \Container {
+            \Box()
+        }
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let (expanded, _) = compile_to_graph(&doc).expect("Compilation error");
+    let box_node = expanded.nodes.iter().find(|n| n.name == "Box").expect("Box not found");
+    match box_node.ports.get("border_color").unwrap() {
+        Expr::MemberAccess(m) => {
+            assert_eq!(m.member.as_str(), "accent");
+        }
+        _ => panic!("Expected member access to Theme.accent"),
+    }
+}
+
+#[test]
+fn test_env_blocked_by_shield_firewall_error() {
+    let input = r#"
+    \Component Theme(env color: Color) {
+        \Children
+    }
+
+    \Component Shield(env color: Color) {
+        let color;
+        \Children
+    }
+
+    \Component Card(bg: Color) {
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: bg)
+    }
+
+    \Theme(color: #ff0000) {
+        \Shield {
+            \Card(bg: env.color)
+        }
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should fail due to firewalled env variable");
+    match err {
+        directedtype::compiler::error::CompileError::BlockedEnvVariable { name, .. } => {
+            assert_eq!(name, "color");
+        }
+        other => panic!("Expected BlockedEnvVariable, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_env_undefined_variable_error() {
+    let input = r#"
+    \Component Card(bg: Color) {
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: bg)
+    }
+
+    \Card(bg: env.missing_var)
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should fail due to undefined env variable");
+    match err {
+        directedtype::compiler::error::CompileError::UndefinedEnvVariable { name, .. } => {
+            assert_eq!(name, "missing_var");
+        }
+        other => panic!("Expected UndefinedEnvVariable, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_env_component_internal_body_hermeticity_error() {
+    let input = r#"
+    \Component Theme(env color: Color) {
+        \Children
+    }
+
+    \Component SneakyCard {
+        \Rect(x: 0, y: 0, width: 100, height: 100, color: env.color)
+    }
+
+    \Theme(color: #ff0000) {
+        \SneakyCard()
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should fail: component body cannot access undeclared env");
+    match err {
+        directedtype::compiler::error::CompileError::UndefinedEnvVariable { name, .. } => {
+            assert_eq!(name, "color");
+        }
+        other => panic!("Expected UndefinedEnvVariable, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_bare_env_expression_error() {
+    let input = r#"
+    let x = env;
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should fail on bare env");
+    match err {
+        directedtype::compiler::error::CompileError::BareEnvUse { .. } => {}
+        other => panic!("Expected BareEnvUse, got {:?}", other),
+    }
+}
 

@@ -226,3 +226,61 @@ By the time the DTML compiler completes template expansion, all implicit scopes,
 * `Button_1.color = Surface_Lighten_B`
 
 Because the DAG treats clipping, colors, and layout traits as pure data edges, the Rust/Vello rendering backend evaluates them deterministically, sorts visual primitives by `z` and `clip`, and pushes draw commands directly to GPU layers with zero runtime cascading overhead.
+
+---
+
+## 7. Manual Environmental Wiring (`env.<ident>`) and Component Hermeticity
+
+Because environmental variables auto-bind **only** to parameters explicitly declared with `env`, there are times when a caller wants to manually bridge an ambient environmental variable into a standard, non-env parameter, a raw paint primitive, or a container projection. DirectedType provides first-class syntax for this via `env.<ident>`.
+
+### Call-Site Wiring to Standard Parameters
+A caller can pull from ambient environment and wire explicitly into a non-env component parameter:
+
+```dtml
+\Component Card(bg: Color) {
+    \Rect(x: 0, y: 0, width: 200, height: 100, color: bg)
+}
+
+\Theme(env card_bg: #1e293b) {
+    // Manually bridges ambient card_bg into Card's non-env 'bg' parameter:
+    \Card(bg: env.card_bg)
+}
+```
+
+### Direct Wiring to Paint Primitives
+Low-level primitives like `\Rect` require all geometry and paint properties (`x`, `y`, `width`, `height`, `color`) to be explicitly specified. `env.<ident>` allows wiring ambient variables directly to primitives:
+
+```dtml
+\Theme(env fill: #3b82f6) {
+    \Rect(x: 10, y: 10, width: 100, height: 50, color: env.fill)
+}
+```
+
+### Container Projection via `\Children`
+A container can capture ambient variables and project them onto its children's regular ports via the `\Children` directive:
+
+```dtml
+\Component CardGroup {
+    \Children {
+        bg: env.card_bg
+    }
+}
+```
+
+### Architectural Guarantees
+
+> [!IMPORTANT]
+> **1. Component Hermeticity (No Backdoors):**
+> `env.<ident>` is strictly a caller-facing / projection mechanism. It is valid at call sites (`\Foo(color: env.color)`), on element instances, and inside container `\Children { ... }` directives. A component's internal body cannot reach into ambient scope to bypass its parameter declarations. If a component needs an ambient variable, it must declare it in its signature:
+> ```dtml
+> // COMPILE ERROR: Undefined environmental variable 'theme'
+> \Component SneakyCard {
+>     \Rect(..., color: env.theme)
+> }
+> ```
+>
+> **2. Unbreachable Firewalls:**
+> When an enclosing component establishes a shield or firewall (e.g. `\Shield(env color) { let color; \Children }`), attempting to evaluate `env.color` anywhere in its subtree raises `CompileError::BlockedEnvVariable`. The compiler will **never** silently tunnel through a shield to an outer provider.
+>
+> **3. Bare `env` Forbidden:**
+> Using `env` by itself as a bare identifier (e.g. `let x = env;`) raises `CompileError::BareEnvUse`.

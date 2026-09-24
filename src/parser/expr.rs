@@ -120,6 +120,7 @@ fn parse_prefix(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
         Token::False => Ok(Expr::Literal(Literal::Bool(false, span))),
         Token::Ident(name) => Ok(Expr::Ident(Ident::new(name, span))),
         Token::Children => Ok(Expr::Ident(Ident::new("Children", span))),
+        Token::Env => Ok(Expr::Ident(Ident::new("env", span))),
         Token::Minus => {
             let operand = parse_expr_bp(cursor, 13)?;
             let total_span = span.merge(operand.span());
