@@ -2,7 +2,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Event as NotifyEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use parley::{FontContext, LayoutContext};
 use vello::peniko::Color;
 use vello::util::{RenderContext, RenderSurface};
@@ -17,7 +17,9 @@ use winit::window::{Window, WindowId};
 
 use crate::ast::Document;
 use crate::compiler::evaluate_document_with_window;
+use crate::compiler::expanded::NodeId;
 use crate::compiler::layout::ResolvedLayout;
+use crate::interaction::{Event, EventKind, Modifiers, MouseButton, Point};
 use crate::parser::parse_document;
 use crate::render::scene::{build_scene, SceneOptions};
 
@@ -133,7 +135,19 @@ pub struct ViewerApp {
     font_cx: FontContext,
     layout_cx: LayoutContext<()>,
     frame_count: u64,
+
+    // Interaction state
+    cursor_pos: Option<Point>,
+    hovered_node: Option<NodeId>,
+    pressed_node: Option<(NodeId, MouseButton)>,
+    modifiers: Modifiers,
+    inspect_mode: bool,
+    selected_node: Option<NodeId>,
+    event_handler: Option<EventHandler>,
 }
+
+/// Type alias for event callbacks dispatched by `ViewerApp`.
+pub type EventHandler = Box<dyn FnMut(&mut Event, &ResolvedLayout)>;
 
 impl ViewerApp {
     pub fn new(layout: ResolvedLayout, config: ViewerConfig) -> Self {
@@ -150,6 +164,59 @@ impl ViewerApp {
             font_cx: FontContext::new(),
             layout_cx: LayoutContext::new(),
             frame_count: 0,
+            cursor_pos: None,
+            hovered_node: None,
+            pressed_node: None,
+            modifiers: Modifiers::default(),
+            inspect_mode: false,
+            selected_node: None,
+            event_handler: None,
+        }
+    }
+
+    /// Registers a callback to receive high-level interaction events.
+    pub fn on_event<F: FnMut(&mut Event, &ResolvedLayout) + 'static>(mut self, handler: F) -> Self {
+        self.event_handler = Some(Box::new(handler));
+        self
+    }
+
+    /// Dynamically sets or updates the interaction event callback.
+    pub fn set_event_handler<F: FnMut(&mut Event, &ResolvedLayout) + 'static>(&mut self, handler: F) {
+        self.event_handler = Some(Box::new(handler));
+    }
+
+    /// Toggles the interactive visual inspector overlay.
+    pub fn set_inspect_mode(&mut self, enabled: bool) {
+        self.inspect_mode = enabled;
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Returns whether inspect mode is currently active.
+    pub fn inspect_mode(&self) -> bool {
+        self.inspect_mode
+    }
+
+    /// Returns the currently selected node in inspector mode, if any.
+    pub fn selected_node(&self) -> Option<NodeId> {
+        self.selected_node
+    }
+
+    /// Returns the currently hovered visual node, if any.
+    pub fn hovered_node(&self) -> Option<NodeId> {
+        self.hovered_node
+    }
+
+    fn dispatch_event_with_bubble(&mut self, mut event: Event, bubble_path: &[NodeId]) {
+        if let Some(handler) = &mut self.event_handler {
+            for &ancestor_id in bubble_path {
+                event.current_target = ancestor_id;
+                handler(&mut event, &self.layout);
+                if event.propagation_stopped {
+                    break;
+                }
+            }
         }
     }
 
@@ -285,12 +352,57 @@ impl ViewerApp {
         let mut scene_opts = self.config.scene_options.clone();
         scene_opts.scale_factor = window.scale_factor();
 
-        let scene = build_scene(
+        let mut scene = build_scene(
             &self.layout,
             &mut self.font_cx,
             &mut self.layout_cx,
             &scene_opts,
         );
+
+        if self.inspect_mode {
+            use vello::kurbo::{Affine, Rect as KRect, Stroke};
+            use vello::peniko::{Brush, Color as PColor};
+
+            let transform = Affine::scale(window.scale_factor());
+
+            // 1. Highlight hovered node (cyan outline)
+            if let Some(hovered_id) = self.hovered_node {
+                if let Some(node) = self.layout.get_node(hovered_id) {
+                    let rect = KRect::new(
+                        node.rect.x,
+                        node.rect.y,
+                        node.rect.x + node.rect.width,
+                        node.rect.y + node.rect.height,
+                    );
+                    scene.stroke(
+                        &Stroke::new(2.0),
+                        transform,
+                        Brush::Solid(PColor::from_rgba8(0, 200, 255, 220)),
+                        None,
+                        &rect,
+                    );
+                }
+            }
+
+            // 2. Highlight selected node (amber outline)
+            if let Some(selected_id) = self.selected_node {
+                if let Some(node) = self.layout.get_node(selected_id) {
+                    let rect = KRect::new(
+                        node.rect.x,
+                        node.rect.y,
+                        node.rect.x + node.rect.width,
+                        node.rect.y + node.rect.height,
+                    );
+                    scene.stroke(
+                        &Stroke::new(3.0),
+                        transform,
+                        Brush::Solid(PColor::from_rgba8(255, 170, 0, 255)),
+                        None,
+                        &rect,
+                    );
+                }
+            }
+        }
 
         let base_color = self
             .config
@@ -503,6 +615,235 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
             WindowEvent::RedrawRequested => {
                 self.render_frame();
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+                let point = Point::new(position.x / scale, position.y / scale);
+                self.cursor_pos = Some(point);
+
+                let hit = self.layout.hit_test(point);
+                let new_hovered = hit.as_ref().map(|h| h.target);
+
+                if new_hovered != self.hovered_node {
+                    if let Some(old_id) = self.hovered_node {
+                        let mut leave_event = Event::new(
+                            EventKind::PointerLeave,
+                            point,
+                            Point::new(0.0, 0.0),
+                            self.modifiers,
+                            old_id,
+                        );
+                        if let Some(handler) = &mut self.event_handler {
+                            handler(&mut leave_event, &self.layout);
+                        }
+                    }
+
+                    if let Some(ref hit_res) = hit {
+                        let enter_event = Event::new(
+                            EventKind::PointerEnter,
+                            point,
+                            hit_res.local_point,
+                            self.modifiers,
+                            hit_res.target,
+                        );
+                        self.dispatch_event_with_bubble(enter_event, &hit_res.bubble_path);
+                    }
+
+                    self.hovered_node = new_hovered;
+
+                    if self.inspect_mode {
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
+                }
+
+                if let Some(ref hit_res) = hit {
+                    let move_event = Event::new(
+                        EventKind::PointerMove,
+                        point,
+                        hit_res.local_point,
+                        self.modifiers,
+                        hit_res.target,
+                    );
+                    self.dispatch_event_with_bubble(move_event, &hit_res.bubble_path);
+                }
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                let btn = match button {
+                    winit::event::MouseButton::Left => MouseButton::Left,
+                    winit::event::MouseButton::Right => MouseButton::Right,
+                    winit::event::MouseButton::Middle => MouseButton::Middle,
+                    winit::event::MouseButton::Back => MouseButton::Other(1),
+                    winit::event::MouseButton::Forward => MouseButton::Other(2),
+                    winit::event::MouseButton::Other(c) => MouseButton::Other(c),
+                };
+
+                if let Some(point) = self.cursor_pos {
+                    let hit = self.layout.hit_test(point);
+                    match state {
+                        ElementState::Pressed => {
+                            if let Some(ref hit_res) = hit {
+                                self.pressed_node = Some((hit_res.target, btn));
+                                if self.inspect_mode {
+                                    self.selected_node = Some(hit_res.target);
+                                    if let Some(node) = self.layout.get_node(hit_res.target) {
+                                        println!(
+                                            "[Inspector] Click at ({:.1}, {:.1}) (local: ({:.1}, {:.1}))",
+                                            point.x, point.y, hit_res.local_point.x, hit_res.local_point.y
+                                        );
+                                        println!(
+                                            "    Target: {} (id: {:?}) bounds: [x: {:.1}, y: {:.1}, w: {:.1}, h: {:.1}] z: {}",
+                                            node.name,
+                                            node.id,
+                                            node.rect.x,
+                                            node.rect.y,
+                                            node.rect.width,
+                                            node.rect.height,
+                                            node.z
+                                        );
+                                        if let Some(text) = &node.text_content {
+                                            println!("    Text: {:?}", text.trim());
+                                        } else if node.name == "Text" {
+                                            println!("    Text: (empty)");
+                                        }
+
+                                        // If the target itself doesn't have text, report any context text from children or siblings
+                                        if node.text_content.is_none() {
+                                            let mut context_texts = Vec::new();
+                                            for child_id in &node.children {
+                                                if let Some(child) = self.layout.get_node(*child_id) {
+                                                    if let Some(child_text) = &child.text_content {
+                                                        context_texts.push(format!("child {}: {:?}", child.name, child_text.trim()));
+                                                    }
+                                                }
+                                            }
+                                            if let Some(parent_id) = node.parent {
+                                                if let Some(parent_node) = self.layout.get_node(parent_id) {
+                                                    for sibling_id in &parent_node.children {
+                                                        if *sibling_id != node.id {
+                                                            if let Some(sibling) = self.layout.get_node(*sibling_id) {
+                                                                if let Some(stext) = &sibling.text_content {
+                                                                    context_texts.push(format!("sibling {}: {:?}", sibling.name, stext.trim()));
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            for info in context_texts {
+                                                println!("    Context {}", info);
+                                            }
+                                        }
+
+                                        let path: Vec<String> = hit_res
+                                            .bubble_path
+                                            .iter()
+                                            .filter_map(|id| {
+                                                self.layout.get_node(*id).map(|n| format!("{} ({:?})", n.name, n.id))
+                                            })
+                                            .collect();
+                                        println!("    Hierarchy: {}", path.join(" -> "));
+                                    }
+                                    if let Some(w) = &self.window {
+                                        w.request_redraw();
+                                    }
+                                }
+                                let down_event = Event::new(
+                                    EventKind::PointerDown { button: btn },
+                                    point,
+                                    hit_res.local_point,
+                                    self.modifiers,
+                                    hit_res.target,
+                                );
+                                self.dispatch_event_with_bubble(down_event, &hit_res.bubble_path);
+                            } else {
+                                self.pressed_node = None;
+                                if self.inspect_mode {
+                                    self.selected_node = None;
+                                    println!(
+                                        "[Inspector] Click at ({:.1}, {:.1}): no node hit",
+                                        point.x, point.y
+                                    );
+                                    if let Some(w) = &self.window {
+                                        w.request_redraw();
+                                    }
+                                }
+                            }
+                        }
+                        ElementState::Released => {
+                            if let Some(ref hit_res) = hit {
+                                let up_event = Event::new(
+                                    EventKind::PointerUp { button: btn },
+                                    point,
+                                    hit_res.local_point,
+                                    self.modifiers,
+                                    hit_res.target,
+                                );
+                                self.dispatch_event_with_bubble(up_event, &hit_res.bubble_path);
+
+                                if let Some((pressed_id, pressed_btn)) = self.pressed_node {
+                                    if pressed_btn == btn && hit_res.bubble_path.contains(&pressed_id) {
+                                        let click_event = Event::new(
+                                            EventKind::Click { button: btn },
+                                            point,
+                                            hit_res.local_point,
+                                            self.modifiers,
+                                            hit_res.target,
+                                        );
+                                        self.dispatch_event_with_bubble(click_event, &hit_res.bubble_path);
+                                    }
+                                }
+                            }
+                            self.pressed_node = None;
+                        }
+                    }
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let (delta_x, delta_y) = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(x, y) => (x as f64 * 20.0, y as f64 * 20.0),
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => (pos.x, pos.y),
+                };
+                if let Some(point) = self.cursor_pos {
+                    if let Some(ref hit_res) = self.layout.hit_test(point) {
+                        let scroll_event = Event::new(
+                            EventKind::Scroll { delta_x, delta_y },
+                            point,
+                            hit_res.local_point,
+                            self.modifiers,
+                            hit_res.target,
+                        );
+                        self.dispatch_event_with_bubble(scroll_event, &hit_res.bubble_path);
+                    }
+                }
+            }
+            WindowEvent::CursorLeft { .. } => {
+                if let Some(old_id) = self.hovered_node.take() {
+                    let pt = self.cursor_pos.unwrap_or_default();
+                    let mut leave_event = Event::new(
+                        EventKind::PointerLeave,
+                        pt,
+                        Point::new(0.0, 0.0),
+                        self.modifiers,
+                        old_id,
+                    );
+                    if let Some(handler) = &mut self.event_handler {
+                        handler(&mut leave_event, &self.layout);
+                    }
+                    if self.inspect_mode {
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
+                }
+                self.cursor_pos = None;
+            }
+            WindowEvent::ModifiersChanged(new_mods) => {
+                self.modifiers.shift = new_mods.state().shift_key();
+                self.modifiers.ctrl = new_mods.state().control_key();
+                self.modifiers.alt = new_mods.state().alt_key();
+                self.modifiers.meta = new_mods.state().super_key();
+            }
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -520,6 +861,16 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 }
                 Key::Character(c) if c.eq_ignore_ascii_case("d") => {
                     self.layout.print_dom();
+                }
+                Key::Character(c) if c.eq_ignore_ascii_case("i") => {
+                    self.inspect_mode = !self.inspect_mode;
+                    println!(
+                        "[Inspector] Mode: {}",
+                        if self.inspect_mode { "ON (Hover/click elements to inspect)" } else { "OFF" }
+                    );
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
                 }
                 _ => {}
             },
@@ -588,7 +939,7 @@ fn run_viewer_app(
         });
 
         let mut watcher = RecommendedWatcher::new(
-            move |res: Result<Event, notify::Error>| {
+            move |res: Result<NotifyEvent, notify::Error>| {
                 if let Ok(event) = res {
                     if !event.kind.is_access() {
                         let matches = if let Some(target) = &target_filename {

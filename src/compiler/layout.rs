@@ -1,6 +1,7 @@
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::graph::VarId;
 use crate::compiler::value::Value;
+use crate::interaction::{HitTestResult, Point};
 use crate::span::Span;
 use std::collections::HashMap;
 
@@ -38,6 +39,53 @@ impl Rect {
     pub fn bottom(&self) -> f64 {
         self.y + self.height
     }
+
+    pub fn contains_point(&self, point: Point) -> bool {
+        self.contains(point.x, point.y)
+    }
+
+    pub fn contains(&self, px: f64, py: f64) -> bool {
+        self.width > 0.0
+            && self.height > 0.0
+            && px >= self.x
+            && px <= self.x + self.width
+            && py >= self.y
+            && py <= self.y + self.height
+    }
+}
+
+/// Tests whether a point is inside a rectangle with an optional corner radius.
+pub fn rounded_rect_contains(rect: &Rect, radius: f64, point: Point) -> bool {
+    if !rect.contains_point(point) {
+        return false;
+    }
+    if radius <= 0.0 {
+        return true;
+    }
+    let r = radius.min(rect.width / 2.0).min(rect.height / 2.0);
+    let px = point.x;
+    let py = point.y;
+    let x0 = rect.x;
+    let y0 = rect.y;
+    let x1 = rect.x + rect.width;
+    let y1 = rect.y + rect.height;
+
+    // Fast-path: if the point is within the inner cross bands, it is inside the rounded rect.
+    if (px >= x0 + r && px <= x1 - r) || (py >= y0 + r && py <= y1 - r) {
+        return true;
+    }
+
+    // Determine which corner quadrant the point is in:
+    let (cx, cy) = match (px < x0 + r, py < y0 + r) {
+        (true, true) => (x0 + r, y0 + r),       // Top-left
+        (false, true) => (x1 - r, y0 + r),      // Top-right
+        (true, false) => (x0 + r, y1 - r),      // Bottom-left
+        (false, false) => (x1 - r, y1 - r),    // Bottom-right
+    };
+
+    let dx = px - cx;
+    let dy = py - cy;
+    dx * dx + dy * dy <= r * r
 }
 
 /// A resolved visual element with concrete spatial boundaries and computed properties.
@@ -92,6 +140,114 @@ impl ResolvedLayout {
 
     pub fn get_value(&self, node_id: NodeId, port: &str) -> Option<&Value> {
         self.values.get(&VarId::new(node_id, port))
+    }
+
+    /// Validates whether a point is within all active clip boundaries for a given clip ID.
+    pub fn clip_chain_contains(&self, clip_id: Option<NodeId>, point: Point) -> bool {
+        let mut curr = clip_id;
+        let mut visited = std::collections::HashSet::new();
+        let mut depth = 0;
+
+        while let Some(id) = curr {
+            if id.is_window() || depth >= 64 || !visited.insert(id) {
+                break;
+            }
+            depth += 1;
+
+            if let Some(box_id) = self.get_value(id, "box").and_then(|v| v.as_node()) {
+                if !box_id.is_window() {
+                    let get_box_val = |port: &str| -> f64 {
+                        self.get_value(box_id, port)
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0)
+                    };
+                    let x = get_box_val("x");
+                    let y = get_box_val("y");
+                    let w = get_box_val("width");
+                    let h = get_box_val("height");
+                    let radius = self
+                        .get_value(box_id, "radius")
+                        .or_else(|| self.get_value(box_id, "corner_radius"))
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0);
+
+                    let clip_rect = Rect::new(x, y, w, h);
+                    if !rounded_rect_contains(&clip_rect, radius, point) {
+                        return false;
+                    }
+                }
+            }
+
+            curr = self
+                .get_value(id, "up")
+                .and_then(|v| v.as_node())
+                .filter(|up_id| !up_id.is_window());
+        }
+
+        true
+    }
+
+    /// Queries the topmost visual element at the given logical coordinate.
+    ///
+    /// Evaluates in Reverse Painter's Order (descending `z`, reverse AST order),
+    /// strictly enforcing active hardware `\Clip` boundaries and corner radii.
+    pub fn hit_test(&self, point: Point) -> Option<HitTestResult> {
+        for node in self.render_order().into_iter().rev() {
+            // Only visual paint primitives can be directly hit
+            if !node.is_paint_primitive() {
+                continue;
+            }
+
+            // Exclude primitives with non-positive dimensions
+            if node.rect.width <= 0.0 || node.rect.height <= 0.0 {
+                continue;
+            }
+
+            // Check if point is outside active clip boundary
+            if !self.clip_chain_contains(node.clip, point) {
+                continue;
+            }
+
+            // Check primitive geometry
+            let radius = node
+                .properties
+                .get("radius")
+                .or_else(|| node.properties.get("corner_radius"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+
+            if !rounded_rect_contains(&node.rect, radius, point) {
+                continue;
+            }
+
+            // Construct bubble path from leaf target up to root
+            let mut bubble_path = Vec::new();
+            bubble_path.push(node.id);
+
+            let mut curr_parent = node.parent;
+            let mut visited = std::collections::HashSet::new();
+            visited.insert(node.id);
+
+            let max_depth = self.nodes.len() + 1;
+            while let Some(parent_id) = curr_parent {
+                if parent_id.is_window() || bubble_path.len() >= max_depth || !visited.insert(parent_id) {
+                    break;
+                }
+                bubble_path.push(parent_id);
+                curr_parent = self.get_node(parent_id).and_then(|n| n.parent);
+            }
+
+            let local_point = Point::new(point.x - node.rect.x, point.y - node.rect.y);
+
+            return Some(HitTestResult {
+                target: node.id,
+                global_point: point,
+                local_point,
+                bubble_path,
+            });
+        }
+
+        None
     }
 
     /// Formats the resolved layout hierarchy into DTML syntax: `\Name(ports) { body }`.
