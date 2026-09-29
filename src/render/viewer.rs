@@ -7,7 +7,7 @@ use parley::{FontContext, LayoutContext};
 use vello::peniko::Color;
 use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu;
-use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions};
+use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
@@ -360,47 +360,61 @@ impl ViewerApp {
         );
 
         if self.inspect_mode {
-            use vello::kurbo::{Affine, Rect as KRect, Stroke};
-            use vello::peniko::{Brush, Color as PColor};
+            let overlay = crate::inspector::InspectOverlayComponent::default();
+            let scale = window.scale_factor();
+            let size = window.inner_size();
+            let win_w = if size.width > 0 {
+                size.width as f64 / scale
+            } else {
+                self.config.width as f64
+            };
+            let win_h = if size.height > 0 {
+                size.height as f64 / scale
+            } else {
+                self.config.height as f64
+            };
 
-            let transform = Affine::scale(window.scale_factor());
+            let mut overlay_scene = Scene::new();
 
-            // 1. Highlight hovered node (cyan outline)
+            // Render selected node (if distinct from hovered)
+            if let Some(selected_id) = self.selected_node {
+                if self.hovered_node != Some(selected_id) {
+                    if let Some(info) = crate::inspector::InspectTargetInfo::from_layout(&self.layout, selected_id) {
+                        overlay.render_to_scene(
+                            &mut overlay_scene,
+                            vello::kurbo::Affine::IDENTITY,
+                            &info,
+                            true,
+                            &mut self.font_cx,
+                            &mut self.layout_cx,
+                            win_w,
+                            win_h,
+                        );
+                    }
+                }
+            }
+
+            // Render hovered node
             if let Some(hovered_id) = self.hovered_node {
-                if let Some(node) = self.layout.get_node(hovered_id) {
-                    let rect = KRect::new(
-                        node.rect.x,
-                        node.rect.y,
-                        node.rect.x + node.rect.width,
-                        node.rect.y + node.rect.height,
-                    );
-                    scene.stroke(
-                        &Stroke::new(2.0),
-                        transform,
-                        Brush::Solid(PColor::from_rgba8(0, 200, 255, 220)),
-                        None,
-                        &rect,
+                if let Some(info) = crate::inspector::InspectTargetInfo::from_layout(&self.layout, hovered_id) {
+                    let is_selected = self.selected_node == Some(hovered_id);
+                    overlay.render_to_scene(
+                        &mut overlay_scene,
+                        vello::kurbo::Affine::IDENTITY,
+                        &info,
+                        is_selected,
+                        &mut self.font_cx,
+                        &mut self.layout_cx,
+                        win_w,
+                        win_h,
                     );
                 }
             }
 
-            // 2. Highlight selected node (amber outline)
-            if let Some(selected_id) = self.selected_node {
-                if let Some(node) = self.layout.get_node(selected_id) {
-                    let rect = KRect::new(
-                        node.rect.x,
-                        node.rect.y,
-                        node.rect.x + node.rect.width,
-                        node.rect.y + node.rect.height,
-                    );
-                    scene.stroke(
-                        &Stroke::new(3.0),
-                        transform,
-                        Brush::Solid(PColor::from_rgba8(255, 170, 0, 255)),
-                        None,
-                        &rect,
-                    );
-                }
+            if (scale - 1.0).abs() > 0.001 {
+                scene.append(&overlay_scene, Some(vello::kurbo::Affine::scale(scale)));
+            } else {
+                scene.append(&overlay_scene, None);
             }
         }
 
