@@ -260,6 +260,7 @@ fn expand_element(
 
     let node_id = NodeId(doc.nodes.len());
     let mut expanded = ExpandedNode::new(node_id, elem.name.as_str(), elem.span);
+    expanded.handle = elem.handle;
     expanded.parent = ctx.parent_id;
     expanded.prev_sibling = ctx.prev_sibling_id;
 

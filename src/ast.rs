@@ -1,3 +1,4 @@
+use crate::dom::NodeHandle;
 use crate::span::Span;
 
 /// An identifier with its source span.
@@ -132,6 +133,7 @@ pub struct ElementNode {
     pub ports: Vec<PortBinding>,
     pub content: Option<ContentSlot>,
     pub span: Span,
+    pub handle: Option<NodeHandle>,
 }
 
 /// The `\Children` directive: `\Children { x: parent.left, y: prev ? prev.bottom + gap : parent.top }`
@@ -208,6 +210,26 @@ impl Expr {
             Expr::Paren(_, span) => *span,
             Expr::Node(n) => n.span,
         }
+    }
+
+    pub fn number(val: f64) -> Self {
+        Expr::Literal(Literal::Number(val, Span::default()))
+    }
+
+    pub fn lit(val: f64) -> Self {
+        Self::number(val)
+    }
+
+    pub fn string(val: impl Into<String>) -> Self {
+        Expr::Literal(Literal::String(val.into(), Span::default()))
+    }
+
+    pub fn bool(val: bool) -> Self {
+        Expr::Literal(Literal::Bool(val, Span::default()))
+    }
+
+    pub fn color(val: impl Into<String>) -> Self {
+        Expr::Literal(Literal::Color(val.into(), Span::default()))
     }
 }
 

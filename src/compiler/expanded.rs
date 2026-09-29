@@ -1,4 +1,5 @@
 use crate::ast::Expr;
+use crate::dom::NodeHandle;
 use crate::span::Span;
 use std::collections::HashMap;
 
@@ -44,6 +45,7 @@ pub struct ExpandedNode {
     pub ports: HashMap<String, Expr>,
     pub text_content: Option<String>,
     pub span: Span,
+    pub handle: Option<NodeHandle>,
 }
 
 impl ExpandedNode {
@@ -57,6 +59,7 @@ impl ExpandedNode {
             ports: HashMap::new(),
             text_content: None,
             span,
+            handle: None,
         }
     }
 

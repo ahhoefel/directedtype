@@ -99,6 +99,7 @@ pub fn parse_element_node(cursor: &mut ParserCursor<'_>) -> Result<ElementNode, 
         ports,
         content,
         span: total_span,
+        handle: None,
     })
 }
 

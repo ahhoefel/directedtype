@@ -1,6 +1,7 @@
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::graph::VarId;
 use crate::compiler::value::Value;
+use crate::dom::NodeHandle;
 use crate::interaction::{HitTestResult, Point};
 use crate::span::Span;
 use std::collections::HashMap;
@@ -101,6 +102,7 @@ pub struct ResolvedNode {
     pub text_content: Option<String>,
     pub properties: HashMap<String, Value>,
     pub span: Span,
+    pub handle: Option<NodeHandle>,
 }
 
 impl ResolvedNode {
@@ -136,6 +138,10 @@ impl ResolvedLayout {
 
     pub fn get_node(&self, id: NodeId) -> Option<&ResolvedNode> {
         self.nodes.iter().find(|n| n.id == id)
+    }
+
+    pub fn get_by_handle(&self, handle: NodeHandle) -> Option<&ResolvedNode> {
+        self.nodes.iter().find(|n| n.handle == Some(handle))
     }
 
     pub fn get_value(&self, node_id: NodeId, port: &str) -> Option<&Value> {
@@ -482,6 +488,7 @@ pub fn resolve_layout(
             text_content: node.text_content.clone(),
             properties,
             span: node.span,
+            handle: node.handle,
         });
     }
 
