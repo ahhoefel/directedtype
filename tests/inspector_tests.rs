@@ -298,3 +298,205 @@ fn test_overlay_render_to_scene_dpi_scaling() {
     );
 }
 
+#[test]
+fn test_build_tree_items_from_layout_and_ancestor_expansion() {
+    let source = r#"
+        \Component Card(id: String: "c1") {
+            \Rect(id: id, x: 0, y: 0, width: 200, height: 100, color: #38bdf8) {
+                \Text { "Card Title" }
+            }
+        }
+        \Card(id: "main_card")
+    "#;
+    let doc = directedtype::parse(source).expect("Source must parse");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0)
+        .expect("Layout evaluation must succeed");
+
+    let mut state = InspectorState::new();
+
+    // 1. Initial state: all nodes expanded by default
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+    assert!(!tree_items.is_empty());
+
+    // Find the Card root and the child Text
+    let card_node = tree_items.iter().find(|it| it.tag == "Card").expect("Card must be in tree");
+    let card_id = card_node.node_id.expect("Card must have node_id");
+
+    let text_node = tree_items.iter().find(|it| it.tag == "Text").expect("Text must be in tree");
+    let text_id = text_node.node_id.expect("Text must have node_id");
+
+    // 2. Collapse the Card node
+    assert!(!state.toggle_expanded_id(card_id)); // now collapsed
+    assert!(!state.is_expanded_id(card_id));
+
+    let tree_collapsed = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+    // When Card is collapsed, its children (Rect and Text) must not appear in the flattened tree
+    assert!(!tree_collapsed.iter().any(|it| it.tag == "Text"));
+
+    // 3. Select child Text from canvas -> expand ancestors
+    state.set_selected_id(Some(text_id));
+    state.expand_ancestors(text_id, &layout);
+    assert!(state.is_expanded_id(card_id)); // Card must be re-expanded!
+
+    let tree_restored = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+    assert!(tree_restored.iter().any(|it| it.tag == "Text"));
+}
+
+#[test]
+fn test_inspect_panel_component_rendering_and_hit_testing() {
+    let source = r#"
+        \Rect(id: "hero_box", x: 0, y: 0, width: 400, height: 200, color: #0284c7) {
+            \Text { "Hero Headline" }
+        }
+    "#;
+    let doc = directedtype::parse(source).expect("Must parse");
+    let layout = directedtype::evaluate_document_with_window(&doc, 1000.0, 700.0).expect("Layout ok");
+
+    let state = InspectorState::new();
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+    assert!(tree_items.len() >= 2);
+
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let win_w = 1000.0;
+    let win_h = 700.0;
+    let panel_x = win_w - panel.width; // 640.0
+
+    // 1. Render test
+    let mut scene = vello::Scene::new();
+    let mut font_cx = parley::FontContext::new();
+    let mut layout_cx = parley::LayoutContext::new();
+    panel.render_to_scene(
+        &mut scene,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+        &mut font_cx,
+        &mut layout_cx,
+    );
+
+    // 2. Hit testing: Header pick button [↖]
+    let btn_click = panel.handle_click(
+        panel_x + 12.0,
+        15.0,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+    );
+    assert_eq!(btn_click, directedtype::inspector::PanelHitResult::ToggleInspectCursor);
+
+    // 3. Hit testing: Chevron click on first item (has children)
+    let chevron_click = panel.handle_click(
+        panel_x + 12.0,
+        panel.header_height + 10.0, // in first row
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+    );
+    let root_id = tree_items[0].node_id.unwrap();
+    assert_eq!(chevron_click, directedtype::inspector::PanelHitResult::ToggleExpand(root_id));
+
+    // 4. Hit testing: Row selection click (to the right of chevron)
+    let row_click = panel.handle_click(
+        panel_x + 80.0,
+        panel.header_height + 10.0,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+    );
+    assert_eq!(row_click, directedtype::inspector::PanelHitResult::SelectNode(root_id));
+
+    // 5. Mouse move / hover testing
+    let hovered = panel.handle_mouse_move(
+        panel_x + 80.0,
+        panel.header_height + 10.0,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+    );
+    assert_eq!(hovered, Some(root_id));
+
+    // Outside panel
+    let hovered_outside = panel.handle_mouse_move(
+        100.0,
+        100.0,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+    );
+    assert_eq!(hovered_outside, None);
+}
+
+#[test]
+fn test_inspect_cursor_toggle_and_selection_gating() {
+    let source = r#"
+        \Component Button {
+            \Rect(id: "btn_rect", x: 20, y: 20, width: 120, height: 40, color: #2563eb)
+        }
+        \Button()
+    "#;
+    let doc = directedtype::parse(source).expect("Must parse");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout ok");
+
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let win_w = 800.0;
+    let win_h = 600.0;
+    let panel_x = win_w - panel.width; // 440.0
+
+    let mut state = directedtype::inspector::InspectorState::new();
+
+    // 1. By default, inspect_cursor_active must be false (page interaction mode)
+    assert!(!state.inspect_cursor_active);
+    assert!(!state.inspect_cursor_hovered);
+
+    // 2. Cursor icon button hover hit testing
+    assert!(panel.is_cursor_btn_hovered(panel_x + 12.0, 15.0, panel_x));
+    assert!(!panel.is_cursor_btn_hovered(panel_x + 60.0, 15.0, panel_x)); // outside button
+    assert!(!panel.is_cursor_btn_hovered(100.0, 15.0, panel_x));          // canvas area
+
+    // 3. Clicking cursor button toggles inspect_cursor_active
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+    let hit_action = panel.handle_click(
+        panel_x + 12.0,
+        15.0,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+    );
+    assert_eq!(hit_action, directedtype::inspector::PanelHitResult::ToggleInspectCursor);
+
+    assert!(state.toggle_inspect_cursor());
+    assert!(state.inspect_cursor_active);
+
+    assert!(!state.toggle_inspect_cursor());
+    assert!(!state.inspect_cursor_active);
+
+    state.set_inspect_cursor(true);
+    assert!(state.inspect_cursor_active);
+    state.set_inspect_cursor(false);
+    assert!(!state.inspect_cursor_active);
+
+    // 4. ViewerApp defaults: inspect_cursor_active is false even when inspect_mode is enabled
+    let mut app = directedtype::render::ViewerApp::new(layout.clone(), directedtype::render::ViewerConfig::default());
+    app.set_inspect_mode(true);
+
+    assert!(app.inspect_mode());
+    assert!(!app.inspect_cursor_active());
+    assert_eq!(app.selected_node(), None);
+
+    // Activating inspect cursor on app
+    app.set_inspect_cursor_active(true);
+    assert!(app.inspect_cursor_active());
+
+    // Deactivating inspect cursor on app
+    app.set_inspect_cursor_active(false);
+    assert!(!app.inspect_cursor_active());
+}
+
+

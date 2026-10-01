@@ -1,4 +1,6 @@
 use crate::ast::Expr;
+use crate::compiler::expanded::NodeId;
+use crate::compiler::layout::ResolvedLayout;
 use crate::dom::{Dom, NodeHandle};
 use crate::inspector::model::{BoxModelValues, PortEquationEntry};
 use crate::inspector::state::InspectorState;
@@ -6,6 +8,7 @@ use crate::inspector::state::InspectorState;
 /// A formatted row in the interactive Component DOM tree view.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DomTreeItem {
+    pub node_id: Option<NodeId>,
     pub handle: NodeHandle,
     pub depth: usize,
     pub tag: String,
@@ -15,14 +18,20 @@ pub struct DomTreeItem {
     pub is_selected: bool,
     pub is_hovered: bool,
     pub port_summary: String,
+    pub bounds_summary: String,
 }
 
 impl DomTreeItem {
-    /// Formats the tree item display line (e.g. `"▼ \ScrollView#main (height: 200)"`).
+    /// Returns true if this element represents a paint primitive rather than an authored component.
+    pub fn is_primitive(&self) -> bool {
+        self.tag == "Rect" || self.tag == "Text"
+    }
+
+    /// Formats the tree item display line (e.g. `"▼ \ScrollView#main (height: 200) [380 × 180]"`).
     pub fn display_text(&self) -> String {
         let indent = "  ".repeat(self.depth);
         let chevron = if self.has_children {
-            if self.is_expanded { "▼ " } else { "▶ " }
+            if self.is_expanded { "▼ " } else { "► " }
         } else {
             "  "
         };
@@ -34,6 +43,10 @@ impl DomTreeItem {
         if !self.port_summary.is_empty() {
             line.push(' ');
             line.push_str(&self.port_summary);
+        }
+        if !self.bounds_summary.is_empty() {
+            line.push(' ');
+            line.push_str(&self.bounds_summary);
         }
         line
     }
@@ -88,14 +101,21 @@ fn collect_tree_items(
         format!("({})", summary_parts.join(", "))
     };
 
+    let bounds_summary = dom
+        .computed_rect(handle)
+        .map(|r| format!("[{} × {}]", r.width.round() as i64, r.height.round() as i64))
+        .unwrap_or_default();
+
     let children = dom.children(handle).unwrap_or(&[]);
     let has_children = !children.is_empty();
-    // Default to expanded if not explicitly collapsed
     let is_expanded = state.is_expanded(handle) || !state.expanded_nodes.contains(&handle);
     let is_selected = state.selected_node == Some(handle);
     let is_hovered = state.hovered_node == Some(handle);
 
+    let node_id = dom.node_handle_to_id(handle);
+
     out.push(DomTreeItem {
+        node_id,
         handle,
         depth,
         tag,
@@ -105,11 +125,87 @@ fn collect_tree_items(
         is_selected,
         is_hovered,
         port_summary,
+        bounds_summary,
     });
 
     if has_children && is_expanded {
         for &child in children {
             collect_tree_items(dom, child, depth + 1, state, out);
+        }
+    }
+}
+
+/// Traverses a ResolvedLayout tree to produce the flattened list of visible tree rows.
+pub fn build_tree_items_from_layout(
+    layout: &ResolvedLayout,
+    state: &InspectorState,
+) -> Vec<DomTreeItem> {
+    let mut items = Vec::new();
+    for &root_id in &layout.roots {
+        collect_layout_tree_items(layout, root_id, 0, state, &mut items);
+    }
+    items
+}
+
+fn collect_layout_tree_items(
+    layout: &ResolvedLayout,
+    node_id: NodeId,
+    depth: usize,
+    state: &InspectorState,
+    out: &mut Vec<DomTreeItem>,
+) {
+    let node = match layout.get_node(node_id) {
+        Some(n) => n,
+        None => return,
+    };
+
+    let tag = node.name.clone();
+    let id_name = node
+        .properties
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let bounds_summary = format!(
+        "[{} × {}]",
+        node.rect.width.round() as i64,
+        node.rect.height.round() as i64
+    );
+
+    let mut port_summary = String::new();
+    if let Some(text) = &node.text_content {
+        let snippet: String = text.chars().take(24).collect();
+        port_summary = if text.chars().count() > 24 {
+            format!("\"{snippet}...\"")
+        } else {
+            format!("\"{snippet}\"")
+        };
+    }
+
+    let has_children = !node.children.is_empty();
+    let is_expanded = state.is_expanded_id(node_id);
+    let is_selected = state.selected_id == Some(node_id)
+        || (node.handle.is_some() && state.selected_node == node.handle);
+    let is_hovered = state.hovered_id == Some(node_id)
+        || (node.handle.is_some() && state.hovered_node == node.handle);
+
+    out.push(DomTreeItem {
+        node_id: Some(node_id),
+        handle: node.handle.unwrap_or_else(|| NodeHandle::new(0, 0)),
+        depth,
+        tag,
+        id_name,
+        has_children,
+        is_expanded,
+        is_selected,
+        is_hovered,
+        port_summary,
+        bounds_summary,
+    });
+
+    if has_children && is_expanded {
+        for &child_id in &node.children {
+            collect_layout_tree_items(layout, child_id, depth + 1, state, out);
         }
     }
 }

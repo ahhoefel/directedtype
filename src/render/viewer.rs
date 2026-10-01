@@ -144,6 +144,8 @@ pub struct ViewerApp {
     inspect_mode: bool,
     selected_node: Option<NodeId>,
     event_handler: Option<EventHandler>,
+    inspector_state: crate::inspector::InspectorState,
+    panel_component: crate::inspector::InspectPanelComponent,
 }
 
 /// Type alias for event callbacks dispatched by `ViewerApp`.
@@ -171,6 +173,8 @@ impl ViewerApp {
             inspect_mode: false,
             selected_node: None,
             event_handler: None,
+            inspector_state: crate::inspector::InspectorState::new(),
+            panel_component: crate::inspector::InspectPanelComponent::default(),
         }
     }
 
@@ -206,6 +210,32 @@ impl ViewerApp {
     /// Returns the currently hovered visual node, if any.
     pub fn hovered_node(&self) -> Option<NodeId> {
         self.hovered_node
+    }
+
+    /// Returns whether the spatial element picker cursor is actively picking elements.
+    pub fn inspect_cursor_active(&self) -> bool {
+        self.inspector_state.inspect_cursor_active
+    }
+
+    /// Sets whether the spatial element picker cursor is actively picking elements.
+    pub fn set_inspect_cursor_active(&mut self, active: bool) {
+        self.inspector_state.inspect_cursor_active = active;
+        if !active {
+            self.inspector_state.set_hovered_id(None);
+        }
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Returns a reference to the internal inspector state.
+    pub fn inspector_state(&self) -> &crate::inspector::InspectorState {
+        &self.inspector_state
+    }
+
+    /// Returns a mutable reference to the internal inspector state.
+    pub fn inspector_state_mut(&mut self) -> &mut crate::inspector::InspectorState {
+        &mut self.inspector_state
     }
 
     fn dispatch_event_with_bubble(&mut self, mut event: Event, bubble_path: &[NodeId]) {
@@ -374,11 +404,15 @@ impl ViewerApp {
                 self.config.height as f64
             };
 
+            let panel_w = self.panel_component.width;
+            let panel_x = win_w - panel_w;
+            let canvas_w = (win_w - panel_w).max(100.0);
+
             let mut overlay_scene = Scene::new();
 
             // Render selected node (if distinct from hovered)
             if let Some(selected_id) = self.selected_node {
-                if self.hovered_node != Some(selected_id) {
+                if self.inspector_state.hovered_id != Some(selected_id) {
                     if let Some(info) = crate::inspector::InspectTargetInfo::from_layout(&self.layout, selected_id) {
                         overlay.render_to_scene(
                             &mut overlay_scene,
@@ -387,7 +421,7 @@ impl ViewerApp {
                             true,
                             &mut self.font_cx,
                             &mut self.layout_cx,
-                            win_w,
+                            canvas_w,
                             win_h,
                         );
                     }
@@ -395,7 +429,7 @@ impl ViewerApp {
             }
 
             // Render hovered node
-            if let Some(hovered_id) = self.hovered_node {
+            if let Some(hovered_id) = self.inspector_state.hovered_id {
                 if let Some(info) = crate::inspector::InspectTargetInfo::from_layout(&self.layout, hovered_id) {
                     let is_selected = self.selected_node == Some(hovered_id);
                     overlay.render_to_scene(
@@ -405,16 +439,35 @@ impl ViewerApp {
                         is_selected,
                         &mut self.font_cx,
                         &mut self.layout_cx,
-                        win_w,
+                        canvas_w,
                         win_h,
                     );
                 }
             }
 
+            // Build and render docked DOM inspector side panel
+            let tree_items = crate::inspector::build_tree_items_from_layout(
+                &self.layout,
+                &self.inspector_state,
+            );
+            let mut panel_scene = Scene::new();
+            self.panel_component.render_to_scene(
+                &mut panel_scene,
+                panel_x,
+                win_h,
+                &tree_items,
+                &self.inspector_state,
+                &mut self.font_cx,
+                &mut self.layout_cx,
+            );
+
             if (scale - 1.0).abs() > 0.001 {
-                scene.append(&overlay_scene, Some(vello::kurbo::Affine::scale(scale)));
+                let scale_affine = Some(vello::kurbo::Affine::scale(scale));
+                scene.append(&overlay_scene, scale_affine);
+                scene.append(&panel_scene, scale_affine);
             } else {
                 scene.append(&overlay_scene, None);
+                scene.append(&panel_scene, None);
             }
         }
 
@@ -634,6 +687,70 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 let point = Point::new(position.x / scale, position.y / scale);
                 self.cursor_pos = Some(point);
 
+                if self.inspect_mode {
+                    let (win_w, win_h) = if let Some(w) = &self.window {
+                        let size = w.inner_size();
+                        (size.width as f64 / scale, size.height as f64 / scale)
+                    } else {
+                        (self.config.width as f64, self.config.height as f64)
+                    };
+                    let panel_x = win_w - self.panel_component.width;
+
+                    if point.x >= panel_x {
+                        let btn_hovered = self.panel_component.is_cursor_btn_hovered(point.x, point.y, panel_x);
+                        let mut needs_redraw = false;
+
+                        if self.inspector_state.inspect_cursor_hovered != btn_hovered {
+                            self.inspector_state.inspect_cursor_hovered = btn_hovered;
+                            needs_redraw = true;
+                        }
+
+                        let tree_items = crate::inspector::build_tree_items_from_layout(
+                            &self.layout,
+                            &self.inspector_state,
+                        );
+                        let panel_hovered = self.panel_component.handle_mouse_move(
+                            point.x,
+                            point.y,
+                            panel_x,
+                            win_h,
+                            &tree_items,
+                            &self.inspector_state,
+                        );
+                        if self.inspector_state.hovered_id != panel_hovered {
+                            self.inspector_state.set_hovered_id(panel_hovered);
+                            needs_redraw = true;
+                        }
+
+                        if needs_redraw {
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+
+                        // Clear canvas hover state when moving into panel
+                        if let Some(old_id) = self.hovered_node.take() {
+                            let mut leave_event = Event::new(
+                                EventKind::PointerLeave,
+                                point,
+                                Point::new(0.0, 0.0),
+                                self.modifiers,
+                                old_id,
+                            );
+                            if let Some(handler) = &mut self.event_handler {
+                                handler(&mut leave_event, &self.layout);
+                            }
+                        }
+                        return;
+                    } else if self.inspector_state.inspect_cursor_hovered {
+                        self.inspector_state.inspect_cursor_hovered = false;
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
+                }
+
+                // Cursor is over the canvas
                 let hit = self.layout.hit_test(point);
                 let new_hovered = hit.as_ref().map(|h| h.target);
 
@@ -663,12 +780,6 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
 
                     self.hovered_node = new_hovered;
-
-                    if self.inspect_mode {
-                        if let Some(w) = &self.window {
-                            w.request_redraw();
-                        }
-                    }
                 }
 
                 if let Some(ref hit_res) = hit {
@@ -680,6 +791,20 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         hit_res.target,
                     );
                     self.dispatch_event_with_bubble(move_event, &hit_res.bubble_path);
+                }
+
+                if self.inspect_mode {
+                    let target_hover = if self.inspector_state.inspect_cursor_active {
+                        new_hovered
+                    } else {
+                        None
+                    };
+                    if self.inspector_state.hovered_id != target_hover {
+                        self.inspector_state.set_hovered_id(target_hover);
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -693,20 +818,89 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 };
 
                 if let Some(point) = self.cursor_pos {
+                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+                    let (win_w, win_h) = if let Some(w) = &self.window {
+                        let size = w.inner_size();
+                        (size.width as f64 / scale, size.height as f64 / scale)
+                    } else {
+                        (self.config.width as f64, self.config.height as f64)
+                    };
+
+                    if self.inspect_mode {
+                        let panel_x = win_w - self.panel_component.width;
+                        if point.x >= panel_x {
+                            if state == ElementState::Pressed {
+                                let tree_items = crate::inspector::build_tree_items_from_layout(
+                                    &self.layout,
+                                    &self.inspector_state,
+                                );
+                                let action = self.panel_component.handle_click(
+                                    point.x,
+                                    point.y,
+                                    panel_x,
+                                    win_h,
+                                    &tree_items,
+                                    &self.inspector_state,
+                                );
+
+                                match action {
+                                    crate::inspector::PanelHitResult::ToggleExpand(node_id) => {
+                                        self.inspector_state.toggle_expanded_id(node_id);
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                    }
+                                    crate::inspector::PanelHitResult::SelectNode(node_id) => {
+                                        self.selected_node = Some(node_id);
+                                        self.inspector_state.set_selected_id(Some(node_id));
+                                        self.inspector_state.expand_ancestors(node_id, &self.layout);
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                    }
+                                    crate::inspector::PanelHitResult::ToggleInspectCursor => {
+                                        let active = self.inspector_state.toggle_inspect_cursor();
+                                        if !active {
+                                            self.inspector_state.set_hovered_id(None);
+                                        }
+                                        println!(
+                                            "[Inspector] Pick cursor: {}",
+                                            if active {
+                                                "ACTIVE (click any component on canvas to inspect)"
+                                            } else {
+                                                "INACTIVE (normal page interaction)"
+                                            }
+                                        );
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                    }
+                                    crate::inspector::PanelHitResult::None => {}
+                                }
+                            }
+                            // Always consume mouse events over the inspector panel
+                            return;
+                        }
+                    }
+
+                    // Mouse input is over canvas area
                     let hit = self.layout.hit_test(point);
                     match state {
                         ElementState::Pressed => {
-                            if let Some(ref hit_res) = hit {
-                                self.pressed_node = Some((hit_res.target, btn));
-                                if self.inspect_mode {
+                            if self.inspect_mode && self.inspector_state.inspect_cursor_active {
+                                // Inspect picker tool is ACTIVE: intercept click to select component!
+                                if let Some(ref hit_res) = hit {
                                     self.selected_node = Some(hit_res.target);
+                                    self.inspector_state.set_selected_id(Some(hit_res.target));
+                                    self.inspector_state.expand_ancestors(hit_res.target, &self.layout);
+
+                                    // Turn off inspect cursor after picking (standard DevTools behavior)
+                                    self.inspector_state.inspect_cursor_active = false;
+                                    self.inspector_state.set_hovered_id(None);
+
                                     if let Some(node) = self.layout.get_node(hit_res.target) {
                                         println!(
-                                            "[Inspector] Click at ({:.1}, {:.1}) (local: ({:.1}, {:.1}))",
-                                            point.x, point.y, hit_res.local_point.x, hit_res.local_point.y
-                                        );
-                                        println!(
-                                            "    Target: {} (id: {:?}) bounds: [x: {:.1}, y: {:.1}, w: {:.1}, h: {:.1}] z: {}",
+                                            "[Inspector] Selected element: {} (id: {:?}) bounds: [x: {:.1}, y: {:.1}, w: {:.1}, h: {:.1}] z: {}",
                                             node.name,
                                             node.id,
                                             node.rect.x,
@@ -721,34 +915,6 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                             println!("    Text: (empty)");
                                         }
 
-                                        // If the target itself doesn't have text, report any context text from children or siblings
-                                        if node.text_content.is_none() {
-                                            let mut context_texts = Vec::new();
-                                            for child_id in &node.children {
-                                                if let Some(child) = self.layout.get_node(*child_id) {
-                                                    if let Some(child_text) = &child.text_content {
-                                                        context_texts.push(format!("child {}: {:?}", child.name, child_text.trim()));
-                                                    }
-                                                }
-                                            }
-                                            if let Some(parent_id) = node.parent {
-                                                if let Some(parent_node) = self.layout.get_node(parent_id) {
-                                                    for sibling_id in &parent_node.children {
-                                                        if *sibling_id != node.id {
-                                                            if let Some(sibling) = self.layout.get_node(*sibling_id) {
-                                                                if let Some(stext) = &sibling.text_content {
-                                                                    context_texts.push(format!("sibling {}: {:?}", sibling.name, stext.trim()));
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            for info in context_texts {
-                                                println!("    Context {}", info);
-                                            }
-                                        }
-
                                         let path: Vec<String> = hit_res
                                             .bubble_path
                                             .iter()
@@ -758,10 +924,22 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                             .collect();
                                         println!("    Hierarchy: {}", path.join(" -> "));
                                     }
-                                    if let Some(w) = &self.window {
-                                        w.request_redraw();
-                                    }
+                                } else {
+                                    // Clicked empty canvas in picking mode
+                                    self.selected_node = None;
+                                    self.inspector_state.set_selected_id(None);
+                                    self.inspector_state.inspect_cursor_active = false;
+                                    self.inspector_state.set_hovered_id(None);
                                 }
+                                if let Some(w) = &self.window {
+                                    w.request_redraw();
+                                }
+                                return; // Intercepted: DO NOT dispatch to page elements
+                            }
+
+                            // Normal page interaction: inspect cursor is inactive
+                            if let Some(ref hit_res) = hit {
+                                self.pressed_node = Some((hit_res.target, btn));
                                 let down_event = Event::new(
                                     EventKind::PointerDown { button: btn },
                                     point,
@@ -772,30 +950,20 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                 self.dispatch_event_with_bubble(down_event, &hit_res.bubble_path);
                             } else {
                                 self.pressed_node = None;
-                                if self.inspect_mode {
-                                    self.selected_node = None;
-                                    println!(
-                                        "[Inspector] Click at ({:.1}, {:.1}): no node hit",
-                                        point.x, point.y
-                                    );
-                                    if let Some(w) = &self.window {
-                                        w.request_redraw();
-                                    }
-                                }
                             }
                         }
                         ElementState::Released => {
-                            if let Some(ref hit_res) = hit {
-                                let up_event = Event::new(
-                                    EventKind::PointerUp { button: btn },
-                                    point,
-                                    hit_res.local_point,
-                                    self.modifiers,
-                                    hit_res.target,
-                                );
-                                self.dispatch_event_with_bubble(up_event, &hit_res.bubble_path);
+                            if let Some((pressed_id, pressed_btn)) = self.pressed_node.take() {
+                                if let Some(ref hit_res) = hit {
+                                    let up_event = Event::new(
+                                        EventKind::PointerUp { button: btn },
+                                        point,
+                                        hit_res.local_point,
+                                        self.modifiers,
+                                        hit_res.target,
+                                    );
+                                    self.dispatch_event_with_bubble(up_event, &hit_res.bubble_path);
 
-                                if let Some((pressed_id, pressed_btn)) = self.pressed_node {
                                     if pressed_btn == btn && hit_res.bubble_path.contains(&pressed_id) {
                                         let click_event = Event::new(
                                             EventKind::Click { button: btn },
@@ -808,7 +976,6 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                     }
                                 }
                             }
-                            self.pressed_node = None;
                         }
                     }
                 }
@@ -819,6 +986,28 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     winit::event::MouseScrollDelta::PixelDelta(pos) => (pos.x, pos.y),
                 };
                 if let Some(point) = self.cursor_pos {
+                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+                    let (win_w, win_h) = if let Some(w) = &self.window {
+                        let size = w.inner_size();
+                        (size.width as f64 / scale, size.height as f64 / scale)
+                    } else {
+                        (self.config.width as f64, self.config.height as f64)
+                    };
+                    let panel_x = win_w - self.panel_component.width;
+
+                    if self.inspect_mode && point.x >= panel_x {
+                        let tree_items = crate::inspector::build_tree_items_from_layout(
+                            &self.layout,
+                            &self.inspector_state,
+                        );
+                        let max_scroll = self.panel_component.max_scroll(tree_items.len(), win_h);
+                        self.inspector_state.scroll_by(-delta_y, max_scroll);
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                        return;
+                    }
+
                     if let Some(ref hit_res) = self.layout.hit_test(point) {
                         let scroll_event = Event::new(
                             EventKind::Scroll { delta_x, delta_y },
@@ -844,10 +1033,12 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     if let Some(handler) = &mut self.event_handler {
                         handler(&mut leave_event, &self.layout);
                     }
-                    if self.inspect_mode {
-                        if let Some(w) = &self.window {
-                            w.request_redraw();
-                        }
+                }
+                self.inspector_state.set_hovered_id(None);
+                self.inspector_state.inspect_cursor_hovered = false;
+                if self.inspect_mode {
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
                     }
                 }
                 self.cursor_pos = None;
@@ -871,19 +1062,52 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     event_loop.exit();
                 }
                 Key::Named(NamedKey::Escape) => {
-                    event_loop.exit();
+                    if self.inspect_mode && self.inspector_state.inspect_cursor_active {
+                        self.inspector_state.inspect_cursor_active = false;
+                        self.inspector_state.set_hovered_id(None);
+                        println!("[Inspector] Pick cursor deactivated (Escape)");
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    } else {
+                        event_loop.exit();
+                    }
                 }
                 Key::Character(c) if c.eq_ignore_ascii_case("d") => {
                     self.layout.print_dom();
                 }
                 Key::Character(c) if c.eq_ignore_ascii_case("i") => {
                     self.inspect_mode = !self.inspect_mode;
+                    if !self.inspect_mode {
+                        self.hovered_node = None;
+                        self.inspector_state.set_hovered_id(None);
+                        self.inspector_state.inspect_cursor_active = false;
+                    }
                     println!(
                         "[Inspector] Mode: {}",
-                        if self.inspect_mode { "ON (Hover/click elements to inspect)" } else { "OFF" }
+                        if self.inspect_mode { "ON (Docked DOM inspector active)" } else { "OFF" }
                     );
                     if let Some(w) = &self.window {
                         w.request_redraw();
+                    }
+                }
+                Key::Character(c) if c.eq_ignore_ascii_case("c") => {
+                    if self.inspect_mode {
+                        let active = self.inspector_state.toggle_inspect_cursor();
+                        if !active {
+                            self.inspector_state.set_hovered_id(None);
+                        }
+                        println!(
+                            "[Inspector] Pick cursor: {}",
+                            if active {
+                                "ACTIVE (click any component on canvas to inspect)"
+                            } else {
+                                "INACTIVE (normal page interaction)"
+                            }
+                        );
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
                     }
                 }
                 _ => {}

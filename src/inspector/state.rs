@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use crate::compiler::expanded::NodeId;
+use crate::compiler::layout::ResolvedLayout;
 use crate::dom::NodeHandle;
 
 /// Active tab in the DevTools inspector detail pane.
@@ -21,14 +23,29 @@ pub struct InspectorState {
     /// Currently selected / pinned node handle for inspection.
     pub selected_node: Option<NodeHandle>,
 
+    /// Currently hovered layout NodeId.
+    pub hovered_id: Option<NodeId>,
+
+    /// Currently selected / pinned layout NodeId.
+    pub selected_id: Option<NodeId>,
+
     /// Whether the spatial element picker cursor (`[↖]`) is actively picking elements.
     pub inspect_cursor_active: bool,
+
+    /// Whether the cursor icon button in the toolbar is hovered by the mouse.
+    pub inspect_cursor_hovered: bool,
 
     /// Currently active inspection tab.
     pub active_tab: InspectorTab,
 
     /// Set of expanded parent node handles in the DOM tree view.
     pub expanded_nodes: HashSet<NodeHandle>,
+
+    /// Set of explicitly collapsed NodeIds in the tree view (nodes start expanded by default).
+    pub collapsed_ids: HashSet<NodeId>,
+
+    /// Vertical scroll offset (in logical pixels) inside the tree view.
+    pub scroll_offset: f64,
 }
 
 impl InspectorState {
@@ -56,10 +73,35 @@ impl InspectorState {
         }
     }
 
+    /// Sets the hovered layout NodeId. Returns true if changed.
+    pub fn set_hovered_id(&mut self, id: Option<NodeId>) -> bool {
+        if self.hovered_id != id {
+            self.hovered_id = id;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Sets the selected layout NodeId. Returns true if changed.
+    pub fn set_selected_id(&mut self, id: Option<NodeId>) -> bool {
+        if self.selected_id != id {
+            self.selected_id = id;
+            true
+        } else {
+            false
+        }
+    }
+
     /// Toggles whether the inspect cursor is active.
     pub fn toggle_inspect_cursor(&mut self) -> bool {
         self.inspect_cursor_active = !self.inspect_cursor_active;
         self.inspect_cursor_active
+    }
+
+    /// Sets whether the inspect cursor is active.
+    pub fn set_inspect_cursor(&mut self, active: bool) {
+        self.inspect_cursor_active = active;
     }
 
     /// Toggles the expanded/collapsed state of a node in the DOM tree view.
@@ -77,9 +119,41 @@ impl InspectorState {
         self.expanded_nodes.contains(&handle)
     }
 
+    /// Toggles the expanded/collapsed state of a layout NodeId.
+    pub fn toggle_expanded_id(&mut self, id: NodeId) -> bool {
+        if self.collapsed_ids.contains(&id) {
+            self.collapsed_ids.remove(&id);
+            true
+        } else {
+            self.collapsed_ids.insert(id);
+            false
+        }
+    }
+
+    /// Returns true if a layout NodeId is expanded (default: expanded).
+    pub fn is_expanded_id(&self, id: NodeId) -> bool {
+        !self.collapsed_ids.contains(&id)
+    }
+
+    /// Expands all ancestor nodes of `id` in the layout tree so that `id` is visible.
+    pub fn expand_ancestors(&mut self, id: NodeId, layout: &ResolvedLayout) {
+        let mut curr = layout.get_node(id).and_then(|n| n.parent);
+        while let Some(pid) = curr {
+            self.collapsed_ids.remove(&pid);
+            curr = layout.get_node(pid).and_then(|n| n.parent);
+        }
+    }
+
+    /// Scrolls the tree view by `delta`, clamped between `0.0` and `max_scroll`.
+    pub fn scroll_by(&mut self, delta: f64, max_scroll: f64) {
+        self.scroll_offset = (self.scroll_offset + delta).clamp(0.0, max_scroll.max(0.0));
+    }
+
     pub fn clear_selection(&mut self) {
         self.selected_node = None;
         self.hovered_node = None;
+        self.selected_id = None;
+        self.hovered_id = None;
     }
 
     /// Returns the node that should currently be visually highlighted on screen:
