@@ -157,7 +157,6 @@ impl InspectOverlayComponent {
 
         let text_width = layout.width() as f64;
         let h_pad = 8.0;
-        let v_pad = 3.0;
         let badge_width = text_width + h_pad * 2.0;
         let badge_height = 20.0;
 
@@ -196,8 +195,25 @@ impl InspectOverlayComponent {
             &badge_rrect,
         );
 
+        // Typographic vertical centering:
+        // The vertical space of a line is taken from the baseline to the top of the capital letters (cap_height)
+        // and does not include the descenders when considering centering.
+        // We ensure symmetric padding above the capitals and below the baseline, with enough space below the baseline
+        // to comfortably enclose the descenders within the badge box.
+        let cap_height = (font_size * 0.71) as f64;
+        let (baseline_offset, descent) = if let Some(line) = layout.lines().next() {
+            let m = line.metrics();
+            (m.baseline as f64, m.descent as f64)
+        } else {
+            ((font_size * 0.75) as f64, (font_size * 0.25) as f64)
+        };
+
+        let v_pad = ((badge_height - cap_height) / 2.0).max(descent);
+        let target_baseline = v_pad + cap_height;
+        let text_y_offset = target_baseline - baseline_offset;
+
         // Draw badge label text
-        let text_affine = transform * Affine::translate((bx + h_pad, by + v_pad));
+        let text_affine = transform * Affine::translate((bx + h_pad, by + text_y_offset));
         for line in layout.lines() {
             for item in line.items() {
                 if let PositionedLayoutItem::GlyphRun(glyph_run) = item {

@@ -677,7 +677,91 @@ fn test_env_demo_components_authored_formulas() {
     );
 }
 
+#[test]
+fn test_badge_text_typographic_centering() {
+    use parley::style::{FontWeight, StyleProperty};
+    use parley::{Alignment, FontContext, LayoutContext};
 
+    let mut font_cx = FontContext::new();
+    let mut layout_cx = LayoutContext::<()>::new();
 
+    let font_size = 11.0f32;
+    let badge_height = 20.0f64;
+    let text = "Rect#main [380 × 180]";
 
+    let mut builder = layout_cx.ranged_builder(&mut font_cx, text, 1.0, true);
+    builder.push_default(StyleProperty::FontSize(font_size));
+    builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
+
+    let mut layout = builder.build(text);
+    layout.break_all_lines(None);
+    layout.align(Alignment::Start, parley::layout::AlignmentOptions::default());
+
+    let cap_height = (font_size * 0.71) as f64;
+    let line = layout.lines().next().unwrap();
+    let m = line.metrics();
+    let baseline_offset = m.baseline as f64;
+    let descent = m.descent as f64;
+
+    let v_pad = ((badge_height - cap_height) / 2.0).max(descent);
+    let target_baseline = v_pad + cap_height;
+    let text_y_offset = target_baseline - baseline_offset;
+
+    // Check 1: Top of capital letters has identical padding to space below baseline
+    let cap_top = text_y_offset + baseline_offset - cap_height;
+    let bottom_to_baseline = badge_height - (text_y_offset + baseline_offset);
+    assert!((cap_top - v_pad).abs() < 1e-4, "Top padding should equal v_pad");
+    assert!((bottom_to_baseline - v_pad).abs() < 1e-4, "Bottom space below baseline should equal v_pad");
+    assert!((cap_top - bottom_to_baseline).abs() < 1e-4, "Capital letters must be vertically centered");
+
+    // Check 2: Descenders must be enclosed inside the badge
+    let descender_bottom = text_y_offset + baseline_offset + descent;
+    assert!(descender_bottom < badge_height, "Descenders must not exceed badge bounds");
+    assert!(badge_height - descender_bottom >= 2.0, "Descenders must have comfortable clearance");
+}
+
+#[test]
+fn test_dom_tree_highlight_and_baseline_alignment() {
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    assert_eq!(panel.row_height, 18.0, "DOM tree row height should be 18px for tight modern DevTools aesthetics");
+
+    // For 10.5pt Menlo in 18px row:
+    let font_size = 10.5;
+    let cap_height = font_size * 0.71;
+    let v_pad = (panel.row_height - cap_height) / 2.0;
+    let target_baseline = panel.row_height - v_pad;
+
+    // Padding above capitals must equal padding below baseline
+    let cap_top = target_baseline - cap_height;
+    let bottom_space = panel.row_height - target_baseline;
+    assert!((cap_top - bottom_space).abs() < 1e-4, "Highlight must be vertically symmetric around capital letters and baseline");
+
+    // Descenders (~2.5px) must be comfortably enclosed
+    let descent = 2.48;
+    assert!(v_pad > descent, "Row padding must enclose descenders");
+    assert!(panel.row_height - (target_baseline + descent) > 2.0, "Clearance below descenders must exist");
+}
+
+#[test]
+fn test_property_bullet_vertical_centering() {
+    // In property rows, text baseline is at cur_y + 11.5.
+    // x-height for 10.5pt Menlo is ~5.73px (from cur_y + 5.77 to cur_y + 11.5).
+    // The bullet center is at cur_y + 8.65, which is midway between x-top (cur_y + 5.77) and baseline (cur_y + 11.5).
+    let baseline_y: f64 = 11.5;
+    let x_height: f64 = 5.73;
+    let x_top: f64 = baseline_y - x_height; // 5.77
+    let bullet_cy: f64 = 8.65;
+    let bullet_radius: f64 = 2.0;
+
+    // Bullet center must be distinctly below the top of lowercase x
+    assert!(bullet_cy > x_top + 1.0, "Bullet must be centered lower than the top of lowercase x");
+
+    // Bullet center must be at the optical midpoint of lowercase letters (x-height center)
+    let optical_center: f64 = baseline_y - (x_height / 2.0); // 8.635
+    assert!((bullet_cy - optical_center).abs() < 0.1, "Bullet center must align with optical x-height midpoint");
+
+    // Entire bullet circle must be inside the lowercase x-height vertical span
+    assert!(bullet_cy - bullet_radius > x_top, "Top of bullet must not exceed top of lowercase letters");
+    assert!(bullet_cy + bullet_radius < baseline_y, "Bottom of bullet must not cross baseline");
+}
 

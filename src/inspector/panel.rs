@@ -3,7 +3,7 @@ use parley::style::{FontFamily, FontWeight, StyleProperty};
 #[cfg(not(target_os = "macos"))]
 use parley::style::GenericFamily;
 use parley::{Alignment, FontContext, LayoutContext};
-use vello::kurbo::{Affine, Line, Rect, RoundedRect, Stroke};
+use vello::kurbo::{Affine, Circle, Line, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color, Fill};
 use vello::Scene;
 
@@ -32,7 +32,7 @@ pub struct InspectPanelComponent {
     pub width: f64,
     /// Height of the top header toolbar (default: 36px).
     pub header_height: f64,
-    /// Height of each tree item row (default: 19px).
+    /// Height of each tree item row (default: 18px).
     pub row_height: f64,
     /// Pixel indentation step per depth level (default: 14px).
     pub indent_step: f64,
@@ -45,7 +45,7 @@ impl Default for InspectPanelComponent {
         Self {
             width: 380.0,
             header_height: 36.0,
-            row_height: 19.0,
+            row_height: 18.0,
             indent_step: 14.0,
             divider_height: 26.0,
         }
@@ -244,7 +244,7 @@ impl InspectPanelComponent {
                 );
             }
 
-            // Chevron
+            // Chevron (aligned with text baseline)
             let indent_x = panel_x + 8.0 + item.depth as f64 * self.indent_step;
             if item.has_children {
                 let chevron_str = if item.is_expanded { "▼" } else { "►" };
@@ -263,13 +263,14 @@ impl InspectPanelComponent {
                     chevron_col,
                     false,
                     indent_x,
-                    row_y + 2.0,
+                    row_y + 2.75,
                 );
             }
 
             let mut cur_x = indent_x + 14.0;
 
             // 1. Tag name: cyan for primitives, purple for authored components
+            // Vertically centered by cap-height within the 18px row, enclosing descenders
             let tag_str = format!("\\{}", item.tag);
             let tag_col = if item.is_primitive() {
                 Color::from_rgb8(56, 189, 248) // cyan 400
@@ -286,7 +287,7 @@ impl InspectPanelComponent {
                 tag_col,
                 true,
                 cur_x,
-                row_y + 2.0,
+                row_y + 2.75,
             );
 
             // 2. ID name: amber
@@ -302,7 +303,7 @@ impl InspectPanelComponent {
                     Color::from_rgb8(251, 191, 36), // amber 400
                     true,
                     cur_x,
-                    row_y + 2.0,
+                    row_y + 2.75,
                 );
             }
 
@@ -319,7 +320,7 @@ impl InspectPanelComponent {
                     Color::from_rgb8(148, 163, 184), // slate 400
                     true,
                     cur_x,
-                    row_y + 2.5,
+                    row_y + 3.75,
                 );
             }
             // Note: spatial dimensions [W x H] are intentionally removed from the DOM tree rows!
@@ -701,17 +702,17 @@ impl InspectPanelComponent {
                     let prop_x = panel_x + 12.0;
 
                     // Line 1: Bullet + Property Name + Value
-                    self.draw_text_snippet(
-                        scene,
-                        font_cx,
-                        layout_cx,
-                        "●",
-                        8.0,
-                        FontWeight::BOLD,
-                        Color::from_rgb8(56, 189, 248), // cyan 400
-                        false,
-                        prop_x,
-                        cur_y + 2.0,
+                    // Typographic bullet: centered on the optical midpoint of lowercase letters (x-height center)
+                    // aligning with the colon and hyphen, rather than at the top of lowercase x.
+                    let bullet_cx = prop_x + 4.0;
+                    let bullet_cy = cur_y + 8.65;
+                    let bullet_circle = Circle::new((bullet_cx, bullet_cy), 2.0);
+                    scene.fill(
+                        Fill::NonZero,
+                        Affine::IDENTITY,
+                        Brush::Solid(Color::from_rgb8(56, 189, 248)), // cyan 400
+                        None,
+                        &bullet_circle,
                     );
 
                     let name_adv = self.draw_text_snippet(
