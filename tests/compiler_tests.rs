@@ -2061,3 +2061,114 @@ fn test_bare_env_expression_error() {
     }
 }
 
+#[test]
+fn test_font_primitive_metrics_and_sharing() {
+    let input = r#"
+    let f = \Font(size: 20, weight: 700);
+    let t1 = \Text(font: f) { First };
+    let t2 = \Text(font: f) { Second };
+    let r1 = \Rect(x: 0, y: 0, width: 100, height: t1.font.cap_height + 10, color: #000000);
+    let r2 = \Rect(x: 0, y: 50, width: 100, height: t2.cap_height + 10, color: #000000);
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let (expanded, _graph) = compile_to_graph(&doc).expect("Failed to compile to graph");
+
+    // Verify DAG minimization: t1 and t2 do NOT have metric ports in expanded node.ports!
+    let t1_node = expanded.get_node(expanded.roots[1]).unwrap();
+    assert_eq!(t1_node.name, "Text");
+    assert!(!t1_node.ports.contains_key("cap_height"), "Text node should NOT duplicate cap_height port in DAG");
+    assert!(!t1_node.ports.contains_key("x_height"), "Text node should NOT duplicate x_height port in DAG");
+    assert!(!t1_node.ports.contains_key("descent"), "Text node should NOT duplicate descent port in DAG");
+
+    // The shared \Font node holds the metric ports
+    let f_node = expanded.get_node(expanded.roots[0]).unwrap();
+    assert_eq!(f_node.name, "Font");
+    assert!(f_node.ports.contains_key("cap_height"));
+    assert!(f_node.ports.contains_key("x_height"));
+    assert!(f_node.ports.contains_key("descent"));
+    assert!(f_node.ports.contains_key("ascent"));
+    assert!(f_node.ports.contains_key("line_height"));
+
+    // Evaluate layout
+    let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate layout");
+    let expected_cap = 20.0 * 0.71;
+    let expected_rect_h = expected_cap + 10.0;
+
+    let r1_h = layout.get_value(expanded.roots[3], "height").and_then(|v| v.as_f64()).unwrap();
+    let r2_h = layout.get_value(expanded.roots[4], "height").and_then(|v| v.as_f64()).unwrap();
+
+    assert!((r1_h - expected_rect_h).abs() < 1e-4, "r1.height should match t1.font.cap_height + 10");
+    assert!((r2_h - expected_rect_h).abs() < 1e-4, "r2.height should match t2.cap_height + 10 (forwarded to font node)");
+}
+
+#[test]
+fn test_text_ambient_font_inheritance() {
+    let input = r#"
+    let my_font = \Font(size: 24, weight: 600);
+    env font = my_font;
+    let label = \Text { Ambient text };
+    let box = \Rect(x: 0, y: 0, width: 200, height: label.font.cap_height + 16, color: #111111);
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let (expanded, _graph) = compile_to_graph(&doc).expect("Failed to compile to graph");
+
+    let font_id = expanded.roots[0];
+    let label_id = expanded.roots[1];
+    let box_id = expanded.roots[2];
+
+    let label_node = expanded.get_node(label_id).unwrap();
+    assert_eq!(label_node.font, Some(font_id), "Label should inherit ambient font node");
+
+    let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate layout");
+    let expected_cap = 24.0 * 0.71;
+    let expected_box_h = expected_cap + 16.0;
+
+    let box_h = layout.get_value(box_id, "height").and_then(|v| v.as_f64()).unwrap();
+    assert!((box_h - expected_box_h).abs() < 1e-4, "box.height should match label.font.cap_height + 16");
+
+    let label_size = layout.get_value(label_id, "size").and_then(|v| v.as_f64()).unwrap();
+    assert_eq!(label_size, 24.0, "Label should inherit font size 24 from ambient font node");
+}
+
+#[test]
+fn test_font_backward_compatible_string_family() {
+    let input = r#"
+    let t = \Text(font: "Menlo", size: 18) { Code };
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate layout");
+    let (expanded, _) = compile_to_graph(&doc).expect("Graph compilation");
+
+    let t_id = expanded.roots[0];
+    let t_node = expanded.get_node(t_id).unwrap();
+    assert_eq!(t_node.font, None, "String font should not create a font node reference");
+
+    let font_val = layout.get_value(t_id, "font").and_then(|v| v.as_str()).unwrap();
+    assert_eq!(font_val, "Menlo");
+}
+
+#[test]
+fn test_font_metrics_algebraic_calculations() {
+    let input = r#"
+    let f = \Font(size: 20);
+    let t = \Text(font: f) { Metrics Test };
+    let r = \Rect(x: 0, y: 0, width: f.line_height, height: t.font.ascent + t.font.descent, color: #ffffff);
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation");
+    let (expanded, _) = compile_to_graph(&doc).expect("Graph compilation");
+
+    let r_id = expanded.roots[2];
+    let r_w = layout.get_value(r_id, "width").and_then(|v| v.as_f64()).unwrap();
+    let r_h = layout.get_value(r_id, "height").and_then(|v| v.as_f64()).unwrap();
+
+    let f_node = expanded.roots[0];
+    let f_lh = layout.get_value(f_node, "line_height").and_then(|v| v.as_f64()).unwrap();
+    let f_ascent = layout.get_value(f_node, "ascent").and_then(|v| v.as_f64()).unwrap();
+    let f_descent = layout.get_value(f_node, "descent").and_then(|v| v.as_f64()).unwrap();
+
+    assert!((r_w - f_lh).abs() < 1e-4);
+    assert!((r_h - (f_ascent + f_descent)).abs() < 1e-4);
+}
+
+

@@ -24,6 +24,18 @@ pub fn evaluate_graph(
     Ok(env)
 }
 
+fn get_family_from_val<'a>(val: Option<&'a Value>, env: &'a HashMap<VarId, Value>) -> Option<&'a str> {
+    match val {
+        Some(Value::String(s)) => Some(s.as_str()),
+        Some(Value::Node(id)) => {
+            env.get(&VarId::new(*id, "family"))
+                .or_else(|| env.get(&VarId::new(*id, "font")))
+                .and_then(|v| v.as_str())
+        }
+        _ => None,
+    }
+}
+
 /// Evaluates an algebraic expression in the given environment.
 pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, CompileError> {
     match expr {
@@ -209,11 +221,12 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         })
                     }
                 }
+
                 "text_height" => {
                     let text = evaluated_args.first().and_then(|v| v.as_str()).unwrap_or("");
                     let size = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(16.0);
                     let weight = evaluated_args.get(2).and_then(|v| v.as_f64()).unwrap_or(400.0);
-                    let family = evaluated_args.get(3).and_then(|v| v.as_str());
+                    let family = get_family_from_val(evaluated_args.get(3), env);
                     let max_width = evaluated_args.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0);
 
                     let h = crate::compiler::text::measure_text_height(text, size, weight, family, max_width);
@@ -223,10 +236,50 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let text = evaluated_args.first().and_then(|v| v.as_str()).unwrap_or("");
                     let size = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(16.0);
                     let weight = evaluated_args.get(2).and_then(|v| v.as_f64()).unwrap_or(400.0);
-                    let family = evaluated_args.get(3).and_then(|v| v.as_str());
+                    let family = get_family_from_val(evaluated_args.get(3), env);
 
                     let w = crate::compiler::text::measure_text_width(text, size, weight, family);
                     Ok(Value::Number(w))
+                }
+                "font_cap_height" => {
+                    let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
+                    let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
+                    let family = get_family_from_val(evaluated_args.get(2), env);
+
+                    let m = crate::compiler::text::measure_font_metrics(size, weight, family);
+                    Ok(Value::Number(m.cap_height))
+                }
+                "font_x_height" => {
+                    let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
+                    let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
+                    let family = get_family_from_val(evaluated_args.get(2), env);
+
+                    let m = crate::compiler::text::measure_font_metrics(size, weight, family);
+                    Ok(Value::Number(m.x_height))
+                }
+                "font_descent" => {
+                    let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
+                    let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
+                    let family = get_family_from_val(evaluated_args.get(2), env);
+
+                    let m = crate::compiler::text::measure_font_metrics(size, weight, family);
+                    Ok(Value::Number(m.descent))
+                }
+                "font_ascent" => {
+                    let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
+                    let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
+                    let family = get_family_from_val(evaluated_args.get(2), env);
+
+                    let m = crate::compiler::text::measure_font_metrics(size, weight, family);
+                    Ok(Value::Number(m.ascent))
+                }
+                "font_line_height" => {
+                    let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
+                    let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
+                    let family = get_family_from_val(evaluated_args.get(2), env);
+
+                    let m = crate::compiler::text::measure_font_metrics(size, weight, family);
+                    Ok(Value::Number(m.line_height))
                 }
                 other => Err(CompileError::Custom {
                     message: format!("Unknown math/collection function '{}'", other),

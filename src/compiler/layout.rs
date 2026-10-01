@@ -104,6 +104,8 @@ pub struct ResolvedNode {
     pub formulas: HashMap<String, String>,
     pub span: Span,
     pub handle: Option<NodeHandle>,
+    pub font: Option<NodeId>,
+    pub var_name: Option<String>,
 }
 
 impl ResolvedNode {
@@ -146,7 +148,11 @@ impl ResolvedLayout {
     }
 
     pub fn get_value(&self, node_id: NodeId, port: &str) -> Option<&Value> {
-        self.values.get(&VarId::new(node_id, port))
+        self.values.get(&VarId::new(node_id, port)).or_else(|| {
+            self.get_node(node_id).and_then(|n| {
+                n.font.and_then(|fid| self.values.get(&VarId::new(fid, port)))
+            })
+        })
     }
 
     /// Validates whether a point is within all active clip boundaries for a given clip ID.
@@ -330,6 +336,26 @@ impl ResolvedLayout {
     fn format_node_ports(&self, node: &ResolvedNode) -> String {
         let mut ports = Vec::new();
 
+        if node.name == "Font" {
+            if let Some(size) = node.properties.get("size").and_then(|v| v.as_f64()) {
+                ports.push(format!("size: {}", format_num(size)));
+            }
+            if let Some(weight) = node.properties.get("weight").and_then(|v| v.as_f64()) {
+                ports.push(format!("weight: {}", format_num(weight)));
+            }
+            if let Some(family) = node
+                .properties
+                .get("family")
+                .or_else(|| node.properties.get("font"))
+                .and_then(|v| v.as_str())
+            {
+                if !family.is_empty() {
+                    ports.push(format!("family: \"{}\"", family));
+                }
+            }
+            return ports.join(", ");
+        }
+
         if node.name == "Clip" {
             if let Some(box_val) = node.properties.get("box").and_then(|v| v.as_node()) {
                 let box_str = if box_val.is_window() {
@@ -400,7 +426,8 @@ impl ResolvedLayout {
         let standard_keys = [
             "x", "y", "width", "height", "z", "clip", "box", "up",
             "color", "bg_color", "radius", "border_width", "border_color",
-            "size", "weight", "text_height",
+            "size", "weight", "text_height", "font", "family",
+            "cap_height", "x_height", "descent", "ascent", "line_height",
         ];
         let mut extra_keys: Vec<&String> = node
             .properties
@@ -483,6 +510,12 @@ pub fn resolve_layout(
             formulas.insert(port.clone(), expr.to_string());
         }
 
+        let font = node.font.or_else(|| {
+            values
+                .get(&VarId::new(node.id, "font"))
+                .and_then(|v| v.as_node())
+        });
+
         resolved_nodes.push(ResolvedNode {
             id: node.id,
             name: node.name.clone(),
@@ -496,6 +529,8 @@ pub fn resolve_layout(
             formulas,
             span: node.span,
             handle: node.handle,
+            font,
+            var_name: node.var_name.clone(),
         });
     }
 

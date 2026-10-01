@@ -19,12 +19,13 @@ pub struct DomTreeItem {
     pub is_hovered: bool,
     pub port_summary: String,
     pub bounds_summary: String,
+    pub var_name: Option<String>,
 }
 
 impl DomTreeItem {
     /// Returns true if this element represents a paint primitive rather than an authored component.
     pub fn is_primitive(&self) -> bool {
-        self.tag == "Rect" || self.tag == "Text"
+        self.tag == "Rect" || self.tag == "Text" || self.tag == "Font" || self.tag == "Clip" || self.tag == "Box"
     }
 
     /// Formats the tree item display line (e.g. `"▼ \ScrollView#main (height: 200) [380 × 180]"`).
@@ -35,7 +36,11 @@ impl DomTreeItem {
         } else {
             "  "
         };
-        let mut line = format!("{indent}{chevron}\\{}", self.tag);
+        let mut line = if let Some(var) = &self.var_name {
+            format!("{indent}{chevron}{var}: \\{}", self.tag)
+        } else {
+            format!("{indent}{chevron}\\{}", self.tag)
+        };
         if let Some(id) = &self.id_name {
             line.push('#');
             line.push_str(id);
@@ -122,6 +127,7 @@ fn collect_tree_items(
         is_hovered,
         port_summary,
         bounds_summary,
+        var_name: None,
     });
 
     if has_children && is_expanded {
@@ -197,6 +203,7 @@ fn collect_layout_tree_items(
         is_hovered,
         port_summary,
         bounds_summary,
+        var_name: node.var_name.clone(),
     });
 
     if has_children && is_expanded {

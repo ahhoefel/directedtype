@@ -205,6 +205,17 @@ pub fn build_scene(
                     .get("font_size")
                     .or_else(|| node.properties.get("size"))
                     .and_then(|v| v.as_f64())
+                    .or_else(|| {
+                        node.font.and_then(|fid| {
+                            layout.get_node(fid).and_then(|fn_node| {
+                                fn_node
+                                    .properties
+                                    .get("size")
+                                    .or_else(|| fn_node.properties.get("font_size"))
+                                    .and_then(|v| v.as_f64())
+                            })
+                        })
+                    })
                     .unwrap_or(16.0) as f32;
 
                 let font_weight = node
@@ -212,13 +223,41 @@ pub fn build_scene(
                     .get("font_weight")
                     .or_else(|| node.properties.get("weight"))
                     .and_then(|v| v.as_f64())
+                    .or_else(|| {
+                        node.font.and_then(|fid| {
+                            layout.get_node(fid).and_then(|fn_node| {
+                                fn_node
+                                    .properties
+                                    .get("weight")
+                                    .or_else(|| fn_node.properties.get("font_weight"))
+                                    .and_then(|v| v.as_f64())
+                            })
+                        })
+                    })
                     .unwrap_or(400.0) as f32;
 
                 let font_family = node
                     .properties
-                    .get("font")
-                    .or_else(|| node.properties.get("font_family"))
-                    .and_then(|v| v.as_str());
+                    .get("font_family")
+                    .or_else(|| node.properties.get("family"))
+                    .and_then(|v| v.as_str())
+                    .or_else(|| {
+                        node.properties.get("font").and_then(|v| match v {
+                            Value::String(s) => Some(s.as_str()),
+                            _ => None,
+                        })
+                    })
+                    .or_else(|| {
+                        node.font.and_then(|fid| {
+                            layout.get_node(fid).and_then(|fn_node| {
+                                fn_node
+                                    .properties
+                                    .get("family")
+                                    .or_else(|| fn_node.properties.get("font"))
+                                    .and_then(|v| v.as_str())
+                            })
+                        })
+                    });
 
                 let text_color = node
                     .properties

@@ -3,12 +3,13 @@ use parley::style::{FontFamily, FontWeight, StyleProperty};
 #[cfg(not(target_os = "macos"))]
 use parley::style::GenericFamily;
 use parley::{Alignment, FontContext, LayoutContext};
-use vello::kurbo::{Affine, Circle, Line, Rect, RoundedRect, Stroke};
+use vello::kurbo::{Affine, BezPath, Circle, Line, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color, Fill};
 use vello::Scene;
 
 use crate::compiler::expanded::NodeId;
 use crate::compiler::layout::ResolvedLayout;
+use crate::compiler::Value;
 use crate::inspector::state::InspectorState;
 use crate::inspector::view::DomTreeItem;
 
@@ -23,6 +24,8 @@ pub enum PanelHitResult {
     ToggleExpand(NodeId),
     /// Clicked a tree row to select a node.
     SelectNode(NodeId),
+    /// Clicked an expandable object reference property row in details panel.
+    TogglePropertyRef(NodeId, String),
 }
 
 /// The docked side panel component rendering the Component DOM tree and selected component details.
@@ -72,11 +75,56 @@ impl InspectPanelComponent {
 
     /// Computes the maximum vertical scroll offset for the bottom details panel.
     pub fn max_detail_scroll(&self, selected_id: Option<NodeId>, layout: &ResolvedLayout, win_h: f64) -> f64 {
+        self.max_detail_scroll_with_state(selected_id, layout, None, win_h)
+    }
+
+    /// Computes the maximum vertical scroll offset for the bottom details panel taking state into account.
+    pub fn max_detail_scroll_with_state(
+        &self,
+        selected_id: Option<NodeId>,
+        layout: &ResolvedLayout,
+        state: Option<&InspectorState>,
+        win_h: f64,
+    ) -> f64 {
         let divider_y = self.divider_y(win_h);
         let detail_visible_h = (win_h - (divider_y + self.divider_height)).max(0.0);
         let content_h = if let Some(node) = selected_id.and_then(|id| layout.get_node(id)) {
-            let num_props = node.properties.len() + 5;
-            110.0 + (num_props as f64) * 36.0 + 30.0
+            let mut h = 10.0 + 14.0 + 76.0 + 16.0 + 18.0;
+            let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
+            prop_keys.retain(|k| k != "clip");
+            for geom in ["x", "y", "width", "height", "z"] {
+                if !prop_keys.contains(&geom.to_string()) {
+                    prop_keys.push(geom.to_string());
+                }
+            }
+            for key in &prop_keys {
+                let eval_str = if let Some(val) = node.properties.get(key) {
+                    format!("{val}")
+                } else {
+                    String::new()
+                };
+                let formula_str = node.formulas.get(key).cloned().unwrap_or_default();
+                let has_formula = !formula_str.is_empty() && formula_str != eval_str;
+                h += if has_formula { 36.0 } else { 22.0 };
+
+                if let Some(Value::Node(ref_id)) = node.properties.get(key) {
+                    let is_expanded = state.map_or(false, |s| s.is_property_ref_expanded(node.id, key));
+                    if is_expanded {
+                        if let Some(rn) = layout.get_node(*ref_id) {
+                            let mut child_keys: Vec<String> = rn.properties.keys().cloned().collect();
+                            child_keys.retain(|k| k != "clip");
+                            for ck in &child_keys {
+                                let c_val = rn.properties.get(ck);
+                                let c_eval = c_val.map(|v| format!("{v}")).unwrap_or_default();
+                                let c_form = rn.formulas.get(ck).cloned().unwrap_or_else(|| c_eval.clone());
+                                let c_has = c_form != c_eval && !c_form.is_empty();
+                                h += if c_has { 32.0 } else { 19.0 };
+                            }
+                        }
+                    }
+                }
+            }
+            h + 30.0
         } else {
             120.0
         };
@@ -97,6 +145,7 @@ impl InspectPanelComponent {
         win_h: f64,
         items: &[DomTreeItem],
         state: &InspectorState,
+        layout: Option<&ResolvedLayout>,
     ) -> PanelHitResult {
         if px < panel_x || px > panel_x + self.width {
             return PanelHitResult::None;
@@ -135,6 +184,79 @@ impl InspectPanelComponent {
                 PanelHitResult::None
             }
         } else {
+            let detail_y = divider_y + self.divider_height;
+            if py >= detail_y {
+                if let Some(layout) = layout {
+                    if let Some(node) = state.selected_id.and_then(|id| layout.get_node(id)) {
+                        let base_y = detail_y - state.detail_scroll_offset;
+                        let mut cur_y = base_y + 10.0;
+                        cur_y += 14.0 + 76.0 + 16.0; // Section A card
+                        cur_y += 18.0; // Section B header
+
+                        let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
+                        prop_keys.retain(|k| k != "clip");
+                        for geom in ["x", "y", "width", "height", "z"] {
+                            if !prop_keys.contains(&geom.to_string()) {
+                                prop_keys.push(geom.to_string());
+                            }
+                        }
+                        prop_keys.sort_by(|a, b| {
+                            let rank = |k: &str| match k {
+                                "x" => 1,
+                                "y" => 2,
+                                "width" => 3,
+                                "height" => 4,
+                                "z" => 5,
+                                "color" | "bg_color" => 6,
+                                "border_color" | "border_width" => 7,
+                                "radius" | "corner_radius" => 8,
+                                "clip" => 9,
+                                _ => 10,
+                            };
+                            rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
+                        });
+
+                        for key in &prop_keys {
+                            let val = node.properties.get(key);
+                            let is_node_ref = matches!(val, Some(Value::Node(_)));
+
+                            let eval_str = if let Some(v) = val {
+                                format!("{v}")
+                            } else {
+                                String::new()
+                            };
+                            let formula_str = node.formulas.get(key).cloned().unwrap_or_else(|| eval_str.clone());
+                            let has_formula = formula_str != eval_str && !formula_str.is_empty();
+                            let row_h = if has_formula { 36.0 } else { 22.0 };
+
+                            if is_node_ref {
+                                // If clicked on this property row
+                                if py >= cur_y && py < cur_y + row_h {
+                                    return PanelHitResult::TogglePropertyRef(node.id, key.clone());
+                                }
+                            }
+
+                            cur_y += row_h;
+
+                            if is_node_ref && state.is_property_ref_expanded(node.id, key) {
+                                if let Some(Value::Node(ref_id)) = val {
+                                    if let Some(rn) = layout.get_node(*ref_id) {
+                                        let mut child_keys: Vec<String> = rn.properties.keys().cloned().collect();
+                                        child_keys.retain(|k| k != "clip");
+                                        for ck in &child_keys {
+                                            let c_val = rn.properties.get(ck);
+                                            let c_eval = c_val.map(|v| format!("{v}")).unwrap_or_default();
+                                            let c_form = rn.formulas.get(ck).cloned().unwrap_or_else(|| c_eval.clone());
+                                            let c_has = c_form != c_eval && !c_form.is_empty();
+                                            cur_y += if c_has { 32.0 } else { 19.0 };
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             PanelHitResult::None
         }
     }
@@ -247,27 +369,39 @@ impl InspectPanelComponent {
             // Chevron (aligned with text baseline)
             let indent_x = panel_x + 8.0 + item.depth as f64 * self.indent_step;
             if item.has_children {
-                let chevron_str = if item.is_expanded { "▼" } else { "►" };
                 let chevron_col = if item.is_expanded {
                     Color::from_rgb8(148, 163, 184) // slate 400
                 } else {
                     Color::from_rgb8(100, 116, 139) // slate 500
                 };
-                self.draw_text_snippet(
+                Self::draw_chevron(
                     scene,
-                    font_cx,
-                    layout_cx,
-                    chevron_str,
-                    9.5,
-                    FontWeight::NORMAL,
+                    indent_x + 5.0,
+                    row_y + 8.5,
+                    7.0,
+                    item.is_expanded,
                     chevron_col,
-                    false,
-                    indent_x,
-                    row_y + 2.75,
                 );
             }
 
             let mut cur_x = indent_x + 14.0;
+
+            // 0. Variable name (if let-bound or env-bound): e.g. "heading_font: "
+            if let Some(var) = &item.var_name {
+                let var_str = format!("{var}: ");
+                cur_x += self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    &var_str,
+                    10.5,
+                    FontWeight::NORMAL,
+                    Color::from_rgb8(203, 213, 225), // slate 300
+                    true,
+                    cur_x,
+                    row_y + 2.75,
+                );
+            }
 
             // 1. Tag name: cyan for primitives, purple for authored components
             // Vertically centered by cap-height within the 18px row, enclosing descenders
@@ -680,8 +814,24 @@ impl InspectPanelComponent {
             });
 
             for key in &prop_keys {
-                let eval_str = if let Some(val) = node.properties.get(key) {
-                    format!("{val}")
+                let val_opt = node.properties.get(key);
+                let is_node_ref = matches!(val_opt, Some(Value::Node(_)));
+
+                let eval_str = if let Some(val) = val_opt {
+                    match val {
+                        Value::Node(ref_id) => {
+                            if let Some(rn) = layout.get_node(*ref_id) {
+                                if let Some(var) = &rn.var_name {
+                                    format!("{var} (\\{})", rn.name)
+                                } else {
+                                    format!("\\{}", rn.name)
+                                }
+                            } else {
+                                format!("{val}")
+                            }
+                        }
+                        _ => format!("{val}"),
+                    }
                 } else {
                     match key.as_str() {
                         "x" => format!("{:.1}", node.rect.x),
@@ -693,27 +843,44 @@ impl InspectPanelComponent {
                     }
                 };
 
-                let formula_str = node.formulas.get(key).cloned().unwrap_or_else(|| eval_str.clone());
-                let has_formula = formula_str != eval_str && !formula_str.is_empty();
+                let formula_str = node.formulas.get(key).cloned().unwrap_or_default();
+                let has_formula = !formula_str.is_empty() && formula_str != eval_str;
                 let row_h = if has_formula { 36.0 } else { 22.0 };
+
+                let is_ref_expanded = is_node_ref && state.is_property_ref_expanded(node.id, key);
 
                 // Only draw if within visible viewport
                 if cur_y + row_h >= detail_y && cur_y <= win_h {
                     let prop_x = panel_x + 12.0;
 
-                    // Line 1: Bullet + Property Name + Value
-                    // Typographic bullet: centered on the optical midpoint of lowercase letters (x-height center)
-                    // aligning with the colon and hyphen, rather than at the top of lowercase x.
-                    let bullet_cx = prop_x + 4.0;
-                    let bullet_cy = cur_y + 8.65;
-                    let bullet_circle = Circle::new((bullet_cx, bullet_cy), 2.0);
-                    scene.fill(
-                        Fill::NonZero,
-                        Affine::IDENTITY,
-                        Brush::Solid(Color::from_rgb8(56, 189, 248)), // cyan 400
-                        None,
-                        &bullet_circle,
-                    );
+                    // Line 1: Chevron (for node refs) or Typographic bullet (for standard props)
+                    if is_node_ref {
+                        let chevron_col = if is_ref_expanded {
+                            Color::from_rgb8(192, 132, 252) // purple 400
+                        } else {
+                            Color::from_rgb8(148, 163, 184) // slate 400
+                        };
+                        Self::draw_chevron(
+                            scene,
+                            prop_x + 4.0,
+                            cur_y + 8.65,
+                            6.5,
+                            is_ref_expanded,
+                            chevron_col,
+                        );
+                    } else {
+                        // Typographic bullet: centered on the optical midpoint of lowercase letters (x-height center)
+                        let bullet_cx = prop_x + 4.0;
+                        let bullet_cy = cur_y + 8.65;
+                        let bullet_circle = Circle::new((bullet_cx, bullet_cy), 2.0);
+                        scene.fill(
+                            Fill::NonZero,
+                            Affine::IDENTITY,
+                            Brush::Solid(Color::from_rgb8(56, 189, 248)), // cyan 400
+                            None,
+                            &bullet_circle,
+                        );
+                    }
 
                     let name_adv = self.draw_text_snippet(
                         scene,
@@ -743,16 +910,20 @@ impl InspectPanelComponent {
 
                     let mut val_x = prop_x + 12.0 + name_adv + sep_adv;
 
-                    // If evaluated value is a color hex, render a small color swatch box!
-                    if let Some(swatch_col) = parse_hex_color(&eval_str) {
-                        let swatch_rrect = RoundedRect::new(val_x, cur_y + 2.5, val_x + 11.0, cur_y + 13.5, 2.0);
-                        scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(swatch_col), None, &swatch_rrect);
-                        let swatch_stroke = Stroke::new(1.0);
-                        scene.stroke(&swatch_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(71, 85, 105)), None, &swatch_rrect);
-                        val_x += 16.0;
+                    if !is_node_ref {
+                        // If evaluated value is a color hex, render a small color swatch box!
+                        if let Some(swatch_col) = parse_hex_color(&eval_str) {
+                            let swatch_rrect = RoundedRect::new(val_x, cur_y + 2.5, val_x + 11.0, cur_y + 13.5, 2.0);
+                            scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(swatch_col), None, &swatch_rrect);
+                            let swatch_stroke = Stroke::new(1.0);
+                            scene.stroke(&swatch_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(71, 85, 105)), None, &swatch_rrect);
+                            val_x += 16.0;
+                        }
                     }
 
-                    let val_col = if parse_hex_color(&eval_str).is_some() {
+                    let val_col = if is_node_ref {
+                        Color::from_rgb8(192, 132, 252) // purple 400 for node references
+                    } else if parse_hex_color(&eval_str).is_some() {
                         Color::from_rgb8(241, 245, 249) // white
                     } else if eval_str.starts_with('"') {
                         Color::from_rgb8(251, 191, 36) // amber for strings
@@ -773,7 +944,7 @@ impl InspectPanelComponent {
                         cur_y + 1.5,
                     );
 
-                    if !has_formula {
+                    if !has_formula && !is_node_ref {
                         self.draw_text_snippet(
                             scene,
                             font_cx,
@@ -818,6 +989,158 @@ impl InspectPanelComponent {
                 }
 
                 cur_y += row_h;
+
+                // Indented child properties if reference is expanded
+                if is_ref_expanded {
+                    if let Some(Value::Node(ref_id)) = val_opt {
+                        if let Some(rn) = layout.get_node(*ref_id) {
+                            let mut child_keys: Vec<String> = rn.properties.keys().cloned().collect();
+                            child_keys.retain(|k| k != "clip");
+                            child_keys.sort_by(|a, b| {
+                                let rank = |k: &str| match k {
+                                    "size" => 1,
+                                    "weight" => 2,
+                                    "family" => 3,
+                                    "line_height" => 4,
+                                    "cap_height" => 5,
+                                    "x_height" => 6,
+                                    "ascent" => 7,
+                                    "descent" => 8,
+                                    _ => 10,
+                                };
+                                rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
+                            });
+
+                            let child_start_y = cur_y;
+                            let guide_x = panel_x + 20.0;
+                            let child_indent_x = panel_x + 28.0;
+
+                            for ck in &child_keys {
+                                let c_val = rn.properties.get(ck);
+                                let c_eval = c_val.map(|v| format!("{v}")).unwrap_or_default();
+                                let c_form = rn.formulas.get(ck).cloned().unwrap_or_else(|| c_eval.clone());
+                                let c_has = c_form != c_eval && !c_form.is_empty();
+                                let c_row_h = if c_has { 32.0 } else { 19.0 };
+
+                                if cur_y + c_row_h >= detail_y && cur_y <= win_h {
+                                    // Bullet
+                                    let c_bullet = Circle::new((child_indent_x + 2.0, cur_y + 7.5), 1.5);
+                                    scene.fill(
+                                        Fill::NonZero,
+                                        Affine::IDENTITY,
+                                        Brush::Solid(Color::from_rgb8(125, 211, 252)), // sky 300
+                                        None,
+                                        &c_bullet,
+                                    );
+
+                                    // Key
+                                    let c_name_adv = self.draw_text_snippet(
+                                        scene,
+                                        font_cx,
+                                        layout_cx,
+                                        ck,
+                                        9.5,
+                                        FontWeight::BOLD,
+                                        Color::from_rgb8(125, 211, 252), // sky 300
+                                        true,
+                                        child_indent_x + 8.0,
+                                        cur_y + 1.0,
+                                    );
+
+                                    // Separator ": "
+                                    let c_sep_adv = self.draw_text_snippet(
+                                        scene,
+                                        font_cx,
+                                        layout_cx,
+                                        ": ",
+                                        9.5,
+                                        FontWeight::NORMAL,
+                                        Color::from_rgb8(100, 116, 139), // slate 500
+                                        true,
+                                        child_indent_x + 8.0 + c_name_adv,
+                                        cur_y + 1.0,
+                                    );
+
+                                    let mut c_val_x = child_indent_x + 8.0 + c_name_adv + c_sep_adv;
+
+                                    if let Some(swatch_col) = parse_hex_color(&c_eval) {
+                                        let swatch_rrect = RoundedRect::new(c_val_x, cur_y + 2.0, c_val_x + 10.0, cur_y + 12.0, 2.0);
+                                        scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(swatch_col), None, &swatch_rrect);
+                                        let swatch_stroke = Stroke::new(1.0);
+                                        scene.stroke(&swatch_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(71, 85, 105)), None, &swatch_rrect);
+                                        c_val_x += 14.0;
+                                    }
+
+                                    let c_val_col = if parse_hex_color(&c_eval).is_some() {
+                                        Color::from_rgb8(241, 245, 249)
+                                    } else if c_eval.starts_with('"') {
+                                        Color::from_rgb8(251, 191, 36)
+                                    } else {
+                                        Color::from_rgb8(52, 211, 153)
+                                    };
+
+                                    let c_val_adv = self.draw_text_snippet(
+                                        scene,
+                                        font_cx,
+                                        layout_cx,
+                                        &c_eval,
+                                        9.5,
+                                        FontWeight::BOLD,
+                                        c_val_col,
+                                        true,
+                                        c_val_x,
+                                        cur_y + 1.0,
+                                    );
+
+                                    if !c_has {
+                                        self.draw_text_snippet(
+                                            scene,
+                                            font_cx,
+                                            layout_cx,
+                                            " (literal)",
+                                            8.5,
+                                            FontWeight::NORMAL,
+                                            Color::from_rgb8(100, 116, 139),
+                                            false,
+                                            c_val_x + c_val_adv + 3.0,
+                                            cur_y + 2.0,
+                                        );
+                                    } else {
+                                        let formula_line = format!("  ↳ {c_form}");
+                                        self.draw_text_snippet(
+                                            scene,
+                                            font_cx,
+                                            layout_cx,
+                                            &formula_line,
+                                            8.5,
+                                            FontWeight::NORMAL,
+                                            Color::from_rgb8(203, 213, 225),
+                                            true,
+                                            child_indent_x + 4.0,
+                                            cur_y + 16.0,
+                                        );
+                                    }
+                                }
+                                cur_y += c_row_h;
+                            }
+
+                            // Guideline spanning the indented children
+                            if cur_y > child_start_y && child_start_y <= win_h {
+                                let guide_top = child_start_y.max(detail_y);
+                                let guide_bottom = (cur_y - 3.0).min(win_h);
+                                if guide_bottom > guide_top {
+                                    scene.stroke(
+                                        &Stroke::new(1.0),
+                                        Affine::IDENTITY,
+                                        Brush::Solid(Color::from_rgba8(148, 163, 184, 70)),
+                                        None,
+                                        &Line::new((guide_x, guide_top), (guide_x, guide_bottom)),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             total_detail_content_h = cur_y - base_y + 20.0;
@@ -950,7 +1273,34 @@ impl InspectPanelComponent {
             }
         }
 
-        layout.width() as f64
+        layout.full_width() as f64
+    }
+
+    /// Draws a crisp geometric vector triangle chevron for tree and property folding.
+    fn draw_chevron(scene: &mut Scene, cx: f64, cy: f64, size: f64, is_expanded: bool, color: Color) {
+        let mut path = BezPath::new();
+        if is_expanded {
+            // Downward-pointing equilateral triangle centered at (cx, cy)
+            let half_w = size * 0.5;
+            let h = size * 0.75;
+            let top_y = cy - h * 0.4;
+            let bot_y = cy + h * 0.6;
+            path.move_to((cx - half_w, top_y));
+            path.line_to((cx + half_w, top_y));
+            path.line_to((cx, bot_y));
+            path.close_path();
+        } else {
+            // Rightward-pointing equilateral triangle centered at (cx, cy)
+            let half_h = size * 0.5;
+            let w = size * 0.75;
+            let left_x = cx - w * 0.4;
+            let right_x = cx + w * 0.6;
+            path.move_to((left_x, cy - half_h));
+            path.line_to((right_x, cy));
+            path.line_to((left_x, cy + half_h));
+            path.close_path();
+        }
+        scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(color), None, &path);
     }
 }
 

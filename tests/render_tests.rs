@@ -286,5 +286,61 @@ fn test_binding_example_file() {
     }
 }
 
+#[test]
+fn test_font_sharing_example_file() {
+    let source = std::fs::read_to_string("examples/font_sharing_demo.dt")
+        .expect("Failed to read examples/font_sharing_demo.dt");
+    let doc = parse_document(&source).expect("Failed to parse examples/font_sharing_demo.dt");
+    let layout = evaluate_document(&doc).expect("Failed to evaluate examples/font_sharing_demo.dt");
 
+    let mut renderer = HeadlessRenderer::new().expect("Failed to initialize HeadlessRenderer");
+    let options = SceneOptions {
+        background: Some(Color::WHITE),
+        ..Default::default()
+    };
+
+    let img = renderer
+        .render_layout(&layout, 800, 600, &options)
+        .expect("Failed to render examples/font_sharing_demo.dt");
+
+    assert_eq!(img.width(), 800);
+    assert_eq!(img.height(), 600);
+}
+
+#[test]
+fn test_render_inspector_panel_snapshot() {
+    let source = std::fs::read_to_string("examples/font_sharing_demo.dt")
+        .expect("Failed to read examples/font_sharing_demo.dt");
+    let doc = directedtype::parse(&source).expect("Failed to parse");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout ok");
+
+    let text_node = layout.nodes.iter().find(|n| n.name == "Text" && n.properties.contains_key("font")).unwrap();
+    let mut state = directedtype::inspector::InspectorState::new();
+    state.set_selected_id(Some(text_node.id));
+    state.toggle_property_ref_expanded(text_node.id, "font");
+    state.detail_scroll_offset = 120.0;
+
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    let mut scene = vello::Scene::new();
+    let mut font_cx = parley::FontContext::new();
+    let mut layout_cx = parley::LayoutContext::new();
+
+    panel.render_to_scene(
+        &mut scene,
+        0.0,
+        600.0,
+        &tree_items,
+        &state,
+        &layout,
+        &mut font_cx,
+        &mut layout_cx,
+    );
+
+    let mut renderer = HeadlessRenderer::new().expect("Failed renderer");
+    let img = renderer.render_scene(&scene, 360, 600).expect("Render scene ok");
+    assert_eq!(img.width(), 360);
+    assert_eq!(img.height(), 600);
+}
 

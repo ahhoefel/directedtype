@@ -74,3 +74,68 @@ pub fn measure_text_bounds(
         })
     })
 }
+
+/// Font metrics describing vertical typographic landmarks for layout equations.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FontMetrics {
+    pub size: f64,
+    pub weight: f64,
+    pub cap_height: f64,
+    pub x_height: f64,
+    pub ascent: f64,
+    pub descent: f64,
+    pub line_height: f64,
+}
+
+/// Measures typographic vertical landmarks for a font given size, weight, and family.
+pub fn measure_font_metrics(
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+) -> FontMetrics {
+    let size = if font_size > 0.0 { font_size as f32 } else { 16.0 };
+    let weight = if font_weight > 0.0 { font_weight as f32 } else { 400.0 };
+
+    FONT_CONTEXT.with(|font_cx_cell| {
+        LAYOUT_CONTEXT.with(|layout_cx_cell| {
+            let mut font_cx = font_cx_cell.borrow_mut();
+            let mut layout_cx = layout_cx_cell.borrow_mut();
+
+            let sample = "Hx";
+            let mut builder = layout_cx.ranged_builder(&mut font_cx, sample, 1.0, true);
+            builder.push_default(StyleProperty::FontSize(size));
+            if (weight - 400.0).abs() > 1.0 {
+                builder.push_default(StyleProperty::FontWeight(FontWeight::new(weight)));
+            }
+            if let Some(family) = font_family {
+                if !family.is_empty() {
+                    builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
+                }
+            }
+
+            let mut layout = builder.build(sample);
+            layout.break_all_lines(None);
+
+            let (ascent, descent, leading) = if let Some(line) = layout.lines().next() {
+                let m = line.metrics();
+                (m.ascent as f64, m.descent as f64, m.leading as f64)
+            } else {
+                (size as f64 * 0.8, size as f64 * 0.25, 0.0)
+            };
+
+            let cap_height = size as f64 * 0.71;
+            let x_height = size as f64 * 0.52;
+            let line_height = ascent + descent + leading;
+
+            FontMetrics {
+                size: size as f64,
+                weight: weight as f64,
+                cap_height,
+                x_height,
+                ascent,
+                descent,
+                line_height,
+            }
+        })
+    })
+}

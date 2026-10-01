@@ -29,6 +29,7 @@ pub struct ScopeContext<'a> {
     pub current_ports: &'a [String],
     pub lexical_scope: &'a HashMap<String, LexicalBinding>,
     pub env_scope: &'a HashMap<String, EnvEntry>,
+    pub node_fonts: &'a HashMap<NodeId, NodeId>,
 }
 
 /// Expands a parsed AST `Document` into an `ExpandedDocument`.
@@ -36,6 +37,7 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
     let mut registry = HashMap::new();
     let mut global_scope = HashMap::new();
     let mut global_env_scope: HashMap<String, EnvEntry> = HashMap::new();
+    let mut node_fonts: HashMap<NodeId, NodeId> = HashMap::new();
 
     // Default universal clip: window.clip
     global_env_scope.insert(
@@ -103,6 +105,7 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                             current_ports: &window_scope_ports,
                             lexical_scope: &global_scope,
                             env_scope: &global_env_scope,
+                            node_fonts: &node_fonts,
                         };
                         let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                         if let Some(LexicalBinding::Expr(existing)) = global_scope.get(let_binding.name.as_str()) {
@@ -131,6 +134,7 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                                 current_ports: &window_scope_ports,
                                 lexical_scope: &global_scope,
                                 env_scope: &global_env_scope,
+                                node_fonts: &node_fonts,
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             if let Some(LexicalBinding::Expr(existing)) = global_scope.get(env_binding.name.as_str()) {
@@ -170,7 +174,8 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                         is_let: true,
                         ambient_authored_ports: None,
                     };
-                    let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc)?;
+                    let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
+                    expanded_doc.get_node_mut(root_id).unwrap().var_name = Some(env_binding.name.as_str().to_string());
                     expanded_doc.roots.push(root_id);
                     last_root_id = Some(root_id);
                     global_scope.insert(
@@ -182,6 +187,31 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                         env_binding.name.as_str().to_string(),
                         EnvEntry::Bound(bound_expr),
                     );
+                    if elem.name.as_str() == "Font" {
+                        node_fonts.insert(root_id, root_id);
+                    }
+                } else if let Some(raw_expr) = &env_binding.value {
+                    let scope_ctx = ScopeContext {
+                        current_node: NodeId::WINDOW,
+                        parent_node: None,
+                        prev_sibling: None,
+                        child_ids: &empty_children,
+                        parent_ports: &empty_ports,
+                        current_ports: &window_scope_ports,
+                        lexical_scope: &global_scope,
+                        env_scope: &global_env_scope,
+                        node_fonts: &node_fonts,
+                    };
+                    if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
+                        global_scope.insert(
+                            env_binding.name.as_str().to_string(),
+                            LexicalBinding::Expr(rewritten.clone()),
+                        );
+                        global_env_scope.insert(
+                            env_binding.name.as_str().to_string(),
+                            EnvEntry::Bound(rewritten),
+                        );
+                    }
                 }
             }
             Item::Node(node) => {
@@ -195,7 +225,7 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                     is_let: false,
                     ambient_authored_ports: None,
                 };
-                let root_id = expand_element(node, &elem_ctx, &registry, &mut expanded_doc)?;
+                let root_id = expand_element(node, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
                 expanded_doc.roots.push(root_id);
                 last_root_id = Some(root_id);
             }
@@ -212,13 +242,17 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                         is_let: true,
                         ambient_authored_ports: None,
                     };
-                    let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc)?;
+                    let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
+                    expanded_doc.get_node_mut(root_id).unwrap().var_name = Some(let_binding.name.as_str().to_string());
                     expanded_doc.roots.push(root_id);
                     last_root_id = Some(root_id);
                     global_scope.insert(
                         let_binding.name.as_str().to_string(),
                         LexicalBinding::Node(root_id),
                     );
+                    if elem.name.as_str() == "Font" {
+                        node_fonts.insert(root_id, root_id);
+                    }
                 }
             },
         }
@@ -252,6 +286,7 @@ fn expand_element(
     ctx: &ElementContext<'_>,
     registry: &HashMap<String, ComponentDef>,
     doc: &mut ExpandedDocument,
+    node_fonts: &mut HashMap<NodeId, NodeId>,
 ) -> Result<NodeId, CompileError> {
     for port in &elem.ports {
         if port.name.as_str() == "parent" {
@@ -302,6 +337,7 @@ fn expand_element(
             doc,
             ctx.lexical_scope,
             ctx.env_scope,
+            node_fonts,
         )?;
     } else {
         // It's a primitive element (e.g. \Rect, \Text, \Header, etc.)
@@ -311,6 +347,7 @@ fn expand_element(
             ctx,
             registry,
             doc,
+            node_fonts,
         )?;
     }
 
@@ -326,6 +363,7 @@ fn expand_component_instance(
     doc: &mut ExpandedDocument,
     lexical_scope: &HashMap<String, LexicalBinding>,
     caller_env_scope: &HashMap<String, EnvEntry>,
+    node_fonts: &mut HashMap<NodeId, NodeId>,
 ) -> Result<(), CompileError> {
     // 1. Gather parameter definitions and map consumer arguments
     let mut comp_scope_ports = vec![
@@ -342,16 +380,6 @@ fn expand_component_instance(
     let mut explicit_ports = HashMap::new();
     let empty_ports: [String; 0] = [];
     let empty_children: [NodeId; 0] = [];
-    let caller_scope_ctx = ScopeContext {
-        current_node: ctx.comp_node_id,
-        parent_node: ctx.parent_id,
-        prev_sibling: ctx.prev_sibling_id,
-        child_ids: &empty_children,
-        parent_ports: ctx.parent_ports,
-        current_ports: &empty_ports,
-        lexical_scope,
-        env_scope: caller_env_scope,
-    };
     for port in &instance.ports {
         let name = port.name.as_str().to_string();
         let expr = match &port.expr {
@@ -366,10 +394,23 @@ fn expand_component_instance(
                     is_let: false,
                     ambient_authored_ports: None,
                 };
-                let child_id = expand_element(inline_elem, &child_ctx, registry, doc)?;
+                let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
                 Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span))
             }
-            other => rewrite_expr(other, &caller_scope_ctx)?,
+            other => {
+                let caller_scope_ctx = ScopeContext {
+                    current_node: ctx.comp_node_id,
+                    parent_node: ctx.parent_id,
+                    prev_sibling: ctx.prev_sibling_id,
+                    child_ids: &empty_children,
+                    parent_ports: ctx.parent_ports,
+                    current_ports: &empty_ports,
+                    lexical_scope,
+                    env_scope: caller_env_scope,
+                    node_fonts,
+                };
+                rewrite_expr(other, &caller_scope_ctx)?
+            }
         };
         explicit_ports.insert(name, expr);
     }
@@ -422,6 +463,16 @@ fn expand_component_instance(
             comp_scope_ports.push(name.clone());
         }
         comp_ports.insert(name, expr);
+    }
+
+    // Record component font if resolved
+    if let Some(font_expr) = comp_ports.get("font") {
+        if let Expr::Ident(id) = font_expr {
+            if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                node_fonts.insert(ctx.comp_node_id, fid);
+                doc.get_node_mut(ctx.comp_node_id).unwrap().font = Some(fid);
+            }
+        }
     }
 
     // Default clip port if not explicitly declared
@@ -580,6 +631,7 @@ fn expand_component_instance(
                             current_ports: &comp_scope_ports,
                             lexical_scope: &local_scope,
                             env_scope: &internal_body_env_scope,
+                            node_fonts: &*node_fonts,
                         };
                         let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                         if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
@@ -607,6 +659,7 @@ fn expand_component_instance(
                                 current_ports: &comp_scope_ports,
                                 lexical_scope: &local_scope,
                                 env_scope: &internal_body_env_scope,
+                                node_fonts: &*node_fonts,
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             if let Some(LexicalBinding::Expr(existing)) = local_scope.get(env_binding.name.as_str()) {
@@ -657,12 +710,17 @@ fn expand_component_instance(
                         &elem_ctx,
                         registry,
                         doc,
+                        node_fonts,
                     )?;
+                    doc.get_node_mut(node_id).unwrap().var_name = Some(let_binding.name.as_str().to_string());
                     all_children_ids.push(node_id);
                     local_scope.insert(
                         let_binding.name.as_str().to_string(),
                         LexicalBinding::Node(node_id),
                     );
+                    if elem.name.as_str() == "Font" {
+                        node_fonts.insert(node_id, node_id);
+                    }
                 }
             }
             ComponentBodyItem::Env(env_binding) => {
@@ -684,7 +742,9 @@ fn expand_component_instance(
                                 &elem_ctx,
                                 registry,
                                 doc,
+                                node_fonts,
                             )?;
+                            doc.get_node_mut(node_id).unwrap().var_name = Some(env_binding.name.as_str().to_string());
                             all_children_ids.push(node_id);
                             local_scope.insert(
                                 env_binding.name.as_str().to_string(),
@@ -693,6 +753,9 @@ fn expand_component_instance(
                             let bound_expr = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
                             children_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(bound_expr.clone()));
                             internal_body_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(bound_expr));
+                            if elem.name.as_str() == "Font" {
+                                node_fonts.insert(node_id, node_id);
+                            }
                         }
                         _ => {
                             let scope_ctx = ScopeContext {
@@ -704,6 +767,7 @@ fn expand_component_instance(
                                 current_ports: &comp_scope_ports,
                                 lexical_scope: &local_scope,
                                 env_scope: &internal_body_env_scope,
+                                node_fonts: &*node_fonts,
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             local_scope.insert(
@@ -737,6 +801,7 @@ fn expand_component_instance(
                     &elem_ctx,
                     registry,
                     doc,
+                    node_fonts,
                 )?;
                 all_children_ids.push(body_id);
                 last_child_id = Some(body_id);
@@ -767,6 +832,7 @@ fn expand_component_instance(
                         current_ports: &comp_scope_ports,
                         lexical_scope: &local_scope,
                         env_scope: &children_env_scope,
+                        node_fonts: &*node_fonts,
                     };
 
                     for ambient in &dir.ports {
@@ -806,6 +872,7 @@ fn expand_component_instance(
                         &elem_ctx,
                         registry,
                         doc,
+                        node_fonts,
                     )?;
 
                     instantiated_children_ids.push(child_id);
@@ -827,6 +894,7 @@ fn expand_component_instance(
         current_ports: &empty_ports,
         lexical_scope: &local_scope,
         env_scope: &internal_body_env_scope,
+        node_fonts: &*node_fonts,
     };
 
     let mut rewritten_ports = HashMap::new();
@@ -862,13 +930,14 @@ fn expand_component_instance(
     Ok(())
 }
 
-/// Expands a primitive element (e.g. \Rect, \Text, \Header, etc.)
+/// Expands a primitive element (e.g. \Rect, \Text, \Font, \Header, etc.)
 fn expand_primitive_element(
     node_id: NodeId,
     elem: &ElementNode,
     ctx: &ElementContext<'_>,
     registry: &HashMap<String, ComponentDef>,
     doc: &mut ExpandedDocument,
+    node_fonts: &mut HashMap<NodeId, NodeId>,
 ) -> Result<(), CompileError> {
     // 1. Expand nested child nodes in content slot
     let mut child_ids = Vec::new();
@@ -892,6 +961,7 @@ fn expand_primitive_element(
                     &child_ctx,
                     registry,
                     doc,
+                    node_fonts,
                 )?;
                 child_ids.push(child_id);
                 last_child_id = Some(child_id);
@@ -919,7 +989,7 @@ fn expand_primitive_element(
                     is_let: ctx.is_let,
                     ambient_authored_ports: None,
                 };
-                let child_id = expand_element(inline_elem, &child_ctx, registry, doc)?;
+                let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
                 child_ids.push(child_id);
                 last_child_id = Some(child_id);
                 resolved_port_exprs.push((
@@ -955,6 +1025,59 @@ fn expand_primitive_element(
         &empty_ports
     };
 
+    // First, determine if this element has a font node (explicitly or ambiently)
+    let mut font_node_id = None;
+    if let Some((_, raw_font_expr)) = resolved_port_exprs.iter().find(|(name, _)| name == "font") {
+        let temp_scope_ctx = ScopeContext {
+            current_node,
+            parent_node,
+            prev_sibling: ctx.prev_sibling_id,
+            child_ids: &child_ids,
+            parent_ports: ctx.parent_ports,
+            current_ports,
+            lexical_scope: ctx.lexical_scope,
+            env_scope: ctx.env_scope,
+            node_fonts: &*node_fonts,
+        };
+        if let Ok(rewritten) = rewrite_expr(raw_font_expr, &temp_scope_ctx) {
+            if let Expr::Ident(id) = &rewritten {
+                if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                    font_node_id = Some(fid);
+                }
+            }
+        }
+    } else if let Some(EnvEntry::Bound(env_expr)) = ctx.env_scope.get("font") {
+        let temp_scope_ctx = ScopeContext {
+            current_node,
+            parent_node,
+            prev_sibling: ctx.prev_sibling_id,
+            child_ids: &child_ids,
+            parent_ports: ctx.parent_ports,
+            current_ports,
+            lexical_scope: ctx.lexical_scope,
+            env_scope: ctx.env_scope,
+            node_fonts: &*node_fonts,
+        };
+        if let Ok(rewritten) = rewrite_expr(env_expr, &temp_scope_ctx) {
+            if let Expr::Ident(id) = &rewritten {
+                if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                    font_node_id = Some(fid);
+                    resolved_port_exprs.push(("font".to_string(), Expr::Ident(Ident::new(fid.canonical_name(), elem.span))));
+                }
+            } else if matches!(rewritten, Expr::Literal(Literal::String(_, _))) {
+                resolved_port_exprs.push(("font".to_string(), rewritten));
+            }
+        }
+    }
+
+    if let Some(fid) = font_node_id {
+        node_fonts.insert(node_id, fid);
+        doc.get_node_mut(node_id).unwrap().font = Some(fid);
+    } else if elem.name.as_str() == "Font" {
+        node_fonts.insert(node_id, node_id);
+        doc.get_node_mut(node_id).unwrap().font = Some(node_id);
+    }
+
     let scope_ctx = ScopeContext {
         current_node,
         parent_node,
@@ -964,6 +1087,7 @@ fn expand_primitive_element(
         current_ports,
         lexical_scope: ctx.lexical_scope,
         env_scope: ctx.env_scope,
+        node_fonts: &*node_fonts,
     };
 
     let mut ports = HashMap::new();
@@ -976,6 +1100,109 @@ fn expand_primitive_element(
         }
         let rewritten = rewrite_expr(&expr, &scope_ctx)?;
         ports.insert(port_name, rewritten);
+    }
+
+    if elem.name.as_str() == "Font" {
+        // Default size to 16.0 if not specified
+        if !ports.contains_key("size") {
+            ports.insert(
+                "size".to_string(),
+                Expr::Literal(Literal::Number(16.0, elem.span)),
+            );
+        }
+        // Default weight to 400.0 if not specified
+        if !ports.contains_key("weight") {
+            ports.insert(
+                "weight".to_string(),
+                Expr::Literal(Literal::Number(400.0, elem.span)),
+            );
+        }
+        // Default family to empty string if not specified
+        if !ports.contains_key("family") {
+            if let Some(font_val) = ports.get("font").cloned() {
+                ports.insert("family".to_string(), font_val);
+            } else {
+                ports.insert(
+                    "family".to_string(),
+                    Expr::Literal(Literal::String(String::new(), elem.span)),
+                );
+            }
+        }
+        if !ports.contains_key("font") {
+            ports.insert(
+                "font".to_string(),
+                ports.get("family").cloned().unwrap(),
+            );
+        }
+
+        let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
+        let size_ref = Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("size", elem.span),
+            span: elem.span,
+        });
+        let weight_ref = Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("weight", elem.span),
+            span: elem.span,
+        });
+        let family_ref = Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("family", elem.span),
+            span: elem.span,
+        });
+
+        // Add typographic metric ports: cap_height, x_height, descent, ascent, line_height
+        ports.entry("cap_height".to_string()).or_insert_with(|| {
+            Expr::Call(CallExpr {
+                callee: Ident::new("font_cap_height", elem.span),
+                args: vec![size_ref.clone(), weight_ref.clone(), family_ref.clone()],
+                span: elem.span,
+            })
+        });
+        ports.entry("x_height".to_string()).or_insert_with(|| {
+            Expr::Call(CallExpr {
+                callee: Ident::new("font_x_height", elem.span),
+                args: vec![size_ref.clone(), weight_ref.clone(), family_ref.clone()],
+                span: elem.span,
+            })
+        });
+        ports.entry("descent".to_string()).or_insert_with(|| {
+            Expr::Call(CallExpr {
+                callee: Ident::new("font_descent", elem.span),
+                args: vec![size_ref.clone(), weight_ref.clone(), family_ref.clone()],
+                span: elem.span,
+            })
+        });
+        ports.entry("ascent".to_string()).or_insert_with(|| {
+            Expr::Call(CallExpr {
+                callee: Ident::new("font_ascent", elem.span),
+                args: vec![size_ref.clone(), weight_ref.clone(), family_ref.clone()],
+                span: elem.span,
+            })
+        });
+        ports.entry("line_height".to_string()).or_insert_with(|| {
+            Expr::Call(CallExpr {
+                callee: Ident::new("font_line_height", elem.span),
+                args: vec![size_ref, weight_ref, family_ref],
+                span: elem.span,
+            })
+        });
+
+        // Dummy spatial ports
+        ports.entry("x".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+        ports.entry("y".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+        ports.entry("width".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+        ports.entry("height".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+        ports.entry("z".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+
+        let node = doc.get_node_mut(node_id).unwrap();
+        node.children = child_ids;
+        node.ports = ports;
+        node.authored_ports = authored_ports;
+        node.font = Some(node_id);
+        node_fonts.insert(node_id, node_id);
+        return Ok(());
     }
 
     if elem.name.as_str() == "Clip" {
@@ -1068,6 +1295,40 @@ fn expand_primitive_element(
         .and_then(|n| n.text_content.clone());
     let has_text = text_content.as_ref().is_some_and(|t| !t.is_empty());
 
+    if let Some(fid) = font_node_id {
+        let font_ident = Expr::Ident(Ident::new(fid.canonical_name(), elem.span));
+        if !ports.contains_key("size") && !ports.contains_key("font_size") {
+            ports.insert(
+                "size".to_string(),
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(font_ident.clone()),
+                    member: Ident::new("size", elem.span),
+                    span: elem.span,
+                }),
+            );
+        }
+        if !ports.contains_key("weight") && !ports.contains_key("font_weight") {
+            ports.insert(
+                "weight".to_string(),
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(font_ident.clone()),
+                    member: Ident::new("weight", elem.span),
+                    span: elem.span,
+                }),
+            );
+        }
+        if !ports.contains_key("family") && !ports.contains_key("font_family") {
+            ports.insert(
+                "family".to_string(),
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(font_ident.clone()),
+                    member: Ident::new("family", elem.span),
+                    span: elem.span,
+                }),
+            );
+        }
+    }
+
     let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
     let size_expr = if ports.contains_key("size") {
         Expr::MemberAccess(MemberAccessExpr {
@@ -1101,16 +1362,22 @@ fn expand_primitive_element(
         Expr::Literal(Literal::Number(400.0, elem.span))
     };
 
-    let font_expr = if ports.contains_key("font") {
+    let font_expr = if ports.contains_key("family") {
         Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident.clone()),
-            member: Ident::new("font", elem.span),
+            member: Ident::new("family", elem.span),
             span: elem.span,
         })
     } else if ports.contains_key("font_family") {
         Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident.clone()),
             member: Ident::new("font_family", elem.span),
+            span: elem.span,
+        })
+    } else if ports.contains_key("font") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("font", elem.span),
             span: elem.span,
         })
     } else {
@@ -1329,6 +1596,33 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             } else {
                 rewrite_expr(&m.target, ctx)?
             };
+
+            let target_node_id = match &resolved_target {
+                Expr::Ident(id) => NodeId::from_canonical_name(id.as_str()),
+                _ => None,
+            };
+
+            // Font node reference access: e.g. label.font -> font_node_id
+            if m.member.as_str() == "font" {
+                if let Some(tid) = target_node_id {
+                    if let Some(&fid) = ctx.node_fonts.get(&tid) {
+                        return Ok(Expr::Ident(Ident::new(fid.canonical_name(), m.span)));
+                    }
+                }
+            }
+
+            // Typographic metric access: e.g. label.cap_height -> fid.cap_height
+            if ["cap_height", "x_height", "descent", "ascent", "line_height"].contains(&m.member.as_str()) {
+                if let Some(tid) = target_node_id {
+                    if let Some(&fid) = ctx.node_fonts.get(&tid) {
+                        return Ok(Expr::MemberAccess(MemberAccessExpr {
+                            target: Box::new(Expr::Ident(Ident::new(fid.canonical_name(), m.span))),
+                            member: m.member.clone(),
+                            span: m.span,
+                        }));
+                    }
+                }
+            }
 
             // Resolve derived spatial aliases:
             // left -> x, top -> y, right -> x + width, bottom -> y + height

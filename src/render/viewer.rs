@@ -842,11 +842,18 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                     win_h,
                                     &tree_items,
                                     &self.inspector_state,
+                                    Some(&self.layout),
                                 );
 
                                 match action {
                                     crate::inspector::PanelHitResult::ToggleExpand(node_id) => {
                                         self.inspector_state.toggle_expanded_id(node_id);
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                    }
+                                    crate::inspector::PanelHitResult::TogglePropertyRef(node_id, prop_key) => {
+                                        self.inspector_state.toggle_property_ref_expanded(node_id, &prop_key);
                                         if let Some(w) = &self.window {
                                             w.request_redraw();
                                         }
@@ -1006,9 +1013,10 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                             let max_scroll = self.panel_component.max_scroll(tree_items.len(), win_h);
                             self.inspector_state.scroll_by(-delta_y, max_scroll);
                         } else {
-                            let max_detail_scroll = self.panel_component.max_detail_scroll(
+                            let max_detail_scroll = self.panel_component.max_detail_scroll_with_state(
                                 self.selected_node,
                                 &self.layout,
+                                Some(&self.inspector_state),
                                 win_h,
                             );
                             self.inspector_state.scroll_detail_by(-delta_y, max_detail_scroll);

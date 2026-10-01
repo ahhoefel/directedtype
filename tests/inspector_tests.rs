@@ -384,6 +384,7 @@ fn test_inspect_panel_component_rendering_and_hit_testing() {
         win_h,
         &tree_items,
         &state,
+        Some(&layout),
     );
     assert_eq!(btn_click, directedtype::inspector::PanelHitResult::ToggleInspectCursor);
 
@@ -395,6 +396,7 @@ fn test_inspect_panel_component_rendering_and_hit_testing() {
         win_h,
         &tree_items,
         &state,
+        Some(&layout),
     );
     let root_id = tree_items[0].node_id.unwrap();
     assert_eq!(chevron_click, directedtype::inspector::PanelHitResult::ToggleExpand(root_id));
@@ -407,6 +409,7 @@ fn test_inspect_panel_component_rendering_and_hit_testing() {
         win_h,
         &tree_items,
         &state,
+        Some(&layout),
     );
     assert_eq!(row_click, directedtype::inspector::PanelHitResult::SelectNode(root_id));
 
@@ -469,6 +472,7 @@ fn test_inspect_cursor_toggle_and_selection_gating() {
         win_h,
         &tree_items,
         &state,
+        Some(&layout),
     );
     assert_eq!(hit_action, directedtype::inspector::PanelHitResult::ToggleInspectCursor);
 
@@ -764,4 +768,126 @@ fn test_property_bullet_vertical_centering() {
     assert!(bullet_cy - bullet_radius > x_top, "Top of bullet must not exceed top of lowercase letters");
     assert!(bullet_cy + bullet_radius < baseline_y, "Bottom of bullet must not cross baseline");
 }
+
+#[test]
+fn test_let_bound_var_name_in_dom_tree() {
+    let source = r#"
+        let heading_font = \Font(size: 24, weight: 700, family: "Inter")
+        \Text(font: heading_font, text: "Hello World")
+    "#;
+    let doc = directedtype::parse(source).expect("Parse ok");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout ok");
+
+    let state = directedtype::inspector::InspectorState::new();
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    // One of the tree items should be the let-bound Font node with var_name "heading_font"
+    let font_item = tree_items.iter().find(|it| it.var_name.as_deref() == Some("heading_font"));
+    assert!(font_item.is_some(), "heading_font must be present in DOM tree items");
+    let item = font_item.unwrap();
+    assert_eq!(item.display_text().trim(), "heading_font: \\Font");
+}
+
+#[test]
+fn test_expandable_reference_properties() {
+    let source = r#"
+        let heading_font = \Font(size: 24, weight: 700, family: "Inter")
+        \Text(id: "my_text", font: heading_font, text: "Hello World")
+    "#;
+    let doc = directedtype::parse(source).expect("Parse ok");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout ok");
+
+    let text_node = layout.nodes.iter().find(|n| n.name == "Text").expect("Text node found");
+    assert!(text_node.properties.contains_key("font"));
+    assert!(matches!(text_node.properties.get("font"), Some(directedtype::compiler::Value::Node(_))));
+
+    let mut state = directedtype::inspector::InspectorState::new();
+    state.set_selected_id(Some(text_node.id));
+
+    // Initially, property ref is not expanded
+    assert!(!state.is_property_ref_expanded(text_node.id, "font"));
+
+    // Toggle expansion
+    state.toggle_property_ref_expanded(text_node.id, "font");
+    assert!(state.is_property_ref_expanded(text_node.id, "font"));
+
+    // Toggle again collapses it
+    state.toggle_property_ref_expanded(text_node.id, "font");
+    assert!(!state.is_property_ref_expanded(text_node.id, "font"));
+
+    // Hit testing click in details panel toggles expansion
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let win_w = 800.0;
+    let win_h = 600.0;
+    let panel_x = win_w - panel.width;
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    let divider_y = panel.divider_y(win_h);
+    let detail_y = divider_y + panel.divider_height;
+    let section_b_start = detail_y + 134.0;
+    let mut test_y = section_b_start;
+    let mut prop_keys: Vec<String> = text_node.properties.keys().cloned().collect();
+    prop_keys.retain(|k| k != "clip");
+    for geom in ["x", "y", "width", "height", "z"] {
+        if !prop_keys.contains(&geom.to_string()) {
+            prop_keys.push(geom.to_string());
+        }
+    }
+    prop_keys.sort_by(|a, b| {
+        let rank = |k: &str| match k {
+            "x" => 1,
+            "y" => 2,
+            "width" => 3,
+            "height" => 4,
+            "z" => 5,
+            "color" | "bg_color" => 6,
+            "border_color" | "border_width" => 7,
+            "radius" | "corner_radius" => 8,
+            "clip" => 9,
+            _ => 10,
+        };
+        rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
+    });
+    for key in &prop_keys {
+        let val = text_node.properties.get(key);
+        let eval_str = if let Some(v) = val {
+            match v {
+                directedtype::compiler::Value::Node(ref_id) => {
+                    if let Some(rn) = layout.get_node(*ref_id) {
+                        if let Some(var) = &rn.var_name {
+                            format!("{var} (\\{})", rn.name)
+                        } else {
+                            format!("\\{}", rn.name)
+                        }
+                    } else {
+                        format!("{v}")
+                    }
+                }
+                _ => format!("{v}"),
+            }
+        } else {
+            String::new()
+        };
+        let formula_str = text_node.formulas.get(key).cloned().unwrap_or_default();
+        let has_formula = !formula_str.is_empty() && formula_str != eval_str;
+        let row_h = if has_formula { 36.0 } else { 22.0 };
+        if key == "font" {
+            test_y += 5.0; // Click inside this row!
+            break;
+        }
+        test_y += row_h;
+    }
+
+    let click_res = panel.handle_click(
+        panel_x + 50.0,
+        test_y,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+        Some(&layout),
+    );
+    assert_eq!(click_res, directedtype::inspector::PanelHitResult::TogglePropertyRef(text_node.id, "font".to_string()));
+}
+
 

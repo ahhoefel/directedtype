@@ -49,6 +49,10 @@ pub struct InspectorState {
 
     /// Vertical scroll offset (in logical pixels) inside the component details bottom panel.
     pub detail_scroll_offset: f64,
+
+    /// Set of expanded reference properties in the component details bottom panel.
+    /// Keyed by (referring_node_id, property_key).
+    pub expanded_property_refs: HashSet<(NodeId, String)>,
 }
 
 impl InspectorState {
@@ -173,6 +177,21 @@ impl InspectorState {
             Some((s, true))
         } else {
             None
+        }
+    }
+
+    /// Returns whether an object reference property is expanded in the details panel.
+    pub fn is_property_ref_expanded(&self, node_id: NodeId, prop_key: &str) -> bool {
+        self.expanded_property_refs.contains(&(node_id, prop_key.to_string()))
+    }
+
+    /// Toggles the expansion state of an object reference property in the details panel.
+    pub fn toggle_property_ref_expanded(&mut self, node_id: NodeId, prop_key: &str) {
+        let key = (node_id, prop_key.to_string());
+        if self.expanded_property_refs.contains(&key) {
+            self.expanded_property_refs.remove(&key);
+        } else {
+            self.expanded_property_refs.insert(key);
         }
     }
 }

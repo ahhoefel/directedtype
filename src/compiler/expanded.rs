@@ -47,6 +47,8 @@ pub struct ExpandedNode {
     pub text_content: Option<String>,
     pub span: Span,
     pub handle: Option<NodeHandle>,
+    pub font: Option<NodeId>,
+    pub var_name: Option<String>,
 }
 
 impl ExpandedNode {
@@ -62,6 +64,8 @@ impl ExpandedNode {
             text_content: None,
             span,
             handle: None,
+            font: None,
+            var_name: None,
         }
     }
 
