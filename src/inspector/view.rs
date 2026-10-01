@@ -44,10 +44,6 @@ impl DomTreeItem {
             line.push(' ');
             line.push_str(&self.port_summary);
         }
-        if !self.bounds_summary.is_empty() {
-            line.push(' ');
-            line.push_str(&self.bounds_summary);
-        }
         line
     }
 }

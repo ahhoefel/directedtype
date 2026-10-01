@@ -457,6 +457,7 @@ impl ViewerApp {
                 win_h,
                 &tree_items,
                 &self.inspector_state,
+                &self.layout,
                 &mut self.font_cx,
                 &mut self.layout_cx,
             );
@@ -996,12 +997,22 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     let panel_x = win_w - self.panel_component.width;
 
                     if self.inspect_mode && point.x >= panel_x {
-                        let tree_items = crate::inspector::build_tree_items_from_layout(
-                            &self.layout,
-                            &self.inspector_state,
-                        );
-                        let max_scroll = self.panel_component.max_scroll(tree_items.len(), win_h);
-                        self.inspector_state.scroll_by(-delta_y, max_scroll);
+                        let divider_y = self.panel_component.divider_y(win_h);
+                        if point.y < divider_y {
+                            let tree_items = crate::inspector::build_tree_items_from_layout(
+                                &self.layout,
+                                &self.inspector_state,
+                            );
+                            let max_scroll = self.panel_component.max_scroll(tree_items.len(), win_h);
+                            self.inspector_state.scroll_by(-delta_y, max_scroll);
+                        } else {
+                            let max_detail_scroll = self.panel_component.max_detail_scroll(
+                                self.selected_node,
+                                &self.layout,
+                                win_h,
+                            );
+                            self.inspector_state.scroll_detail_by(-delta_y, max_detail_scroll);
+                        }
                         if let Some(w) = &self.window {
                             w.request_redraw();
                         }

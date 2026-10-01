@@ -168,6 +168,7 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                         env_scope: &global_env_scope,
                         enclosing_component_id: None,
                         is_let: true,
+                        ambient_authored_ports: None,
                     };
                     let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc)?;
                     expanded_doc.roots.push(root_id);
@@ -192,6 +193,7 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                     env_scope: &global_env_scope,
                     enclosing_component_id: None,
                     is_let: false,
+                    ambient_authored_ports: None,
                 };
                 let root_id = expand_element(node, &elem_ctx, &registry, &mut expanded_doc)?;
                 expanded_doc.roots.push(root_id);
@@ -208,6 +210,7 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                         env_scope: &global_env_scope,
                         enclosing_component_id: None,
                         is_let: true,
+                        ambient_authored_ports: None,
                     };
                     let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc)?;
                     expanded_doc.roots.push(root_id);
@@ -229,6 +232,7 @@ struct InstanceContext<'a> {
     pub parent_id: Option<NodeId>,
     pub prev_sibling_id: Option<NodeId>,
     pub parent_ports: &'a [String],
+    pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
 }
 
 struct ElementContext<'a> {
@@ -239,6 +243,7 @@ struct ElementContext<'a> {
     pub env_scope: &'a HashMap<String, EnvEntry>,
     pub enclosing_component_id: Option<NodeId>,
     pub is_let: bool,
+    pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
 }
 
 /// Expands a single element node (either a component invocation or a primitive).
@@ -287,6 +292,7 @@ fn expand_element(
             parent_id: ctx.parent_id,
             prev_sibling_id: ctx.prev_sibling_id,
             parent_ports: ctx.parent_ports,
+            ambient_authored_ports: ctx.ambient_authored_ports,
         };
         expand_component_instance(
             &inst_ctx,
@@ -358,6 +364,7 @@ fn expand_component_instance(
                     env_scope: caller_env_scope,
                     enclosing_component_id: None,
                     is_let: false,
+                    ambient_authored_ports: None,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc)?;
                 Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span))
@@ -643,6 +650,7 @@ fn expand_component_instance(
                         env_scope: &internal_body_env_scope,
                         enclosing_component_id: Some(ctx.comp_node_id),
                         is_let: true,
+                        ambient_authored_ports: None,
                     };
                     let node_id = expand_element(
                         elem,
@@ -669,6 +677,7 @@ fn expand_component_instance(
                                 env_scope: &internal_body_env_scope,
                                 enclosing_component_id: Some(ctx.comp_node_id),
                                 is_let: true,
+                                ambient_authored_ports: None,
                             };
                             let node_id = expand_element(
                                 elem,
@@ -721,6 +730,7 @@ fn expand_component_instance(
                     env_scope: &internal_body_env_scope,
                     enclosing_component_id: Some(ctx.comp_node_id),
                     is_let: false,
+                    ambient_authored_ports: None,
                 };
                 let body_id = expand_element(
                     body_node,
@@ -744,6 +754,7 @@ fn expand_component_instance(
                 let mut last_consumer_child_id = None;
                 for child_elem in &consumer_child_nodes {
                     let mut merged_ports = HashMap::new();
+                    let mut authored_ambient_ports = HashMap::new();
 
                     // Ambient rules from \Children are authored inside the component (Tier 3)
                     let empty_children: [NodeId; 0] = [];
@@ -761,11 +772,13 @@ fn expand_component_instance(
                     for ambient in &dir.ports {
                         let rewritten = rewrite_expr(&ambient.expr, &ambient_scope_ctx)?;
                         merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
+                        authored_ambient_ports.insert(ambient.name.as_str().to_string(), ambient.expr.clone());
                     }
 
                     // Explicit child ports override ambient rules (Tier 4 > Tier 3)
                     for explicit in &child_elem.ports {
                         merged_ports.insert(explicit.name.as_str().to_string(), explicit.expr.clone());
+                        authored_ambient_ports.remove(explicit.name.as_str());
                     }
 
                     let mut wired_elem = child_elem.clone();
@@ -786,6 +799,7 @@ fn expand_component_instance(
                         env_scope: &children_env_scope,
                         enclosing_component_id: Some(ctx.comp_node_id),
                         is_let: false,
+                        ambient_authored_ports: Some(&authored_ambient_ports),
                     };
                     let child_id = expand_element(
                         &wired_elem,
@@ -820,9 +834,30 @@ fn expand_component_instance(
         rewritten_ports.insert(port_name, rewrite_expr(&port_expr, &scope_ctx)?);
     }
 
+    let mut comp_authored_ports = HashMap::new();
+    if let Some(ambient_map) = ctx.ambient_authored_ports {
+        for (k, v) in ambient_map {
+            comp_authored_ports.insert(k.clone(), v.clone());
+        }
+    }
+    for param in &comp_def.params {
+        let name = param.name.as_str().to_string();
+        if let Some(default_expr) = &param.default_edge {
+            comp_authored_ports.entry(name).or_insert_with(|| default_expr.clone());
+        }
+    }
+    for port in &instance.ports {
+        if let Some(ambient_expr) = ctx.ambient_authored_ports.and_then(|m| m.get(port.name.as_str())) {
+            comp_authored_ports.insert(port.name.as_str().to_string(), ambient_expr.clone());
+        } else {
+            comp_authored_ports.insert(port.name.as_str().to_string(), port.expr.clone());
+        }
+    }
+
     let node = doc.get_node_mut(ctx.comp_node_id).unwrap();
     node.children = all_children_ids;
     node.ports = rewritten_ports;
+    node.authored_ports = comp_authored_ports;
 
     Ok(())
 }
@@ -850,6 +885,7 @@ fn expand_primitive_element(
                     env_scope: ctx.env_scope,
                     enclosing_component_id: ctx.enclosing_component_id,
                     is_let: false,
+                    ambient_authored_ports: None,
                 };
                 let child_id = expand_element(
                     child_elem,
@@ -881,6 +917,7 @@ fn expand_primitive_element(
                     env_scope: ctx.env_scope,
                     enclosing_component_id: ctx.enclosing_component_id,
                     is_let: ctx.is_let,
+                    ambient_authored_ports: None,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc)?;
                 child_ids.push(child_id);
@@ -930,7 +967,13 @@ fn expand_primitive_element(
     };
 
     let mut ports = HashMap::new();
+    let mut authored_ports = HashMap::new();
     for (port_name, expr) in resolved_port_exprs {
+        if let Some(ambient_expr) = ctx.ambient_authored_ports.and_then(|m| m.get(&port_name)) {
+            authored_ports.insert(port_name.clone(), ambient_expr.clone());
+        } else {
+            authored_ports.insert(port_name.clone(), expr.clone());
+        }
         let rewritten = rewrite_expr(&expr, &scope_ctx)?;
         ports.insert(port_name, rewritten);
     }
@@ -1145,6 +1188,7 @@ fn expand_primitive_element(
     let node = doc.get_node_mut(node_id).unwrap();
     node.children = child_ids;
     node.ports = ports;
+    node.authored_ports = authored_ports;
 
     Ok(())
 }

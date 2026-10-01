@@ -371,6 +371,7 @@ fn test_inspect_panel_component_rendering_and_hit_testing() {
         win_h,
         &tree_items,
         &state,
+        &layout,
         &mut font_cx,
         &mut layout_cx,
     );
@@ -498,5 +499,185 @@ fn test_inspect_cursor_toggle_and_selection_gating() {
     app.set_inspect_cursor_active(false);
     assert!(!app.inspect_cursor_active());
 }
+
+#[test]
+fn test_inspector_bottom_panel_dimensions_and_formulas() {
+    let source = r#"
+        \Component Card(id: String: "card1") {
+            \Rect(id: id, x: 20 + 5, y: 10 * 2, width: min(400, 300), height: 180, color: #6366f1) {
+                \Text { "Card Content" }
+            }
+        }
+        \Card(id: "my_card")
+    "#;
+    let doc = directedtype::parse(source).expect("Source must parse");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0)
+        .expect("Layout evaluation must succeed");
+
+    let mut state = directedtype::inspector::InspectorState::new();
+
+    // 1. Verify dimensions are NOT in the DOM tree items
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+    assert!(!tree_items.is_empty());
+    for item in &tree_items {
+        let display = item.display_text();
+        assert!(
+            !display.contains(" × "),
+            "DOM tree item text '{}' must not contain dimensions ' × '",
+            display
+        );
+        assert!(
+            !display.contains('[') && !display.contains(']'),
+            "DOM tree item text '{}' must not contain dimension brackets '[W × H]'",
+            display
+        );
+    }
+
+    // 2. Verify formulas were captured on ResolvedNode
+    let rect_node = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Rect")
+        .expect("Rect node must exist in layout");
+
+    assert!(
+        !rect_node.formulas.is_empty(),
+        "ResolvedNode should contain preserved authored formulas"
+    );
+    // x had expression `20 + 5`
+    if let Some(f_x) = rect_node.formulas.get("x") {
+        assert!(f_x.contains("20") && f_x.contains('+') && f_x.contains('5'), "Formula for x: {}", f_x);
+    }
+    // width had expression `min(400, 300)`
+    if let Some(f_w) = rect_node.formulas.get("width") {
+        assert!(f_w.contains("min"), "Formula for width: {}", f_w);
+    }
+
+    // 3. Render bottom panel with selected component
+    state.set_selected_id(Some(rect_node.id));
+
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let win_h = 600.0;
+    let win_w = 800.0;
+    let panel_x = win_w - panel.width;
+
+    let mut scene = vello::Scene::new();
+    let mut font_cx = parley::FontContext::new();
+    let mut layout_cx = parley::LayoutContext::new();
+
+    // Render with selection
+    panel.render_to_scene(
+        &mut scene,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+        &layout,
+        &mut font_cx,
+        &mut layout_cx,
+    );
+
+    // Verify detail scrolling and max_detail_scroll
+    let max_detail = panel.max_detail_scroll(Some(rect_node.id), &layout, win_h);
+    assert!(max_detail >= 0.0);
+
+    state.scroll_detail_by(50.0, max_detail);
+    assert!(state.detail_scroll_offset <= max_detail);
+    state.scroll_detail_by(-100.0, max_detail);
+    assert_eq!(state.detail_scroll_offset, 0.0);
+
+    // Render empty state (no selection)
+    state.clear_selection();
+    let mut scene_empty = vello::Scene::new();
+    panel.render_to_scene(
+        &mut scene_empty,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+        &layout,
+        &mut font_cx,
+        &mut layout_cx,
+    );
+}
+
+#[test]
+fn test_ambient_children_authored_formulas_preserved() {
+    let source = r#"
+        \Component Flow(margin: Number: 30, gap: Number: 20) {
+            \Children {
+                x: parent.left + parent.margin,
+                y: prev ? prev.bottom + gap : parent.top,
+                width: parent.width - (2 * parent.margin)
+            }
+        }
+
+        \Flow(margin: 40) {
+            \Text { "Environmental Scope Showcase" }
+        }
+    "#;
+    let doc = directedtype::parse(source).expect("Source must parse");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0)
+        .expect("Layout evaluation must succeed");
+
+    let text_node = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Text")
+        .expect("Text node must exist in layout");
+
+    assert_eq!(
+        text_node.formulas.get("x").map(|s| s.as_str()),
+        Some("parent.left + parent.margin"),
+        "Child node should preserve authored ambient expression for x"
+    );
+    assert_eq!(
+        text_node.formulas.get("y").map(|s| s.as_str()),
+        Some("prev ? prev.bottom + gap : parent.top"),
+        "Child node should preserve authored ambient expression for y"
+    );
+    assert!(
+        text_node.formulas.get("width").unwrap().contains("parent.width"),
+        "Child node should preserve authored ambient expression for width"
+    );
+}
+
+#[test]
+fn test_env_demo_components_authored_formulas() {
+    let source = std::fs::read_to_string("examples/env_demo.dt").expect("read ok");
+    let doc = directedtype::parse(&source).expect("parse ok");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0).expect("layout ok");
+
+    let mut failed = Vec::new();
+    for node in &layout.nodes {
+        for (port, formula) in &node.formulas {
+            if formula.contains("__node_") {
+                failed.push(format!("Node {} (id: {:?}): {} -> {}", node.name, node.id, port, formula));
+            }
+        }
+    }
+    assert!(
+        failed.is_empty(),
+        "Found formulas containing __node_:\n{}",
+        failed.join("\n")
+    );
+
+    let theme_provider = layout.nodes.iter().find(|n| n.name == "ThemeProvider").unwrap();
+    assert_eq!(
+        theme_provider.formulas.get("x").map(|s| s.as_str()),
+        Some("parent.left + parent.margin"),
+        "ThemeProvider must have authored formula for x"
+    );
+
+    let ambient_card = layout.nodes.iter().find(|n| n.name == "AmbientCard").unwrap();
+    assert_eq!(
+        ambient_card.formulas.get("x").map(|s| s.as_str()),
+        Some("parent.left"),
+        "AmbientCard must have authored formula for x"
+    );
+}
+
+
+
 
 

@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::dom::NodeHandle;
 use crate::span::Span;
 
@@ -308,6 +310,83 @@ impl Literal {
             | Literal::String(_, span)
             | Literal::Bool(_, span)
             | Literal::Color(_, span) => *span,
+        }
+    }
+}
+
+impl fmt::Display for Ident {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BinaryOp::Add => write!(f, "+"),
+            BinaryOp::Sub => write!(f, "-"),
+            BinaryOp::Mul => write!(f, "*"),
+            BinaryOp::Div => write!(f, "/"),
+            BinaryOp::Rem => write!(f, "%"),
+            BinaryOp::Eq => write!(f, "=="),
+            BinaryOp::Ne => write!(f, "!="),
+            BinaryOp::Lt => write!(f, "<"),
+            BinaryOp::Le => write!(f, "<="),
+            BinaryOp::Gt => write!(f, ">"),
+            BinaryOp::Ge => write!(f, ">="),
+            BinaryOp::And => write!(f, "&&"),
+            BinaryOp::Or => write!(f, "||"),
+        }
+    }
+}
+
+impl fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UnaryOp::Neg => write!(f, "-"),
+            UnaryOp::Not => write!(f, "!"),
+        }
+    }
+}
+
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Literal::Number(n, _) => {
+                if n.fract() == 0.0 && n.abs() < 1e15 {
+                    write!(f, "{}", *n as i64)
+                } else {
+                    write!(f, "{}", n)
+                }
+            }
+            Literal::String(s, _) => write!(f, "\"{}\"", s),
+            Literal::Bool(b, _) => write!(f, "{}", b),
+            Literal::Color(c, _) => write!(f, "{}", c),
+        }
+    }
+}
+
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Expr::Literal(lit) => write!(f, "{}", lit),
+            Expr::Ident(id) => write!(f, "{}", id),
+            Expr::MemberAccess(m) => write!(f, "{}.{}", m.target, m.member),
+            Expr::Ternary(t) => write!(f, "{} ? {} : {}", t.condition, t.then_expr, t.else_expr),
+            Expr::Call(c) => {
+                write!(f, "{}(", c.callee)?;
+                for (i, arg) in c.args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
+            }
+            Expr::Binary(b) => write!(f, "{} {} {}", b.left, b.op, b.right),
+            Expr::Unary(u) => write!(f, "{}{}", u.op, u.operand),
+            Expr::Paren(inner, _) => write!(f, "({})", inner),
+            Expr::Node(node) => write!(f, "\\{}(...)", node.name),
         }
     }
 }

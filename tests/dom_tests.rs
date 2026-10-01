@@ -463,3 +463,52 @@ fn test_dom_destroy_node_frees_subtree() {
         Err(DomError::InvalidHandle(_))
     ));
 }
+
+#[test]
+fn test_dom_insert_before_dynamic_flow_recurrence() {
+    let source = r#"
+        \Component Flow(gap: Number: 20) {
+            \Children {
+                x: 0,
+                y: prev ? prev.bottom + gap : parent.top,
+                width: 200
+            }
+        }
+        \Flow() {
+            \Rect(height: 50, color: #ff0000)
+            \Rect(height: 50, color: #0000ff)
+        }
+    "#;
+    let doc = directedtype::parse(source).expect("Source must parse");
+    let mut dom = Dom::from_document(&doc).expect("Dom init ok");
+    let flow_handle = dom.roots()[0];
+
+    let initial_children = dom.children(flow_handle).unwrap().to_vec();
+    assert_eq!(initial_children.len(), 2);
+    let child1 = initial_children[0];
+    let child2 = initial_children[1];
+
+    // Initial evaluation
+    dom.commit().unwrap();
+    assert_eq!(dom.computed_rect(child1).unwrap().y, 0.0);
+    assert_eq!(dom.computed_rect(child2).unwrap().y, 70.0); // 0 + 50 + 20
+
+    // Dynamically insert a new child between child1 and child2
+    let middle_child = dom.create_element(
+        "Rect",
+        vec![
+            ("height".to_string(), Expr::lit(30.0)),
+            ("color".to_string(), Expr::color("#00ff00")),
+        ],
+    );
+    dom.insert_before(flow_handle, child2, middle_child).unwrap();
+
+    // Recommit DOM layout
+    dom.commit().unwrap();
+
+    // Verify prev dynamically rewired!
+    assert_eq!(dom.computed_rect(child1).unwrap().y, 0.0);
+    assert_eq!(dom.computed_rect(middle_child).unwrap().y, 70.0);  // 0 + 50 + 20
+    assert_eq!(dom.computed_rect(child2).unwrap().y, 120.0);      // 70 + 30 + 20
+}
+

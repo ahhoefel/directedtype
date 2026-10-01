@@ -46,6 +46,9 @@ pub struct InspectorState {
 
     /// Vertical scroll offset (in logical pixels) inside the tree view.
     pub scroll_offset: f64,
+
+    /// Vertical scroll offset (in logical pixels) inside the component details bottom panel.
+    pub detail_scroll_offset: f64,
 }
 
 impl InspectorState {
@@ -147,6 +150,11 @@ impl InspectorState {
     /// Scrolls the tree view by `delta`, clamped between `0.0` and `max_scroll`.
     pub fn scroll_by(&mut self, delta: f64, max_scroll: f64) {
         self.scroll_offset = (self.scroll_offset + delta).clamp(0.0, max_scroll.max(0.0));
+    }
+
+    /// Scrolls the component details view by `delta`, clamped between `0.0` and `max_scroll`.
+    pub fn scroll_detail_by(&mut self, delta: f64, max_scroll: f64) {
+        self.detail_scroll_offset = (self.detail_scroll_offset + delta).clamp(0.0, max_scroll.max(0.0));
     }
 
     pub fn clear_selection(&mut self) {

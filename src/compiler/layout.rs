@@ -101,6 +101,7 @@ pub struct ResolvedNode {
     pub clip: Option<NodeId>,
     pub text_content: Option<String>,
     pub properties: HashMap<String, Value>,
+    pub formulas: HashMap<String, String>,
     pub span: Span,
     pub handle: Option<NodeHandle>,
 }
@@ -477,6 +478,11 @@ pub fn resolve_layout(
             .and_then(|v| v.as_node())
             .filter(|id| !id.is_window());
 
+        let mut formulas = HashMap::new();
+        for (port, expr) in &node.authored_ports {
+            formulas.insert(port.clone(), expr.to_string());
+        }
+
         resolved_nodes.push(ResolvedNode {
             id: node.id,
             name: node.name.clone(),
@@ -487,6 +493,7 @@ pub fn resolve_layout(
             clip,
             text_content: node.text_content.clone(),
             properties,
+            formulas,
             span: node.span,
             handle: node.handle,
         });
