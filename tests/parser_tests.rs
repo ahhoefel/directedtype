@@ -891,3 +891,233 @@ fn test_parse_alias_bindings() {
         _ => panic!("Expected Item::Component"),
     }
 }
+
+#[test]
+fn test_parse_structured_component_keys() {
+    let source = r#"
+    \Cell(row, col; width: 80, height: 32, color: #ffffff)
+    \Button("submit_btn"; width: 120, height: 40)
+    \Item(r, c;)
+    \Empty(; width: 100)
+    \Plain(x: 10, y: 20)
+    "#;
+
+    let doc = parse(source).expect("Failed to parse elements with structured keys");
+    assert_eq!(doc.items.len(), 5);
+
+    // 1. \Cell(row, col; width: 80, height: 32, color: #ffffff)
+    match &doc.items[0] {
+        Item::Node(node) => {
+            assert_eq!(node.name.as_str(), "Cell");
+            let key = node.key.as_ref().expect("Expected ComponentKey on Cell");
+            assert_eq!(key.parts.len(), 2);
+            match &key.parts[0] {
+                Expr::Ident(id) => assert_eq!(id.as_str(), "row"),
+                _ => panic!("Expected Expr::Ident for row"),
+            }
+            match &key.parts[1] {
+                Expr::Ident(id) => assert_eq!(id.as_str(), "col"),
+                _ => panic!("Expected Expr::Ident for col"),
+            }
+            assert_eq!(node.ports.len(), 3);
+            assert_eq!(node.ports[0].name.as_str(), "width");
+            assert_eq!(node.ports[1].name.as_str(), "height");
+            assert_eq!(node.ports[2].name.as_str(), "color");
+        }
+        _ => panic!("Expected Item::Node"),
+    }
+
+    // 2. \Button("submit_btn"; width: 120, height: 40)
+    match &doc.items[1] {
+        Item::Node(node) => {
+            assert_eq!(node.name.as_str(), "Button");
+            let key = node.key.as_ref().expect("Expected ComponentKey on Button");
+            assert_eq!(key.parts.len(), 1);
+            match &key.parts[0] {
+                Expr::Literal(Literal::String(s, _)) => assert_eq!(s, "submit_btn"),
+                _ => panic!("Expected Expr::Literal string for submit_btn"),
+            }
+            assert_eq!(node.ports.len(), 2);
+        }
+        _ => panic!("Expected Item::Node"),
+    }
+
+    // 3. \Item(r, c;)
+    match &doc.items[2] {
+        Item::Node(node) => {
+            assert_eq!(node.name.as_str(), "Item");
+            let key = node.key.as_ref().expect("Expected ComponentKey on Item");
+            assert_eq!(key.parts.len(), 2);
+            assert_eq!(node.ports.len(), 0);
+        }
+        _ => panic!("Expected Item::Node"),
+    }
+
+    // 4. \Empty(; width: 100)
+    match &doc.items[3] {
+        Item::Node(node) => {
+            assert_eq!(node.name.as_str(), "Empty");
+            assert!(node.key.is_none());
+            assert_eq!(node.ports.len(), 1);
+            assert_eq!(node.ports[0].name.as_str(), "width");
+        }
+        _ => panic!("Expected Item::Node"),
+    }
+
+    // 5. \Plain(x: 10, y: 20)
+    match &doc.items[4] {
+        Item::Node(node) => {
+            assert_eq!(node.name.as_str(), "Plain");
+            assert!(node.key.is_none());
+            assert_eq!(node.ports.len(), 2);
+        }
+        _ => panic!("Expected Item::Node"),
+    }
+}
+
+#[test]
+fn test_parse_port_boolean_shorthand() {
+    let source = r#"
+    \Cell(row, column; highlighted)
+    \Dialog(modal, title: "Login")
+    "#;
+
+    let doc = parse(source).expect("Failed to parse boolean shorthand ports");
+    assert_eq!(doc.items.len(), 2);
+
+    match &doc.items[0] {
+        Item::Node(node) => {
+            assert_eq!(node.name.as_str(), "Cell");
+            assert_eq!(node.key.as_ref().unwrap().parts.len(), 2);
+            assert_eq!(node.ports.len(), 1);
+            assert_eq!(node.ports[0].name.as_str(), "highlighted");
+            match &node.ports[0].expr {
+                Expr::Literal(Literal::Bool(val, _)) => assert_eq!(*val, true),
+                _ => panic!("Expected Expr::Literal bool for highlighted flag"),
+            }
+        }
+        _ => panic!("Expected Item::Node"),
+    }
+
+    match &doc.items[1] {
+        Item::Node(node) => {
+            assert_eq!(node.name.as_str(), "Dialog");
+            assert!(node.key.is_none());
+            assert_eq!(node.ports.len(), 2);
+            assert_eq!(node.ports[0].name.as_str(), "modal");
+            match &node.ports[0].expr {
+                Expr::Literal(Literal::Bool(val, _)) => assert_eq!(*val, true),
+                _ => panic!("Expected Expr::Literal bool for modal flag"),
+            }
+            assert_eq!(node.ports[1].name.as_str(), "title");
+        }
+        _ => panic!("Expected Item::Node"),
+    }
+}
+
+#[test]
+fn test_parse_state_bindings_in_component_and_toplevel() {
+    let source = r#"
+    state global_count: Number = 42;
+
+    \Component Counter(initial: Number: 0) {
+        state count: Number: initial;
+        state is_open: Boolean;
+        state label: String = "Active";
+        state user_name;
+        state bio = "Loading " + initial;
+
+        \Rect(width: 100, height: 40)
+    }
+    "#;
+
+    let doc = parse(source).expect("Failed to parse state declarations");
+    assert_eq!(doc.items.len(), 2);
+
+    // 1. Top-level state binding
+    match &doc.items[0] {
+        Item::State(s) => {
+            assert_eq!(s.name.as_str(), "global_count");
+            assert_eq!(s.type_annotation.as_ref().unwrap().name.as_str(), "Number");
+            match &s.default {
+                Some(Expr::Literal(Literal::Number(n, _))) => assert_eq!(*n, 42.0),
+                _ => panic!("Expected Expr::Literal number for global_count"),
+            }
+        }
+        _ => panic!("Expected Item::State"),
+    }
+
+    // 2. Component state bindings
+    match &doc.items[1] {
+        Item::Component(c) => {
+            assert_eq!(c.name.as_str(), "Counter");
+            assert_eq!(c.body.len(), 6);
+
+            // state count: Number: initial;
+            match &c.body[0] {
+                ComponentBodyItem::State(s) => {
+                    assert_eq!(s.name.as_str(), "count");
+                    assert_eq!(s.type_annotation.as_ref().unwrap().name.as_str(), "Number");
+                    match &s.default {
+                        Some(Expr::Ident(id)) => assert_eq!(id.as_str(), "initial"),
+                        _ => panic!("Expected Expr::Ident for initial"),
+                    }
+                }
+                _ => panic!("Expected ComponentBodyItem::State for count"),
+            }
+
+            // state is_open: Boolean;
+            match &c.body[1] {
+                ComponentBodyItem::State(s) => {
+                    assert_eq!(s.name.as_str(), "is_open");
+                    assert_eq!(s.type_annotation.as_ref().unwrap().name.as_str(), "Boolean");
+                    assert!(s.default.is_none());
+                }
+                _ => panic!("Expected ComponentBodyItem::State for is_open"),
+            }
+
+            // state label: String = "Active";
+            match &c.body[2] {
+                ComponentBodyItem::State(s) => {
+                    assert_eq!(s.name.as_str(), "label");
+                    assert_eq!(s.type_annotation.as_ref().unwrap().name.as_str(), "String");
+                    match &s.default {
+                        Some(Expr::Literal(Literal::String(str_val, _))) => assert_eq!(str_val, "Active"),
+                        _ => panic!("Expected Expr::Literal string for Active"),
+                    }
+                }
+                _ => panic!("Expected ComponentBodyItem::State for label"),
+            }
+
+            // state user_name;
+            match &c.body[3] {
+                ComponentBodyItem::State(s) => {
+                    assert_eq!(s.name.as_str(), "user_name");
+                    assert!(s.type_annotation.is_none());
+                    assert!(s.default.is_none());
+                }
+                _ => panic!("Expected ComponentBodyItem::State for user_name"),
+            }
+
+            // state bio = "Loading " + initial;
+            match &c.body[4] {
+                ComponentBodyItem::State(s) => {
+                    assert_eq!(s.name.as_str(), "bio");
+                    assert!(s.type_annotation.is_none());
+                    match &s.default {
+                        Some(Expr::Binary(b)) => assert_eq!(b.op, BinaryOp::Add),
+                        _ => panic!("Expected Expr::Binary for bio default"),
+                    }
+                }
+                _ => panic!("Expected ComponentBodyItem::State for bio"),
+            }
+
+            // \Rect(width: 100, height: 40)
+            match &c.body[5] {
+                ComponentBodyItem::Node(n) => assert_eq!(n.name.as_str(), "Rect"),
+                _ => panic!("Expected ComponentBodyItem::Node"),
+            }
+        }
+        _ => panic!("Expected Item::Component"),
+    }
+}

@@ -254,7 +254,8 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                         node_fonts.insert(root_id, root_id);
                     }
                 }
-            },
+            }
+            Item::State(_) => {}
         }
     }
 
@@ -929,6 +930,7 @@ fn expand_component_instance(
                 }
             }
             ComponentBodyItem::Alias(_) => {}
+            ComponentBodyItem::State(_) => {}
         }
     }
 

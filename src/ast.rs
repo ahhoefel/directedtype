@@ -36,6 +36,7 @@ pub enum Item {
     Node(ElementNode),
     Let(LetBinding),
     Env(EnvBinding),
+    State(StateBinding),
 }
 
 impl Item {
@@ -45,6 +46,7 @@ impl Item {
             Item::Node(n) => n.span,
             Item::Let(l) => l.span,
             Item::Env(e) => e.span,
+            Item::State(s) => s.span,
         }
     }
 }
@@ -65,6 +67,7 @@ pub enum ComponentBodyItem {
     Let(LetBinding),
     Env(EnvBinding),
     Alias(AliasBinding),
+    State(StateBinding),
 }
 
 impl ComponentBodyItem {
@@ -75,7 +78,30 @@ impl ComponentBodyItem {
             ComponentBodyItem::Let(l) => l.span,
             ComponentBodyItem::Env(e) => e.span,
             ComponentBodyItem::Alias(a) => a.span,
+            ComponentBodyItem::State(s) => s.span,
         }
+    }
+}
+
+/// Reactive state variable binding: `state name = expr;`, `state name: Type = expr;`, `state name: Type: expr;`, or uninitialized `state name: Type;` / `state name;`
+#[derive(Debug, Clone, PartialEq)]
+pub struct StateBinding {
+    pub name: Ident,
+    pub type_annotation: Option<TypeRef>,
+    pub default: Option<Expr>,
+    pub span: Span,
+}
+
+/// Component identity key: structured list of expressions, e.g. `(row, col)` or `"submit_btn"`
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComponentKey {
+    pub parts: Vec<Expr>,
+    pub span: Span,
+}
+
+impl ComponentKey {
+    pub fn new(parts: Vec<Expr>, span: Span) -> Self {
+        Self { parts, span }
     }
 }
 
@@ -139,10 +165,11 @@ pub struct TypeRef {
     pub span: Span,
 }
 
-/// Element node instantiation: `\Name(ports) { content }`
+/// Element node instantiation: `\Name [ ( [ key ; ] ports ) ] [ { content } ]`
 #[derive(Debug, Clone, PartialEq)]
 pub struct ElementNode {
     pub name: Ident,
+    pub key: Option<ComponentKey>,
     pub ports: Vec<PortBinding>,
     pub content: Option<ContentSlot>,
     pub span: Span,

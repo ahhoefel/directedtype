@@ -26,6 +26,9 @@ pub enum Token {
     #[token("alias")]
     Alias,
 
+    #[token("state")]
+    State,
+
     #[token("true")]
     True,
 
@@ -153,6 +156,7 @@ impl fmt::Display for Token {
             Token::Let => write!(f, "let"),
             Token::Env => write!(f, "env"),
             Token::Alias => write!(f, "alias"),
+            Token::State => write!(f, "state"),
             Token::True => write!(f, "true"),
             Token::False => write!(f, "false"),
             Token::LParen => write!(f, "("),

@@ -1,5 +1,5 @@
 use crate::ast::{
-    ChildrenDirective, ContentItem, ElementNode, PortBinding,
+    ChildrenDirective, ComponentKey, ContentItem, ElementNode, PortBinding,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::ParserCursor;
@@ -7,20 +7,81 @@ use crate::parser::expr::{parse_expr, parse_ident};
 use crate::span::Span;
 use crate::token::Token;
 
-/// Parses a single port binding: `name: expr`
+/// Parses a single port binding: `name: expr` or shorthand boolean flag `name` (meaning `name: true`)
 pub fn parse_port_binding(cursor: &mut ParserCursor<'_>) -> Result<PortBinding, ParseError> {
     let name = parse_ident(cursor)?;
-    cursor.consume_token(&Token::Colon)?;
-    let expr = parse_expr(cursor)?;
-    let span = name.span.merge(expr.span());
-    Ok(PortBinding { name, expr, span })
+    if let Some((Token::Colon, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Colon)?;
+        let expr = parse_expr(cursor)?;
+        let span = name.span.merge(expr.span());
+        Ok(PortBinding { name, expr, span })
+    } else {
+        let span = name.span;
+        let expr = crate::ast::Expr::bool(true);
+        Ok(PortBinding { name, expr, span })
+    }
 }
 
-/// Parses a list of port bindings enclosed in parentheses: `(port1: expr1, port2: expr2)`
-pub fn parse_port_list(cursor: &mut ParserCursor<'_>) -> Result<(Vec<PortBinding>, Span), ParseError> {
-    let open_span = cursor.consume_token(&Token::LParen)?;
-    let mut ports = Vec::new();
+fn has_top_level_semicolon(cursor: &mut ParserCursor<'_>) -> Result<bool, ParseError> {
+    let mut depth = 1;
+    let mut i = 0;
+    loop {
+        match cursor.peek_nth(i)? {
+            Some((Token::LParen, _)) => depth += 1,
+            Some((Token::RParen, _)) => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(false);
+                }
+            }
+            Some((Token::Semicolon, _)) if depth == 1 => return Ok(true),
+            Some(_) => {}
+            None => return Ok(false),
+        }
+        i += 1;
+    }
+}
 
+/// Parses an element's arguments enclosed in parentheses: `( [ key ; ] [ ports ] )`
+pub fn parse_element_args(
+    cursor: &mut ParserCursor<'_>,
+) -> Result<(Option<ComponentKey>, Vec<PortBinding>, Span), ParseError> {
+    let open_span = cursor.consume_token(&Token::LParen)?;
+
+    let has_semicolon = has_top_level_semicolon(cursor)?;
+
+    let key = if has_semicolon {
+        let mut parts = Vec::new();
+        let mut key_span = open_span;
+
+        while let Some((tok, _)) = cursor.peek_token()? {
+            if tok == &Token::Semicolon || tok == &Token::RParen {
+                break;
+            }
+            let expr = parse_expr(cursor)?;
+            key_span = key_span.merge(expr.span());
+            parts.push(expr);
+
+            if let Some((Token::Comma, _)) = cursor.peek_token()? {
+                cursor.consume_token(&Token::Comma)?;
+            } else {
+                break;
+            }
+        }
+
+        let semi_span = cursor.consume_token(&Token::Semicolon)?;
+        key_span = key_span.merge(semi_span);
+
+        if parts.is_empty() {
+            None
+        } else {
+            Some(ComponentKey::new(parts, key_span))
+        }
+    } else {
+        None
+    };
+
+    let mut ports = Vec::new();
     while let Some((tok, _)) = cursor.peek_token()? {
         if tok == &Token::RParen {
             break;
@@ -35,6 +96,12 @@ pub fn parse_port_list(cursor: &mut ParserCursor<'_>) -> Result<(Vec<PortBinding
 
     let close_span = cursor.consume_token(&Token::RParen)?;
     let span = open_span.merge(close_span);
+    Ok((key, ports, span))
+}
+
+/// Parses a list of port bindings enclosed in parentheses: `(port1: expr1, port2: expr2)`
+pub fn parse_port_list(cursor: &mut ParserCursor<'_>) -> Result<(Vec<PortBinding>, Span), ParseError> {
+    let (_, ports, span) = parse_element_args(cursor)?;
     Ok((ports, span))
 }
 
@@ -69,16 +136,16 @@ pub fn parse_children_directive(cursor: &mut ParserCursor<'_>) -> Result<Childre
     }
 }
 
-/// Parses an element node: `\Name [ ( ports ) ] [ { content } ]`
+/// Parses an element node: `\Name [ ( [ key ; ] [ ports ] ) ] [ { content } ]`
 pub fn parse_element_node(cursor: &mut ParserCursor<'_>) -> Result<ElementNode, ParseError> {
     let slash_span = cursor.consume_token(&Token::Backslash)?;
     let name = parse_ident(cursor)?;
 
-    let (ports, port_span) = if let Some((Token::LParen, _)) = cursor.peek_token()? {
-        let (p, s) = parse_port_list(cursor)?;
-        (p, Some(s))
+    let (key, ports, port_span) = if let Some((Token::LParen, _)) = cursor.peek_token()? {
+        let (k, p, s) = parse_element_args(cursor)?;
+        (k, p, Some(s))
     } else {
-        (Vec::new(), None)
+        (None, Vec::new(), None)
     };
 
     let (content, content_span) = if let Some((Token::LBrace, _)) = cursor.peek_token()? {
@@ -96,6 +163,7 @@ pub fn parse_element_node(cursor: &mut ParserCursor<'_>) -> Result<ElementNode, 
 
     Ok(ElementNode {
         name,
+        key,
         ports,
         content,
         span: total_span,

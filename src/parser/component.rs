@@ -1,6 +1,6 @@
 use crate::ast::{
     AliasBinding, ComponentBodyItem, ComponentDef, EnvBinding, Ident, LetBinding, LetValue,
-    ParamDef, TypeRef,
+    ParamDef, StateBinding, TypeRef,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::ParserCursor;
@@ -149,6 +149,12 @@ pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef
         if tok == &Token::Alias {
             let alias_binding = parse_alias_binding(cursor)?;
             body.push(ComponentBodyItem::Alias(alias_binding));
+            continue;
+        }
+
+        if tok == &Token::State {
+            let state_binding = parse_state_binding(cursor)?;
+            body.push(ComponentBodyItem::State(state_binding));
             continue;
         }
 
@@ -331,6 +337,79 @@ pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding
         name,
         type_annotation,
         value,
+        span,
+    })
+}
+
+/// Parses a reactive state variable binding:
+/// `state name = expr;`, `state name: Type = expr;`, `state name: Type: expr;`, or uninitialized `state name: Type;` / `state name;`
+pub fn parse_state_binding(cursor: &mut ParserCursor<'_>) -> Result<StateBinding, ParseError> {
+    let state_span = cursor.consume_token(&Token::State)?;
+    let name = parse_ident(cursor)?;
+
+    let mut type_annotation = None;
+    let mut default = None;
+
+    if let Some((Token::Colon, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Colon)?;
+
+        let tok0 = cursor.peek_token()?.cloned();
+        let tok1 = cursor.peek_nth(1)?.cloned();
+
+        match (tok0, tok1) {
+            // `state name: Type: expr` or `state name: Type = expr`
+            (Some((Token::Ident(type_name), span0)), Some((Token::Colon, _)))
+            | (Some((Token::Ident(type_name), span0)), Some((Token::Eq, _)))
+                if type_name.chars().next().is_some_and(|c| c.is_uppercase()) =>
+            {
+                cursor.next_token()?; // consume type_name
+                type_annotation = Some(TypeRef {
+                    name: Ident::new(type_name, span0),
+                    span: span0,
+                });
+                if cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Eq) {
+                    cursor.consume_token(&Token::Eq)?;
+                } else {
+                    cursor.consume_token(&Token::Colon)?;
+                }
+                default = Some(parse_expr(cursor)?);
+            }
+            // `state name: Type;` (uninitialized with type)
+            (Some((Token::Ident(type_name), span0)), Some((Token::Semicolon, _)))
+                if type_name.chars().next().is_some_and(|c| c.is_uppercase()) =>
+            {
+                cursor.next_token()?; // consume type_name
+                type_annotation = Some(TypeRef {
+                    name: Ident::new(type_name, span0),
+                    span: span0,
+                });
+            }
+            _ => {
+                // `state name: expr` (no type annotation, expr follows)
+                default = Some(parse_expr(cursor)?);
+            }
+        }
+    } else if let Some((Token::Eq, _)) = cursor.peek_token()? {
+        // `state name = expr`
+        cursor.consume_token(&Token::Eq)?;
+        default = Some(parse_expr(cursor)?);
+    }
+
+    let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Semicolon)?
+    } else if let Some(expr) = &default {
+        expr.span()
+    } else if let Some(ty) = &type_annotation {
+        ty.span
+    } else {
+        name.span
+    };
+
+    let span = state_span.merge(semi_span);
+    Ok(StateBinding {
+        name,
+        type_annotation,
+        default,
         span,
     })
 }

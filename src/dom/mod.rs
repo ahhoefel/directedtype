@@ -120,6 +120,7 @@ impl Dom {
                     let handle = dom.insert_ast_element(node)?;
                     dom.roots.push(handle);
                 }
+                Item::State(_) => {}
             }
         }
 
@@ -876,6 +877,7 @@ impl Dom {
 
         Ok(ElementNode {
             name: Ident::new(node.tag.clone(), node.span),
+            key: None,
             ports,
             content,
             span: node.span,
