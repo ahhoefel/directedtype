@@ -121,6 +121,7 @@ impl Dom {
                     dom.roots.push(handle);
                 }
                 Item::State(_) => {}
+                Item::Use(_) => {}
             }
         }
 

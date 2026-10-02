@@ -7,6 +7,7 @@ use crate::ast::{Document, Item};
 use crate::error::ParseError;
 use crate::parser::component::{
     parse_component_def, parse_env_binding, parse_let_binding, parse_state_binding,
+    parse_use_declaration,
 };
 use crate::parser::cursor::ParserCursor;
 use crate::parser::node::parse_element_node;
@@ -40,20 +41,24 @@ pub fn parse_document(source: &str) -> Result<Document, ParseError> {
                         let comp = parse_component_def(&mut cursor)?;
                         items.push(Item::Component(comp));
                     }
+                    Some((Token::Use, _)) => {
+                        let use_decl = parse_use_declaration(&mut cursor)?;
+                        items.push(Item::Use(use_decl));
+                    }
                     Some((Token::Ident(_), _)) | Some((Token::Children, _)) => {
                         let node = parse_element_node(&mut cursor)?;
                         items.push(Item::Node(node));
                     }
                     Some((other, other_span)) => {
                         return Err(ParseError::UnexpectedToken {
-                            expected: "Component or element name after '\\'".to_string(),
+                            expected: "Component, use, or element name after '\\'".to_string(),
                             found: other.to_string(),
                             span: other_span,
                         });
                     }
                     None => {
                         return Err(ParseError::UnexpectedEof {
-                            expected: "Component or element name after '\\'".to_string(),
+                            expected: "Component, use, or element name after '\\'".to_string(),
                             span,
                         });
                     }

@@ -1121,3 +1121,91 @@ fn test_parse_state_bindings_in_component_and_toplevel() {
         _ => panic!("Expected Item::Component"),
     }
 }
+
+#[test]
+fn test_parse_use_declarations() {
+    let input = r#"
+    \use "./components/Button.dt";
+    \use "./components/Card.dt" as PrimaryCard;
+    \use "design-system/Table.dt" as DataTable;
+    "#;
+
+    let doc = parse(input).expect("Failed to parse use declarations");
+    assert_eq!(doc.items.len(), 3);
+
+    match &doc.items[0] {
+        Item::Use(u) => {
+            assert_eq!(u.path, "./components/Button.dt");
+            assert!(u.alias.is_none());
+        }
+        _ => panic!("Expected Item::Use"),
+    }
+
+    match &doc.items[1] {
+        Item::Use(u) => {
+            assert_eq!(u.path, "./components/Card.dt");
+            assert_eq!(u.alias.as_ref().unwrap().as_str(), "PrimaryCard");
+        }
+        _ => panic!("Expected Item::Use"),
+    }
+
+    match &doc.items[2] {
+        Item::Use(u) => {
+            assert_eq!(u.path, "design-system/Table.dt");
+            assert_eq!(u.alias.as_ref().unwrap().as_str(), "DataTable");
+        }
+        _ => panic!("Expected Item::Use"),
+    }
+}
+
+#[test]
+fn test_parse_use_mixed_with_components_and_nodes() {
+    let input = r#"
+    \use "./Button.dt" as ActionButton;
+
+    \Component App {
+        state active: Boolean: true;
+        \ActionButton { "Click" }
+    }
+
+    \App
+    "#;
+
+    let doc = parse(input).expect("Failed to parse mixed use document");
+    assert_eq!(doc.items.len(), 3);
+
+    match &doc.items[0] {
+        Item::Use(u) => {
+            assert_eq!(u.path, "./Button.dt");
+            assert_eq!(u.alias.as_ref().unwrap().as_str(), "ActionButton");
+        }
+        _ => panic!("Expected Item::Use"),
+    }
+
+    match &doc.items[1] {
+        Item::Component(c) => {
+            assert_eq!(c.name.as_str(), "App");
+        }
+        _ => panic!("Expected Item::Component"),
+    }
+
+    match &doc.items[2] {
+        Item::Node(n) => {
+            assert_eq!(n.name.as_str(), "App");
+        }
+        _ => panic!("Expected Item::Node"),
+    }
+}
+
+#[test]
+fn test_parse_use_error_handling() {
+    let input_bad_path = r#"\use 123;"#;
+    assert!(parse(input_bad_path).is_err());
+
+    let input_bad_alias = r#"\use "./Button.dt" as 456;"#;
+    assert!(parse(input_bad_alias).is_err());
+
+    let input_missing_semi = r#"\use "./Button.dt" as Btn"#;
+    // Forgiving semicolon handling accepts this
+    assert!(parse(input_missing_semi).is_ok());
+}

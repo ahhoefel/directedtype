@@ -37,6 +37,7 @@ pub enum Item {
     Let(LetBinding),
     Env(EnvBinding),
     State(StateBinding),
+    Use(UseDeclaration),
 }
 
 impl Item {
@@ -47,8 +48,17 @@ impl Item {
             Item::Let(l) => l.span,
             Item::Env(e) => e.span,
             Item::State(s) => s.span,
+            Item::Use(u) => u.span,
         }
     }
+}
+
+/// Module import declaration: `\use "./components/Button.dt" [as Alias];`
+#[derive(Debug, Clone, PartialEq)]
+pub struct UseDeclaration {
+    pub path: String,
+    pub alias: Option<Ident>,
+    pub span: Span,
 }
 
 /// Component definition: `\Component Name(params) { body }`

@@ -1,6 +1,6 @@
 use crate::ast::{
     AliasBinding, ComponentBodyItem, ComponentDef, EnvBinding, Ident, LetBinding, LetValue,
-    ParamDef, StateBinding, TypeRef,
+    ParamDef, StateBinding, TypeRef, UseDeclaration,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::ParserCursor;
@@ -412,4 +412,60 @@ pub fn parse_state_binding(cursor: &mut ParserCursor<'_>) -> Result<StateBinding
         default,
         span,
     })
+}
+
+/// Parses a module use/import declaration: `\use "path" [as Alias];`
+pub fn parse_use_declaration(cursor: &mut ParserCursor<'_>) -> Result<UseDeclaration, ParseError> {
+    let bs_span = cursor.consume_token(&Token::Backslash)?;
+    cursor.consume_token(&Token::Use)?;
+
+    let (path, path_span) = match cursor.next_token()? {
+        Some((Token::String(s), span)) => (s, span),
+        Some((tok, span)) => {
+            return Err(ParseError::UnexpectedToken {
+                expected: "string literal file path after '\\use'".to_string(),
+                found: tok.to_string(),
+                span,
+            });
+        }
+        None => {
+            return Err(ParseError::UnexpectedEof {
+                expected: "string literal file path after '\\use'".to_string(),
+                span: Span::empty(cursor.pos()),
+            });
+        }
+    };
+
+    let alias = if let Some((Token::As, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::As)?;
+        match cursor.next_token()? {
+            Some((Token::Ident(name), span)) => Some(Ident::new(name, span)),
+            Some((tok, span)) => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: "identifier alias after 'as'".to_string(),
+                    found: tok.to_string(),
+                    span,
+                });
+            }
+            None => {
+                return Err(ParseError::UnexpectedEof {
+                    expected: "identifier alias after 'as'".to_string(),
+                    span: Span::empty(cursor.pos()),
+                });
+            }
+        }
+    } else {
+        None
+    };
+
+    let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Semicolon)?
+    } else if let Some(a) = &alias {
+        a.span
+    } else {
+        path_span
+    };
+
+    let span = bs_span.merge(semi_span);
+    Ok(UseDeclaration { path, alias, span })
 }

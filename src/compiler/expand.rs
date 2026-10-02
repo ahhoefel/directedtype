@@ -310,6 +310,7 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                 }
             }
             Item::State(_) => {}
+            Item::Use(_) => {}
         }
     }
 
