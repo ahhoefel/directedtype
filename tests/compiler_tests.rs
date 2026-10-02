@@ -2,6 +2,7 @@ use directedtype::ast::*;
 use directedtype::compiler::{compile_to_graph, VarId};
 use directedtype::parse;
 use directedtype::span::Span;
+use directedtype::Value;
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -2335,6 +2336,226 @@ fn test_reserved_parent_alias_error() {
     match err {
         directedtype::compiler::CompileError::ReservedPort { port, .. } => assert_eq!(port, "parent"),
         _ => panic!("Expected ReservedPort, got {:?}", err),
+    }
+}
+
+#[test]
+fn test_component_key_purity_rejects_spatial_port_error() {
+    let input = r#"
+    \Rect(width / 2; x: 0, y: 0, width: 100, height: 50, color: #ff0000)
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should reject spatial port in key");
+    match err {
+        directedtype::compiler::CompileError::InvalidComponentKeyDependency { node, name, .. } => {
+            assert_eq!(node, "Rect");
+            assert_eq!(name, "width");
+        }
+        _ => panic!("Expected InvalidComponentKeyDependency, got {:?}", err),
+    }
+
+    let input_member = r#"
+    \Rect(self.height; x: 0, y: 0, width: 100, height: 50, color: #ff0000)
+    "#;
+    let doc_member = parse(input_member).expect("parse ok");
+    let err_member = directedtype::evaluate_document(&doc_member).expect_err("Should reject self.height in key");
+    match err_member {
+        directedtype::compiler::CompileError::InvalidComponentKeyDependency { node, name, .. } => {
+            assert_eq!(node, "Rect");
+            assert_eq!(name, "height");
+        }
+        _ => panic!("Expected InvalidComponentKeyDependency, got {:?}", err_member),
+    }
+
+    let input_parent = r#"
+    \Component Container {
+        \Rect(parent.x; x: 0, y: 0, width: 50, height: 50, color: #000000)
+    }
+    \Container
+    "#;
+    let doc_parent = parse(input_parent).expect("parse ok");
+    let err_parent = directedtype::evaluate_document(&doc_parent).expect_err("Should reject parent.x in key");
+    match err_parent {
+        directedtype::compiler::CompileError::InvalidComponentKeyDependency { node, name, .. } => {
+            assert_eq!(node, "Rect");
+            assert_eq!(name, "x");
+        }
+        _ => panic!("Expected InvalidComponentKeyDependency, got {:?}", err_parent),
+    }
+}
+
+#[test]
+fn test_component_key_purity_rejects_lexical_let_formula_error() {
+    let input = r#"
+    \Component Grid {
+        let cell_width = 50;
+        \Rect(cell_width; x: 0, y: 0, width: 50, height: 50, color: #ffffff)
+    }
+    \Grid
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should reject let variable in key");
+    match err {
+        directedtype::compiler::CompileError::InvalidComponentKeyDependency { node, name, .. } => {
+            assert_eq!(node, "Rect");
+            assert_eq!(name, "cell_width");
+        }
+        _ => panic!("Expected InvalidComponentKeyDependency, got {:?}", err),
+    }
+}
+
+#[test]
+fn test_component_private_state_port_rejected() {
+    let input = r#"
+    \Component Counter {
+        state count: Number: 0;
+        \Rect(x: 0, y: 0, width: 100, height: 40, color: #000000)
+    }
+    \Counter(count: 10)
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = directedtype::evaluate_document(&doc).expect_err("Should reject caller passing private state port");
+    match err {
+        directedtype::compiler::CompileError::PrivateStatePort { node, port, .. } => {
+            assert_eq!(node, "Counter");
+            assert_eq!(port, "count");
+        }
+        _ => panic!("Expected PrivateStatePort, got {:?}", err),
+    }
+}
+
+#[test]
+fn test_component_state_evaluates_initial_defaults_in_layout_dag() {
+    let input = r#"
+    \Component Counter {
+        state count: Number: 5;
+        state is_active: Boolean: true;
+        \Rect(
+            x: 0,
+            y: 0,
+            width: count * 20,
+            height: 40,
+            color: is_active ? #3b82f6 : #1e293b
+        )
+    }
+    \Counter
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation should succeed");
+
+    assert_eq!(layout.nodes.len(), 2);
+    let counter_node = &layout.nodes[0];
+    let rect_node = &layout.nodes[1];
+
+    assert_eq!(counter_node.name, "Counter");
+    assert_eq!(rect_node.name, "Rect");
+
+    // Rect width should be count (5) * 20 = 100.0
+    assert_eq!(rect_node.rect.width, 100.0);
+    // Rect color should be "#3b82f6"
+    assert_eq!(
+        rect_node.properties.get("color"),
+        Some(&Value::Color("#3b82f6".to_string()))
+    );
+
+    // Counter state values in layout values
+    assert_eq!(
+        layout.get_value(counter_node.id, "count"),
+        Some(&Value::Number(5.0))
+    );
+    assert_eq!(
+        layout.get_value(counter_node.id, "is_active"),
+        Some(&Value::Bool(true))
+    );
+}
+
+#[test]
+fn test_top_level_state_evaluates_in_window() {
+    let input = r#"
+    state global_margin: Number: 30;
+    \Rect(x: global_margin, y: global_margin, width: 200, height: 100, color: #ff0000)
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation should succeed");
+
+    assert_eq!(layout.nodes.len(), 1);
+    let rect_node = &layout.nodes[0];
+    assert_eq!(rect_node.rect.x, 30.0);
+    assert_eq!(rect_node.rect.y, 30.0);
+
+    assert_eq!(
+        layout.get_value(directedtype::compiler::NodeId::WINDOW, "global_margin"),
+        Some(&Value::Number(30.0))
+    );
+}
+
+#[test]
+fn test_structured_key_lookup_and_evaluation() {
+    let input = r#"
+    \Component TableView {
+        state selected_row: Number: 1;
+        \Rect("header"; x: 0, y: 0, width: 100, height: 30, color: #ffffff)
+        \Rect(0, 0; x: 0, y: 30, width: 50, height: 30, color: #ffffff)
+        \Rect(selected_row, 0; x: 0, y: 60, width: 50, height: 30, color: #ffffff)
+    }
+    \TableView
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation should succeed");
+
+    let table_id = layout.roots[0];
+
+    // Find header by string key
+    let header_node = layout.find_by_key(Some(table_id), &ComponentKey::string("header"));
+    assert!(header_node.is_some());
+    assert_eq!(header_node.unwrap().rect.y, 0.0);
+
+    // Find cell (0, 0) by tuple key
+    let cell_0_0 = layout.find_by_key(
+        Some(table_id),
+        &ComponentKey::tuple(&[Expr::number(0.0), Expr::number(0.0)]),
+    );
+    assert!(cell_0_0.is_some());
+    assert_eq!(cell_0_0.unwrap().rect.y, 30.0);
+
+    // Find cell (selected_row, 0) which evaluated to (1.0, 0.0)
+    let cell_1_0 = layout.find_by_key(
+        Some(table_id),
+        &ComponentKey::tuple(&[Expr::number(1.0), Expr::number(0.0)]),
+    );
+    assert!(cell_1_0.is_some());
+    assert_eq!(cell_1_0.unwrap().rect.y, 60.0);
+}
+
+#[test]
+fn test_state_reserved_parent_and_duplicate_error() {
+    let input_reserved = r#"
+    \Component TestComp {
+        state parent: Number: 0;
+        \Rect(x: 0, y: 0, width: 10, height: 10, color: #ff0000)
+    }
+    \TestComp
+    "#;
+    let doc_res = parse(input_reserved).expect("parse ok");
+    let err_res = directedtype::evaluate_document(&doc_res).expect_err("Should reject reserved state 'parent'");
+    match err_res {
+        directedtype::compiler::CompileError::ReservedPort { port, .. } => assert_eq!(port, "parent"),
+        _ => panic!("Expected ReservedPort, got {:?}", err_res),
+    }
+
+    let input_dup = r#"
+    \Component TestComp {
+        state count: Number: 0;
+        state count: Number: 1;
+        \Rect(x: 0, y: 0, width: 10, height: 10, color: #ff0000)
+    }
+    \TestComp
+    "#;
+    let doc_dup = parse(input_dup).expect("parse ok");
+    let err_dup = directedtype::evaluate_document(&doc_dup).expect_err("Should reject duplicate state");
+    match err_dup {
+        directedtype::compiler::CompileError::DuplicatePort { port, .. } => assert_eq!(port, "count"),
+        _ => panic!("Expected DuplicatePort, got {:?}", err_dup),
     }
 }
 

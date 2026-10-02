@@ -58,14 +58,52 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
 
     let mut expanded_doc = ExpandedDocument::new();
 
-    let window_scope_ports = vec![
+    let mut window_scope_ports = vec![
         "x".to_string(),
         "y".to_string(),
         "width".to_string(),
         "height".to_string(),
         "z".to_string(),
         "clip".to_string(),
+        "left".to_string(),
+        "top".to_string(),
+        "right".to_string(),
+        "bottom".to_string(),
     ];
+
+    // Pre-register top-level state items
+    let mut declared_top_states = HashMap::new();
+    for item in &doc.items {
+        if let Item::State(s) = item {
+            let name = s.name.as_str().to_string();
+            if name == "parent" || name == "window" || name == "self" {
+                return Err(CompileError::ReservedPort {
+                    node: "Document".to_string(),
+                    port: name,
+                    span: s.name.span,
+                });
+            }
+            if declared_top_states.contains_key(&name) {
+                return Err(CompileError::DuplicatePort {
+                    node: "Document".to_string(),
+                    port: name,
+                    span: s.name.span,
+                });
+            }
+            declared_top_states.insert(name.clone(), s.clone());
+            if !window_scope_ports.contains(&name) {
+                window_scope_ports.push(name.clone());
+            }
+            let default_expr = default_expr_for_state(s);
+            let window_ref = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), s.span))),
+                member: s.name.clone(),
+                span: s.span,
+            });
+            global_scope.insert(name.clone(), LexicalBinding::Expr(window_ref));
+            expanded_doc.window_ports.insert(name, default_expr);
+        }
+    }
 
     // Pre-register uninitialized let and env items
     for item in &doc.items {
@@ -154,6 +192,22 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
                 _ => {}
             }
         }
+    }
+
+    let window_scope_ctx = ScopeContext {
+        current_node: NodeId::WINDOW,
+        parent_node: None,
+        prev_sibling: None,
+        child_ids: &empty_children,
+        parent_ports: &empty_ports,
+        current_ports: &window_scope_ports,
+        lexical_scope: &global_scope,
+        env_scope: &global_env_scope,
+        node_fonts: &node_fonts,
+    };
+    for (name, expr) in expanded_doc.window_ports.clone() {
+        let rewritten = rewrite_expr(&expr, &window_scope_ctx)?;
+        expanded_doc.window_ports.insert(name, rewritten);
     }
 
     // 3. Expand root elements and top-level node bindings in document order
@@ -305,6 +359,28 @@ fn expand_element(
     expanded.parent = ctx.parent_id;
     expanded.prev_sibling = ctx.prev_sibling_id;
 
+    if let Some(key) = &elem.key {
+        validate_component_key(elem.name.as_str(), key, ctx.lexical_scope)?;
+        let empty_ports: [String; 0] = [];
+        let empty_children: [NodeId; 0] = [];
+        let key_scope_ctx = ScopeContext {
+            current_node: node_id,
+            parent_node: ctx.parent_id,
+            prev_sibling: ctx.prev_sibling_id,
+            child_ids: &empty_children,
+            parent_ports: ctx.parent_ports,
+            current_ports: &empty_ports,
+            lexical_scope: ctx.lexical_scope,
+            env_scope: ctx.env_scope,
+            node_fonts,
+        };
+        let mut rewritten_parts = Vec::new();
+        for part in &key.parts {
+            rewritten_parts.push(rewrite_expr(part, &key_scope_ctx)?);
+        }
+        expanded.key = Some(ComponentKey::new(rewritten_parts, key.span));
+    }
+
     // Check if element has text content directly in content slot
     if let Some(content_slot) = &elem.content {
         let mut text_parts = Vec::new();
@@ -411,7 +487,46 @@ fn expand_component_instance(
         }
     }
 
-    // Validate that caller does not attempt to override immutable alias ports
+    let mut declared_states: HashMap<String, StateBinding> = HashMap::new();
+    for item in &comp_def.body {
+        if let ComponentBodyItem::State(s) = item {
+            let state_name = s.name.as_str().to_string();
+            if state_name == "parent" {
+                return Err(CompileError::ReservedPort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: "parent".to_string(),
+                    span: s.name.span,
+                });
+            }
+            if comp_def.params.iter().any(|p| p.name.as_str() == state_name) {
+                return Err(CompileError::DuplicatePort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: state_name,
+                    span: s.name.span,
+                });
+            }
+            if declared_aliases.contains_key(&state_name) {
+                return Err(CompileError::DuplicatePort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: state_name,
+                    span: s.name.span,
+                });
+            }
+            if declared_states.contains_key(&state_name) {
+                return Err(CompileError::DuplicatePort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: state_name,
+                    span: s.name.span,
+                });
+            }
+            if !comp_scope_ports.contains(&state_name) {
+                comp_scope_ports.push(state_name.clone());
+            }
+            declared_states.insert(state_name, s.clone());
+        }
+    }
+
+    // Validate that caller does not attempt to override immutable alias ports or set private state
     for port in &instance.ports {
         let name = port.name.as_str();
         if declared_aliases.contains_key(name) || matches!(name, "left" | "top" | "right" | "bottom") {
@@ -421,9 +536,20 @@ fn expand_component_instance(
                 span: port.name.span,
             });
         }
+        if declared_states.contains_key(name) {
+            return Err(CompileError::PrivateStatePort {
+                node: comp_def.name.as_str().to_string(),
+                port: name.to_string(),
+                span: port.name.span,
+            });
+        }
     }
 
     let mut comp_ports = HashMap::new();
+    for (state_name, s) in &declared_states {
+        let default_expr = default_expr_for_state(s);
+        comp_ports.insert(state_name.clone(), default_expr);
+    }
 
     // Map explicit arguments passed to the component (Tier 4)
     let mut explicit_ports = HashMap::new();
@@ -935,14 +1061,13 @@ fn expand_component_instance(
     }
 
     // 6. Rewrite component ports in scope
-    let empty_ports: [String; 0] = [];
     let scope_ctx = ScopeContext {
         current_node: ctx.comp_node_id,
         parent_node: ctx.parent_id,
         prev_sibling: ctx.prev_sibling_id,
         child_ids: &instantiated_children_ids,
         parent_ports: ctx.parent_ports,
-        current_ports: &empty_ports,
+        current_ports: &comp_scope_ports,
         lexical_scope: &local_scope,
         env_scope: &internal_body_env_scope,
         node_fonts: &*node_fonts,
@@ -964,6 +1089,10 @@ fn expand_component_instance(
         if let Some(default_expr) = &param.default_edge {
             comp_authored_ports.entry(name).or_insert_with(|| default_expr.clone());
         }
+    }
+    for (state_name, s) in &declared_states {
+        let default_expr = default_expr_for_state(s);
+        comp_authored_ports.insert(state_name.clone(), default_expr);
     }
     for port in &instance.ports {
         if let Some(ambient_expr) = ctx.ambient_authored_ports.and_then(|m| m.get(port.name.as_str())) {
@@ -1914,5 +2043,118 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
 
         Expr::Literal(_) => Ok(expr.clone()),
         Expr::Node(n) => Ok(Expr::Node(n.clone())),
+    }
+}
+
+/// Returns the initial default expression for a state binding.
+pub fn default_expr_for_state(state: &StateBinding) -> Expr {
+    if let Some(def) = &state.default {
+        def.clone()
+    } else if let Some(ty) = &state.type_annotation {
+        match ty.name.as_str() {
+            "Boolean" | "Bool" => Expr::Literal(Literal::Bool(false, state.span)),
+            "String" => Expr::Literal(Literal::String(String::new(), state.span)),
+            "Color" => Expr::Literal(Literal::Color("#000000".to_string(), state.span)),
+            _ => Expr::Literal(Literal::Number(0.0, state.span)),
+        }
+    } else {
+        Expr::Literal(Literal::Number(0.0, state.span))
+    }
+}
+
+/// Validates that component identity expressions (before `;`) do not depend on layout geometry or layout let formulas.
+pub fn validate_component_key(
+    node_name: &str,
+    key: &ComponentKey,
+    lexical_scope: &HashMap<String, LexicalBinding>,
+) -> Result<(), CompileError> {
+    for part in &key.parts {
+        validate_key_expr(node_name, part, lexical_scope)?;
+    }
+    Ok(())
+}
+
+fn validate_key_expr(
+    node_name: &str,
+    expr: &Expr,
+    lexical_scope: &HashMap<String, LexicalBinding>,
+) -> Result<(), CompileError> {
+    const SPATIAL_PORTS: &[&str] = &[
+        "x", "y", "z", "width", "height", "clip", "left", "top", "right", "bottom",
+    ];
+
+    match expr {
+        Expr::Literal(_) => Ok(()),
+        Expr::Ident(id) => {
+            let name = id.as_str();
+            if name == "true" || name == "false" {
+                return Ok(());
+            }
+            if SPATIAL_PORTS.contains(&name) {
+                return Err(CompileError::InvalidComponentKeyDependency {
+                    node: node_name.to_string(),
+                    name: name.to_string(),
+                    span: id.span,
+                });
+            }
+            if name == "self" || name == "parent" || name == "prev" || name == "window" {
+                return Err(CompileError::InvalidComponentKeyDependency {
+                    node: node_name.to_string(),
+                    name: name.to_string(),
+                    span: id.span,
+                });
+            }
+            if lexical_scope.contains_key(name) {
+                return Err(CompileError::InvalidComponentKeyDependency {
+                    node: node_name.to_string(),
+                    name: name.to_string(),
+                    span: id.span,
+                });
+            }
+            Ok(())
+        }
+        Expr::MemberAccess(m) => {
+            let member_name = m.member.as_str();
+            if SPATIAL_PORTS.contains(&member_name) {
+                return Err(CompileError::InvalidComponentKeyDependency {
+                    node: node_name.to_string(),
+                    name: member_name.to_string(),
+                    span: m.span,
+                });
+            }
+            if lexical_scope.contains_key(member_name) {
+                return Err(CompileError::InvalidComponentKeyDependency {
+                    node: node_name.to_string(),
+                    name: member_name.to_string(),
+                    span: m.span,
+                });
+            }
+            match m.target.as_ref() {
+                Expr::Ident(id) if matches!(id.as_str(), "self" | "parent" | "window") => Ok(()),
+                other => validate_key_expr(node_name, other, lexical_scope),
+            }
+        }
+        Expr::Binary(b) => {
+            validate_key_expr(node_name, &b.left, lexical_scope)?;
+            validate_key_expr(node_name, &b.right, lexical_scope)
+        }
+        Expr::Unary(u) => validate_key_expr(node_name, &u.operand, lexical_scope),
+        Expr::Paren(inner, _) => validate_key_expr(node_name, inner, lexical_scope),
+        Expr::Ternary(t) => {
+            validate_key_expr(node_name, &t.condition, lexical_scope)?;
+            validate_key_expr(node_name, &t.then_expr, lexical_scope)?;
+            validate_key_expr(node_name, &t.else_expr, lexical_scope)
+        }
+        Expr::Call(c) => {
+            for arg in &c.args {
+                validate_key_expr(node_name, arg, lexical_scope)?;
+            }
+            Ok(())
+        }
+        Expr::Node(n) => Err(CompileError::InvalidComponentKeyDependency {
+            node: node_name.to_string(),
+            name: n.name.as_str().to_string(),
+            span: n.span,
+        }),
     }
 }

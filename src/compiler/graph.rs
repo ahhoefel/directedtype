@@ -170,6 +170,15 @@ pub fn build_variable_graph_with_window(
         window_span,
     );
 
+    for (port_name, expr) in &doc.window_ports {
+        let span = expr.span();
+        graph.add_variable(
+            VarId::new(NodeId::WINDOW, port_name.clone()),
+            expr.clone(),
+            span,
+        );
+    }
+
     for node in &doc.nodes {
         let is_root = doc.roots.contains(&node.id) || node.parent.is_none_or(|p| p.is_window());
         let mut ports = node.ports.clone();

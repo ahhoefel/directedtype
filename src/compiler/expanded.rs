@@ -1,4 +1,4 @@
-use crate::ast::Expr;
+use crate::ast::{ComponentKey, Expr};
 use crate::dom::NodeHandle;
 use crate::span::Span;
 use std::collections::HashMap;
@@ -39,6 +39,7 @@ impl NodeId {
 pub struct ExpandedNode {
     pub id: NodeId,
     pub name: String,
+    pub key: Option<ComponentKey>,
     pub parent: Option<NodeId>,
     pub prev_sibling: Option<NodeId>,
     pub children: Vec<NodeId>,
@@ -56,6 +57,7 @@ impl ExpandedNode {
         Self {
             id,
             name: name.into(),
+            key: None,
             parent: None,
             prev_sibling: None,
             children: Vec::new(),
@@ -79,6 +81,7 @@ impl ExpandedNode {
 pub struct ExpandedDocument {
     pub nodes: Vec<ExpandedNode>,
     pub roots: Vec<NodeId>,
+    pub window_ports: HashMap<String, Expr>,
 }
 
 impl ExpandedDocument {
@@ -86,6 +89,7 @@ impl ExpandedDocument {
         Self {
             nodes: Vec::new(),
             roots: Vec::new(),
+            window_ports: HashMap::new(),
         }
     }
 
@@ -95,6 +99,17 @@ impl ExpandedDocument {
 
     pub fn get_node_mut(&mut self, id: NodeId) -> Option<&mut ExpandedNode> {
         self.nodes.get_mut(id.0)
+    }
+
+    pub fn find_by_key(&self, parent: Option<NodeId>, key: &ComponentKey) -> Option<&ExpandedNode> {
+        self.nodes.iter().find(|n| {
+            if let Some(expected_parent) = parent {
+                if n.parent != Some(expected_parent) {
+                    return false;
+                }
+            }
+            n.key.as_ref() == Some(key)
+        })
     }
 }
 

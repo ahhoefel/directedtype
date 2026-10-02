@@ -93,7 +93,7 @@ pub struct StateBinding {
 }
 
 /// Component identity key: structured list of expressions, e.g. `(row, col)` or `"submit_btn"`
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ComponentKey {
     pub parts: Vec<Expr>,
     pub span: Span,
@@ -102,6 +102,104 @@ pub struct ComponentKey {
 impl ComponentKey {
     pub fn new(parts: Vec<Expr>, span: Span) -> Self {
         Self { parts, span }
+    }
+
+    pub fn single(expr: Expr) -> Self {
+        let span = expr.span();
+        Self {
+            parts: vec![expr],
+            span,
+        }
+    }
+
+    pub fn string(s: impl Into<String>) -> Self {
+        Self {
+            parts: vec![Expr::Literal(Literal::String(s.into(), Span::default()))],
+            span: Span::default(),
+        }
+    }
+
+    pub fn number(n: f64) -> Self {
+        Self {
+            parts: vec![Expr::Literal(Literal::Number(n, Span::default()))],
+            span: Span::default(),
+        }
+    }
+
+    pub fn tuple(parts: &[Expr]) -> Self {
+        let span = parts.first().map(|p| p.span()).unwrap_or_default();
+        Self {
+            parts: parts.to_vec(),
+            span,
+        }
+    }
+}
+
+impl PartialEq for ComponentKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.parts.len() == other.parts.len()
+            && self
+                .parts
+                .iter()
+                .zip(&other.parts)
+                .all(|(a, b)| expr_eq_ignore_span(a, b))
+    }
+}
+
+impl Eq for ComponentKey {}
+
+impl fmt::Display for ComponentKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(")?;
+        for (i, p) in self.parts.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", p)?;
+        }
+        write!(f, ")")
+    }
+}
+
+/// Helper to compare two AST expressions for semantic equivalence, ignoring source spans.
+pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
+    match (a, b) {
+        (Expr::Literal(l1), Expr::Literal(l2)) => match (l1, l2) {
+            (Literal::Number(n1, _), Literal::Number(n2, _)) => (n1 - n2).abs() < f64::EPSILON,
+            (Literal::String(s1, _), Literal::String(s2, _)) => s1 == s2,
+            (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 == b2,
+            (Literal::Color(c1, _), Literal::Color(c2, _)) => c1 == c2,
+            _ => false,
+        },
+        (Expr::Ident(id1), Expr::Ident(id2)) => id1.as_str() == id2.as_str(),
+        (Expr::MemberAccess(m1), Expr::MemberAccess(m2)) => {
+            m1.member.as_str() == m2.member.as_str() && expr_eq_ignore_span(&m1.target, &m2.target)
+        }
+        (Expr::Binary(b1), Expr::Binary(b2)) => {
+            b1.op == b2.op
+                && expr_eq_ignore_span(&b1.left, &b2.left)
+                && expr_eq_ignore_span(&b1.right, &b2.right)
+        }
+        (Expr::Unary(u1), Expr::Unary(u2)) => {
+            u1.op == u2.op && expr_eq_ignore_span(&u1.operand, &u2.operand)
+        }
+        (Expr::Paren(p1, _), other) => expr_eq_ignore_span(p1, other),
+        (other, Expr::Paren(p2, _)) => expr_eq_ignore_span(other, p2),
+        (Expr::Ternary(t1), Expr::Ternary(t2)) => {
+            expr_eq_ignore_span(&t1.condition, &t2.condition)
+                && expr_eq_ignore_span(&t1.then_expr, &t2.then_expr)
+                && expr_eq_ignore_span(&t1.else_expr, &t2.else_expr)
+        }
+        (Expr::Call(c1), Expr::Call(c2)) => {
+            c1.callee.as_str() == c2.callee.as_str()
+                && c1.args.len() == c2.args.len()
+                && c1
+                    .args
+                    .iter()
+                    .zip(&c2.args)
+                    .all(|(a1, a2)| expr_eq_ignore_span(a1, a2))
+        }
+        _ => false,
     }
 }
 

@@ -1,3 +1,5 @@
+use crate::ast::{ComponentKey, Expr, Literal};
+use crate::compiler::eval::eval_expr;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::graph::VarId;
 use crate::compiler::value::Value;
@@ -94,6 +96,7 @@ pub fn rounded_rect_contains(rect: &Rect, radius: f64, point: Point) -> bool {
 pub struct ResolvedNode {
     pub id: NodeId,
     pub name: String,
+    pub key: Option<ComponentKey>,
     pub parent: Option<NodeId>,
     pub children: Vec<NodeId>,
     pub rect: Rect,
@@ -145,6 +148,17 @@ impl ResolvedLayout {
 
     pub fn get_by_handle(&self, handle: NodeHandle) -> Option<&ResolvedNode> {
         self.nodes.iter().find(|n| n.handle == Some(handle))
+    }
+
+    pub fn find_by_key(&self, parent: Option<NodeId>, key: &ComponentKey) -> Option<&ResolvedNode> {
+        self.nodes.iter().find(|n| {
+            if let Some(expected_parent) = parent {
+                if n.parent != Some(expected_parent) {
+                    return false;
+                }
+            }
+            n.key.as_ref() == Some(key)
+        })
     }
 
     pub fn get_value(&self, node_id: NodeId, port: &str) -> Option<&Value> {
@@ -516,9 +530,31 @@ pub fn resolve_layout(
                 .and_then(|v| v.as_node())
         });
 
+        let resolved_key = node.key.as_ref().map(|k| {
+            let resolved_parts = k
+                .parts
+                .iter()
+                .map(|part| {
+                    if let Ok(val) = eval_expr(part, &values) {
+                        match val {
+                            Value::Number(n) => Expr::Literal(Literal::Number(n, part.span())),
+                            Value::String(s) => Expr::Literal(Literal::String(s, part.span())),
+                            Value::Bool(b) => Expr::Literal(Literal::Bool(b, part.span())),
+                            Value::Color(c) => Expr::Literal(Literal::Color(c, part.span())),
+                            _ => part.clone(),
+                        }
+                    } else {
+                        part.clone()
+                    }
+                })
+                .collect();
+            ComponentKey::new(resolved_parts, k.span)
+        });
+
         resolved_nodes.push(ResolvedNode {
             id: node.id,
             name: node.name.clone(),
+            key: resolved_key,
             parent: node.parent,
             children: node.children.clone(),
             rect: Rect::new(x, y, width, height),

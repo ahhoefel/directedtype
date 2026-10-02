@@ -67,6 +67,20 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Component key on '{node}' cannot depend on layout port or formula '{name}'")]
+    InvalidComponentKeyDependency {
+        node: String,
+        name: String,
+        span: Span,
+    },
+
+    #[error("Port '{port}' on node '{node}' is private component state and cannot be set by caller")]
+    PrivateStatePort {
+        node: String,
+        port: String,
+        span: Span,
+    },
+
     #[error("{message}")]
     Custom {
         message: String,
@@ -82,6 +96,8 @@ impl CompileError {
             | CompileError::MissingPort { span, .. }
             | CompileError::DuplicatePort { span, .. }
             | CompileError::ImmutableAliasPort { span, .. }
+            | CompileError::InvalidComponentKeyDependency { span, .. }
+            | CompileError::PrivateStatePort { span, .. }
             | CompileError::CyclicDependency { span, .. }
             | CompileError::UninitializedVariableUse { span, .. }
             | CompileError::UndefinedEnvVariable { span, .. }
