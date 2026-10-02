@@ -314,11 +314,10 @@ fn test_render_inspector_panel_snapshot() {
     let doc = directedtype::parse(&source).expect("Failed to parse");
     let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout ok");
 
-    let text_node = layout.nodes.iter().find(|n| n.name == "Text" && n.properties.contains_key("font")).unwrap();
+    let card_node = layout.nodes.iter().find(|n| n.name == "Card").unwrap();
     let mut state = directedtype::inspector::InspectorState::new();
-    state.set_selected_id(Some(text_node.id));
-    state.toggle_property_ref_expanded(text_node.id, "font");
-    state.detail_scroll_offset = 120.0;
+    state.set_selected_id(Some(card_node.id));
+    state.detail_scroll_offset = 100.0;
 
     let panel = directedtype::inspector::InspectPanelComponent::default();
     let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);

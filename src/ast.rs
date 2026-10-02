@@ -64,6 +64,7 @@ pub enum ComponentBodyItem {
     Children(ChildrenDirective),
     Let(LetBinding),
     Env(EnvBinding),
+    Alias(AliasBinding),
 }
 
 impl ComponentBodyItem {
@@ -73,8 +74,18 @@ impl ComponentBodyItem {
             ComponentBodyItem::Children(c) => c.span,
             ComponentBodyItem::Let(l) => l.span,
             ComponentBodyItem::Env(e) => e.span,
+            ComponentBodyItem::Alias(a) => a.span,
         }
     }
+}
+
+/// Public immutable alias port binding: `alias name = expr;` or `alias name: Type = expr;`
+#[derive(Debug, Clone, PartialEq)]
+pub struct AliasBinding {
+    pub name: Ident,
+    pub type_annotation: Option<TypeRef>,
+    pub value: Expr,
+    pub span: Span,
 }
 
 /// Local variable or element binding: `let name = expr;`, `let name = \Node(...);`, or uninitialized `let name;`

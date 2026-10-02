@@ -51,10 +51,10 @@ fn test_expand_flow_recurrence_and_graph() {
     assert_eq!(para_node.prev_sibling, Some(header_id));
 
     // 1. Verify Header (Child 0) Base-Case Expansion:
-    // x: parent.left -> __node_0.x
+    // x: parent.left -> __node_0.left
     match header_node.ports.get("x").unwrap() {
         Expr::MemberAccess(m) => {
-            assert_eq!(m.member.as_str(), "x");
+            assert_eq!(m.member.as_str(), "left");
             match m.target.as_ref() {
                 Expr::Ident(id) => assert_eq!(id.as_str(), "__node_0"),
                 _ => panic!("Expected target ident"),
@@ -63,10 +63,10 @@ fn test_expand_flow_recurrence_and_graph() {
         _ => panic!("Expected MemberAccess for Header.x"),
     }
 
-    // y: parent.top -> __node_0.y (since prev is None, base case was chosen)
+    // y: parent.top -> __node_0.top (since prev is None, base case was chosen)
     match header_node.ports.get("y").unwrap() {
         Expr::MemberAccess(m) => {
-            assert_eq!(m.member.as_str(), "y");
+            assert_eq!(m.member.as_str(), "top");
             match m.target.as_ref() {
                 Expr::Ident(id) => assert_eq!(id.as_str(), "__node_0"),
                 _ => panic!("Expected target ident"),
@@ -76,8 +76,8 @@ fn test_expand_flow_recurrence_and_graph() {
     }
 
     // 2. Verify Paragraph (Child 1) Recurrence Step Expansion:
-    // x: parent.left -> __node_0.x
-    // y: prev.bottom + gap -> (__node_1.y + __node_1.height) + __node_0.gap
+    // x: parent.left -> __node_0.left
+    // y: prev.bottom + gap -> __node_1.bottom + __node_0.gap
     let para_y = para_node.ports.get("y").unwrap();
     match para_y {
         Expr::Binary(bin) => {
@@ -93,20 +93,16 @@ fn test_expand_flow_recurrence_and_graph() {
                 }
                 _ => panic!("Expected gap member access"),
             }
-            // Left is (__node_1.y + __node_1.height)
+            // Left is __node_1.bottom
             match bin.left.as_ref() {
-                Expr::Binary(inner_add) => {
-                    assert_eq!(inner_add.op, BinaryOp::Add);
-                    match inner_add.left.as_ref() {
-                        Expr::MemberAccess(m) => assert_eq!(m.member.as_str(), "y"),
-                        _ => panic!("Expected y"),
-                    }
-                    match inner_add.right.as_ref() {
-                        Expr::MemberAccess(m) => assert_eq!(m.member.as_str(), "height"),
-                        _ => panic!("Expected height"),
+                Expr::MemberAccess(m) => {
+                    assert_eq!(m.member.as_str(), "bottom");
+                    match m.target.as_ref() {
+                        Expr::Ident(id) => assert_eq!(id.as_str(), "__node_1"),
+                        _ => panic!("Expected target __node_1"),
                     }
                 }
-                _ => panic!("Expected inner add for bottom"),
+                _ => panic!("Expected member access for bottom"),
             }
         }
         _ => panic!("Expected Binary expression for Paragraph.y"),
@@ -114,27 +110,32 @@ fn test_expand_flow_recurrence_and_graph() {
 
     // 3. Verify Graph Dependencies:
     let var_flow_gap = VarId::new(flow_id, "gap");
-    let var_flow_x = VarId::new(flow_id, "x");
-    let var_flow_y = VarId::new(flow_id, "y");
+    let var_flow_left = VarId::new(flow_id, "left");
+    let var_flow_top = VarId::new(flow_id, "top");
     let var_header_x = VarId::new(header_id, "x");
     let var_header_y = VarId::new(header_id, "y");
+    let var_header_bottom = VarId::new(header_id, "bottom");
     let var_header_h = VarId::new(header_id, "height");
     let var_para_x = VarId::new(para_id, "x");
     let var_para_y = VarId::new(para_id, "y");
 
-    // Header.x depends on Flow.x
-    assert_eq!(graph.upstream.get(&var_header_x).unwrap(), &vec![var_flow_x.clone()]);
-    // Header.y depends on Flow.y
-    assert_eq!(graph.upstream.get(&var_header_y).unwrap(), &vec![var_flow_y.clone()]);
+    // Header.x depends on Flow.left
+    assert_eq!(graph.upstream.get(&var_header_x).unwrap(), &vec![var_flow_left.clone()]);
+    // Header.y depends on Flow.top
+    assert_eq!(graph.upstream.get(&var_header_y).unwrap(), &vec![var_flow_top.clone()]);
 
-    // Paragraph.x depends on Flow.x
-    assert_eq!(graph.upstream.get(&var_para_x).unwrap(), &vec![var_flow_x.clone()]);
+    // Paragraph.x depends on Flow.left
+    assert_eq!(graph.upstream.get(&var_para_x).unwrap(), &vec![var_flow_left.clone()]);
 
-    // Paragraph.y depends on Flow.gap, Header.height, and Header.y
+    // Paragraph.y depends on Flow.gap and Header.bottom
     let para_y_upstream = graph.upstream.get(&var_para_y).unwrap();
     assert!(para_y_upstream.contains(&var_flow_gap));
-    assert!(para_y_upstream.contains(&var_header_h));
-    assert!(para_y_upstream.contains(&var_header_y));
+    assert!(para_y_upstream.contains(&var_header_bottom));
+
+    // Header.bottom depends on Header.y and Header.height
+    let header_bottom_upstream = graph.upstream.get(&var_header_bottom).unwrap();
+    assert!(header_bottom_upstream.contains(&var_header_y));
+    assert!(header_bottom_upstream.contains(&var_header_h));
 
     // Downstream check: Flow.gap must have Paragraph.y in its downstream list!
     let flow_gap_downstream = graph.downstream.get(&var_flow_gap).unwrap();
@@ -2169,6 +2170,172 @@ fn test_font_metrics_algebraic_calculations() {
 
     assert!((r_w - f_lh).abs() < 1e-4);
     assert!((r_h - (f_ascent + f_descent)).abs() < 1e-4);
+}
+
+#[test]
+fn test_component_custom_alias_declaration_and_evaluation() {
+    let input = r#"
+    \Component Card(x: 10, y: 20, width: 100, height: 50) {
+        alias right = x + width;
+        alias bottom = y + height;
+        \Rect(x: x, y: y, width: width, height: height, color: #ff0000)
+    }
+
+    \Card(x: 30, width: 200)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation");
+    let (expanded, graph) = compile_to_graph(&doc).expect("Graph compilation");
+
+    let card_id = expanded.roots[0];
+    let card_node = expanded.get_node(card_id).unwrap();
+
+    // Check authored expressions
+    assert_eq!(
+        card_node.authored_ports.get("right").map(|e| e.to_string()),
+        Some("x + width".to_string())
+    );
+    assert_eq!(
+        card_node.authored_ports.get("bottom").map(|e| e.to_string()),
+        Some("y + height".to_string())
+    );
+
+    // Check evaluated layout values
+    let right_val = layout.get_value(card_id, "right").and_then(|v| v.as_f64()).unwrap();
+    let bottom_val = layout.get_value(card_id, "bottom").and_then(|v| v.as_f64()).unwrap();
+    assert_eq!(right_val, 230.0); // 30 + 200
+    assert_eq!(bottom_val, 70.0);  // 20 + 50
+
+    // Check resolved node in layout
+    let resolved_card = layout.get_node(card_id).unwrap();
+    assert_eq!(resolved_card.formulas.get("right").map(String::as_str), Some("x + width"));
+    assert_eq!(resolved_card.formulas.get("bottom").map(String::as_str), Some("y + height"));
+    assert_eq!(resolved_card.properties.get("right"), Some(&directedtype::compiler::Value::Number(230.0)));
+    assert_eq!(resolved_card.properties.get("bottom"), Some(&directedtype::compiler::Value::Number(70.0)));
+
+    // Check graph dependencies
+    let var_right = VarId::new(card_id, "right");
+    let var_x = VarId::new(card_id, "x");
+    let var_width = VarId::new(card_id, "width");
+    assert_eq!(graph.upstream.get(&var_right).unwrap(), &vec![var_width, var_x]);
+}
+
+#[test]
+fn test_component_immutable_alias_error() {
+    let input = r#"
+    \Component Card(width: 100, height: 50) {
+        alias right = x + width;
+        \Rect(x: x, y: y, width: width, height: height, color: #ff0000)
+    }
+
+    \Card(right: 300)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let err = compile_to_graph(&doc).expect_err("Should fail when passing alias port");
+    match err {
+        directedtype::compiler::CompileError::ImmutableAliasPort { node, port, .. } => {
+            assert_eq!(node, "Card");
+            assert_eq!(port, "right");
+        }
+        _ => panic!("Expected ImmutableAliasPort error, got {:?}", err),
+    }
+}
+
+#[test]
+fn test_primitive_immutable_alias_error() {
+    let input = r#"
+    \Rect(x: 10, y: 10, width: 100, height: 50, right: 110, color: #ff0000)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let err = compile_to_graph(&doc).expect_err("Should fail when passing spatial alias to primitive");
+    match err {
+        directedtype::compiler::CompileError::ImmutableAliasPort { node, port, .. } => {
+            assert_eq!(node, "Rect");
+            assert_eq!(port, "right");
+        }
+        _ => panic!("Expected ImmutableAliasPort error, got {:?}", err),
+    }
+}
+
+#[test]
+fn test_alias_interdependency_and_downstream_dependency() {
+    let input = r#"
+    \Component Card(x: 10, width: 100) {
+        alias right = x + width;
+        alias center_x = (x + right) / 2;
+        \Rect(x: x, y: 0, width: width, height: 50, color: #00ff00)
+    }
+
+    let c = \Card(x: 20, width: 80);
+    \Rect(x: c.center_x, y: 100, width: 50, height: 50, color: #0000ff)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation");
+
+    let card_node = layout.nodes.iter().find(|n| n.name == "Card").expect("Card node");
+    let target_rect = layout.nodes.iter().find(|n| n.rect.y == 100.0).expect("Rect node");
+
+    let right = card_node.properties.get("right").and_then(|v| v.as_f64()).unwrap();
+    let center_x = card_node.properties.get("center_x").and_then(|v| v.as_f64()).unwrap();
+
+    assert_eq!(right, 100.0); // 20 + 80
+    assert_eq!(center_x, 60.0); // (20 + 100) / 2
+    assert_eq!(target_rect.rect.x, 60.0);
+}
+
+#[test]
+fn test_duplicate_alias_error() {
+    // Alias shadows parameter
+    let input1 = r#"
+    \Component Card(width: 100) {
+        alias width = 200;
+        \Rect(x: 0, y: 0, width: width, height: 50, color: #ff0000)
+    }
+    \Card
+    "#;
+    let doc1 = parse(input1).expect("parse ok");
+    let err1 = compile_to_graph(&doc1).expect_err("Should error on alias shadowing parameter");
+    match err1 {
+        directedtype::compiler::CompileError::DuplicatePort { port, .. } => assert_eq!(port, "width"),
+        _ => panic!("Expected DuplicatePort, got {:?}", err1),
+    }
+
+    // Duplicate alias declarations
+    let input2 = r#"
+    \Component Card(w: 100) {
+        alias right = w;
+        alias right = w + 10;
+        \Rect(x: 0, y: 0, width: w, height: 50, color: #ff0000)
+    }
+    \Card
+    "#;
+    let doc2 = parse(input2).expect("parse ok");
+    let err2 = compile_to_graph(&doc2).expect_err("Should error on duplicate alias");
+    match err2 {
+        directedtype::compiler::CompileError::DuplicatePort { port, .. } => assert_eq!(port, "right"),
+        _ => panic!("Expected DuplicatePort, got {:?}", err2),
+    }
+}
+
+#[test]
+fn test_reserved_parent_alias_error() {
+    let input = r#"
+    \Component Card() {
+        alias parent = 10;
+        \Rect(x: 0, y: 0, width: 10, height: 10, color: #ff0000)
+    }
+    \Card
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = compile_to_graph(&doc).expect_err("Should error on reserved alias 'parent'");
+    match err {
+        directedtype::compiler::CompileError::ReservedPort { port, .. } => assert_eq!(port, "parent"),
+        _ => panic!("Expected ReservedPort, got {:?}", err),
+    }
 }
 
 

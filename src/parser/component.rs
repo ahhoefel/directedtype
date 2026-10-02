@@ -1,5 +1,6 @@
 use crate::ast::{
-    ComponentBodyItem, ComponentDef, EnvBinding, Ident, LetBinding, LetValue, ParamDef, TypeRef,
+    AliasBinding, ComponentBodyItem, ComponentDef, EnvBinding, Ident, LetBinding, LetValue,
+    ParamDef, TypeRef,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::ParserCursor;
@@ -145,6 +146,12 @@ pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef
             continue;
         }
 
+        if tok == &Token::Alias {
+            let alias_binding = parse_alias_binding(cursor)?;
+            body.push(ComponentBodyItem::Alias(alias_binding));
+            continue;
+        }
+
         let is_children = tok == &Token::Backslash
             && cursor.peek_nth(1)?.is_some_and(|(t, _)| t == &Token::Children);
 
@@ -261,6 +268,66 @@ pub fn parse_env_binding(cursor: &mut ParserCursor<'_>) -> Result<EnvBinding, Pa
 
     let span = env_span.merge(end_span);
     Ok(EnvBinding {
+        name,
+        type_annotation,
+        value,
+        span,
+    })
+}
+
+/// Parses a public immutable alias binding: `alias name = expr;`, `alias name: Type = expr;`, or `alias name: expr;`
+pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding, ParseError> {
+    let alias_span = cursor.consume_token(&Token::Alias)?;
+    let name = parse_ident(cursor)?;
+
+    let mut type_annotation = None;
+    if let Some((Token::Colon, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Colon)?;
+
+        let tok0 = cursor.peek_token()?.cloned();
+        let tok1 = cursor.peek_nth(1)?.cloned();
+
+        match (tok0, tok1) {
+            (Some((Token::Ident(type_name), span0)), Some((Token::Eq, _)))
+            | (Some((Token::Ident(type_name), span0)), Some((Token::Colon, _)))
+                if type_name.chars().next().is_some_and(|c| c.is_uppercase()) =>
+            {
+                cursor.next_token()?; // consume type_name
+                type_annotation = Some(TypeRef {
+                    name: Ident::new(type_name, span0),
+                    span: span0,
+                });
+                if cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Eq) {
+                    cursor.consume_token(&Token::Eq)?;
+                } else {
+                    cursor.consume_token(&Token::Colon)?;
+                }
+            }
+            _ => {
+                // `alias name: expr` -> no type annotation, expr follows
+            }
+        }
+    } else if let Some((Token::Eq, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Eq)?;
+    } else {
+        return Err(ParseError::UnexpectedToken {
+            expected: "'=' or ':' after alias identifier".to_string(),
+            found: cursor
+                .peek_token()?
+                .map_or("EOF".to_string(), |(t, _)| t.to_string()),
+            span: name.span,
+        });
+    }
+
+    let value = parse_expr(cursor)?;
+    let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Semicolon)?
+    } else {
+        value.span()
+    };
+
+    let span = alias_span.merge(semi_span);
+    Ok(AliasBinding {
         name,
         type_annotation,
         value,

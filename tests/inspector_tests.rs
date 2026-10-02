@@ -840,11 +840,15 @@ fn test_expandable_reference_properties() {
             "width" => 3,
             "height" => 4,
             "z" => 5,
-            "color" | "bg_color" => 6,
-            "border_color" | "border_width" => 7,
-            "radius" | "corner_radius" => 8,
-            "clip" => 9,
-            _ => 10,
+            "left" => 6,
+            "top" => 7,
+            "right" => 8,
+            "bottom" => 9,
+            "color" | "bg_color" => 10,
+            "border_color" | "border_width" => 11,
+            "radius" | "corner_radius" => 12,
+            "clip" => 13,
+            _ => 14,
         };
         rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
     });

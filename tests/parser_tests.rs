@@ -807,3 +807,87 @@ fn test_parse_env_member_access() {
         _ => panic!("Expected Item::Let"),
     }
 }
+
+#[test]
+fn test_parse_alias_bindings() {
+    let input = r#"
+    \Component Card(width: 100, height: 50) {
+        alias right = x + width;
+        alias bottom: y + height;
+        alias center_x: Number = (x + right) / 2;
+        \Rect(x: x, y: y, width: width, height: height)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse alias bindings");
+    assert_eq!(doc.items.len(), 1);
+
+    match &doc.items[0] {
+        Item::Component(c) => {
+            assert_eq!(c.name.as_str(), "Card");
+            assert_eq!(c.body.len(), 4);
+
+            match &c.body[0] {
+                ComponentBodyItem::Alias(a) => {
+                    assert_eq!(a.name.as_str(), "right");
+                    assert!(a.type_annotation.is_none());
+                    match &a.value {
+                        Expr::Binary(b) => {
+                            assert_eq!(b.op, BinaryOp::Add);
+                            match (b.left.as_ref(), b.right.as_ref()) {
+                                (Expr::Ident(l), Expr::Ident(r)) => {
+                                    assert_eq!(l.as_str(), "x");
+                                    assert_eq!(r.as_str(), "width");
+                                }
+                                _ => panic!("Expected x + width"),
+                            }
+                        }
+                        _ => panic!("Expected binary expr"),
+                    }
+                }
+                _ => panic!("Expected ComponentBodyItem::Alias for right"),
+            }
+
+            match &c.body[1] {
+                ComponentBodyItem::Alias(a) => {
+                    assert_eq!(a.name.as_str(), "bottom");
+                    assert!(a.type_annotation.is_none());
+                    match &a.value {
+                        Expr::Binary(b) => {
+                            assert_eq!(b.op, BinaryOp::Add);
+                            match (b.left.as_ref(), b.right.as_ref()) {
+                                (Expr::Ident(l), Expr::Ident(r)) => {
+                                    assert_eq!(l.as_str(), "y");
+                                    assert_eq!(r.as_str(), "height");
+                                }
+                                _ => panic!("Expected y + height"),
+                            }
+                        }
+                        _ => panic!("Expected binary expr"),
+                    }
+                }
+                _ => panic!("Expected ComponentBodyItem::Alias for bottom"),
+            }
+
+            match &c.body[2] {
+                ComponentBodyItem::Alias(a) => {
+                    assert_eq!(a.name.as_str(), "center_x");
+                    assert_eq!(a.type_annotation.as_ref().unwrap().name.as_str(), "Number");
+                    match &a.value {
+                        Expr::Binary(b) => {
+                            assert_eq!(b.op, BinaryOp::Div);
+                        }
+                        _ => panic!("Expected binary div expr"),
+                    }
+                }
+                _ => panic!("Expected ComponentBodyItem::Alias for center_x"),
+            }
+
+            match &c.body[3] {
+                ComponentBodyItem::Node(n) => assert_eq!(n.name.as_str(), "Rect"),
+                _ => panic!("Expected ComponentBodyItem::Node"),
+            }
+        }
+        _ => panic!("Expected Item::Component"),
+    }
+}

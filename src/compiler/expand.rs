@@ -373,7 +373,55 @@ fn expand_component_instance(
         "height".to_string(),
         "z".to_string(),
         "clip".to_string(),
+        "left".to_string(),
+        "top".to_string(),
+        "right".to_string(),
+        "bottom".to_string(),
     ];
+    let mut declared_aliases: HashMap<String, AliasBinding> = HashMap::new();
+    for item in &comp_def.body {
+        if let ComponentBodyItem::Alias(a) = item {
+            let alias_name = a.name.as_str().to_string();
+            if alias_name == "parent" {
+                return Err(CompileError::ReservedPort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: "parent".to_string(),
+                    span: a.name.span,
+                });
+            }
+            if comp_def.params.iter().any(|p| p.name.as_str() == alias_name) {
+                return Err(CompileError::DuplicatePort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: alias_name,
+                    span: a.name.span,
+                });
+            }
+            if declared_aliases.contains_key(&alias_name) {
+                return Err(CompileError::DuplicatePort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: alias_name,
+                    span: a.name.span,
+                });
+            }
+            if !comp_scope_ports.contains(&alias_name) {
+                comp_scope_ports.push(alias_name.clone());
+            }
+            declared_aliases.insert(alias_name, a.clone());
+        }
+    }
+
+    // Validate that caller does not attempt to override immutable alias ports
+    for port in &instance.ports {
+        let name = port.name.as_str();
+        if declared_aliases.contains_key(name) || matches!(name, "left" | "top" | "right" | "bottom") {
+            return Err(CompileError::ImmutableAliasPort {
+                node: comp_def.name.as_str().to_string(),
+                port: name.to_string(),
+                span: port.name.span,
+            });
+        }
+    }
+
     let mut comp_ports = HashMap::new();
 
     // Map explicit arguments passed to the component (Tier 4)
@@ -880,6 +928,7 @@ fn expand_component_instance(
                     last_consumer_child_id = Some(child_id);
                 }
             }
+            ComponentBodyItem::Alias(_) => {}
         }
     }
 
@@ -922,6 +971,92 @@ fn expand_component_instance(
         }
     }
 
+    // 7. Process explicitly declared component aliases
+    let alias_scope_ctx = ScopeContext {
+        current_node: ctx.comp_node_id,
+        parent_node: ctx.parent_id,
+        prev_sibling: ctx.prev_sibling_id,
+        child_ids: &instantiated_children_ids,
+        parent_ports: ctx.parent_ports,
+        current_ports: &comp_scope_ports,
+        lexical_scope: &local_scope,
+        env_scope: &internal_body_env_scope,
+        node_fonts: &*node_fonts,
+    };
+    for (alias_name, alias_binding) in &declared_aliases {
+        let rewritten_alias = rewrite_expr(&alias_binding.value, &alias_scope_ctx)?;
+        rewritten_ports.insert(alias_name.clone(), rewritten_alias);
+        comp_authored_ports.insert(alias_name.clone(), alias_binding.value.clone());
+    }
+
+    // 8. Default spatial aliases if not explicitly declared
+    let self_ident = Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span));
+    let self_x = Expr::MemberAccess(MemberAccessExpr {
+        target: Box::new(self_ident.clone()),
+        member: Ident::new("x", instance.span),
+        span: instance.span,
+    });
+    let self_y = Expr::MemberAccess(MemberAccessExpr {
+        target: Box::new(self_ident.clone()),
+        member: Ident::new("y", instance.span),
+        span: instance.span,
+    });
+    let self_width = Expr::MemberAccess(MemberAccessExpr {
+        target: Box::new(self_ident.clone()),
+        member: Ident::new("width", instance.span),
+        span: instance.span,
+    });
+    let self_height = Expr::MemberAccess(MemberAccessExpr {
+        target: Box::new(self_ident.clone()),
+        member: Ident::new("height", instance.span),
+        span: instance.span,
+    });
+
+    if !rewritten_ports.contains_key("left") {
+        rewritten_ports.insert("left".to_string(), self_x.clone());
+        comp_authored_ports.insert("left".to_string(), Expr::Ident(Ident::new("x", instance.span)));
+    }
+    if !rewritten_ports.contains_key("top") {
+        rewritten_ports.insert("top".to_string(), self_y.clone());
+        comp_authored_ports.insert("top".to_string(), Expr::Ident(Ident::new("y", instance.span)));
+    }
+    if !rewritten_ports.contains_key("right") {
+        let right_expr = Expr::Binary(BinaryExpr {
+            op: BinaryOp::Add,
+            left: Box::new(self_x),
+            right: Box::new(self_width),
+            span: instance.span,
+        });
+        rewritten_ports.insert("right".to_string(), right_expr);
+        comp_authored_ports.insert(
+            "right".to_string(),
+            Expr::Binary(BinaryExpr {
+                op: BinaryOp::Add,
+                left: Box::new(Expr::Ident(Ident::new("x", instance.span))),
+                right: Box::new(Expr::Ident(Ident::new("width", instance.span))),
+                span: instance.span,
+            }),
+        );
+    }
+    if !rewritten_ports.contains_key("bottom") {
+        let bottom_expr = Expr::Binary(BinaryExpr {
+            op: BinaryOp::Add,
+            left: Box::new(self_y),
+            right: Box::new(self_height),
+            span: instance.span,
+        });
+        rewritten_ports.insert("bottom".to_string(), bottom_expr);
+        comp_authored_ports.insert(
+            "bottom".to_string(),
+            Expr::Binary(BinaryExpr {
+                op: BinaryOp::Add,
+                left: Box::new(Expr::Ident(Ident::new("y", instance.span))),
+                right: Box::new(Expr::Ident(Ident::new("height", instance.span))),
+                span: instance.span,
+            }),
+        );
+    }
+
     let node = doc.get_node_mut(ctx.comp_node_id).unwrap();
     node.children = all_children_ids;
     node.ports = rewritten_ports;
@@ -939,6 +1074,17 @@ fn expand_primitive_element(
     doc: &mut ExpandedDocument,
     node_fonts: &mut HashMap<NodeId, NodeId>,
 ) -> Result<(), CompileError> {
+    // Validate that caller does not attempt to override immutable spatial alias ports
+    for port in &elem.ports {
+        if matches!(port.name.as_str(), "left" | "top" | "right" | "bottom") {
+            return Err(CompileError::ImmutableAliasPort {
+                node: elem.name.as_str().to_string(),
+                port: port.name.as_str().to_string(),
+                span: port.name.span,
+            });
+        }
+    }
+
     // 1. Expand nested child nodes in content slot
     let mut child_ids = Vec::new();
     let mut last_child_id = None;
@@ -1452,6 +1598,87 @@ fn expand_primitive_element(
         }
     }
 
+    // Default spatial alias ports for primitives
+    let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
+    if !ports.contains_key("left") {
+        ports.insert(
+            "left".to_string(),
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(self_ident.clone()),
+                member: Ident::new("x", elem.span),
+                span: elem.span,
+            }),
+        );
+        authored_ports.insert("left".to_string(), Expr::Ident(Ident::new("x", elem.span)));
+    }
+    if !ports.contains_key("top") {
+        ports.insert(
+            "top".to_string(),
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(self_ident.clone()),
+                member: Ident::new("y", elem.span),
+                span: elem.span,
+            }),
+        );
+        authored_ports.insert("top".to_string(), Expr::Ident(Ident::new("y", elem.span)));
+    }
+    if !ports.contains_key("right") {
+        ports.insert(
+            "right".to_string(),
+            Expr::Binary(BinaryExpr {
+                op: BinaryOp::Add,
+                left: Box::new(Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("x", elem.span),
+                    span: elem.span,
+                })),
+                right: Box::new(Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("width", elem.span),
+                    span: elem.span,
+                })),
+                span: elem.span,
+            }),
+        );
+        authored_ports.insert(
+            "right".to_string(),
+            Expr::Binary(BinaryExpr {
+                op: BinaryOp::Add,
+                left: Box::new(Expr::Ident(Ident::new("x", elem.span))),
+                right: Box::new(Expr::Ident(Ident::new("width", elem.span))),
+                span: elem.span,
+            }),
+        );
+    }
+    if !ports.contains_key("bottom") {
+        ports.insert(
+            "bottom".to_string(),
+            Expr::Binary(BinaryExpr {
+                op: BinaryOp::Add,
+                left: Box::new(Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("y", elem.span),
+                    span: elem.span,
+                })),
+                right: Box::new(Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident),
+                    member: Ident::new("height", elem.span),
+                    span: elem.span,
+                })),
+                span: elem.span,
+            }),
+        );
+        authored_ports.insert(
+            "bottom".to_string(),
+            Expr::Binary(BinaryExpr {
+                op: BinaryOp::Add,
+                left: Box::new(Expr::Ident(Ident::new("y", elem.span))),
+                right: Box::new(Expr::Ident(Ident::new("height", elem.span))),
+                span: elem.span,
+            }),
+        );
+    }
+
     let node = doc.get_node_mut(node_id).unwrap();
     node.children = child_ids;
     node.ports = ports;
@@ -1624,61 +1851,11 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
             }
 
-            // Resolve derived spatial aliases:
-            // left -> x, top -> y, right -> x + width, bottom -> y + height
-            match m.member.as_str() {
-                "left" => Ok(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(resolved_target),
-                    member: Ident::new("x", m.member.span),
-                    span: m.span,
-                })),
-                "top" => Ok(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(resolved_target),
-                    member: Ident::new("y", m.member.span),
-                    span: m.span,
-                })),
-                "right" => {
-                    let x = Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(resolved_target.clone()),
-                        member: Ident::new("x", m.member.span),
-                        span: m.span,
-                    });
-                    let width = Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(resolved_target),
-                        member: Ident::new("width", m.member.span),
-                        span: m.span,
-                    });
-                    Ok(Expr::Binary(BinaryExpr {
-                        op: BinaryOp::Add,
-                        left: Box::new(x),
-                        right: Box::new(width),
-                        span: m.span,
-                    }))
-                }
-                "bottom" => {
-                    let y = Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(resolved_target.clone()),
-                        member: Ident::new("y", m.member.span),
-                        span: m.span,
-                    });
-                    let height = Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(resolved_target),
-                        member: Ident::new("height", m.member.span),
-                        span: m.span,
-                    });
-                    Ok(Expr::Binary(BinaryExpr {
-                        op: BinaryOp::Add,
-                        left: Box::new(y),
-                        right: Box::new(height),
-                        span: m.span,
-                    }))
-                }
-                _ => Ok(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(resolved_target),
-                    member: m.member.clone(),
-                    span: m.span,
-                })),
-            }
+            Ok(Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(resolved_target),
+                member: m.member.clone(),
+                span: m.span,
+            }))
         }
 
         Expr::Call(call) => {

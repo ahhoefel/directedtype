@@ -108,7 +108,7 @@ impl InspectPanelComponent {
                 h += if has_formula { 36.0 } else { 22.0 };
 
                 if let Some(Value::Node(ref_id)) = node.properties.get(key) {
-                    let is_expanded = state.map_or(false, |s| s.is_property_ref_expanded(node.id, key));
+                    let is_expanded = state.is_some_and(|s| s.is_property_ref_expanded(node.id, key));
                     if is_expanded {
                         if let Some(rn) = layout.get_node(*ref_id) {
                             let mut child_keys: Vec<String> = rn.properties.keys().cloned().collect();
@@ -207,11 +207,15 @@ impl InspectPanelComponent {
                                 "width" => 3,
                                 "height" => 4,
                                 "z" => 5,
-                                "color" | "bg_color" => 6,
-                                "border_color" | "border_width" => 7,
-                                "radius" | "corner_radius" => 8,
-                                "clip" => 9,
-                                _ => 10,
+                                "left" => 6,
+                                "top" => 7,
+                                "right" => 8,
+                                "bottom" => 9,
+                                "color" | "bg_color" => 10,
+                                "border_color" | "border_width" => 11,
+                                "radius" | "corner_radius" => 12,
+                                "clip" => 13,
+                                _ => 14,
                             };
                             rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
                         });
@@ -804,11 +808,15 @@ impl InspectPanelComponent {
                     "width" => 3,
                     "height" => 4,
                     "z" => 5,
-                    "color" | "bg_color" => 6,
-                    "border_color" | "border_width" => 7,
-                    "radius" | "corner_radius" => 8,
-                    "clip" => 9,
-                    _ => 10,
+                    "left" => 6,
+                    "top" => 7,
+                    "right" => 8,
+                    "bottom" => 9,
+                    "color" | "bg_color" => 10,
+                    "border_color" | "border_width" => 11,
+                    "radius" | "corner_radius" => 12,
+                    "clip" => 13,
+                    _ => 14,
                 };
                 rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
             });

@@ -60,6 +60,13 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Cannot override immutable alias port '{port}' on node '{node}'")]
+    ImmutableAliasPort {
+        node: String,
+        port: String,
+        span: Span,
+    },
+
     #[error("{message}")]
     Custom {
         message: String,
@@ -74,6 +81,7 @@ impl CompileError {
             | CompileError::ReservedPort { span, .. }
             | CompileError::MissingPort { span, .. }
             | CompileError::DuplicatePort { span, .. }
+            | CompileError::ImmutableAliasPort { span, .. }
             | CompileError::CyclicDependency { span, .. }
             | CompileError::UninitializedVariableUse { span, .. }
             | CompileError::UndefinedEnvVariable { span, .. }

@@ -424,7 +424,7 @@ impl ResolvedLayout {
         }
 
         let standard_keys = [
-            "x", "y", "width", "height", "z", "clip", "box", "up",
+            "x", "y", "width", "height", "z", "left", "top", "right", "bottom", "clip", "box", "up",
             "color", "bg_color", "radius", "border_width", "border_color",
             "size", "weight", "text_height", "font", "family",
             "cap_height", "x_height", "descent", "ascent", "line_height",

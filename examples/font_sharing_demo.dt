@@ -22,6 +22,9 @@
     bg_color: Color: #f8fafc,
     radius: Number: 12
 ) {
+    alias right = x + width;
+    alias bottom = y + height;
+
     \Rect(x: x, y: y, width: width, height: height, color: bg_color, radius: radius)
     \Children {
         x: parent.left + 24,
