@@ -487,6 +487,29 @@ impl TableView {
 
 ---
 
+## 8.5. Component Imports & Multi-File Architecture
+
+Components are organized across modular `.dt` files and imported using the `\use` directive:
+
+```dtml
+// Main.dt
+\use "./widgets/Button.dt";
+\use "./cards/ProductCard.dt" as Card;
+
+\Card(id: 101) {
+    \Button(label: "Buy Now")
+}
+```
+
+### Module Resolution Rules:
+1. **Explicit Tag-Prefixed Syntax:** The `\use` keyword requires a leading backslash, preventing parsing conflicts with plain document prose starting with the word *"Use"*.
+2. **Path Normalization:** Relative paths (`./`, `../`) resolve relative to the enclosing file's directory.
+3. **Aliasing Support:** An optional `as AliasName` aliases the imported component, enabling conflict-free namespacing and semantic renaming.
+4. **Cycle Detection & Memoization:** The compiler maintains an active recursion stack detecting circular dependencies (`A -> B -> A`) and throwing `CompileError::CyclicImport`, while safely memoizing diamond dependency graphs (`A -> B, A -> C, B -> D, C -> D`).
+5. **Transitive Dependency Propagation:** When a component is imported (either directly or via an alias), any child components it internally depends upon are safely made available to the component's expansion scope.
+
+---
+
 ## 9. Summary of Guarantees
 
 1. **Deterministic Layout Math:** Formulas (`let`, `alias`, and spatial ports) are strictly algebraic and evaluated topologically. Application logic cannot overwrite equations or break formulas.
@@ -494,4 +517,5 @@ impl TableView {
 3. **Structured Non-DAG Identity:** Identifiers are defined before a semicolon (`\Cell(row, col; ...)`), determined strictly by literals, loop variables, or state, guaranteeing $O(1)$ programmatic lookup without layout feedback cycles.
 4. **Zero Layout Thrashing:** Because Rust logic has no read access to computed layout values, feedback cycles between logic and layout are mathematically impossible.
 5. **Minimal Boundary Crossing:** Events cross from the native viewer into WASM once per event turn; all resulting state mutations are batched and applied to the DAG simultaneously, triggering a single-pass GPU redraw.
+
 

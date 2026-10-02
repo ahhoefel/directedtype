@@ -4,20 +4,23 @@ pub mod expand;
 pub mod expanded;
 pub mod graph;
 pub mod layout;
+pub mod module;
 pub mod text;
 pub mod topo;
 pub mod value;
 
 pub use error::CompileError;
 pub use eval::evaluate_graph;
-pub use expand::expand_document;
+pub use expand::{expand_document, expand_document_with_base_dir, expand_document_with_resolver};
 pub use expanded::{ExpandedDocument, ExpandedNode, NodeId};
 pub use graph::{build_variable_graph, build_variable_graph_with_window, VarId, VariableGraph, VariableNode};
-pub use layout::{resolve_layout, Rect, ResolvedNode, ResolvedLayout};
+pub use layout::{resolve_layout, Rect, ResolvedLayout, ResolvedNode};
+pub use module::{resolve_imports, FileResolver, FsResolver, VirtualResolver};
 pub use topo::{sort_graph, TopologicalSchedule};
 pub use value::Value;
 
 use crate::ast::Document;
+use std::path::Path;
 
 /// High-level compiler helper: expands an AST document and builds the flat variable dependency graph
 /// using default window dimensions (800x600).
@@ -75,4 +78,28 @@ pub fn evaluate_document_with_window(
     let values = evaluate_graph(&graph, &schedule)?;
     let layout = resolve_layout(&expanded, values);
     Ok(layout)
+}
+
+/// End-to-end layout pipeline with a custom FileResolver and base directory.
+pub fn evaluate_document_with_resolver<R: FileResolver>(
+    doc: &Document,
+    window_width: f64,
+    window_height: f64,
+    base_dir: &Path,
+    resolver: &R,
+) -> Result<ResolvedLayout, CompileError> {
+    let expanded = expand_document_with_resolver(doc, base_dir, resolver)?;
+    let graph = build_variable_graph_with_window(&expanded, window_width, window_height)?;
+    let schedule = sort_graph(&graph)?;
+    let values = evaluate_graph(&graph, &schedule)?;
+    let layout = resolve_layout(&expanded, values);
+    Ok(layout)
+}
+
+/// End-to-end layout pipeline with a custom base directory using standard filesystem resolver.
+pub fn evaluate_document_with_base_dir(
+    doc: &Document,
+    base_dir: &Path,
+) -> Result<ResolvedLayout, CompileError> {
+    evaluate_document_with_resolver(doc, 800.0, 600.0, base_dir, &FsResolver)
 }

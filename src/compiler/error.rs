@@ -81,6 +81,19 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Import failed for '{path}': {message}")]
+    ImportError {
+        path: String,
+        message: String,
+        span: Span,
+    },
+
+    #[error("Cyclic import detected for '{path}'")]
+    CyclicImport {
+        path: String,
+        span: Span,
+    },
+
     #[error("{message}")]
     Custom {
         message: String,
@@ -98,6 +111,8 @@ impl CompileError {
             | CompileError::ImmutableAliasPort { span, .. }
             | CompileError::InvalidComponentKeyDependency { span, .. }
             | CompileError::PrivateStatePort { span, .. }
+            | CompileError::ImportError { span, .. }
+            | CompileError::CyclicImport { span, .. }
             | CompileError::CyclicDependency { span, .. }
             | CompileError::UninitializedVariableUse { span, .. }
             | CompileError::UndefinedEnvVariable { span, .. }

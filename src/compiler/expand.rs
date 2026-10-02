@@ -32,9 +32,26 @@ pub struct ScopeContext<'a> {
     pub node_fonts: &'a HashMap<NodeId, NodeId>,
 }
 
-/// Expands a parsed AST `Document` into an `ExpandedDocument`.
+/// Expands a parsed AST `Document` into an `ExpandedDocument` using default current directory.
 pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError> {
-    let mut registry = HashMap::new();
+    expand_document_with_resolver(doc, std::path::Path::new("."), &crate::compiler::module::FsResolver)
+}
+
+/// Expands a parsed AST `Document` into an `ExpandedDocument` with a specific base directory.
+pub fn expand_document_with_base_dir(
+    doc: &Document,
+    base_dir: &std::path::Path,
+) -> Result<ExpandedDocument, CompileError> {
+    expand_document_with_resolver(doc, base_dir, &crate::compiler::module::FsResolver)
+}
+
+/// Expands a parsed AST `Document` into an `ExpandedDocument` with a custom file resolver.
+pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
+    doc: &Document,
+    base_dir: &std::path::Path,
+    resolver: &R,
+) -> Result<ExpandedDocument, CompileError> {
+    let registry = crate::compiler::module::resolve_imports(doc, base_dir, resolver)?;
     let mut global_scope = HashMap::new();
     let mut global_env_scope: HashMap<String, EnvEntry> = HashMap::new();
     let mut node_fonts: HashMap<NodeId, NodeId> = HashMap::new();
@@ -48,13 +65,6 @@ pub fn expand_document(doc: &Document) -> Result<ExpandedDocument, CompileError>
             span: doc.span,
         })),
     );
-
-    // 1. Index all component definitions
-    for item in &doc.items {
-        if let Item::Component(comp) = item {
-            registry.insert(comp.name.as_str().to_string(), comp.clone());
-        }
-    }
 
     let mut expanded_doc = ExpandedDocument::new();
 
