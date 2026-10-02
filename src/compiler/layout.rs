@@ -104,6 +104,7 @@ pub struct ResolvedNode {
     pub clip: Option<NodeId>,
     pub text_content: Option<String>,
     pub properties: HashMap<String, Value>,
+    pub state_vars: HashMap<String, Option<String>>,
     pub formulas: HashMap<String, String>,
     pub span: Span,
     pub handle: Option<NodeHandle>,
@@ -562,6 +563,7 @@ pub fn resolve_layout(
             clip,
             text_content: node.text_content.clone(),
             properties,
+            state_vars: node.state_vars.clone(),
             formulas,
             span: node.span,
             handle: node.handle,
@@ -574,5 +576,75 @@ pub fn resolve_layout(
         roots: doc.roots.clone(),
         nodes: resolved_nodes,
         values,
+    }
+}
+
+/// Updates an existing `ResolvedLayout` in-place using newly computed values for dirty/changed variables.
+pub fn update_resolved_layout(
+    layout: &mut ResolvedLayout,
+    doc: &ExpandedDocument,
+    changed_vars: &std::collections::HashSet<VarId>,
+) {
+    if changed_vars.is_empty() {
+        return;
+    }
+
+    let affected_node_ids: std::collections::HashSet<NodeId> =
+        changed_vars.iter().map(|v| v.node).collect();
+
+    for node in &mut layout.nodes {
+        if affected_node_ids.contains(&node.id) {
+            let get_num = |port: &str| -> f64 {
+                layout
+                    .values
+                    .get(&VarId::new(node.id, port))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0)
+            };
+
+            node.rect.x = get_num("x");
+            node.rect.y = get_num("y");
+            node.rect.width = get_num("width");
+            node.rect.height = get_num("height");
+            node.z = get_num("z");
+
+            for var_id in changed_vars {
+                if var_id.node == node.id {
+                    if let Some(val) = layout.values.get(var_id) {
+                        node.properties.insert(var_id.port.clone(), val.clone());
+                    }
+                }
+            }
+
+            node.clip = layout
+                .values
+                .get(&VarId::new(node.id, "clip"))
+                .and_then(|v| v.as_node())
+                .filter(|id| !id.is_window());
+        }
+
+        // Re-evaluate structured component keys if the node has a key
+        if let Some(expanded_node) = doc.get_node(node.id) {
+            if let Some(k) = &expanded_node.key {
+                let resolved_parts = k
+                    .parts
+                    .iter()
+                    .map(|part| {
+                        if let Ok(val) = eval_expr(part, &layout.values) {
+                            match val {
+                                Value::Number(n) => Expr::Literal(Literal::Number(n, part.span())),
+                                Value::String(s) => Expr::Literal(Literal::String(s, part.span())),
+                                Value::Bool(b) => Expr::Literal(Literal::Bool(b, part.span())),
+                                Value::Color(c) => Expr::Literal(Literal::Color(c, part.span())),
+                                _ => part.clone(),
+                            }
+                        } else {
+                            part.clone()
+                        }
+                    })
+                    .collect();
+                node.key = Some(ComponentKey::new(resolved_parts, k.span));
+            }
+        }
     }
 }

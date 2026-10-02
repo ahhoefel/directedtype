@@ -1,3 +1,4 @@
+pub mod compiled;
 pub mod error;
 pub mod eval;
 pub mod expand;
@@ -9,18 +10,49 @@ pub mod text;
 pub mod topo;
 pub mod value;
 
+pub use compiled::CompiledDocument;
 pub use error::CompileError;
-pub use eval::evaluate_graph;
+pub use eval::{
+    evaluate_graph, evaluate_graph_with_state, find_downstream_dependents,
+    invalidate_and_reevaluate,
+};
 pub use expand::{expand_document, expand_document_with_base_dir, expand_document_with_resolver};
 pub use expanded::{ExpandedDocument, ExpandedNode, NodeId};
-pub use graph::{build_variable_graph, build_variable_graph_with_window, VarId, VariableGraph, VariableNode};
-pub use layout::{resolve_layout, Rect, ResolvedLayout, ResolvedNode};
+pub use graph::{
+    build_variable_graph, build_variable_graph_with_window, VarId, VariableGraph, VariableNode,
+};
+pub use layout::{resolve_layout, update_resolved_layout, Rect, ResolvedLayout, ResolvedNode};
 pub use module::{resolve_imports, FileResolver, FsResolver, VirtualResolver};
 pub use topo::{sort_graph, TopologicalSchedule};
 pub use value::Value;
 
 use crate::ast::Document;
 use std::path::Path;
+
+/// Compiles an AST document into an execution-ready `CompiledDocument` using default window dimensions (800x600).
+pub fn compile_document(doc: &Document) -> Result<CompiledDocument, CompileError> {
+    compile_document_with_window(doc, 800.0, 600.0)
+}
+
+/// Compiles an AST document into an execution-ready `CompiledDocument` with explicit window dimensions.
+pub fn compile_document_with_window(
+    doc: &Document,
+    window_width: f64,
+    window_height: f64,
+) -> Result<CompiledDocument, CompileError> {
+    CompiledDocument::compile_with_window(doc, window_width, window_height)
+}
+
+/// Compiles an AST document with explicit window dimensions, base directory, and custom FileResolver.
+pub fn compile_document_with_resolver<R: FileResolver>(
+    doc: &Document,
+    window_width: f64,
+    window_height: f64,
+    base_dir: &Path,
+    resolver: &R,
+) -> Result<CompiledDocument, CompileError> {
+    CompiledDocument::compile_with_resolver(doc, window_width, window_height, base_dir, resolver)
+}
 
 /// High-level compiler helper: expands an AST document and builds the flat variable dependency graph
 /// using default window dimensions (800x600).

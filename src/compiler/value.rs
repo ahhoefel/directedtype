@@ -49,6 +49,27 @@ impl Value {
             Value::Node(_) => true,
         }
     }
+
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Value::Number(_) => "Number",
+            Value::String(_) => "String",
+            Value::Bool(_) => "Boolean",
+            Value::Color(_) => "Color",
+            Value::Node(_) => "Node",
+        }
+    }
+
+    pub fn matches_type_name(&self, expected: &str) -> bool {
+        match expected {
+            "Number" => matches!(self, Value::Number(_)),
+            "String" => matches!(self, Value::String(_)),
+            "Boolean" | "Bool" => matches!(self, Value::Bool(_)),
+            "Color" => matches!(self, Value::Color(_)),
+            "Node" => matches!(self, Value::Node(_)),
+            _ => true,
+        }
+    }
 }
 
 impl fmt::Display for Value {

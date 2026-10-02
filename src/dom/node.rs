@@ -1,4 +1,4 @@
-use crate::ast::Expr;
+use crate::ast::{ComponentKey, Expr};
 use crate::dom::handle::NodeHandle;
 use crate::span::Span;
 use std::collections::HashMap;
@@ -11,6 +11,9 @@ pub struct DomNode {
 
     /// Component tag or primitive name (e.g. "Rect", "Text", "ScrollView", "Flow").
     pub tag: String,
+
+    /// Structured identity key (e.g. `(row, col)` or `"submit_btn"`).
+    pub key: Option<ComponentKey>,
 
     /// Enclosing parent node, if attached.
     pub parent: Option<NodeHandle>,
@@ -33,6 +36,7 @@ impl DomNode {
         Self {
             handle,
             tag: tag.into(),
+            key: None,
             parent: None,
             children: Vec::new(),
             ports: HashMap::new(),

@@ -111,6 +111,8 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                 span: s.span,
             });
             global_scope.insert(name.clone(), LexicalBinding::Expr(window_ref));
+            let type_name = s.type_annotation.as_ref().map(|t| t.name.as_str().to_string());
+            expanded_doc.window_state_vars.insert(name.clone(), type_name);
             expanded_doc.window_ports.insert(name, default_expr);
         }
     }
@@ -1203,6 +1205,10 @@ fn expand_component_instance(
     node.children = all_children_ids;
     node.ports = rewritten_ports;
     node.authored_ports = comp_authored_ports;
+    for (state_name, s) in &declared_states {
+        let type_name = s.type_annotation.as_ref().map(|t| t.name.as_str().to_string());
+        node.state_vars.insert(state_name.clone(), type_name);
+    }
 
     Ok(())
 }

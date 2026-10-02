@@ -4,7 +4,7 @@ use crate::compiler::expanded::NodeId;
 use crate::compiler::graph::{VarId, VariableGraph};
 use crate::compiler::topo::TopologicalSchedule;
 use crate::compiler::value::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Evaluates all variables in the graph according to the topological schedule,
 /// returning an environment mapping each `VarId` to its computed `Value`.
@@ -12,16 +12,88 @@ pub fn evaluate_graph(
     graph: &VariableGraph,
     schedule: &TopologicalSchedule,
 ) -> Result<HashMap<VarId, Value>, CompileError> {
+    evaluate_graph_with_state(graph, schedule, &HashMap::new())
+}
+
+/// Evaluates all variables in the graph according to the topological schedule,
+/// injecting any active runtime state overrides into their corresponding cells.
+pub fn evaluate_graph_with_state(
+    graph: &VariableGraph,
+    schedule: &TopologicalSchedule,
+    state_overrides: &HashMap<VarId, Value>,
+) -> Result<HashMap<VarId, Value>, CompileError> {
     let mut env = HashMap::with_capacity(schedule.len());
 
     for var_id in schedule.iter() {
-        if let Some(node) = graph.get_variable(var_id) {
+        if let Some(override_val) = state_overrides.get(var_id) {
+            env.insert(var_id.clone(), override_val.clone());
+        } else if let Some(node) = graph.get_variable(var_id) {
             let val = eval_expr(&node.equation, &env)?;
             env.insert(var_id.clone(), val);
         }
     }
 
     Ok(env)
+}
+
+/// Computes the complete set of transitively downstream variables in the graph
+/// affected by changes to `dirty_roots`.
+pub fn find_downstream_dependents(
+    graph: &VariableGraph,
+    dirty_roots: &[VarId],
+) -> HashSet<VarId> {
+    let mut dirty = HashSet::new();
+    let mut queue = Vec::new();
+
+    for root in dirty_roots {
+        dirty.insert(root.clone());
+        queue.push(root.clone());
+    }
+
+    while let Some(current) = queue.pop() {
+        if let Some(downstream) = graph.downstream.get(&current) {
+            for dep in downstream {
+                if dirty.insert(dep.clone()) {
+                    queue.push(dep.clone());
+                }
+            }
+        }
+    }
+
+    dirty
+}
+
+/// Incrementally re-evaluates all variables downstream of `dirty_roots` in topological order.
+///
+/// Returns the set of `VarId`s whose computed values actually changed.
+pub fn invalidate_and_reevaluate(
+    graph: &VariableGraph,
+    schedule: &TopologicalSchedule,
+    current_values: &mut HashMap<VarId, Value>,
+    dirty_roots: &[VarId],
+    state_overrides: &HashMap<VarId, Value>,
+) -> Result<HashSet<VarId>, CompileError> {
+    let dirty = find_downstream_dependents(graph, dirty_roots);
+    let mut changed = HashSet::new();
+
+    for var_id in schedule.iter() {
+        if dirty.contains(var_id) {
+            let new_val = if let Some(override_val) = state_overrides.get(var_id) {
+                override_val.clone()
+            } else if let Some(node) = graph.get_variable(var_id) {
+                eval_expr(&node.equation, current_values)?
+            } else {
+                continue;
+            };
+
+            let prev_val = current_values.insert(var_id.clone(), new_val.clone());
+            if prev_val.as_ref() != Some(&new_val) {
+                changed.insert(var_id.clone());
+            }
+        }
+    }
+
+    Ok(changed)
 }
 
 fn get_family_from_val<'a>(val: Option<&'a Value>, env: &'a HashMap<VarId, Value>) -> Option<&'a str> {

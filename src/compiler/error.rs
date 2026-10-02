@@ -94,6 +94,26 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Node '{node:?}' not found in compiled document")]
+    NodeNotFound {
+        node: crate::compiler::expanded::NodeId,
+        span: Span,
+    },
+
+    #[error("Variable '{var}' on node '{node}' is not a declared state variable")]
+    NotAStateVariable {
+        node: String,
+        var: String,
+        span: Span,
+    },
+
+    #[error("Type mismatch for state variable: expected '{expected}', found '{actual}'")]
+    TypeMismatch {
+        expected: String,
+        actual: String,
+        span: Span,
+    },
+
     #[error("{message}")]
     Custom {
         message: String,
@@ -113,6 +133,9 @@ impl CompileError {
             | CompileError::PrivateStatePort { span, .. }
             | CompileError::ImportError { span, .. }
             | CompileError::CyclicImport { span, .. }
+            | CompileError::NodeNotFound { span, .. }
+            | CompileError::NotAStateVariable { span, .. }
+            | CompileError::TypeMismatch { span, .. }
             | CompileError::CyclicDependency { span, .. }
             | CompileError::UninitializedVariableUse { span, .. }
             | CompileError::UndefinedEnvVariable { span, .. }

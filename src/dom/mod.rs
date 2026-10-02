@@ -10,16 +10,18 @@ pub use handle::NodeHandle;
 pub use node::DomNode;
 pub use transaction::Transaction;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    ComponentDef, ContentItem, ContentSlot, Document, ElementNode, EnvBinding, Expr, Ident, Item,
-    LetBinding, PortBinding, TextChunk,
+    ComponentDef, ComponentKey, ContentItem, ContentSlot, Document, ElementNode, EnvBinding, Expr,
+    Ident, Item, LetBinding, PortBinding, TextChunk,
 };
+use crate::compiler::error::CompileError;
 use crate::compiler::expanded::NodeId;
+use crate::compiler::graph::VarId;
 use crate::compiler::layout::{Rect, ResolvedLayout};
 use crate::compiler::value::Value;
-use crate::compiler::{evaluate_document_with_window};
+use crate::compiler::{compile_document_with_window, CompiledDocument};
 use crate::interaction::Point;
 use crate::parser::cursor::ParserCursor;
 use crate::parser::node::parse_element_node;
@@ -64,7 +66,8 @@ pub struct Dom {
     window_width: f64,
     window_height: f64,
     dirty: bool,
-    layout: Option<ResolvedLayout>,
+    compiled: Option<CompiledDocument>,
+    state_overrides: HashMap<VarId, Value>,
     handle_to_node_id: HashMap<NodeHandle, NodeId>,
     node_id_to_handle: HashMap<NodeId, NodeHandle>,
 }
@@ -86,7 +89,8 @@ impl Dom {
             window_width: width,
             window_height: height,
             dirty: true,
-            layout: None,
+            compiled: None,
+            state_overrides: HashMap::new(),
             handle_to_node_id: HashMap::new(),
             node_id_to_handle: HashMap::new(),
         }
@@ -150,6 +154,16 @@ impl Dom {
 
     /// Instantiates an unattached element node.
     pub fn create_element(&mut self, tag: &str, ports: Vec<(String, Expr)>) -> NodeHandle {
+        self.create_element_with_key(tag, None, ports)
+    }
+
+    /// Instantiates an unattached element node with a structured key.
+    pub fn create_element_with_key(
+        &mut self,
+        tag: &str,
+        key: Option<ComponentKey>,
+        ports: Vec<(String, Expr)>,
+    ) -> NodeHandle {
         let mut port_map = HashMap::new();
         for (k, v) in ports {
             port_map.insert(k, v);
@@ -157,6 +171,7 @@ impl Dom {
         let handle = self.arena.alloc(|h| DomNode {
             handle: h,
             tag: tag.to_string(),
+            key,
             parent: None,
             children: Vec::new(),
             ports: port_map,
@@ -176,6 +191,7 @@ impl Dom {
         let handle = self.arena.alloc(|h| DomNode {
             handle: h,
             tag: "Text".to_string(),
+            key: None,
             parent: None,
             children: Vec::new(),
             ports: port_map,
@@ -610,50 +626,149 @@ impl Dom {
         self.window_width = width;
         self.window_height = height;
 
-        if !self.dirty && self.layout.is_some() {
-            return Ok(self.layout.as_ref().unwrap());
+        if !self.dirty {
+            if let Some(ref compiled) = self.compiled {
+                return Ok(compiled.layout());
+            }
         }
 
         let doc = self.to_document()?;
-        let layout = evaluate_document_with_window(&doc, width, height)?;
+        let mut compiled = compile_document_with_window(&doc, width, height)?;
+
+        // Re-apply any active runtime state overrides into the newly compiled document
+        if !self.state_overrides.is_empty() {
+            for (var_id, val) in &self.state_overrides {
+                let _ = compiled.set_state(var_id.node, &var_id.port, val.clone());
+            }
+        }
 
         self.handle_to_node_id.clear();
         self.node_id_to_handle.clear();
 
-        for resolved_node in &layout.nodes {
+        for resolved_node in &compiled.layout.nodes {
             if let Some(handle) = resolved_node.handle {
                 self.handle_to_node_id.insert(handle, resolved_node.id);
                 self.node_id_to_handle.insert(resolved_node.id, handle);
             }
         }
 
-        self.layout = Some(layout);
+        self.compiled = Some(compiled);
         self.dirty = false;
-        Ok(self.layout.as_ref().unwrap())
+        Ok(self.compiled.as_ref().unwrap().layout())
     }
 
     /// Returns the most recently committed `ResolvedLayout`, if one exists.
     pub fn layout(&self) -> Option<&ResolvedLayout> {
-        self.layout.as_ref()
+        self.compiled.as_ref().map(|c| c.layout())
+    }
+
+    /// Returns the active `CompiledDocument`, if one exists.
+    pub fn compiled(&self) -> Option<&CompiledDocument> {
+        self.compiled.as_ref()
+    }
+
+    /// Mutates a declared reactive state variable on a component instance, triggering an
+    /// incremental topological re-evaluation of all downstream dependent variables in microseconds.
+    pub fn set_state(
+        &mut self,
+        node: NodeHandle,
+        state_name: &str,
+        value: Value,
+    ) -> Result<HashSet<VarId>, DomError> {
+        if self.dirty || self.compiled.is_none() {
+            self.commit()?;
+        }
+
+        let node_id = self
+            .handle_to_node_id
+            .get(&node)
+            .copied()
+            .ok_or(DomError::InvalidHandle(node))?;
+
+        let compiled = self.compiled.as_mut().unwrap();
+        let changed = compiled.set_state(node_id, state_name, value.clone())?;
+        let var_id = VarId::new(node_id, state_name);
+        self.state_overrides.insert(var_id, value);
+
+        Ok(changed)
+    }
+
+    /// Mutates a reactive state variable on a child component identified by its structured identity key.
+    pub fn set_state_by_key(
+        &mut self,
+        parent: Option<NodeHandle>,
+        key: &ComponentKey,
+        state_name: &str,
+        value: Value,
+    ) -> Result<HashSet<VarId>, DomError> {
+        if self.dirty || self.compiled.is_none() {
+            self.commit()?;
+        }
+
+        let parent_id = match parent {
+            Some(h) => Some(
+                self.handle_to_node_id
+                    .get(&h)
+                    .copied()
+                    .ok_or(DomError::InvalidHandle(h))?,
+            ),
+            None => None,
+        };
+
+        let target_node_id = self
+            .compiled
+            .as_ref()
+            .unwrap()
+            .find_by_key(parent_id, key)
+            .map(|n| n.id)
+            .ok_or_else(|| CompileError::Custom {
+                message: format!("Component with structured key '{}' not found", key),
+                span: key.span,
+            })?;
+
+        let compiled = self.compiled.as_mut().unwrap();
+        let changed = compiled.set_state(target_node_id, state_name, value.clone())?;
+        let var_id = VarId::new(target_node_id, state_name);
+        self.state_overrides.insert(var_id, value);
+
+        Ok(changed)
+    }
+
+    /// Returns the active runtime value for a state variable on `node`.
+    pub fn get_state(&self, node: NodeHandle, state_name: &str) -> Option<&Value> {
+        let node_id = self.handle_to_node_id.get(&node)?;
+        self.compiled.as_ref()?.get_state(*node_id, state_name)
+    }
+
+    /// Finds a node handle matching a structured component key.
+    pub fn get_node_by_key(&self, parent: Option<NodeHandle>, key: &ComponentKey) -> Option<NodeHandle> {
+        let parent_id = parent.and_then(|h| self.handle_to_node_id.get(&h).copied());
+        let resolved = self.compiled.as_ref()?.find_by_key(parent_id, key)?;
+        self.node_id_to_handle.get(&resolved.id).copied()
+    }
+
+    /// Returns the active map of all runtime state overrides.
+    pub fn state_overrides(&self) -> &HashMap<VarId, Value> {
+        &self.state_overrides
     }
 
     /// Returns the resolved bounding rectangle for `node` from the most recent committed layout.
     pub fn computed_rect(&self, node: NodeHandle) -> Option<Rect> {
-        let layout = self.layout.as_ref()?;
+        let layout = self.layout()?;
         let node_id = self.handle_to_node_id.get(&node)?;
         layout.get_node(*node_id).map(|n| n.rect)
     }
 
     /// Returns the computed value of a port on `node` from the most recent committed layout.
     pub fn computed_value(&self, node: NodeHandle, port: &str) -> Option<&Value> {
-        let layout = self.layout.as_ref()?;
+        let layout = self.layout()?;
         let node_id = self.handle_to_node_id.get(&node)?;
         layout.get_value(*node_id, port)
     }
 
     /// Returns the active clip node bounding `node` from the most recent committed layout.
     pub fn clip_context(&self, node: NodeHandle) -> Option<NodeHandle> {
-        let layout = self.layout.as_ref()?;
+        let layout = self.layout()?;
         let node_id = self.handle_to_node_id.get(&node)?;
         let resolved = layout.get_node(*node_id)?;
         let clip_node_id = resolved.clip?;
@@ -662,7 +777,7 @@ impl Dom {
 
     /// Queries the topmost visual element handle at the given coordinate.
     pub fn hit_test(&self, point: Point) -> Option<NodeHandle> {
-        let layout = self.layout.as_ref()?;
+        let layout = self.layout()?;
         let hit = layout.hit_test(point)?;
         if let Some(&handle) = self.node_id_to_handle.get(&hit.target) {
             return Some(handle);
@@ -677,7 +792,7 @@ impl Dom {
 
     /// Queries the full hit test result translated into Component DOM `NodeHandle`s.
     pub fn hit_test_full(&self, point: Point) -> Option<DomHitTestResult> {
-        let layout = self.layout.as_ref()?;
+        let layout = self.layout()?;
         let hit = layout.hit_test(point)?;
         let target = self
             .node_id_to_handle
@@ -821,9 +936,11 @@ impl Dom {
             }
         }
 
+        let key = elem.key.clone();
         let handle = self.arena.alloc(|h| DomNode {
             handle: h,
             tag,
+            key,
             parent: None,
             children: Vec::new(),
             ports,
@@ -878,7 +995,7 @@ impl Dom {
 
         Ok(ElementNode {
             name: Ident::new(node.tag.clone(), node.span),
-            key: None,
+            key: node.key.clone(),
             ports,
             content,
             span: node.span,
