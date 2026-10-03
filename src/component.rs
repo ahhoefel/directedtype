@@ -153,7 +153,7 @@ pub trait Component: Send + 'static {
     fn dispatch(
         &mut self,
         method: &str,
-        event: &Event,
+        event: &mut Event,
         ctx: &mut Context<'_>,
     ) -> Result<(), DispatchError>;
 }
@@ -210,7 +210,68 @@ impl ComponentRegistry {
     pub fn get_companion_path(&self, name: &str) -> Option<&str> {
         self.companion_files.get(name).map(|s| s.as_str())
     }
+
+    /// Returns a pre-configured ComponentRegistry containing standard library components.
+    pub fn standard() -> Self {
+        let mut registry = Self::new();
+        registry.register_companion("Button", "components/Button.rs", || {
+            Box::new(std_components::Button::default())
+        });
+        registry
+    }
 }
+
+pub mod std_components {
+    use super::{Component, Context, DispatchError};
+    use crate::interaction::Event;
+
+    /// Standard interactive Button companion component.
+    #[derive(Default, Debug, Clone)]
+    pub struct Button {
+        pub disabled: bool,
+        pub click_count: u64,
+    }
+
+    impl Button {
+        pub fn new() -> Self {
+            Self::default()
+        }
+    }
+
+    impl Component for Button {
+        fn on_mount(&mut self, ctx: &mut Context<'_>) {
+            if let Some(d) = ctx.get_port_bool("disabled") {
+                self.disabled = d;
+            }
+        }
+
+        fn dispatch(
+            &mut self,
+            method: &str,
+            event: &mut Event,
+            ctx: &mut Context<'_>,
+        ) -> Result<(), DispatchError> {
+            match method {
+                "click" => {
+                    if self.disabled {
+                        event.stop_propagation();
+                    } else {
+                        self.click_count += 1;
+                        ctx.set_state("click_count", self.click_count as f64);
+                    }
+                    Ok(())
+                }
+                _ => Err(DispatchError::MethodNotFound {
+                    component: "Button".into(),
+                    method: method.into(),
+                }),
+            }
+        }
+    }
+}
+
+pub use std_components::Button;
+
 
 /// Container managing live `Component` instances keyed by their `NodeId`.
 #[derive(Default)]

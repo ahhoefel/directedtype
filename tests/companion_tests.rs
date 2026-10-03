@@ -27,7 +27,7 @@ impl Component for CounterComponent {
     fn dispatch(
         &mut self,
         method: &str,
-        _event: &Event,
+        _event: &mut Event,
         ctx: &mut Context<'_>,
     ) -> Result<(), DispatchError> {
         match method {
@@ -63,7 +63,7 @@ impl Component for DrawerComponent {
     fn dispatch(
         &mut self,
         method: &str,
-        _event: &Event,
+        _event: &mut Event,
         ctx: &mut Context<'_>,
     ) -> Result<(), DispatchError> {
         match method {
@@ -274,7 +274,7 @@ fn test_structured_key_lookup_from_companion_context() {
         fn dispatch(
             &mut self,
             _method: &str,
-            _event: &Event,
+            _event: &mut Event,
             _ctx: &mut Context<'_>,
         ) -> Result<(), DispatchError> {
             Ok(())
@@ -377,7 +377,7 @@ fn test_event_propagation_stopping() {
         fn dispatch(
             &mut self,
             method: &str,
-            _event: &Event,
+            _event: &mut Event,
             _ctx: &mut Context<'_>,
         ) -> Result<(), DispatchError> {
             match method {
@@ -501,7 +501,7 @@ fn test_examples_counter_dt_and_rs_integration() {
         fn dispatch(
             &mut self,
             method: &str,
-            _event: &Event,
+            _event: &mut Event,
             ctx: &mut Context<'_>,
         ) -> Result<(), DispatchError> {
             match method {

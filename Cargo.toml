@@ -23,3 +23,8 @@ pretty_assertions = "1.4"
 [[example]]
 name = "counter"
 path = "examples/Counter.rs"
+
+[[example]]
+name = "button_demo"
+path = "examples/button_demo.rs"
+

@@ -1283,7 +1283,7 @@ pub fn run_viewer_with_file(
     file_path: PathBuf,
     config: ViewerConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    run_viewer_with_file_and_registry(file_path, config, ComponentRegistry::new())
+    run_viewer_with_file_and_registry(file_path, config, ComponentRegistry::standard())
 }
 
 fn run_viewer_app(

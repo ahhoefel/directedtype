@@ -333,6 +333,10 @@ impl CompiledDocument {
                                     all_changed_vars.extend(changed);
                                 }
                             }
+
+                            if event.propagation_stopped {
+                                break;
+                            }
                         } else {
                             return Err(DispatchError::InstanceNotFound(target_node_id));
                         }

@@ -22,7 +22,7 @@ impl Component for Counter {
     fn dispatch(
         &mut self,
         method: &str,
-        _event: &Event,
+        _event: &mut Event,
         ctx: &mut Context<'_>,
     ) -> Result<(), DispatchError> {
         match method {
