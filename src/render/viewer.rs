@@ -16,9 +16,12 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 use crate::ast::Document;
+use crate::component::ComponentRegistry;
 use crate::compiler::evaluate_document_with_window;
 use crate::compiler::expanded::NodeId;
 use crate::compiler::layout::ResolvedLayout;
+use crate::compiler::module::FsResolver;
+use crate::compiler::CompiledDocument;
 use crate::interaction::{Event, EventKind, Modifiers, MouseButton, Point};
 use crate::parser::parse_document;
 use crate::render::scene::{build_scene, SceneOptions};
@@ -127,6 +130,8 @@ pub struct ViewerApp {
     watch_path: Option<PathBuf>,
     _watcher: Option<RecommendedWatcher>,
     doc: Option<Document>,
+    compiled: Option<CompiledDocument>,
+    component_registry: ComponentRegistry,
     layout: ResolvedLayout,
     render_cx: RenderContext,
     surface: Option<RenderSurface<'static>>,
@@ -158,6 +163,8 @@ impl ViewerApp {
             watch_path: None,
             _watcher: None,
             doc: None,
+            compiled: None,
+            component_registry: ComponentRegistry::new(),
             layout,
             render_cx: RenderContext::new(),
             surface: None,
@@ -239,6 +246,19 @@ impl ViewerApp {
     }
 
     fn dispatch_event_with_bubble(&mut self, mut event: Event, bubble_path: &[NodeId]) {
+        event.bubble_path = bubble_path.to_vec();
+
+        if let Some(compiled) = &mut self.compiled {
+            if let Ok(changed_vars) = compiled.dispatch_event(&mut event) {
+                if !changed_vars.is_empty() {
+                    self.layout = compiled.layout().clone();
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                }
+            }
+        }
+
         if let Some(handler) = &mut self.event_handler {
             for &ancestor_id in bubble_path {
                 event.current_target = ancestor_id;
@@ -256,6 +276,29 @@ impl ViewerApp {
         self
     }
 
+    /// Attaches an active `CompiledDocument` to power reactive state mutations and event dispatching.
+    pub fn with_compiled(mut self, compiled: CompiledDocument) -> Self {
+        self.layout = compiled.layout().clone();
+        self.compiled = Some(compiled);
+        self
+    }
+
+    /// Attaches a `ComponentRegistry` for companion component lifecycle and dispatching.
+    pub fn with_registry(mut self, registry: ComponentRegistry) -> Self {
+        self.component_registry = registry;
+        self
+    }
+
+    /// Returns a reference to the active `CompiledDocument`, if present.
+    pub fn compiled(&self) -> Option<&CompiledDocument> {
+        self.compiled.as_ref()
+    }
+
+    /// Returns a mutable reference to the active `CompiledDocument`, if present.
+    pub fn compiled_mut(&mut self) -> Option<&mut CompiledDocument> {
+        self.compiled.as_mut()
+    }
+
     /// Returns a reference to the current resolved layout.
     pub fn layout(&self) -> &ResolvedLayout {
         &self.layout
@@ -270,6 +313,35 @@ impl ViewerApp {
     pub fn with_watch_path(mut self, path: PathBuf) -> Self {
         self.watch_path = Some(path);
         self
+    }
+
+    fn update_layout_for_size(&mut self, logical_w: f64, logical_h: f64) {
+        if let Some(doc) = &self.doc {
+            if let Some(compiled) = &mut self.compiled {
+                let base_dir = self
+                    .watch_path
+                    .as_deref()
+                    .and_then(|p| p.parent())
+                    .unwrap_or_else(|| std::path::Path::new("."));
+                let resolver = FsResolver;
+                if let Ok(mut new_compiled) = CompiledDocument::compile_with_registry(
+                    doc,
+                    logical_w,
+                    logical_h,
+                    base_dir,
+                    &resolver,
+                    &self.component_registry,
+                ) {
+                    for (var_id, val) in &compiled.state_overrides {
+                        let _ = new_compiled.set_state(var_id.node, &var_id.port, val.clone());
+                    }
+                    self.layout = new_compiled.layout().clone();
+                    *compiled = new_compiled;
+                }
+            } else if let Ok(new_layout) = evaluate_document_with_window(doc, logical_w, logical_h) {
+                self.layout = new_layout;
+            }
+        }
     }
 
     /// Reloads the document from disk and re-renders if parsing and layout evaluation succeed.
@@ -307,22 +379,56 @@ impl ViewerApp {
             (self.config.width as f64, self.config.height as f64)
         };
 
-        match evaluate_document_with_window(&new_doc, logical_w, logical_h) {
-            Ok(new_layout) => {
-                println!(
-                    "[HotReload] Successfully reloaded '{}' ({} resolved nodes)",
-                    path.display(),
-                    new_layout.nodes.len()
-                );
-                self.doc = Some(new_doc);
-                self.layout = new_layout;
-                self.render_frame();
-                if let Some(window) = &self.window {
-                    window.request_redraw();
+        if let Some(compiled) = &mut self.compiled {
+            let base_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+            let resolver = FsResolver;
+            match CompiledDocument::compile_with_registry(
+                &new_doc,
+                logical_w,
+                logical_h,
+                base_dir,
+                &resolver,
+                &self.component_registry,
+            ) {
+                Ok(mut new_compiled) => {
+                    for (var_id, val) in &compiled.state_overrides {
+                        let _ = new_compiled.set_state(var_id.node, &var_id.port, val.clone());
+                    }
+                    println!(
+                        "[HotReload] Successfully reloaded '{}' ({} resolved nodes)",
+                        path.display(),
+                        new_compiled.layout().nodes.len()
+                    );
+                    self.doc = Some(new_doc);
+                    self.layout = new_compiled.layout().clone();
+                    *compiled = new_compiled;
+                    self.render_frame();
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[HotReload] Compile error in '{}':\n{e}", path.display());
                 }
             }
-            Err(e) => {
-                eprintln!("[HotReload] Layout evaluation error in '{}':\n{e}", path.display());
+        } else {
+            match evaluate_document_with_window(&new_doc, logical_w, logical_h) {
+                Ok(new_layout) => {
+                    println!(
+                        "[HotReload] Successfully reloaded '{}' ({} resolved nodes)",
+                        path.display(),
+                        new_layout.nodes.len()
+                    );
+                    self.doc = Some(new_doc);
+                    self.layout = new_layout;
+                    self.render_frame();
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[HotReload] Layout evaluation error in '{}':\n{e}", path.display());
+                }
             }
         }
     }
@@ -602,11 +708,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
         let logical_w = width as f64 / scale_factor;
         let logical_h = height as f64 / scale_factor;
-        if let Some(doc) = &self.doc {
-            if let Ok(new_layout) = evaluate_document_with_window(doc, logical_w, logical_h) {
-                self.layout = new_layout;
-            }
-        }
+        self.update_layout_for_size(logical_w, logical_h);
 
         self.renderer = Some(renderer);
         self.surface = Some(surface);
@@ -646,13 +748,11 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         self.render_cx
                             .resize_surface(surface, size.width, size.height);
                     }
-                    if let (Some(doc), Some(window)) = (&self.doc, &self.window) {
+                    if let Some(window) = &self.window {
                         let scale = window.scale_factor();
                         let logical_w = size.width as f64 / scale;
                         let logical_h = size.height as f64 / scale;
-                        if let Ok(new_layout) = evaluate_document_with_window(doc, logical_w, logical_h) {
-                            self.layout = new_layout;
-                        }
+                        self.update_layout_for_size(logical_w, logical_h);
                     }
                     // Immediately render frame synchronously on resize!
                     // This prevents macOS CAMetalLayer from stretching the previous frame's texture.
@@ -668,14 +768,10 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                             self.render_cx
                                 .resize_surface(surface, size.width, size.height);
                         }
-                        if let Some(doc) = &self.doc {
-                            let scale = window.scale_factor();
-                            let logical_w = size.width as f64 / scale;
-                            let logical_h = size.height as f64 / scale;
-                            if let Ok(new_layout) = evaluate_document_with_window(doc, logical_w, logical_h) {
-                                self.layout = new_layout;
-                            }
-                        }
+                        let scale = window.scale_factor();
+                        let logical_w = size.width as f64 / scale;
+                        let logical_h = size.height as f64 / scale;
+                        self.update_layout_for_size(logical_w, logical_h);
                         self.render_frame();
                     }
                 }
@@ -1152,20 +1248,42 @@ pub fn run_viewer_with_document(
     run_viewer_app(&mut app, None)
 }
 
-/// Launches an interactive window viewer watching a source file on disk, hot-reloading on changes.
-pub fn run_viewer_with_file(
+/// Launches an interactive window viewer watching a source file on disk, hot-reloading on changes,
+/// and wiring a `ComponentRegistry` for companion component lifecycle and event dispatching.
+pub fn run_viewer_with_file_and_registry(
     file_path: PathBuf,
     config: ViewerConfig,
+    registry: ComponentRegistry,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let source = std::fs::read_to_string(&file_path)
         .map_err(|e| format!("Failed to read file '{}': {e}", file_path.display()))?;
     let doc = parse_document(&source)
         .map_err(|e| format!("Parse error in '{}': {e}", file_path.display()))?;
-    let initial_layout = evaluate_document_with_window(&doc, config.width as f64, config.height as f64)?;
+    let base_dir = file_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let resolver = FsResolver;
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        config.width as f64,
+        config.height as f64,
+        base_dir,
+        &resolver,
+        &registry,
+    )?;
+    let initial_layout = compiled.layout().clone();
     let mut app = ViewerApp::new(initial_layout, config)
         .with_document(doc)
-        .with_watch_path(file_path.clone());
+        .with_watch_path(file_path.clone())
+        .with_compiled(compiled)
+        .with_registry(registry);
     run_viewer_app(&mut app, Some(&file_path))
+}
+
+/// Launches an interactive window viewer watching a source file on disk, hot-reloading on changes.
+pub fn run_viewer_with_file(
+    file_path: PathBuf,
+    config: ViewerConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_viewer_with_file_and_registry(file_path, config, ComponentRegistry::new())
 }
 
 fn run_viewer_app(

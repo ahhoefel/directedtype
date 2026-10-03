@@ -9,6 +9,6 @@ pub use error::RenderError;
 pub use headless::HeadlessRenderer;
 pub use scene::{build_scene, SceneOptions};
 pub use viewer::{
-    run_viewer, run_viewer_with_document, run_viewer_with_file, ViewerApp, ViewerConfig,
-    ViewerUserEvent,
+    run_viewer, run_viewer_with_document, run_viewer_with_file,
+    run_viewer_with_file_and_registry, ViewerApp, ViewerConfig, ViewerUserEvent,
 };
