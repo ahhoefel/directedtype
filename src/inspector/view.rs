@@ -1,4 +1,4 @@
-use crate::ast::Expr;
+use crate::ast::{ComponentKey, Expr};
 use crate::compiler::expanded::NodeId;
 use crate::compiler::layout::ResolvedLayout;
 use crate::dom::{Dom, NodeHandle};
@@ -13,6 +13,7 @@ pub struct DomTreeItem {
     pub depth: usize,
     pub tag: String,
     pub id_name: Option<String>,
+    pub key: Option<ComponentKey>,
     pub has_children: bool,
     pub is_expanded: bool,
     pub is_selected: bool,
@@ -28,7 +29,7 @@ impl DomTreeItem {
         self.tag == "Rect" || self.tag == "Text" || self.tag == "Font" || self.tag == "Clip" || self.tag == "Box"
     }
 
-    /// Formats the tree item display line (e.g. `"▼ \ScrollView#main (height: 200) [380 × 180]"`).
+    /// Formats the tree item display line (e.g. `"▼ \Table#main"`, `"► \Cell#(0, 0)"`, or `"▼ \ScrollView#main (height: 200)"`).
     pub fn display_text(&self) -> String {
         let indent = "  ".repeat(self.depth);
         let chevron = if self.has_children {
@@ -41,7 +42,10 @@ impl DomTreeItem {
         } else {
             format!("{indent}{chevron}\\{}", self.tag)
         };
-        if let Some(id) = &self.id_name {
+        if let Some(key) = &self.key {
+            line.push('#');
+            line.push_str(&key.format_key());
+        } else if let Some(id) = &self.id_name {
             line.push('#');
             line.push_str(id);
         }
@@ -114,6 +118,7 @@ fn collect_tree_items(
     let is_hovered = state.hovered_node == Some(handle);
 
     let node_id = dom.node_handle_to_id(handle);
+    let key = dom.node_key(handle).cloned();
 
     out.push(DomTreeItem {
         node_id,
@@ -121,6 +126,7 @@ fn collect_tree_items(
         depth,
         tag,
         id_name,
+        key,
         has_children,
         is_expanded,
         is_selected,
@@ -175,7 +181,13 @@ fn collect_layout_tree_items(
     );
 
     let mut port_summary = String::new();
-    if let Some(text) = &node.text_content {
+    let text_val = node.text_content.as_deref().or_else(|| {
+        node.properties
+            .get("text")
+            .and_then(|v| v.as_str())
+            .or_else(|| node.properties.get("content").and_then(|v| v.as_str()))
+    });
+    if let Some(text) = text_val {
         let snippet: String = text.chars().take(24).collect();
         port_summary = if text.chars().count() > 24 {
             format!("\"{snippet}...\"")
@@ -191,12 +203,15 @@ fn collect_layout_tree_items(
     let is_hovered = state.hovered_id == Some(node_id)
         || (node.handle.is_some() && state.hovered_node == node.handle);
 
+    let key = node.key.clone();
+
     out.push(DomTreeItem {
         node_id: Some(node_id),
         handle: node.handle.unwrap_or_else(|| NodeHandle::new(0, 0)),
         depth,
         tag,
         id_name,
+        key,
         has_children,
         is_expanded,
         is_selected,

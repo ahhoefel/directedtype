@@ -89,7 +89,11 @@ impl InspectPanelComponent {
         let divider_y = self.divider_y(win_h);
         let detail_visible_h = (win_h - (divider_y + self.divider_height)).max(0.0);
         let content_h = if let Some(node) = selected_id.and_then(|id| layout.get_node(id)) {
-            let mut h = 10.0 + 14.0 + 76.0 + 16.0 + 18.0;
+            let mut h = 10.0 + 14.0 + 76.0 + 16.0;
+            if !node.state_vars.is_empty() {
+                h += 18.0 + node.state_vars.len() as f64 * 24.0 + 10.0;
+            }
+            h += 18.0;
             let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
             prop_keys.retain(|k| k != "clip");
             for geom in ["x", "y", "width", "height", "z"] {
@@ -192,6 +196,9 @@ impl InspectPanelComponent {
                         let base_y = detail_y - state.detail_scroll_offset;
                         let mut cur_y = base_y + 10.0;
                         cur_y += 14.0 + 76.0 + 16.0; // Section A card
+                        if !node.state_vars.is_empty() {
+                            cur_y += 18.0 + node.state_vars.len() as f64 * 24.0 + 10.0;
+                        }
                         cur_y += 18.0; // Section B header
 
                         let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
@@ -429,9 +436,14 @@ impl InspectPanelComponent {
                 row_y + 2.75,
             );
 
-            // 2. ID name: amber
-            if let Some(id) = &item.id_name {
-                let id_str = format!("#{id}");
+            // 2. Key or ID name: amber
+            let key_or_id = item
+                .key
+                .as_ref()
+                .map(|k| k.format_key())
+                .or_else(|| item.id_name.clone());
+            if let Some(kid) = &key_or_id {
+                let id_str = format!("#{kid}");
                 cur_x += self.draw_text_snippet(
                     scene,
                     font_cx,
@@ -776,7 +788,166 @@ impl InspectPanelComponent {
 
             cur_y += card_h + 16.0;
 
-            // --- Section B: Properties, Formulas & Evaluations ---
+            // --- Section B: Component Reactive State ---
+            if !node.state_vars.is_empty() {
+                self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    "COMPONENT STATE",
+                    9.0,
+                    FontWeight::BOLD,
+                    Color::from_rgb8(192, 132, 252), // purple 400
+                    false,
+                    panel_x + 12.0,
+                    cur_y,
+                );
+                cur_y += 18.0;
+
+                let mut state_names: Vec<String> = node.state_vars.keys().cloned().collect();
+                state_names.sort();
+
+                for s_name in &state_names {
+                    let type_annot = node.state_vars.get(s_name).cloned().flatten();
+                    let val_opt = layout.get_value(node.id, s_name);
+
+                    let row_h = 24.0;
+                    if cur_y + row_h >= detail_y && cur_y <= win_h {
+                        let state_x = panel_x + 12.0;
+
+                        // Live state indicator dot (purple halo + vibrant dot)
+                        let dot_cx = state_x + 4.0;
+                        let dot_cy = cur_y + 8.65;
+                        let halo = Circle::new((dot_cx, dot_cy), 3.5);
+                        scene.fill(
+                            Fill::NonZero,
+                            Affine::IDENTITY,
+                            Brush::Solid(Color::from_rgba8(168, 85, 247, 40)),
+                            None,
+                            &halo,
+                        );
+                        let dot = Circle::new((dot_cx, dot_cy), 2.0);
+                        scene.fill(
+                            Fill::NonZero,
+                            Affine::IDENTITY,
+                            Brush::Solid(Color::from_rgb8(192, 132, 252)),
+                            None,
+                            &dot,
+                        );
+
+                        // Variable Name
+                        let name_adv = self.draw_text_snippet(
+                            scene,
+                            font_cx,
+                            layout_cx,
+                            s_name,
+                            10.5,
+                            FontWeight::BOLD,
+                            Color::from_rgb8(216, 180, 254), // purple 300
+                            true,
+                            state_x + 12.0,
+                            cur_y + 1.5,
+                        );
+
+                        // Separator ": "
+                        let sep_adv = self.draw_text_snippet(
+                            scene,
+                            font_cx,
+                            layout_cx,
+                            ": ",
+                            10.5,
+                            FontWeight::NORMAL,
+                            Color::from_rgb8(100, 116, 139), // slate 500
+                            true,
+                            state_x + 12.0 + name_adv,
+                            cur_y + 1.5,
+                        );
+
+                        let mut val_x = state_x + 12.0 + name_adv + sep_adv;
+
+                        let eval_str = if let Some(v) = val_opt {
+                            format!("{v}")
+                        } else {
+                            "-".to_string()
+                        };
+
+                        if let Some(swatch_col) = parse_hex_color(&eval_str) {
+                            let swatch_rrect =
+                                RoundedRect::new(val_x, cur_y + 2.5, val_x + 11.0, cur_y + 13.5, 2.0);
+                            scene.fill(
+                                Fill::NonZero,
+                                Affine::IDENTITY,
+                                Brush::Solid(swatch_col),
+                                None,
+                                &swatch_rrect,
+                            );
+                            let swatch_stroke = Stroke::new(1.0);
+                            scene.stroke(
+                                &swatch_stroke,
+                                Affine::IDENTITY,
+                                Brush::Solid(Color::from_rgb8(71, 85, 105)),
+                                None,
+                                &swatch_rrect,
+                            );
+                            val_x += 16.0;
+                        }
+
+                        let val_col = match val_opt {
+                            Some(Value::Bool(true)) => Color::from_rgb8(52, 211, 153), // emerald 400
+                            Some(Value::Bool(false)) => Color::from_rgb8(248, 113, 113), // red 400
+                            Some(Value::Number(_)) => Color::from_rgb8(251, 191, 36), // amber 400
+                            Some(Value::String(_)) => Color::from_rgb8(251, 191, 36), // amber
+                            _ => Color::from_rgb8(241, 245, 249),
+                        };
+
+                        let val_adv = self.draw_text_snippet(
+                            scene,
+                            font_cx,
+                            layout_cx,
+                            &eval_str,
+                            10.5,
+                            FontWeight::BOLD,
+                            val_col,
+                            true,
+                            val_x,
+                            cur_y + 1.5,
+                        );
+
+                        if let Some(t_name) = &type_annot {
+                            let annot_str = format!(" ({t_name})");
+                            self.draw_text_snippet(
+                                scene,
+                                font_cx,
+                                layout_cx,
+                                &annot_str,
+                                9.0,
+                                FontWeight::NORMAL,
+                                Color::from_rgb8(148, 163, 184), // slate 400
+                                false,
+                                val_x + val_adv + 4.0,
+                                cur_y + 2.5,
+                            );
+                        }
+
+                        // Subtle separator line under each state row
+                        let sep_y = cur_y + row_h - 1.0;
+                        let sep_stroke = Stroke::new(1.0);
+                        scene.stroke(
+                            &sep_stroke,
+                            Affine::IDENTITY,
+                            Brush::Solid(Color::from_rgb8(24, 32, 47)),
+                            None,
+                            &Line::new((state_x, sep_y), (panel_x + panel_w - 12.0, sep_y)),
+                        );
+                    }
+
+                    cur_y += row_h;
+                }
+
+                cur_y += 10.0;
+            }
+
+            // --- Section C: Properties, Formulas & Evaluations ---
             self.draw_text_snippet(
                 scene,
                 font_cx,

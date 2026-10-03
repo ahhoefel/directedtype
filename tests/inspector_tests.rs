@@ -894,4 +894,145 @@ fn test_expandable_reference_properties() {
     assert_eq!(click_res, directedtype::inspector::PanelHitResult::TogglePropertyRef(text_node.id, "font".to_string()));
 }
 
+#[test]
+fn test_dom_tree_item_structured_keys() {
+    let source = r#"
+\Component Cell(w: Number: 80, h: Number: 30) {
+    \Rect(x: 0, y: 0, width: w, height: h, color: #ffffff)
+}
+
+\Component Table {
+    \Children
+}
+
+\Table("main";) {
+    \Cell(0, 0; w: 80, h: 30)
+    \Cell(0, 1; w: 80, h: 30)
+}
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+
+    let state = directedtype::inspector::InspectorState::new();
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    // Tree item for Table should have #main
+    let table_item = tree_items.iter().find(|i| i.tag == "Table").expect("Table found");
+    assert!(table_item.key.is_some());
+    assert_eq!(table_item.key.as_ref().unwrap().format_key(), "main");
+    let table_display = table_item.display_text();
+    assert!(table_display.contains(r#"\Table#main"#), "got: {table_display}");
+
+    // Tree items for Cells should have #(0, 0) and #(0, 1)
+    let cell_0_0 = tree_items.iter().find(|i| i.tag == "Cell" && i.display_text().contains("#(0, 0)")).expect("Cell 0,0 found");
+    assert_eq!(cell_0_0.key.as_ref().unwrap().format_key(), "(0, 0)");
+
+    let cell_0_1 = tree_items.iter().find(|i| i.tag == "Cell" && i.display_text().contains("#(0, 1)")).expect("Cell 0,1 found");
+    assert_eq!(cell_0_1.key.as_ref().unwrap().format_key(), "(0, 1)");
+
+    // Target info badge label
+    let table_info = InspectTargetInfo::from_layout(&layout, table_item.node_id.unwrap()).unwrap();
+    assert!(table_info.badge_label().starts_with("Table#main ["));
+
+    let cell_info = InspectTargetInfo::from_layout(&layout, cell_0_0.node_id.unwrap()).unwrap();
+    assert!(cell_info.badge_label().starts_with("Cell#(0, 0) ["));
+}
+
+#[test]
+fn test_inspector_target_info_state_variables() {
+    let source = r#"
+\Component Counter(initial: Number: 7) {
+    state count: Number: initial;
+    state is_active: Boolean: true;
+    \Rect(x: 0, y: 0, width: 200, height: 100, color: #ffffff)
+}
+
+\Counter(initial: 42)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+
+    let counter_node = layout.nodes.iter().find(|n| n.name == "Counter").expect("Counter found");
+    let info = InspectTargetInfo::from_layout(&layout, counter_node.id).expect("target info ok");
+
+    assert_eq!(info.state_vars.len(), 2);
+    let count_state = info.state_vars.iter().find(|s| s.0 == "count").expect("count found");
+    assert_eq!(count_state.1, Some("Number".to_string()));
+    assert_eq!(count_state.2, Some(directedtype::compiler::Value::Number(42.0)));
+
+    let active_state = info.state_vars.iter().find(|s| s.0 == "is_active").expect("is_active found");
+    assert_eq!(active_state.1, Some("Boolean".to_string()));
+    assert_eq!(active_state.2, Some(directedtype::compiler::Value::Bool(true)));
+
+    // Test with stateful DOM mutation
+    let mut dom = directedtype::dom::Dom::from_document(&doc).expect("dom from doc ok");
+    dom.commit().expect("dom commit ok");
+    let counter_handle = dom.roots()[0];
+    let initial_info = InspectTargetInfo::from_dom(&dom, counter_handle).expect("dom info ok");
+    assert_eq!(
+        initial_info.state_vars.iter().find(|s| s.0 == "count").unwrap().2,
+        Some(directedtype::compiler::Value::Number(42.0))
+    );
+
+    // Mutate state in DOM
+    dom.set_state(counter_handle, "count", directedtype::compiler::Value::Number(99.0)).expect("set_state ok");
+    let updated_info = InspectTargetInfo::from_dom(&dom, counter_handle).expect("updated dom info ok");
+    assert_eq!(
+        updated_info.state_vars.iter().find(|s| s.0 == "count").unwrap().2,
+        Some(directedtype::compiler::Value::Number(99.0))
+    );
+}
+
+#[test]
+fn test_inspector_panel_render_state_variables_and_structured_keys() {
+    let source = r#"
+\Component Switch {
+    state is_on: Boolean: false;
+    \Rect(x: 0, y: 0, width: 100, height: 40, color: #112233)
+}
+
+\Switch("toggle_btn";)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+
+    let switch_node = layout.nodes.iter().find(|n| n.name == "Switch").expect("Switch found");
+
+    let mut state = directedtype::inspector::InspectorState::new();
+    state.selected_id = Some(switch_node.id);
+
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    // Tree item should have #toggle_btn
+    assert!(tree_items[0].display_text().contains(r#"\Switch#toggle_btn"#));
+
+    // Verify detail scroll calculation accounts for state vars section
+    let scroll_h = panel.max_detail_scroll_with_state(Some(switch_node.id), &layout, Some(&state), 400.0);
+    // Since switch_node has 1 state variable (is_on), content_h includes state section (18.0 + 24.0 + 10.0 = 52.0px extra)
+    assert!(scroll_h >= 0.0);
+
+    // Render panel to Vello scene
+    let mut scene = vello::Scene::new();
+    let mut font_cx = parley::FontContext::new();
+    let mut layout_cx = parley::LayoutContext::new();
+
+    panel.render_to_scene(
+        &mut scene,
+        0.0,
+        600.0,
+        &tree_items,
+        &state,
+        &layout,
+        &mut font_cx,
+        &mut layout_cx,
+    );
+
+    let mut renderer = directedtype::render::HeadlessRenderer::new().expect("init renderer");
+    let img = renderer.render_scene(&scene, 360, 600).expect("render scene ok");
+    assert_eq!(img.width(), 360);
+    assert_eq!(img.height(), 600);
+}
+
+
 

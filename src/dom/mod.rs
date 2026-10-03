@@ -810,6 +810,18 @@ impl Dom {
         self.node_id_to_handle.get(&resolved.id).copied()
     }
 
+    /// Returns the structured component key for `node` if one was declared.
+    pub fn node_key(&self, node: NodeHandle) -> Option<&ComponentKey> {
+        self.arena
+            .get(node)
+            .ok()
+            .and_then(|n| n.key.as_ref())
+            .or_else(|| {
+                let node_id = self.handle_to_node_id.get(&node)?;
+                self.layout()?.get_node(*node_id)?.key.as_ref()
+            })
+    }
+
     /// Returns the active map of all runtime state overrides.
     pub fn state_overrides(&self) -> &HashMap<VarId, Value> {
         &self.state_overrides

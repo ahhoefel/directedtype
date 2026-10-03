@@ -143,6 +143,30 @@ impl ComponentKey {
             span,
         }
     }
+
+    /// Formats the key for tree and badge display (e.g. `main` for single string `"main"`, `(0, 0)` for tuple).
+    pub fn format_key(&self) -> String {
+        if self.parts.len() == 1 {
+            match &self.parts[0] {
+                Expr::Literal(Literal::String(s, _)) => s.clone(),
+                Expr::Literal(Literal::Number(n, _)) => format!("{n}"),
+                Expr::Ident(id) => id.as_str().to_string(),
+                other => format!("{other}"),
+            }
+        } else {
+            let inner: Vec<String> = self
+                .parts
+                .iter()
+                .map(|p| match p {
+                    Expr::Literal(Literal::String(s, _)) => format!("\"{s}\""),
+                    Expr::Literal(Literal::Number(n, _)) => format!("{n}"),
+                    Expr::Ident(id) => id.as_str().to_string(),
+                    other => format!("{other}"),
+                })
+                .collect();
+            format!("({})", inner.join(", "))
+        }
+    }
 }
 
 impl PartialEq for ComponentKey {

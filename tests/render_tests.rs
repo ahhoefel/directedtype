@@ -369,5 +369,53 @@ fn test_render_counter_example() {
     assert!(out_path.exists(), "counter_preview.png must be created");
 }
 
+#[test]
+fn test_render_inspector_with_counter_component_state() {
+    let source = std::fs::read_to_string("examples/Counter.dt").expect("read Counter.dt");
+    let doc = directedtype::parse(&source).expect("parse Counter.dt");
+    let registry = directedtype::component::ComponentRegistry::new();
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile Counter.dt ok");
+
+    let counter_node = compiled.layout.nodes.iter().find(|n| n.name == "Counter").expect("Counter found");
+
+    let mut state = directedtype::inspector::InspectorState::new();
+    state.selected_id = Some(counter_node.id);
+
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&compiled.layout, &state);
+
+    let mut scene = vello::Scene::new();
+    let mut font_cx = parley::FontContext::new();
+    let mut layout_cx = parley::LayoutContext::new();
+
+    panel.render_to_scene(
+        &mut scene,
+        0.0,
+        600.0,
+        &tree_items,
+        &state,
+        &compiled.layout,
+        &mut font_cx,
+        &mut layout_cx,
+    );
+
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let out_path = std::env::temp_dir().join("directedtype_inspector_counter_state.png");
+    let img = renderer.render_scene(&scene, 360, 600).expect("render scene ok");
+    assert_eq!(img.width(), 360);
+    assert_eq!(img.height(), 600);
+    img.save(&out_path).expect("save preview ok");
+    assert!(out_path.exists());
+}
+
+
 
 

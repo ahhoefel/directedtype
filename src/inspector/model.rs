@@ -1,4 +1,4 @@
-use crate::ast::Expr;
+use crate::ast::{ComponentKey, Expr};
 use crate::compiler::expanded::NodeId;
 use crate::compiler::layout::{Rect, ResolvedLayout};
 use crate::compiler::value::Value;
@@ -11,12 +11,14 @@ pub struct InspectTargetInfo {
     pub node_id: Option<NodeId>,
     pub tag: String,
     pub id_name: Option<String>,
+    pub key: Option<ComponentKey>,
     pub rect: Rect,
     pub z: f64,
     pub clip_handle: Option<NodeHandle>,
     pub clip_rect: Option<Rect>,
     pub declared_ports: Vec<(String, Expr)>,
     pub computed_values: Vec<(String, Value)>,
+    pub state_vars: Vec<(String, Option<String>, Option<Value>)>,
 }
 
 impl InspectTargetInfo {
@@ -32,11 +34,14 @@ impl InspectTargetInfo {
             _ => None,
         });
 
+        let key = dom.node_key(handle).cloned();
+
         let mut declared_ports: Vec<(String, Expr)> = declared.into_iter().collect();
         declared_ports.sort_by(|a, b| a.0.cmp(&b.0));
 
         let node_id = dom.node_handle_to_id(handle);
         let mut computed_values = Vec::new();
+        let mut state_vars = Vec::new();
         let mut z = 0.0;
         let mut clip_handle = None;
         let mut clip_rect = None;
@@ -49,6 +54,17 @@ impl InspectTargetInfo {
                         computed_values.push((k.clone(), v.clone()));
                     }
                     computed_values.sort_by(|a, b| a.0.cmp(&b.0));
+
+                    let mut sorted_states: Vec<_> = resolved.state_vars.keys().collect();
+                    sorted_states.sort();
+                    for &s_name in &sorted_states {
+                        let type_annot = resolved.state_vars.get(s_name).cloned().flatten();
+                        let val = dom
+                            .get_state(handle, s_name.as_str())
+                            .cloned()
+                            .or_else(|| layout.get_value(nid, s_name.as_str()).cloned());
+                        state_vars.push((s_name.clone(), type_annot, val));
+                    }
 
                     if let Some(clip_id) = resolved.clip {
                         clip_handle = dom.node_id_to_handle(clip_id);
@@ -63,12 +79,14 @@ impl InspectTargetInfo {
             node_id,
             tag,
             id_name,
+            key,
             rect,
             z,
             clip_handle,
             clip_rect,
             declared_ports,
             computed_values,
+            state_vars,
         })
     }
 
@@ -87,6 +105,17 @@ impl InspectTargetInfo {
             _ => None,
         });
 
+        let key = node.key.clone();
+
+        let mut state_vars = Vec::new();
+        let mut sorted_states: Vec<_> = node.state_vars.keys().collect();
+        sorted_states.sort();
+        for &s_name in &sorted_states {
+            let type_annot = node.state_vars.get(s_name).cloned().flatten();
+            let val = layout.get_value(id, s_name.as_str()).cloned();
+            state_vars.push((s_name.clone(), type_annot, val));
+        }
+
         let clip_rect = node.clip.and_then(|cid| layout.get_node(cid)).map(|n| n.rect);
 
         Some(Self {
@@ -94,19 +123,24 @@ impl InspectTargetInfo {
             node_id: Some(id),
             tag: node.name.clone(),
             id_name,
+            key,
             rect: node.rect,
             z: node.z,
             clip_handle: None,
             clip_rect,
             declared_ports: Vec::new(),
             computed_values,
+            state_vars,
         })
     }
 
-    /// Formats the short header badge label, e.g. `"Rect#card [380 × 180]"`.
+    /// Formats the short header badge label, e.g. `"Rect#card [380 × 180]"` or `"Cell#(0, 0) [80 × 32]"`.
     pub fn badge_label(&self) -> String {
         let mut s = self.tag.clone();
-        if let Some(id) = &self.id_name {
+        if let Some(key) = &self.key {
+            s.push('#');
+            s.push_str(&key.format_key());
+        } else if let Some(id) = &self.id_name {
             s.push('#');
             s.push_str(id);
         }
