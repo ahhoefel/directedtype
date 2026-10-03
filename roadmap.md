@@ -7,7 +7,7 @@
 * Build a library of standard components.
 * Build more examples
 * Dom inspector needs to show source of rules. For example, using a VStack sets the width of children nodes, but the formula shows "inner_width" which is a variable on the vstack and not on the child, so it's not in the right context. We should show it in the context of the parent node, not the child node. It should also indicate that properties are inherited from parents, and which parent.
-* Support overloaded Component constructors with different selections of ports. For example, a text component could take a width value and determine its own height, or take its height and determine its width.
+* Support overloaded Component constructors with different selections of ports. For example, a text component could take a width value and determine its own height, or take its height and determine its width. For another example, you might want variants with padding, padding_x & padding_y, or padding_{top,left,bottom,right}.
 * Understand what auto is and whether we want to keep it in the design.
 
 1. Live Hot-Reloading in the Viewer (Completed)

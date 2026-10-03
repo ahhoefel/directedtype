@@ -2,35 +2,8 @@
 // Demonstrates reference-based font sharing, DAG port minimization,
 // and typographic vertical centering using font.cap_height.
 
-\Component Flow(
-    x: 40,
-    y: 40,
-    gap: Number: 24,
-    width: Number: min(max(window.width - 80, 400), 800)
-) {
-    \Children {
-        x: parent.left,
-        y: prev ? prev.bottom + gap : parent.top,
-        width: parent.width
-    }
-}
-
-\Component Card(
-    x: parent.left,
-    width: parent.width,
-    height: Number: 120,
-    bg_color: Color: #f8fafc,
-    radius: Number: 12
-) {
-    alias right = x + width;
-    alias bottom = y + height;
-
-    \Rect(x: x, y: y, width: width, height: height, color: bg_color, radius: radius)
-    \Children {
-        x: parent.left + 24,
-        y: prev ? prev.bottom + 12 : parent.top + 20
-    }
-}
+\use "components/VStack.dt"
+\use "components/Card.dt"
 
 // 1. Reusable font resource definitions
 let heading_font = \Font(size: 28, weight: 700);
@@ -40,7 +13,13 @@ let body_font = \Font(size: 15, weight: 400);
 
 let badge_pad = 8;
 
-\Flow {
+\VStack(
+    x: 40,
+    y: 40,
+    gap: 24,
+    width: min(max(window.width - 80, 400), 800),
+    align: "stretch"
+) {
     // Section Header using shared heading_font
     \Text(font: heading_font, color: #0f172a) {
         Font Sharing & Typographic Metrics
@@ -51,35 +30,37 @@ let badge_pad = 8;
     }
 
     // Card 1: Typographic badge centered using badge_font.cap_height
-    \Card(height: 130, bg_color: #f8fafc) {
+    \Card(color: #f8fafc, border_color: #e2e8f0, padding_x: 24, padding_y: 20) {
         // Badge background sized to precisely fit cap_height + padding
         \Rect(
-            x: parent.left,
-            y: parent.top,
             width: 180,
             height: badge_font.cap_height + (2 * badge_pad) + 4,
             color: #dbeafe,
             radius: 6
-        )
-
-        \Text(x: parent.left + badge_pad, y: parent.top + badge_pad, font: badge_font, color: #2563eb) {
-            FONT RESOURCE NODE
+        ) {
+            // Text mathematically centered on the cap_height optical baseline
+            \Text(
+                font: badge_font,
+                x: parent.left + 14,
+                y: parent.top + badge_pad,
+                color: #1e40af
+            ) {
+                TYPOGRAPHIC BADGE
+            }
         }
 
-        let desc = \Text(font: body_font, color: #334155) {
-            The badge rect height is derived directly from badge_font.cap_height without duplicating metric ports.
+        \Text(
+            font: body_font,
+            color: #334155
+        ) {
+            The badge height and vertical centering adapt dynamically to the intrinsic font cap_height metric.
         }
     }
 
-    // Card 2: Ambient font inheritance
-    \Card(height: 110, bg_color: #f1f5f9) {
-        env font = body_font;
-
-        \Text(color: #1e293b) {
-            Paragraph A automatically inherits body_font from the ambient environment.
-        }
-        \Text(color: #64748b) {
-            Paragraph B shares the exact same font metrics and properties with zero redundancy.
+    // Card 2: Shared font metrics across diverse UI elements
+    \Card(color: #f1f5f9, border_color: #e2e8f0, padding_x: 24, padding_y: 20) {
+        \Text(font: body_font, color: #475569) {
+            All four cards and text blocks reference the same Font nodes, minimizing duplicate measurement passes.
         }
     }
 }

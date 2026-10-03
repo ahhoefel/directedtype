@@ -1,18 +1,5 @@
 // DirectedType (DTML) Clipping & Environmental Clip Contexts Example
-
-\Component Flow(
-    x: parent.x, 
-    y: parent.y + self.margin, 
-    gap: Number: 20, 
-    width: Number: min(max(window.width, 400), 600), 
-    margin: Number: 32
-) {
-    \Children {
-        x: parent.left + parent.margin,
-        y: prev ? prev.bottom + gap : parent.top,
-        width: parent.width - (2 * parent.margin)
-    }
-}
+\use "components/VStack.dt"
 
 // A rounded viewport container that establishes a GPU hardware clip boundary
 \Component ScrollView(
@@ -55,7 +42,13 @@
     }
 }
 
-\Flow(gap: 20) {
+\VStack(
+    x: 32,
+    y: 32,
+    gap: 20,
+    width: min(max(window.width - 64, 400), 600),
+    align: "stretch"
+) {
     \Text(size: 28, weight: 700, color: #0f172a) {
         Spatial Clipping Demonstration
     }

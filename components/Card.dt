@@ -1,11 +1,11 @@
 // DirectedType Standard Component Library: Card
 // Universal surface container with customizable margins, background, borders, and ambient child flow.
+// Always automatically sized to wrap its interior components; exposes read-only height and bottom aliases.
 
 \Component Card(
     x: Number: 0,
     y: Number: 0,
     width: Number: 0,
-    height: Number: 0,
     color: Color: #1e293b,
     radius: Number: 12,
     border_color: Color: #334155,
@@ -13,20 +13,19 @@
     padding_x: Number: 20,
     padding_y: Number: 20,
     gap: Number: 12,
-    text_color: Color: #f8fafc,
-    center_y: Boolean: false
+    text_color: Color: #f8fafc
 ) {
     let resolved_width = width > 0 ? width : (parent.width - (2 * x));
-    let resolved_height = height > 0 ? height : 120;
 
     alias right = x + resolved_width;
-    alias bottom = y + resolved_height;
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_y : y + (2 * padding_y);
+    alias height = bottom - y;
 
     \Rect(
         x: x,
         y: y,
         width: resolved_width,
-        height: resolved_height,
+        height: height,
         color: color,
         radius: radius,
         border_color: border_color,
@@ -35,7 +34,7 @@
 
     \Children {
         x: parent.left + padding_x,
-        y: center_y ? parent.top + (resolved_height - 16) / 2 - 1 : (prev ? prev.bottom + gap : parent.top + padding_y),
+        y: prev ? prev.bottom + gap : parent.top + padding_y,
         color: text_color
     }
 }
