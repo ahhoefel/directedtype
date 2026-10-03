@@ -1,17 +1,5 @@
 // DirectedType (DTML) Showcase Document
-\Component Flow(
-        x: parent.x, 
-        y: parent.y + self.margin, 
-        gap: Number: 20, 
-        width: Number: min(max(window.width, 400), 700), 
-        margin: Number: 40
-    ) {
-    \Children {
-        x: parent.left + parent.margin,
-        y: prev ? prev.bottom + gap : parent.top,
-        width: parent.width - (2 * parent.margin)
-    }
-}
+\use "components/VStack.dt"
 
 \Component ShadedBox(bg_color: Color: #1e222d, width: max(children.width) + 40, height: sum(children.height) + 40) {
     \Rect(
@@ -31,7 +19,13 @@
     }
 }
 
-\Flow(gap: 24) {
+\VStack(
+    x: 40,
+    y: 40,
+    gap: 24,
+    width: min(max(window.width - 80, 400), 700),
+    align: "stretch"
+) {
     \Text(size: 36, weight: 700, color: #0f172a) {
         DirectedType Native Layout Engine
     }

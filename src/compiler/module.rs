@@ -172,11 +172,23 @@ fn resolve_use_decl<R: FileResolver>(
     module_exports: &mut HashMap<PathBuf, HashMap<String, ComponentDef>>,
 ) -> Result<(), CompileError> {
     let raw_path = Path::new(&u.path);
-    let resolved_path = if raw_path.is_absolute() {
+    let mut resolved_path = if raw_path.is_absolute() {
         raw_path.to_path_buf()
     } else {
         base_dir.join(raw_path)
     };
+
+    if !raw_path.is_absolute() && resolver.read(&resolved_path).is_err() {
+        if resolver.read(raw_path).is_ok() {
+            resolved_path = raw_path.to_path_buf();
+        } else if let Ok(stripped) = raw_path.strip_prefix("..") {
+            if resolver.read(stripped).is_ok() {
+                resolved_path = stripped.to_path_buf();
+            } else if resolver.read(&base_dir.join(stripped)).is_ok() {
+                resolved_path = base_dir.join(stripped);
+            }
+        }
+    }
 
     let canonical_path = resolver
         .canonicalize(&resolved_path)
