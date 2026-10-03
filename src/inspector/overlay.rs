@@ -49,6 +49,7 @@ impl InspectOverlayComponent {
     }
 
     /// Renders the complete inspection overlay (highlight, clip guide, and floating badge) onto `scene`.
+    #[allow(clippy::too_many_arguments)]
     pub fn render_to_scene(
         &self,
         scene: &mut Scene,
@@ -134,6 +135,7 @@ impl InspectOverlayComponent {
     }
 
     /// Renders the floating dimension & tag badge above or below the target element.
+    #[allow(clippy::too_many_arguments)]
     fn render_badge(
         &self,
         scene: &mut Scene,

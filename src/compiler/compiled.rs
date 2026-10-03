@@ -12,17 +12,18 @@ use crate::span::Span;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-/// A fully compiled and topologically scheduled DirectedType document with a reactive state store.
+/// A fully compiled and topologically scheduled DirectedType document with a reactive state store
+/// and active typed companion component instances.
 ///
-/// Enables microsecond state mutations and incremental DAG invalidations without re-parsing,
-/// re-expanding, or re-sorting the graph.
-#[derive(Debug, Clone, PartialEq)]
+/// Enables microsecond state mutations, event dispatching, and incremental DAG invalidations.
+#[derive(Debug)]
 pub struct CompiledDocument {
     pub expanded: ExpandedDocument,
     pub graph: VariableGraph,
     pub schedule: TopologicalSchedule,
     pub layout: ResolvedLayout,
     pub state_overrides: HashMap<VarId, Value>,
+    pub instances: crate::component::InstanceManager,
 }
 
 impl CompiledDocument {
@@ -39,6 +40,7 @@ impl CompiledDocument {
             schedule,
             layout,
             state_overrides,
+            instances: crate::component::InstanceManager::new(),
         }
     }
 
@@ -83,7 +85,65 @@ impl CompiledDocument {
             schedule,
             layout,
             state_overrides,
+            instances: crate::component::InstanceManager::new(),
         })
+    }
+
+    /// Compiles an AST document with a `ComponentRegistry`, instantiating companion components
+    /// and executing their `on_mount` lifecycle hooks.
+    pub fn compile_with_registry<R: FileResolver>(
+        doc: &Document,
+        window_width: f64,
+        window_height: f64,
+        base_dir: &Path,
+        resolver: &R,
+        registry: &crate::component::ComponentRegistry,
+    ) -> Result<Self, CompileError> {
+        let mut compiled = Self::compile_with_resolver(doc, window_width, window_height, base_dir, resolver)?;
+        compiled.attach_registry(registry)?;
+        Ok(compiled)
+    }
+
+    /// Attaches a `ComponentRegistry` to this compiled document, instantiating matching components
+    /// and invoking their `on_mount` lifecycle hooks.
+    pub fn attach_registry(
+        &mut self,
+        registry: &crate::component::ComponentRegistry,
+    ) -> Result<(), CompileError> {
+        use crate::component::Context;
+
+        let mut initial_mutations = Vec::new();
+
+        for node in &self.expanded.nodes {
+            if let Some(mut instance) = registry.create_instance(&node.name) {
+                let resolved = match self.layout.get_node(node.id) {
+                    Some(r) => r,
+                    None => continue,
+                };
+                let mut ctx = Context::new(
+                    node.id,
+                    node.parent,
+                    node.key.as_ref(),
+                    &resolved.properties,
+                    &self.layout,
+                );
+
+                instance.on_mount(&mut ctx);
+                let mutations = ctx.take_mutations();
+                for (state_name, val) in mutations {
+                    initial_mutations.push((node.id, state_name, val));
+                }
+
+                self.instances.insert(node.id, instance);
+            }
+        }
+
+        // Apply any initial state mutations produced during on_mount
+        for (node_id, state_name, val) in initial_mutations {
+            let _ = self.set_state(node_id, &state_name, val);
+        }
+
+        Ok(())
     }
 
     /// Mutates a declared reactive state variable on a component instance, triggering an
@@ -195,5 +255,105 @@ impl CompiledDocument {
     /// Finds a resolved node by its structured key.
     pub fn find_by_key(&self, parent: Option<NodeId>, key: &ComponentKey) -> Option<&ResolvedNode> {
         self.layout.find_by_key(parent, key)
+    }
+
+    /// Dispatches an interaction event through the component hierarchy.
+    ///
+    /// The event bubbles up from the hit target along `bubble_path`. At each node,
+    /// matching event handlers (e.g. `on_click: self.increment`) are invoked on the
+    /// target component instance. Any state mutations emitted by component methods
+    /// are batch-applied, triggering an incremental layout DAG update.
+    pub fn dispatch_event(
+        &mut self,
+        event: &mut crate::interaction::Event,
+    ) -> Result<HashSet<VarId>, crate::component::DispatchError> {
+        use crate::component::{Context, DispatchError, EventHandlerTarget};
+        use crate::interaction::EventKind;
+
+        // 1. Populate bubble path if empty via spatial hit-testing
+        if event.bubble_path.is_empty() {
+            if let Some(hit) = self.layout.hit_test(event.global_point) {
+                event.target = hit.target;
+                event.local_point = hit.local_point;
+                event.bubble_path = hit.bubble_path;
+            } else {
+                return Ok(HashSet::new());
+            }
+        }
+
+        let event_handler_name = match &event.kind {
+            EventKind::Click { .. } => "on_click",
+            EventKind::PointerDown { .. } => "on_pointer_down",
+            EventKind::PointerUp { .. } => "on_pointer_up",
+            EventKind::PointerMove => "on_pointer_move",
+            EventKind::PointerEnter => "on_pointer_enter",
+            EventKind::PointerLeave => "on_pointer_leave",
+            EventKind::Scroll { .. } => "on_scroll",
+        };
+
+        let mut all_changed_vars = HashSet::new();
+
+        // 2. Bubble up the ancestor chain
+        let bubble_nodes = event.bubble_path.clone();
+        for node_id in bubble_nodes {
+            if event.propagation_stopped {
+                break;
+            }
+
+            let handler_opt = self
+                .layout
+                .get_node(node_id)
+                .and_then(|n| n.event_handlers.get(event_handler_name).cloned());
+
+            if let Some(handler) = handler_opt {
+                match &handler.target {
+                    EventHandlerTarget::Component(target_id) => {
+                        let target_node_id = *target_id;
+                        if let Some(component) = self.instances.get_mut(target_node_id) {
+                            event.current_target = node_id;
+
+                            let target_node = match self.layout.get_node(target_node_id) {
+                                Some(n) => n,
+                                None => continue,
+                            };
+
+                            let mut ctx = Context::new(
+                                target_node_id,
+                                target_node.parent,
+                                target_node.key.as_ref(),
+                                &target_node.properties,
+                                &self.layout,
+                            );
+
+                            component.dispatch(&handler.method, event, &mut ctx)?;
+
+                            let mutations = ctx.take_mutations();
+                            for (state_name, val) in mutations {
+                                if let Ok(changed) = self.set_state(target_node_id, &state_name, val) {
+                                    all_changed_vars.extend(changed);
+                                }
+                            }
+                        } else {
+                            return Err(DispatchError::InstanceNotFound(target_node_id));
+                        }
+                    }
+                    EventHandlerTarget::Env(service) => {
+                        return Err(DispatchError::UnsupportedTarget(format!("env.{}", service)));
+                    }
+                }
+            }
+        }
+
+        Ok(all_changed_vars)
+    }
+
+    /// Returns a reference to the active `InstanceManager`.
+    pub fn instances(&self) -> &crate::component::InstanceManager {
+        &self.instances
+    }
+
+    /// Returns a mutable reference to the active `InstanceManager`.
+    pub fn instances_mut(&mut self) -> &mut crate::component::InstanceManager {
+        &mut self.instances
     }
 }

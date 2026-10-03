@@ -137,6 +137,7 @@ impl InspectPanelComponent {
     }
 
     /// Determines the action triggered by clicking at `(px, py)` in logical window space.
+    #[allow(clippy::too_many_arguments)]
     pub fn handle_click(
         &self,
         px: f64,

@@ -54,6 +54,18 @@ pub fn compile_document_with_resolver<R: FileResolver>(
     CompiledDocument::compile_with_resolver(doc, window_width, window_height, base_dir, resolver)
 }
 
+/// Compiles an AST document with explicit window dimensions, base directory, FileResolver, and ComponentRegistry.
+pub fn compile_document_with_registry<R: FileResolver>(
+    doc: &Document,
+    window_width: f64,
+    window_height: f64,
+    base_dir: &Path,
+    resolver: &R,
+    registry: &crate::component::ComponentRegistry,
+) -> Result<CompiledDocument, CompileError> {
+    CompiledDocument::compile_with_registry(doc, window_width, window_height, base_dir, resolver, registry)
+}
+
 /// High-level compiler helper: expands an AST document and builds the flat variable dependency graph
 /// using default window dimensions (800x600).
 pub fn compile_to_graph(doc: &Document) -> Result<(ExpandedDocument, VariableGraph), CompileError> {

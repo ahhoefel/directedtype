@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod compiler;
+pub mod component;
 pub mod dom;
 pub mod error;
 pub mod inspector;
@@ -11,6 +12,10 @@ pub mod span;
 pub mod token;
 
 pub use ast::Document;
+pub use component::{
+    Component, ComponentFactory, ComponentRegistry, Context, DispatchError, EventHandlerBinding,
+    EventHandlerTarget, InstanceManager,
+};
 pub use compiler::{evaluate_document, evaluate_document_with_window, Rect, ResolvedLayout, ResolvedNode, Value};
 pub use dom::{Dom, DomError, DomHitTestResult, NodeHandle, Transaction};
 pub use error::ParseError;

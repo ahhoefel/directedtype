@@ -10,6 +10,16 @@ pub trait FileResolver {
     fn canonicalize(&self, path: &Path) -> Result<PathBuf, String> {
         Ok(normalize_path(path))
     }
+    /// Checks if a companion Rust file exists for the given DirectedType file.
+    fn find_companion_rs(&self, dt_path: &Path) -> Option<PathBuf> {
+        if dt_path.extension().and_then(|e| e.to_str()) == Some("dt") {
+            let rs_path = dt_path.with_extension("rs");
+            if self.read(&rs_path).is_ok() {
+                return Some(rs_path);
+            }
+        }
+        None
+    }
 }
 
 /// Default filesystem resolver using `std::fs`.

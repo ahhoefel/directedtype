@@ -74,6 +74,9 @@ pub struct Event {
     /// The node currently receiving the event during bubbling.
     pub current_target: NodeId,
 
+    /// The chain of ancestor nodes from the hit node up to the root.
+    pub bubble_path: Vec<NodeId>,
+
     /// Flag to halt further bubbling up the ancestor chain.
     pub propagation_stopped: bool,
 }
@@ -93,8 +96,15 @@ impl Event {
             modifiers,
             target,
             current_target: target,
+            bubble_path: Vec::new(),
             propagation_stopped: false,
         }
+    }
+
+    /// Sets the bubble path on this event.
+    pub fn with_bubble_path(mut self, path: Vec<NodeId>) -> Self {
+        self.bubble_path = path;
+        self
     }
 
     /// Stops the event from propagating further up the ancestor bubble path.

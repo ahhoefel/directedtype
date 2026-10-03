@@ -68,6 +68,7 @@ pub struct Dom {
     dirty: bool,
     compiled: Option<CompiledDocument>,
     state_overrides: HashMap<VarId, Value>,
+    component_registry: crate::component::ComponentRegistry,
     handle_to_node_id: HashMap<NodeHandle, NodeId>,
     node_id_to_handle: HashMap<NodeId, NodeHandle>,
 }
@@ -91,6 +92,7 @@ impl Dom {
             dirty: true,
             compiled: None,
             state_overrides: HashMap::new(),
+            component_registry: crate::component::ComponentRegistry::new(),
             handle_to_node_id: HashMap::new(),
             node_id_to_handle: HashMap::new(),
         }
@@ -634,6 +636,7 @@ impl Dom {
 
         let doc = self.to_document()?;
         let mut compiled = compile_document_with_window(&doc, width, height)?;
+        compiled.attach_registry(&self.component_registry)?;
 
         // Re-apply any active runtime state overrides into the newly compiled document
         if !self.state_overrides.is_empty() {
@@ -665,6 +668,66 @@ impl Dom {
     /// Returns the active `CompiledDocument`, if one exists.
     pub fn compiled(&self) -> Option<&CompiledDocument> {
         self.compiled.as_ref()
+    }
+
+    /// Returns a mutable reference to the active `CompiledDocument`, if one exists.
+    pub fn compiled_mut(&mut self) -> Option<&mut CompiledDocument> {
+        self.compiled.as_mut()
+    }
+
+    /// Registers a typed companion component implementation on the DOM.
+    pub fn register_component<F>(&mut self, name: impl Into<String>, factory: F)
+    where
+        F: Fn() -> Box<dyn crate::component::Component> + Send + Sync + 'static,
+    {
+        self.component_registry.register(name, factory);
+        self.dirty = true;
+    }
+
+    /// Registers a typed companion component implementation with its companion file path.
+    pub fn register_companion<F>(
+        &mut self,
+        name: impl Into<String>,
+        companion_path: impl Into<String>,
+        factory: F,
+    ) where
+        F: Fn() -> Box<dyn crate::component::Component> + Send + Sync + 'static,
+    {
+        self.component_registry.register_companion(name, companion_path, factory);
+        self.dirty = true;
+    }
+
+    /// Returns a reference to the DOM's component registry.
+    pub fn component_registry(&self) -> &crate::component::ComponentRegistry {
+        &self.component_registry
+    }
+
+    /// Returns a mutable reference to the DOM's component registry.
+    pub fn component_registry_mut(&mut self) -> &mut crate::component::ComponentRegistry {
+        self.dirty = true;
+        &mut self.component_registry
+    }
+
+    /// Dispatches an interaction event through the DOM's compiled component hierarchy.
+    pub fn dispatch_event(
+        &mut self,
+        event: &mut crate::interaction::Event,
+    ) -> Result<HashSet<VarId>, crate::component::DispatchError> {
+        if self.dirty || self.compiled.is_none() {
+            let _ = self.commit();
+        }
+
+        let compiled = self.compiled.as_mut().ok_or_else(|| {
+            crate::component::DispatchError::Custom("DOM layout could not be compiled".into())
+        })?;
+
+        let changed = compiled.dispatch_event(event)?;
+        for var_id in &changed {
+            if let Some(val) = compiled.state_overrides.get(var_id) {
+                self.state_overrides.insert(var_id.clone(), val.clone());
+            }
+        }
+        Ok(changed)
     }
 
     /// Mutates a declared reactive state variable on a component instance, triggering an

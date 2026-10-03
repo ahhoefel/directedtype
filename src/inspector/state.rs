@@ -173,10 +173,8 @@ impl InspectorState {
     pub fn primary_highlight_target(&self) -> Option<(NodeHandle, bool)> {
         if let Some(h) = self.hovered_node {
             Some((h, self.selected_node == Some(h)))
-        } else if let Some(s) = self.selected_node {
-            Some((s, true))
         } else {
-            None
+            self.selected_node.map(|s| (s, true))
         }
     }
 

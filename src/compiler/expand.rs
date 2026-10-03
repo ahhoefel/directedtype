@@ -30,6 +30,7 @@ pub struct ScopeContext<'a> {
     pub lexical_scope: &'a HashMap<String, LexicalBinding>,
     pub env_scope: &'a HashMap<String, EnvEntry>,
     pub node_fonts: &'a HashMap<NodeId, NodeId>,
+    pub enclosing_component: Option<NodeId>,
 }
 
 /// Expands a parsed AST `Document` into an `ExpandedDocument` using default current directory.
@@ -156,6 +157,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             lexical_scope: &global_scope,
                             env_scope: &global_env_scope,
                             node_fonts: &node_fonts,
+                            enclosing_component: None,
                         };
                         let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                         if let Some(LexicalBinding::Expr(existing)) = global_scope.get(let_binding.name.as_str()) {
@@ -185,6 +187,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                                 lexical_scope: &global_scope,
                                 env_scope: &global_env_scope,
                                 node_fonts: &node_fonts,
+                                enclosing_component: None,
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             if let Some(LexicalBinding::Expr(existing)) = global_scope.get(env_binding.name.as_str()) {
@@ -216,6 +219,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         lexical_scope: &global_scope,
         env_scope: &global_env_scope,
         node_fonts: &node_fonts,
+        enclosing_component: None,
     };
     for (name, expr) in expanded_doc.window_ports.clone() {
         let rewritten = rewrite_expr(&expr, &window_scope_ctx)?;
@@ -267,6 +271,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         lexical_scope: &global_scope,
                         env_scope: &global_env_scope,
                         node_fonts: &node_fonts,
+                        enclosing_component: None,
                     };
                     if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
                         global_scope.insert(
@@ -335,6 +340,7 @@ struct InstanceContext<'a> {
     pub prev_sibling_id: Option<NodeId>,
     pub parent_ports: &'a [String],
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
+    pub enclosing_component_id: Option<NodeId>,
 }
 
 struct ElementContext<'a> {
@@ -386,6 +392,7 @@ fn expand_element(
             lexical_scope: ctx.lexical_scope,
             env_scope: ctx.env_scope,
             node_fonts,
+            enclosing_component: ctx.enclosing_component_id,
         };
         let mut rewritten_parts = Vec::new();
         for part in &key.parts {
@@ -418,6 +425,7 @@ fn expand_element(
             prev_sibling_id: ctx.prev_sibling_id,
             parent_ports: ctx.parent_ports,
             ambient_authored_ports: ctx.ambient_authored_ports,
+            enclosing_component_id: ctx.enclosing_component_id,
         };
         expand_component_instance(
             &inst_ctx,
@@ -445,6 +453,7 @@ fn expand_element(
 }
 
 /// Expands a component instance, wiring parameters, component body, and consumer children.
+#[allow(clippy::too_many_arguments)]
 fn expand_component_instance(
     ctx: &InstanceContext<'_>,
     instance: &ElementNode,
@@ -596,6 +605,7 @@ fn expand_component_instance(
                     lexical_scope,
                     env_scope: caller_env_scope,
                     node_fonts,
+                    enclosing_component: ctx.enclosing_component_id,
                 };
                 rewrite_expr(other, &caller_scope_ctx)?
             }
@@ -654,12 +664,10 @@ fn expand_component_instance(
     }
 
     // Record component font if resolved
-    if let Some(font_expr) = comp_ports.get("font") {
-        if let Expr::Ident(id) = font_expr {
-            if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
-                node_fonts.insert(ctx.comp_node_id, fid);
-                doc.get_node_mut(ctx.comp_node_id).unwrap().font = Some(fid);
-            }
+    if let Some(Expr::Ident(id)) = comp_ports.get("font") {
+        if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+            node_fonts.insert(ctx.comp_node_id, fid);
+            doc.get_node_mut(ctx.comp_node_id).unwrap().font = Some(fid);
         }
     }
 
@@ -820,6 +828,7 @@ fn expand_component_instance(
                             lexical_scope: &local_scope,
                             env_scope: &internal_body_env_scope,
                             node_fonts: &*node_fonts,
+                            enclosing_component: Some(ctx.comp_node_id),
                         };
                         let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                         if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
@@ -848,6 +857,7 @@ fn expand_component_instance(
                                 lexical_scope: &local_scope,
                                 env_scope: &internal_body_env_scope,
                                 node_fonts: &*node_fonts,
+                                enclosing_component: Some(ctx.comp_node_id),
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             if let Some(LexicalBinding::Expr(existing)) = local_scope.get(env_binding.name.as_str()) {
@@ -956,6 +966,7 @@ fn expand_component_instance(
                                 lexical_scope: &local_scope,
                                 env_scope: &internal_body_env_scope,
                                 node_fonts: &*node_fonts,
+                                enclosing_component: Some(ctx.comp_node_id),
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             local_scope.insert(
@@ -1021,6 +1032,7 @@ fn expand_component_instance(
                         lexical_scope: &local_scope,
                         env_scope: &children_env_scope,
                         node_fonts: &*node_fonts,
+                        enclosing_component: Some(ctx.comp_node_id),
                     };
 
                     for ambient in &dir.ports {
@@ -1084,11 +1096,12 @@ fn expand_component_instance(
         lexical_scope: &local_scope,
         env_scope: &internal_body_env_scope,
         node_fonts: &*node_fonts,
+        enclosing_component: ctx.enclosing_component_id,
     };
 
     let mut rewritten_ports = HashMap::new();
-    for (port_name, port_expr) in comp_ports {
-        rewritten_ports.insert(port_name, rewrite_expr(&port_expr, &scope_ctx)?);
+    for (port_name, port_expr) in &comp_ports {
+        rewritten_ports.insert(port_name.clone(), rewrite_expr(port_expr, &scope_ctx)?);
     }
 
     let mut comp_authored_ports = HashMap::new();
@@ -1126,6 +1139,7 @@ fn expand_component_instance(
         lexical_scope: &local_scope,
         env_scope: &internal_body_env_scope,
         node_fonts: &*node_fonts,
+        enclosing_component: Some(ctx.comp_node_id),
     };
     for (alias_name, alias_binding) in &declared_aliases {
         let rewritten_alias = rewrite_expr(&alias_binding.value, &alias_scope_ctx)?;
@@ -1208,6 +1222,13 @@ fn expand_component_instance(
     for (state_name, s) in &declared_states {
         let type_name = s.type_annotation.as_ref().map(|t| t.name.as_str().to_string());
         node.state_vars.insert(state_name.clone(), type_name);
+    }
+    for (port_name, expr) in &comp_ports {
+        if port_name.starts_with("on_") {
+            if let Some(binding) = extract_event_binding(port_name, expr) {
+                node.event_handlers.insert(port_name.clone(), binding);
+            }
+        }
     }
 
     Ok(())
@@ -1332,12 +1353,11 @@ fn expand_primitive_element(
             lexical_scope: ctx.lexical_scope,
             env_scope: ctx.env_scope,
             node_fonts: &*node_fonts,
+            enclosing_component: ctx.enclosing_component_id,
         };
-        if let Ok(rewritten) = rewrite_expr(raw_font_expr, &temp_scope_ctx) {
-            if let Expr::Ident(id) = &rewritten {
-                if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
-                    font_node_id = Some(fid);
-                }
+        if let Ok(Expr::Ident(id)) = rewrite_expr(raw_font_expr, &temp_scope_ctx) {
+            if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                font_node_id = Some(fid);
             }
         }
     } else if let Some(EnvEntry::Bound(env_expr)) = ctx.env_scope.get("font") {
@@ -1351,6 +1371,7 @@ fn expand_primitive_element(
             lexical_scope: ctx.lexical_scope,
             env_scope: ctx.env_scope,
             node_fonts: &*node_fonts,
+            enclosing_component: ctx.enclosing_component_id,
         };
         if let Ok(rewritten) = rewrite_expr(env_expr, &temp_scope_ctx) {
             if let Expr::Ident(id) = &rewritten {
@@ -1382,16 +1403,27 @@ fn expand_primitive_element(
         lexical_scope: ctx.lexical_scope,
         env_scope: ctx.env_scope,
         node_fonts: &*node_fonts,
+        enclosing_component: ctx.enclosing_component_id,
     };
 
     let mut ports = HashMap::new();
     let mut authored_ports = HashMap::new();
+    let mut event_handlers = HashMap::new();
     for (port_name, expr) in resolved_port_exprs {
         if let Some(ambient_expr) = ctx.ambient_authored_ports.and_then(|m| m.get(&port_name)) {
             authored_ports.insert(port_name.clone(), ambient_expr.clone());
         } else {
             authored_ports.insert(port_name.clone(), expr.clone());
         }
+
+        if port_name.starts_with("on_") {
+            let rewritten = rewrite_expr(&expr, &scope_ctx)?;
+            if let Some(binding) = extract_event_binding(&port_name, &rewritten) {
+                event_handlers.insert(port_name, binding);
+                continue;
+            }
+        }
+
         let rewritten = rewrite_expr(&expr, &scope_ctx)?;
         ports.insert(port_name, rewritten);
     }
@@ -1831,6 +1863,7 @@ fn expand_primitive_element(
     node.children = child_ids;
     node.ports = ports;
     node.authored_ports = authored_ports;
+    node.event_handlers = event_handlers;
 
     Ok(())
 }
@@ -1888,7 +1921,8 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 return Ok(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), id.span)));
             }
             if id.as_str() == "self" {
-                return Ok(Expr::Ident(Ident::new(ctx.current_node.canonical_name(), id.span)));
+                let self_id = ctx.enclosing_component.unwrap_or(ctx.current_node);
+                return Ok(Expr::Ident(Ident::new(self_id.canonical_name(), id.span)));
             }
             if id.as_str() == "parent" {
                 if let Some(parent) = ctx.parent_node {
@@ -1948,7 +1982,8 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             // Resolve target (parent, window, prev, self, or named node in lexical scope)
             let resolved_target = if let Some(target_name) = &target_ident_name {
                 if target_name == "self" {
-                    Expr::Ident(Ident::new(ctx.current_node.canonical_name(), m.target.span()))
+                    let self_id = ctx.enclosing_component.unwrap_or(ctx.current_node);
+                    Expr::Ident(Ident::new(self_id.canonical_name(), m.target.span()))
                 } else if let Some(LexicalBinding::Node(node_id)) = ctx.lexical_scope.get(target_name) {
                     Expr::Ident(Ident::new(node_id.canonical_name(), m.target.span()))
                 } else if target_name == "parent" {
@@ -2173,5 +2208,46 @@ fn validate_key_expr(
             name: n.name.as_str().to_string(),
             span: n.span,
         }),
+    }
+}
+
+/// Helper to parse an event handler binding expression: `target.method` or `method`.
+fn extract_event_binding(
+    port_name: &str,
+    expr: &Expr,
+) -> Option<crate::component::EventHandlerBinding> {
+    use crate::component::{EventHandlerBinding, EventHandlerTarget};
+    match expr {
+        Expr::MemberAccess(m) => {
+            let target = match m.target.as_ref() {
+                Expr::Ident(id) => {
+                    if let Some(node_id) = NodeId::from_canonical_name(id.as_str()) {
+                        EventHandlerTarget::Component(node_id)
+                    } else if id.as_str().starts_with("env.") || id.as_str() == "env" {
+                        EventHandlerTarget::Env(m.member.as_str().to_string())
+                    } else {
+                        return None;
+                    }
+                }
+                Expr::MemberAccess(inner_m) => {
+                    if let Expr::Ident(root_id) = inner_m.target.as_ref() {
+                        if root_id.as_str() == "env" {
+                            EventHandlerTarget::Env(inner_m.member.as_str().to_string())
+                        } else {
+                            return None;
+                        }
+                    } else {
+                        return None;
+                    }
+                }
+                _ => return None,
+            };
+            Some(EventHandlerBinding {
+                name: port_name.to_string(),
+                target,
+                method: m.member.as_str().to_string(),
+            })
+        }
+        _ => None,
     }
 }

@@ -290,6 +290,9 @@ pub fn build_variable_graph_with_window(
         });
 
         for (port_name, expr) in ports {
+            if port_name.starts_with("on_") {
+                continue;
+            }
             let var_id = VarId::new(node.id, port_name);
             graph.add_variable(var_id, expr, node.span);
         }
