@@ -2559,4 +2559,27 @@ fn test_state_reserved_parent_and_duplicate_error() {
     }
 }
 
+#[test]
+fn test_raw_text_passed_directly_to_component_children() {
+    let input = r#"
+    \Component Card(padding_x: Number: 24, padding_y: Number: 18) {
+        \Rect(x: 10, y: 10, width: 300, height: 100, color: #1e293b)
+        \Children {
+            x: parent.left + padding_x,
+            y: parent.top + padding_y
+        }
+    }
+
+    \Card { Hello world! }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("evaluate ok");
+
+    let text_node = layout.nodes.iter().find(|n| n.name == "Text").expect("Text node found");
+    assert_eq!(text_node.text_content.as_deref(), Some("Hello world!"));
+    assert_eq!(text_node.rect.x, 24.0); // parent.left (0) + 24
+    assert_eq!(text_node.rect.y, 18.0); // parent.top (0) + 18
+}
+
 

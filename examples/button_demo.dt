@@ -1,37 +1,8 @@
-// DirectedType Standard Component Library Demo: Button
-// Showcases interactive variants, intrinsic text-metric sizing, and companion state.
+// DirectedType Standard Component Library Demo: Button & Card
+// Showcases interactive variants, intrinsic text-metric sizing, and ambient Card surfaces.
 
+\use "../components/Card.dt"
 \use "../components/Button.dt"
-
-\Component Card(
-    x: 40,
-    y: 0,
-    width: min(window.width - 80, 720),
-    height: 150,
-    title: String: ""
-) {
-    \Rect(
-        x: x,
-        y: y,
-        width: width,
-        height: height,
-        color: #1e293b,
-        radius: 12,
-        border_color: #334155,
-        border_width: 1
-    )
-    \Text(
-        x: x + 20,
-        y: y + 16,
-        size: 14,
-        weight: 700,
-        color: #94a3b8,
-        text: self.title
-    )
-    \Children {
-        y: parent.top + 52
-    }
-}
 
 // Background Canvas
 \Rect(
@@ -58,31 +29,34 @@
     size: 15,
     weight: 400,
     color: #94a3b8,
-    text: "Standard \\Button with intrinsic typography sizing, 6 design variants, and companion state."
+    text: "Standard \\Card and \\Button with intrinsic typography sizing, 6 variants, and direct text support."
 )
 
 // Section 1: Visual Variants
-\Card("card_variants"; y: 110, height: 120, title: "1. DESIGN VARIANTS (AUTO-SIZED)") {
-    \Button("btn_primary"; x: parent.left + 20, label: "Primary", variant: "primary")
-    \Button("btn_secondary"; x: prev.right + 12, label: "Secondary", variant: "secondary")
-    \Button("btn_outline"; x: prev.right + 12, label: "Outline", variant: "outline")
-    \Button("btn_ghost"; x: prev.right + 12, label: "Ghost", variant: "ghost")
-    \Button("btn_danger"; x: prev.right + 12, label: "Danger", variant: "danger")
-    \Button("btn_success"; x: prev.right + 12, label: "Success", variant: "success")
+\Card("card_variants"; x: 40, y: 110, width: min(window.width - 80, 720), height: 124, padding_x: 20, padding_y: 16) {
+    \Text(size: 13, weight: 700, color: #94a3b8) { 1. DESIGN VARIANTS (AUTO-SIZED) }
+    \Button("btn_primary"; x: parent.left + 20, y: prev.bottom + 14, label: "Primary", variant: "primary")
+    \Button("btn_secondary"; x: prev.right + 12, y: prev.top, label: "Secondary", variant: "secondary")
+    \Button("btn_outline"; x: prev.right + 12, y: prev.top, label: "Outline", variant: "outline")
+    \Button("btn_ghost"; x: prev.right + 12, y: prev.top, label: "Ghost", variant: "ghost")
+    \Button("btn_danger"; x: prev.right + 12, y: prev.top, label: "Danger", variant: "danger")
+    \Button("btn_success"; x: prev.right + 12, y: prev.top, label: "Success", variant: "success")
 }
 
 // Section 2: Dynamic Intrinsic Sizing vs Fixed Width
-\Card("card_sizing"; y: 250, height: 120, title: "2. INTRINSIC TEXT METRIC SIZING VS FIXED OVERRIDE") {
-    \Button("btn_short"; x: parent.left + 20, label: "OK")
-    \Button("btn_medium"; x: prev.right + 12, label: "Save Changes", variant: "secondary")
-    \Button("btn_wide"; x: prev.right + 12, label: "Export Diagnostics Report", variant: "outline")
-    \Button("btn_fixed"; x: prev.right + 12, width: 200, label: "Fixed Width (200px)", variant: "primary")
+\Card("card_sizing"; x: 40, y: 248, width: min(window.width - 80, 720), height: 124, padding_x: 20, padding_y: 16) {
+    \Text(size: 13, weight: 700, color: #94a3b8) { 2. INTRINSIC TEXT METRIC SIZING VS FIXED OVERRIDE }
+    \Button("btn_short"; x: parent.left + 20, y: prev.bottom + 14, label: "OK")
+    \Button("btn_medium"; x: prev.right + 12, y: prev.top, label: "Save Changes", variant: "secondary")
+    \Button("btn_wide"; x: prev.right + 12, y: prev.top, label: "Export Diagnostics Report", variant: "outline")
+    \Button("btn_fixed"; x: prev.right + 12, y: prev.top, width: 200, label: "Fixed Width (200px)", variant: "primary")
 }
 
 // Section 3: Interactive & Disabled States
-\Card("card_interactive"; y: 390, height: 130, title: "3. INTERACTIVE COUNTER & DISABLED EVENT SUPPRESSION") {
-    \Button("btn_active"; x: parent.left + 20, label: "Click To Test Tracking", show_count: true, variant: "primary")
-    \Button("btn_disabled"; x: prev.right + 16, label: "Disabled Button (Suppressed)", show_count: true, disabled: true)
+\Card("card_interactive"; x: 40, y: 386, width: min(window.width - 80, 720), height: 136, padding_x: 20, padding_y: 16) {
+    \Text(size: 13, weight: 700, color: #94a3b8) { 3. INTERACTIVE COUNTER & DISABLED EVENT SUPPRESSION }
+    \Button("btn_active"; x: parent.left + 20, y: prev.bottom + 14, label: "Click To Test Tracking", show_count: true, variant: "primary")
+    \Button("btn_disabled"; x: prev.right + 16, y: prev.top, label: "Disabled Button (Suppressed)", show_count: true, disabled: true)
 
     \Text(
         x: parent.left + 20,
@@ -92,4 +66,9 @@
         color: #64748b,
         text: "Clicking 'Click To Test Tracking' dynamically updates its reactive count badge; the disabled button suppresses clicks."
     )
+}
+
+// Section 4: Direct Text in Card with Optical Vertical Centering
+\Card("card_direct_text"; x: 40, y: 536, width: min(window.width - 80, 720), height: 44, padding_x: 20, center_y: true) {
+    Direct text passed straight to \\Card with optical vertical centering!
 }

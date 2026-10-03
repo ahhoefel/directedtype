@@ -721,7 +721,24 @@ fn expand_component_instance(
                 ContentItem::Node(child_elem) => {
                     consumer_child_nodes.push(child_elem.clone());
                 }
-                ContentItem::Text(_) | ContentItem::Children(_) => {}
+                ContentItem::Text(chunk) => {
+                    let trimmed = chunk.text.trim();
+                    if !trimmed.is_empty() {
+                        let synthetic_text = ElementNode {
+                            name: Ident::new("Text", chunk.span),
+                            key: None,
+                            ports: Vec::new(),
+                            content: Some(ContentSlot {
+                                items: vec![ContentItem::Text(chunk.clone())],
+                                span: chunk.span,
+                            }),
+                            span: chunk.span,
+                            handle: None,
+                        };
+                        consumer_child_nodes.push(synthetic_text);
+                    }
+                }
+                ContentItem::Children(_) => {}
             }
         }
     }
