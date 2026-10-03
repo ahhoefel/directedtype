@@ -6,6 +6,8 @@
 * Add optional scrollbars
 * Build a library of standard components.
 * Build more examples
+* Dom inspector needs to show source of rules. For example, using a VStack sets the width of children nodes, but the formula shows "inner_width" which is a variable on the vstack and not on the child, so it's not in the right context. We should show it in the context of the parent node, not the child node. It should also indicate that properties are inherited from parents, and which parent.
+
 1. Live Hot-Reloading in the Viewer (Completed)
 2. Declarative Reactive State & Object-Oriented Rust Components ([docs/state_and_logic.md](file:///Users/hoefel/dev/directedtype/docs/state_and_logic.md))
 3. Spatial Clipping (scene.push_layer) (Completed)

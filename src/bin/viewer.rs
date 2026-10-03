@@ -2,7 +2,6 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use directedtype::compiler::evaluate_document_with_window;
 use directedtype::parser::parse_document;
 use directedtype::render::{
     run_viewer_with_file, HeadlessRenderer, SceneOptions, ViewerConfig,
@@ -85,9 +84,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let doc = parse_document(&source)
         .map_err(|e| format!("Parse error in '{}': {e}", file_path.display()))?;
 
+    let base_dir = file_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let resolver = directedtype::compiler::FsResolver;
+    let registry = directedtype::component::ComponentRegistry::standard();
+
     println!("Evaluating DAG layout ({}x{})...", width, height);
-    let layout = evaluate_document_with_window(&doc, width as f64, height as f64)
-        .map_err(|e| format!("Layout evaluation error in '{}': {e}", file_path.display()))?;
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        width as f64,
+        height as f64,
+        base_dir,
+        &resolver,
+        &registry,
+    )
+    .map_err(|e| format!("Layout evaluation error in '{}': {e}", file_path.display()))?;
+    let layout = compiled.layout().clone();
 
     println!(
         "Successfully resolved {} layout nodes across topological schedule.",
