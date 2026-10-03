@@ -1619,7 +1619,8 @@ fn expand_primitive_element(
     let text_content = doc
         .get_node(node_id)
         .and_then(|n| n.text_content.clone());
-    let has_text = text_content.as_ref().is_some_and(|t| !t.is_empty());
+    let has_dynamic_text = ports.contains_key("text") || ports.contains_key("content");
+    let has_text = text_content.as_ref().is_some_and(|t| !t.is_empty()) || has_dynamic_text;
 
     if let Some(fid) = font_node_id {
         let font_ident = Expr::Ident(Ident::new(fid.canonical_name(), elem.span));
@@ -1710,6 +1711,23 @@ fn expand_primitive_element(
         Expr::Literal(Literal::String(String::new(), elem.span))
     };
 
+    let text_arg_expr = if ports.contains_key("text") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("text", elem.span),
+            span: elem.span,
+        })
+    } else if ports.contains_key("content") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("content", elem.span),
+            span: elem.span,
+        })
+    } else {
+        let text_str = text_content.clone().unwrap_or_default();
+        Expr::Literal(Literal::String(text_str, elem.span))
+    };
+
     // Height defaults
     if !ports.contains_key("height") {
         if (elem.name.as_str() == "Text" || ports.contains_key("width")) && has_text {
@@ -1719,11 +1737,10 @@ fn expand_primitive_element(
                 member: Ident::new("width", elem.span),
                 span: elem.span,
             });
-            let text_str = text_content.clone().unwrap_or_default();
             let height_call = Expr::Call(CallExpr {
                 callee: Ident::new("text_height", elem.span),
                 args: vec![
-                    Expr::Literal(Literal::String(text_str, elem.span)),
+                    text_arg_expr.clone(),
                     size_expr.clone(),
                     weight_expr.clone(),
                     font_expr.clone(),
@@ -1753,11 +1770,10 @@ fn expand_primitive_element(
     // Width defaults
     if !ports.contains_key("width") {
         if elem.name.as_str() == "Text" && has_text {
-            let text_str = text_content.clone().unwrap_or_default();
             let width_call = Expr::Call(CallExpr {
                 callee: Ident::new("text_width", elem.span),
                 args: vec![
-                    Expr::Literal(Literal::String(text_str, elem.span)),
+                    text_arg_expr,
                     size_expr,
                     weight_expr,
                     font_expr,
@@ -1766,8 +1782,8 @@ fn expand_primitive_element(
             });
             ports.insert("width".to_string(), width_call);
         } else {
-            let default_w = if has_text {
-                (text_content.as_ref().unwrap().len() as f64 * 8.0).max(100.0)
+            let default_w = if let Some(tc) = &text_content {
+                (tc.len() as f64 * 8.0).max(100.0)
             } else {
                 100.0
             };

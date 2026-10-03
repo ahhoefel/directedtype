@@ -169,8 +169,12 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 BinaryOp::Add => {
                     if let (Some(l), Some(r)) = (left.as_f64(), right.as_f64()) {
                         Ok(Value::Number(l + r))
-                    } else if let (Some(l), Some(r)) = (left.as_str(), right.as_str()) {
-                        Ok(Value::String(format!("{}{}", l, r)))
+                    } else if matches!(left, Value::String(_)) || matches!(right, Value::String(_)) {
+                        Ok(Value::String(format!(
+                            "{}{}",
+                            left.to_display_string(),
+                            right.to_display_string()
+                        )))
                     } else {
                         Err(CompileError::Custom {
                             message: format!("Cannot add {} and {}", left, right),

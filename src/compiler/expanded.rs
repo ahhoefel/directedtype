@@ -76,7 +76,11 @@ impl ExpandedNode {
     }
 
     pub fn is_paint_primitive(&self) -> bool {
-        self.name == "Rect" || self.text_content.is_some()
+        self.name == "Rect"
+            || self.name == "Text"
+            || self.text_content.is_some()
+            || self.ports.contains_key("text")
+            || self.ports.contains_key("content")
     }
 }
 

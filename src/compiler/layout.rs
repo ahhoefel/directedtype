@@ -115,7 +115,11 @@ pub struct ResolvedNode {
 
 impl ResolvedNode {
     pub fn is_paint_primitive(&self) -> bool {
-        self.name == "Rect" || self.text_content.is_some()
+        self.name == "Rect"
+            || self.name == "Text"
+            || self.text_content.is_some()
+            || self.properties.contains_key("text")
+            || self.properties.contains_key("content")
     }
 }
 

@@ -198,7 +198,18 @@ pub fn build_scene(
         }
 
         // Render text
-        if let Some(text) = &node.text_content {
+        let dynamic_text = node
+            .properties
+            .get("text")
+            .or_else(|| node.properties.get("content"))
+            .and_then(|v| match v {
+                Value::String(s) => Some(s.clone()),
+                Value::Number(n) => Some(format!("{n}")),
+                Value::Bool(b) => Some(format!("{b}")),
+                _ => None,
+            });
+        let active_text = dynamic_text.as_ref().or(node.text_content.as_ref());
+        if let Some(text) = active_text {
             if !text.is_empty() {
                 let font_size = node
                     .properties

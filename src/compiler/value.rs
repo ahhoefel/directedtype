@@ -50,6 +50,22 @@ impl Value {
         }
     }
 
+    pub fn to_display_string(&self) -> String {
+        match self {
+            Value::String(s) => s.clone(),
+            Value::Number(n) => {
+                if n.fract() == 0.0 && n.is_finite() {
+                    format!("{:.0}", n)
+                } else {
+                    format!("{n}")
+                }
+            }
+            Value::Bool(b) => format!("{b}"),
+            Value::Color(c) => c.clone(),
+            Value::Node(id) => id.canonical_name(),
+        }
+    }
+
     pub fn type_name(&self) -> &'static str {
         match self {
             Value::Number(_) => "Number",
