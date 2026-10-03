@@ -19,3 +19,7 @@ winit = "0.30.13"
 
 [dev-dependencies]
 pretty_assertions = "1.4"
+
+[[example]]
+name = "counter"
+path = "examples/Counter.rs"

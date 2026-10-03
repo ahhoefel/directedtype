@@ -1,0 +1,125 @@
+// DirectedType (DTML) Reactive Counter Component
+// Accompanied by native Rust companion file: Counter.rs
+
+\Component Counter(x: Number: 0, y: Number: 0, initial: Number: 0) {
+    state count: Number: initial;
+
+    let is_max = count >= 10;
+    let is_zero = count <= 0;
+    let bar_width = (count * 26) + 12;
+    let count_label = "Count: " + count;
+    let status_label = is_max ? "MAX (10)" : (is_zero ? "MIN (0)" : "Active");
+
+    \Rect(
+        x: x,
+        y: y,
+        width: 360,
+        height: 270,
+        color: #1e293b,
+        radius: 16,
+        border_width: 2,
+        border_color: is_max ? #ef4444 : #334155
+    ) {
+        // Component Title & Subtitle
+        \Text(x: parent.left + 24, y: parent.top + 24, size: 22, weight: 700, color: #f8fafc) {
+            Reactive Counter
+        }
+
+        \Text(x: parent.left + 24, y: parent.top + 54, size: 12, color: #94a3b8) {
+            One-Way Pipeline: State -> DAG -> Pixels
+        }
+
+        // Count Value Display Card
+        \Rect(
+            x: parent.left + 24,
+            y: parent.top + 80,
+            width: 312,
+            height: 64,
+            color: #0f172a,
+            radius: 10,
+            border_width: 1,
+            border_color: is_max ? #7f1d1d : #1e293b
+        ) {
+            \Text(
+                x: parent.left + 20,
+                y: parent.top + 18,
+                size: 26,
+                weight: 700,
+                color: is_max ? #ef4444 : (is_zero ? #94a3b8 : #38bdf8),
+                text: count_label
+            )
+            \Text(
+                x: parent.left + 200,
+                y: parent.top + 24,
+                size: 12,
+                weight: 600,
+                color: is_max ? #f87171 : #64748b,
+                text: status_label
+            )
+        }
+
+        // Reactive Progress Gauge
+        \Rect(x: parent.left + 24, y: parent.top + 158, width: 312, height: 8, color: #0f172a, radius: 4) {
+            \Rect(
+                x: parent.left,
+                y: parent.top,
+                width: min(bar_width, 312),
+                height: 8,
+                color: is_max ? #ef4444 : #3b82f6,
+                radius: 4
+            )
+        }
+
+        // Interactive Button Row: [-], [+], [Reset]
+        \Rect(
+            x: parent.left + 24,
+            y: parent.top + 184,
+            width: 72,
+            height: 48,
+            color: is_zero ? #334155 : #475569,
+            radius: 10,
+            on_click: self.decrement
+        ) {
+            \Text(x: parent.left + 28, y: parent.top + 12, size: 22, weight: 700, color: #ffffff) {
+                -
+            }
+        }
+
+        \Rect(
+            x: parent.left + 112,
+            y: parent.top + 184,
+            width: 72,
+            height: 48,
+            color: is_max ? #991b1b : #2563eb,
+            radius: 10,
+            on_click: self.increment
+        ) {
+            \Text(x: parent.left + 27, y: parent.top + 12, size: 22, weight: 700, color: #ffffff) {
+                +
+            }
+        }
+
+        \Rect(
+            x: parent.left + 200,
+            y: parent.top + 184,
+            width: 136,
+            height: 48,
+            color: #334155,
+            radius: 10,
+            on_click: self.reset
+        ) {
+            \Text(x: parent.left + 46, y: parent.top + 16, size: 14, weight: 600, color: #e2e8f0) {
+                Reset
+            }
+        }
+    }
+}
+
+// Root Document: Centered Dark Canvas
+\Rect(x: 0, y: 0, width: window.width, height: window.height, color: #0b0f19) {
+    \Counter(
+        x: (window.width - 360) / 2,
+        y: (window.height - 270) / 2,
+        initial: 3
+    )
+}

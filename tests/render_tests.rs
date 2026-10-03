@@ -343,3 +343,31 @@ fn test_render_inspector_panel_snapshot() {
     assert_eq!(img.height(), 600);
 }
 
+#[test]
+fn test_render_counter_example() {
+    let source = std::fs::read_to_string("examples/Counter.dt").expect("read Counter.dt");
+    let doc = directedtype::parse(&source).expect("parse Counter.dt");
+    let registry = directedtype::component::ComponentRegistry::new();
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile Counter.dt ok");
+
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let options = SceneOptions::default();
+    let out_path = std::env::temp_dir().join("directedtype_counter_preview.png");
+
+    renderer
+        .render_layout_to_file(&compiled.layout, 800, 600, &options, &out_path)
+        .expect("render to file ok");
+
+    assert!(out_path.exists(), "counter_preview.png must be created");
+}
+
+
+

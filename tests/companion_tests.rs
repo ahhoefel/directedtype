@@ -479,3 +479,180 @@ fn test_dispatch_error_method_not_found() {
         }
     );
 }
+
+#[test]
+fn test_examples_counter_dt_and_rs_integration() {
+    let dt_source = std::fs::read_to_string("examples/Counter.dt").expect("Counter.dt must exist");
+    let doc = parse(&dt_source).expect("Counter.dt must parse cleanly");
+
+    // Match Counter implementation from examples/Counter.rs
+    #[derive(Default, Debug)]
+    struct ExampleCounter {
+        pub count: i32,
+    }
+
+    impl Component for ExampleCounter {
+        fn on_mount(&mut self, ctx: &mut Context<'_>) {
+            if let Some(initial) = ctx.get_port_number("initial") {
+                self.count = initial as i32;
+            }
+        }
+
+        fn dispatch(
+            &mut self,
+            method: &str,
+            _event: &Event,
+            ctx: &mut Context<'_>,
+        ) -> Result<(), DispatchError> {
+            match method {
+                "increment" => {
+                    if self.count < 10 {
+                        self.count += 1;
+                        ctx.set_state("count", self.count as f64);
+                    }
+                    Ok(())
+                }
+                "decrement" => {
+                    if self.count > 0 {
+                        self.count -= 1;
+                        ctx.set_state("count", self.count as f64);
+                    }
+                    Ok(())
+                }
+                "reset" => {
+                    self.count = 0;
+                    ctx.set_state("count", 0.0);
+                    Ok(())
+                }
+                _ => Err(DispatchError::MethodNotFound {
+                    component: "Counter".into(),
+                    method: method.into(),
+                }),
+            }
+        }
+    }
+
+    let mut registry = ComponentRegistry::new();
+    registry.register_companion("Counter", "examples/Counter.rs", || {
+        Box::new(ExampleCounter::default())
+    });
+
+    let mut compiled = compile_document_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile Counter.dt ok");
+
+    // Initial count is 3
+    let counter_node = compiled.layout.nodes.iter().find(|n| n.name == "Counter").unwrap();
+    let counter_id = counter_node.id;
+    assert_eq!(
+        compiled.get_state(counter_id, "count"),
+        Some(&directedtype::compiler::Value::Number(3.0))
+    );
+
+    // Find the "+" increment button (has on_click: self.increment)
+    let inc_btn = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| {
+            n.event_handlers
+                .get("on_click")
+                .map(|b| b.method == "increment")
+                .unwrap_or(false)
+        })
+        .expect("increment button found");
+
+    let mut click_inc = Event::new(
+        EventKind::Click {
+            button: MouseButton::Left,
+        },
+        Point::new(inc_btn.rect.x + 5.0, inc_btn.rect.y + 5.0),
+        Point::new(5.0, 5.0),
+        Modifiers::default(),
+        inc_btn.id,
+    )
+    .with_bubble_path(vec![inc_btn.id, counter_id]);
+
+    let changed = compiled.dispatch_event(&mut click_inc).expect("dispatch click ok");
+    assert!(!changed.is_empty(), "State mutations must update downstream DAG");
+    assert_eq!(
+        compiled.get_state(counter_id, "count"),
+        Some(&directedtype::compiler::Value::Number(4.0))
+    );
+
+    // Find the "-" decrement button (has on_click: self.decrement)
+    let dec_btn = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| {
+            n.event_handlers
+                .get("on_click")
+                .map(|b| b.method == "decrement")
+                .unwrap_or(false)
+        })
+        .expect("decrement button found");
+
+    let mut click_dec = Event::new(
+        EventKind::Click {
+            button: MouseButton::Left,
+        },
+        Point::new(dec_btn.rect.x + 5.0, dec_btn.rect.y + 5.0),
+        Point::new(5.0, 5.0),
+        Modifiers::default(),
+        dec_btn.id,
+    )
+    .with_bubble_path(vec![dec_btn.id, counter_id]);
+
+    compiled.dispatch_event(&mut click_dec).expect("dispatch click ok");
+    assert_eq!(
+        compiled.get_state(counter_id, "count"),
+        Some(&directedtype::compiler::Value::Number(3.0))
+    );
+
+    // Find the "Reset" button (has on_click: self.reset)
+    let reset_btn = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| {
+            n.event_handlers
+                .get("on_click")
+                .map(|b| b.method == "reset")
+                .unwrap_or(false)
+        })
+        .expect("reset button found");
+
+    let mut click_reset = Event::new(
+        EventKind::Click {
+            button: MouseButton::Left,
+        },
+        Point::new(reset_btn.rect.x + 5.0, reset_btn.rect.y + 5.0),
+        Point::new(5.0, 5.0),
+        Modifiers::default(),
+        reset_btn.id,
+    )
+    .with_bubble_path(vec![reset_btn.id, counter_id]);
+
+    compiled.dispatch_event(&mut click_reset).expect("dispatch click ok");
+    assert_eq!(
+        compiled.get_state(counter_id, "count"),
+        Some(&directedtype::compiler::Value::Number(0.0))
+    );
+
+    // Headless render verification
+    let mut renderer = directedtype::render::HeadlessRenderer::new().expect("renderer ok");
+    let options = directedtype::render::SceneOptions::default();
+    let img = renderer
+        .render_layout(&compiled.layout, 800, 600, &options)
+        .expect("render layout ok");
+    assert_eq!(img.width(), 800);
+    assert_eq!(img.height(), 600);
+}
+
