@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::compiler::error::CompileError;
 use crate::compiler::expanded::{ExpandedDocument, ExpandedNode, NodeId};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// A lexical binding in the component or document scope.
 #[derive(Debug, Clone)]
@@ -32,6 +32,7 @@ pub struct ScopeContext<'a> {
     pub node_fonts: &'a HashMap<NodeId, NodeId>,
     pub enclosing_component: Option<NodeId>,
     pub comp_ports: Option<&'a HashMap<String, Expr>>,
+    pub declared_state_names: Option<&'a HashSet<String>>,
 }
 
 /// Expands a parsed AST `Document` into an `ExpandedDocument` using default current directory.
@@ -160,6 +161,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             node_fonts: &node_fonts,
                             enclosing_component: None,
                             comp_ports: None,
+                            declared_state_names: None,
                         };
                         let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                         if let Some(LexicalBinding::Expr(existing)) = global_scope.get(let_binding.name.as_str()) {
@@ -191,6 +193,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                                 node_fonts: &node_fonts,
                                 enclosing_component: None,
                                 comp_ports: None,
+                                declared_state_names: None,
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             if let Some(LexicalBinding::Expr(existing)) = global_scope.get(env_binding.name.as_str()) {
@@ -224,6 +227,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         node_fonts: &node_fonts,
         enclosing_component: None,
         comp_ports: None,
+        declared_state_names: None,
     };
     for (name, expr) in expanded_doc.window_ports.clone() {
         let rewritten = rewrite_expr(&expr, &window_scope_ctx)?;
@@ -277,6 +281,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         node_fonts: &node_fonts,
                         enclosing_component: None,
                         comp_ports: None,
+                        declared_state_names: None,
                     };
                     if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
                         global_scope.insert(
@@ -399,6 +404,7 @@ fn expand_element(
             node_fonts,
             enclosing_component: ctx.enclosing_component_id,
             comp_ports: None,
+            declared_state_names: None,
         };
         let mut rewritten_parts = Vec::new();
         for part in &key.parts {
@@ -554,6 +560,8 @@ fn expand_component_instance(
         }
     }
 
+    let declared_state_names: HashSet<String> = declared_states.keys().cloned().collect();
+
     // Validate that caller does not attempt to override immutable alias ports or set private state
     for port in &instance.ports {
         let name = port.name.as_str();
@@ -613,6 +621,7 @@ fn expand_component_instance(
                     node_fonts,
                     enclosing_component: ctx.enclosing_component_id,
                     comp_ports: None,
+                    declared_state_names: None,
                 };
                 rewrite_expr(other, &caller_scope_ctx)?
             }
@@ -854,6 +863,7 @@ fn expand_component_instance(
                             node_fonts: &*node_fonts,
                             enclosing_component: Some(ctx.comp_node_id),
                             comp_ports: Some(&comp_ports),
+                            declared_state_names: Some(&declared_state_names),
                         };
                         let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                         if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
@@ -883,7 +893,8 @@ fn expand_component_instance(
                                 env_scope: &internal_body_env_scope,
                                 node_fonts: &*node_fonts,
                                 enclosing_component: Some(ctx.comp_node_id),
-                                comp_ports: Some(&comp_ports),
+                                comp_ports: None,
+                                declared_state_names: None,
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             if let Some(LexicalBinding::Expr(existing)) = local_scope.get(env_binding.name.as_str()) {
@@ -993,7 +1004,8 @@ fn expand_component_instance(
                                 env_scope: &internal_body_env_scope,
                                 node_fonts: &*node_fonts,
                                 enclosing_component: Some(ctx.comp_node_id),
-                                comp_ports: Some(&comp_ports),
+                                comp_ports: None,
+                                declared_state_names: None,
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             local_scope.insert(
@@ -1063,6 +1075,7 @@ fn expand_component_instance(
                         node_fonts: &*node_fonts,
                         enclosing_component: None,
                         comp_ports: Some(&comp_ports),
+                        declared_state_names: Some(&declared_state_names),
                     };
 
                     for ambient in &dir.ports {
@@ -1147,6 +1160,7 @@ fn expand_component_instance(
         node_fonts: &*node_fonts,
         enclosing_component: ctx.enclosing_component_id,
         comp_ports: Some(&comp_ports),
+        declared_state_names: Some(&declared_state_names),
     };
 
     let mut rewritten_ports = HashMap::new();
@@ -1191,6 +1205,7 @@ fn expand_component_instance(
         node_fonts: &*node_fonts,
         enclosing_component: Some(ctx.comp_node_id),
         comp_ports: Some(&comp_ports),
+        declared_state_names: Some(&declared_state_names),
     };
     for (alias_name, alias_binding) in &declared_aliases {
         let rewritten_alias = rewrite_expr(&alias_binding.value, &alias_scope_ctx)?;
@@ -1406,6 +1421,7 @@ fn expand_primitive_element(
             node_fonts: &*node_fonts,
             enclosing_component: ctx.enclosing_component_id,
             comp_ports: None,
+            declared_state_names: None,
         };
         if let Ok(Expr::Ident(id)) = rewrite_expr(raw_font_expr, &temp_scope_ctx) {
             if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
@@ -1425,6 +1441,7 @@ fn expand_primitive_element(
             node_fonts: &*node_fonts,
             enclosing_component: ctx.enclosing_component_id,
             comp_ports: None,
+            declared_state_names: None,
         };
         if let Ok(rewritten) = rewrite_expr(env_expr, &temp_scope_ctx) {
             if let Expr::Ident(id) = &rewritten {
@@ -1458,6 +1475,7 @@ fn expand_primitive_element(
         node_fonts: &*node_fonts,
         enclosing_component: ctx.enclosing_component_id,
         comp_ports: None,
+        declared_state_names: None,
     };
 
     let mut ports = HashMap::new();
@@ -2115,8 +2133,34 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     }
                 }
             }
+            let rewritten_cond = rewrite_expr(&tern.condition, ctx)?;
+            let mut const_env = HashMap::new();
+            if let Some(comp_ports) = ctx.comp_ports {
+                for (port_name, port_expr) in comp_ports.iter() {
+                    if let Some(states) = ctx.declared_state_names {
+                        if states.contains(port_name) {
+                            continue;
+                        }
+                    }
+                    if let Ok(val) = crate::compiler::eval::eval_expr(port_expr, &HashMap::new()) {
+                        const_env.insert(crate::compiler::graph::VarId::new(ctx.current_node, port_name), val.clone());
+                        if let Some(parent) = ctx.parent_node {
+                            const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
+                        }
+                    }
+                }
+            }
+            if let Ok(crate::compiler::value::Value::Bool(b)) =
+                crate::compiler::eval::eval_expr(&rewritten_cond, &const_env)
+            {
+                if b {
+                    return rewrite_expr(&tern.then_expr, ctx);
+                } else {
+                    return rewrite_expr(&tern.else_expr, ctx);
+                }
+            }
             Ok(Expr::Ternary(TernaryExpr {
-                condition: Box::new(rewrite_expr(&tern.condition, ctx)?),
+                condition: Box::new(rewritten_cond),
                 then_expr: Box::new(rewrite_expr(&tern.then_expr, ctx)?),
                 else_expr: Box::new(rewrite_expr(&tern.else_expr, ctx)?),
                 span: tern.span,

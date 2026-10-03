@@ -3,6 +3,7 @@
 // dynamic child spacing (gap), and container padding.
 
 \use "../components/VStack.dt"
+\use "../components/HStack.dt"
 \use "../components/Card.dt"
 \use "../components/Button.dt"
 
@@ -34,106 +35,102 @@
     text: "Declarative vertical stacking with gap recurrence, padding, and cross-axis alignment."
 )
 
-// Column 1: Left Alignment (Default)
-\Card(
-    x: 40,
-    y: 115,
-    width: 210,
-    color: #1e293b,
-    padding_x: 16,
-    padding_y: 16
-) {
-    \Text(size: 13, weight: 700, color: #38bdf8) { ALIGN: LEFT (DEFAULT) }
-
-    \VStack(
-        x: parent.left + 16,
-        y: prev.bottom + 16,
-        width: 178,
-        gap: 14,
-        align: "left"
+// Horizontal row of columns using HStack
+\HStack(x: 40, y: 115, gap: 25) {
+    // Column 1: Left Alignment (Default)
+    \Card(
+        width: 210,
+        color: #1e293b,
+        padding_x: 16,
+        padding_y: 16
     ) {
-        \Rect(width: 90, height: 32, radius: 6, color: #3b82f6)
-        \Button(label: "Short", variant: "primary")
-        \Rect(width: 140, height: 32, radius: 6, color: #10b981)
-        \Button(label: "Medium Action", variant: "secondary")
-        \Rect(width: 60, height: 28, radius: 6, color: #f59e0b)
+        \Text(size: 13, weight: 700, color: #38bdf8) { ALIGN: LEFT (DEFAULT) }
+
+        \VStack(
+            x: parent.left + 16,
+            y: prev.bottom + 16,
+            width: 178,
+            gap: 14,
+            align: "left"
+        ) {
+            \Rect(width: 90, height: 32, radius: 6, color: #3b82f6)
+            \Button(label: "Short", variant: "primary")
+            \Rect(width: 140, height: 32, radius: 6, color: #10b981)
+            \Button(label: "Medium Action", variant: "secondary")
+            \Rect(width: 60, height: 28, radius: 6, color: #f59e0b)
+        }
+    }
+
+    // Column 2: Center Alignment
+    \Card(
+        width: 210,
+        color: #1e293b,
+        padding_x: 16,
+        padding_y: 16
+    ) {
+        \Text(size: 13, weight: 700, color: #a78bfa) { ALIGN: CENTER }
+
+        \VStack(
+            x: parent.left + 16,
+            y: prev.bottom + 16,
+            width: 178,
+            gap: 14,
+            align: "center"
+        ) {
+            \Rect(width: 90, height: 32, radius: 6, color: #8b5cf6)
+            \Button(width: 110, label: "Centered", variant: "outline")
+            \Rect(width: 140, height: 32, radius: 6, color: #ec4899)
+            \Button(width: 130, label: "Centered Item", variant: "secondary")
+            \Rect(width: 60, height: 28, radius: 6, color: #06b6d4)
+        }
+    }
+
+    // Column 3: Right Alignment
+    \Card(
+        width: 210,
+        color: #1e293b,
+        padding_x: 16,
+        padding_y: 16
+    ) {
+        \Text(size: 13, weight: 700, color: #f472b6) { ALIGN: RIGHT }
+
+        \VStack(
+            x: parent.left + 16,
+            y: prev.bottom + 16,
+            width: 178,
+            gap: 14,
+            align: "right"
+        ) {
+            \Rect(width: 90, height: 32, radius: 6, color: #ec4899)
+            \Button(width: 80, label: "Right", variant: "danger")
+            \Rect(width: 140, height: 32, radius: 6, color: #f97316)
+            \Button(width: 124, label: "Aligned Right", variant: "outline")
+            \Rect(width: 60, height: 28, radius: 6, color: #eab308)
+        }
+    }
+
+    // Column 4: Stretch Alignment
+    \Card(
+        width: 215,
+        color: #1e293b,
+        padding_x: 16,
+        padding_y: 16
+    ) {
+        \Text(size: 13, weight: 700, color: #4ade80) { ALIGN: STRETCH }
+
+        \VStack(
+            x: parent.left + 16,
+            y: prev.bottom + 16,
+            width: 183,
+            gap: 14,
+            align: "stretch"
+        ) {
+            \Rect(height: 32, radius: 6, color: #10b981)
+            \Button(label: "Full Width Button", variant: "success")
+            \Rect(height: 32, radius: 6, color: #14b8a6)
+            \Button(label: "Stretched Action", variant: "primary")
+            \Rect(width: 80, height: 28, radius: 6, color: #6366f1)
+        }
     }
 }
 
-// Column 2: Center Alignment
-\Card(
-    x: 275,
-    y: 115,
-    width: 210,
-    color: #1e293b,
-    padding_x: 16,
-    padding_y: 16
-) {
-    \Text(size: 13, weight: 700, color: #a78bfa) { ALIGN: CENTER }
-
-    \VStack(
-        x: parent.left + 16,
-        y: prev.bottom + 16,
-        width: 178,
-        gap: 14,
-        align: "center"
-    ) {
-        \Rect(width: 90, height: 32, radius: 6, color: #8b5cf6)
-        \Button(width: 110, label: "Centered", variant: "outline")
-        \Rect(width: 140, height: 32, radius: 6, color: #ec4899)
-        \Button(width: 130, label: "Centered Item", variant: "secondary")
-        \Rect(width: 60, height: 28, radius: 6, color: #06b6d4)
-    }
-}
-
-// Column 3: Right Alignment
-\Card(
-    x: 510,
-    y: 115,
-    width: 210,
-    color: #1e293b,
-    padding_x: 16,
-    padding_y: 16
-) {
-    \Text(size: 13, weight: 700, color: #f472b6) { ALIGN: RIGHT }
-
-    \VStack(
-        x: parent.left + 16,
-        y: prev.bottom + 16,
-        width: 178,
-        gap: 14,
-        align: "right"
-    ) {
-        \Rect(width: 90, height: 32, radius: 6, color: #ec4899)
-        \Button(width: 80, label: "Right", variant: "danger")
-        \Rect(width: 140, height: 32, radius: 6, color: #f97316)
-        \Button(width: 124, label: "Aligned Right", variant: "outline")
-        \Rect(width: 60, height: 28, radius: 6, color: #eab308)
-    }
-}
-
-// Column 4: Stretch Alignment
-\Card(
-    x: 745,
-    y: 115,
-    width: 215,
-    color: #1e293b,
-    padding_x: 16,
-    padding_y: 16
-) {
-    \Text(size: 13, weight: 700, color: #4ade80) { ALIGN: STRETCH }
-
-    \VStack(
-        x: parent.left + 16,
-        y: prev.bottom + 16,
-        width: 183,
-        gap: 14,
-        align: "stretch"
-    ) {
-        \Rect(height: 32, radius: 6, color: #10b981)
-        \Button(label: "Full Width Button", variant: "success")
-        \Rect(height: 32, radius: 6, color: #14b8a6)
-        \Button(label: "Stretched Action", variant: "primary")
-        \Rect(width: 80, height: 28, radius: 6, color: #6366f1)
-    }
-}
