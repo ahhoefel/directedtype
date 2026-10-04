@@ -54,7 +54,7 @@ impl Component for Counter {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut registry = ComponentRegistry::new();
+    let mut registry = ComponentRegistry::standard();
     registry.register_companion("Counter", "examples/Counter.rs", || {
         Box::new(Counter::default())
     });

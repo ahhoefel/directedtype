@@ -28,3 +28,7 @@ path = "examples/Counter.rs"
 name = "button_demo"
 path = "examples/button_demo.rs"
 
+[[example]]
+name = "vstack_demo"
+path = "examples/vstack_demo.rs"
+

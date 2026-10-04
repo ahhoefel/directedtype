@@ -1,6 +1,9 @@
 // DirectedType (DTML) Reactive Counter Component
 // Accompanied by native Rust companion file: Counter.rs
+\use "components/VStack.dt"
 \use "components/HStack.dt"
+\use "components/Card.dt"
+\use "components/Button.dt"
 
 \Component Counter(x: Number, y: Number, initial: Number: 0) {
     state count: Number: initial;
@@ -11,56 +14,62 @@
     let count_label = "Count: " + count;
     let status_label = is_max ? "MAX (10)" : (is_zero ? "MIN (0)" : "Active");
 
-    \Rect(
+    alias width = 360;
+    alias height = 270;
+    alias right = x + 360;
+    alias bottom = y + 270;
+
+    \Card(
+        width: 360,
         x: x,
         y: y,
-        width: 360,
-        height: 270,
         color: #1e293b,
         radius: 16,
         border_width: 2,
-        border_color: is_max ? #ef4444 : #334155
+        border_color: is_max ? #ef4444 : #334155,
+        padding_x: 24,
+        padding_y: 24,
+        gap: 16
     ) {
-        // Component Title & Subtitle
-        \Text(x: parent.left + 24, y: parent.top + 24, size: 22, weight: 700, color: #f8fafc) {
-            Reactive Counter
+        // Component Title & Subtitle via VStack
+        \VStack(gap: 4) {
+            \Text(size: 22, weight: 700, color: #f8fafc) {
+                Reactive Counter
+            }
+
+            \Text(size: 12, color: #94a3b8) {
+                One-Way Pipeline: State -> DAG -> Pixels
+            }
         }
 
-        \Text(x: parent.left + 24, y: parent.top + 54, size: 12, color: #94a3b8) {
-            One-Way Pipeline: State -> DAG -> Pixels
-        }
-
-        // Count Value Display Card
-        \Rect(
-            x: parent.left + 24,
-            y: parent.top + 80,
+        // Count Value Display Surface via nested Card & HStack
+        \Card(
             width: 312,
-            height: 64,
             color: #0f172a,
             radius: 10,
             border_width: 1,
-            border_color: is_max ? #7f1d1d : #1e293b
+            border_color: is_max ? #7f1d1d : #1e293b,
+            padding_x: 20,
+            padding_y: 16
         ) {
-            \Text(
-                x: parent.left + 20,
-                y: parent.top + 18,
-                size: 26,
-                weight: 700,
-                color: is_max ? #ef4444 : (is_zero ? #94a3b8 : #38bdf8),
-                text: count_label
-            )
-            \Text(
-                x: parent.left + 200,
-                y: parent.top + 24,
-                size: 12,
-                weight: 600,
-                color: is_max ? #f87171 : #64748b,
-                text: status_label
-            )
+            \HStack(gap: 60, align: "center") {
+                \Text(
+                    size: 26,
+                    weight: 700,
+                    color: is_max ? #ef4444 : (is_zero ? #94a3b8 : #38bdf8),
+                    text: count_label
+                )
+                \Text(
+                    size: 12,
+                    weight: 600,
+                    color: is_max ? #f87171 : #64748b,
+                    text: status_label
+                )
+            }
         }
 
         // Reactive Progress Gauge
-        \Rect(x: parent.left + 24, y: parent.top + 158, width: 312, height: 8, color: #0f172a, radius: 4) {
+        \Rect(width: 312, height: 8, color: #0f172a, radius: 4) {
             \Rect(
                 x: parent.left,
                 y: parent.top,
@@ -71,43 +80,41 @@
             )
         }
 
-        // Interactive Button Row: [-], [+], [Reset]
-        \HStack(x: parent.left + 24, y: parent.top + 184, gap: 16) {
-            \Rect(
+        // Interactive Button Row: [-], [+], [Reset] via HStack
+        \HStack(gap: 16) {
+            \Button(
                 width: 72,
                 height: 48,
-                color: is_zero ? #334155 : #475569,
+                label: "-",
+                size: 22,
+                weight: 700,
+                disabled: is_zero,
+                variant: "secondary",
                 radius: 10,
                 on_click: self.decrement
-            ) {
-                \Text(x: parent.left + 28, y: parent.top + 12, size: 22, weight: 700, color: #ffffff) {
-                    -
-                }
-            }
+            )
 
-            \Rect(
+            \Button(
                 width: 72,
                 height: 48,
-                color: is_max ? #991b1b : #2563eb,
+                label: "+",
+                size: 22,
+                weight: 700,
+                variant: is_max ? "danger" : "primary",
                 radius: 10,
                 on_click: self.increment
-            ) {
-                \Text(x: parent.left + 27, y: parent.top + 12, size: 22, weight: 700, color: #ffffff) {
-                    +
-                }
-            }
+            )
 
-            \Rect(
+            \Button(
                 width: 136,
                 height: 48,
-                color: #334155,
+                label: "Reset",
+                size: 14,
+                weight: 600,
+                variant: "secondary",
                 radius: 10,
                 on_click: self.reset
-            ) {
-                \Text(x: parent.left + 46, y: parent.top + 16, size: 14, weight: 600, color: #e2e8f0) {
-                    Reset
-                }
-            }
+            )
         }
     }
 }

@@ -532,7 +532,7 @@ fn test_examples_counter_dt_and_rs_integration() {
         }
     }
 
-    let mut registry = ComponentRegistry::new();
+    let mut registry = ComponentRegistry::standard();
     registry.register_companion("Counter", "examples/Counter.rs", || {
         Box::new(ExampleCounter::default())
     });
