@@ -3,6 +3,19 @@ use directedtype::parser::parse_document;
 use directedtype::render::{HeadlessRenderer, SceneOptions, ViewerApp, ViewerConfig};
 use vello::peniko::Color;
 
+fn golden_dir() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/goldens")
+}
+
+fn save_golden_or_preview(img: &image::RgbaImage, name: &str) {
+    let out_dir = golden_dir();
+    let _ = std::fs::create_dir_all(&out_dir);
+    let golden_path = out_dir.join(name);
+    if std::env::var("DIRECTEDTYPE_UPDATE_GOLDENS").is_ok() || !golden_path.exists() {
+        let _ = img.save(&golden_path);
+    }
+}
+
 #[test]
 fn test_headless_render_layout_to_image() {
     let source = r#"
@@ -228,10 +241,7 @@ fn test_clipping_example_file() {
     assert_eq!(img.width(), 600);
     assert_eq!(img.height(), 600);
 
-    let brain_dir = std::path::Path::new("/Users/hoefel/.gemini/antigravity-ide/brain/c2560240-cb95-4f78-9867-aa0ab7be2601");
-    if brain_dir.exists() {
-        let _ = img.save(brain_dir.join("clipping_render.png"));
-    }
+    save_golden_or_preview(&img, "clipping.png");
 }
 
 #[test]
@@ -254,10 +264,7 @@ fn test_env_example_file() {
     assert_eq!(img.width(), 750);
     assert_eq!(img.height(), 700);
 
-    let brain_dir = std::path::Path::new("/Users/hoefel/.gemini/antigravity-ide/brain/c2560240-cb95-4f78-9867-aa0ab7be2601");
-    if brain_dir.exists() {
-        let _ = img.save(brain_dir.join("env_demo_render.png"));
-    }
+    save_golden_or_preview(&img, "env_demo.png");
 }
 
 #[test]
@@ -280,10 +287,7 @@ fn test_binding_example_file() {
     assert_eq!(img.width(), 400);
     assert_eq!(img.height(), 500);
 
-    let brain_dir = std::path::Path::new("/Users/hoefel/.gemini/antigravity-ide/brain/c2560240-cb95-4f78-9867-aa0ab7be2601");
-    if brain_dir.exists() {
-        let _ = img.save(brain_dir.join("binding_render.png"));
-    }
+    save_golden_or_preview(&img, "binding.png");
 }
 
 #[test]
@@ -341,6 +345,7 @@ fn test_render_inspector_panel_snapshot() {
     let img = renderer.render_scene(&scene, 360, 600).expect("Render scene ok");
     assert_eq!(img.width(), 360);
     assert_eq!(img.height(), 600);
+    save_golden_or_preview(&img, "inspector_panel.png");
 }
 
 #[test]
@@ -360,13 +365,13 @@ fn test_render_counter_example() {
 
     let mut renderer = HeadlessRenderer::new().expect("init renderer");
     let options = SceneOptions::default();
-    let out_path = std::env::temp_dir().join("directedtype_counter_preview.png");
+    let img = renderer
+        .render_layout(&compiled.layout, 800, 600, &options)
+        .expect("render layout ok");
 
-    renderer
-        .render_layout_to_file(&compiled.layout, 800, 600, &options, &out_path)
-        .expect("render to file ok");
-
-    assert!(out_path.exists(), "counter_preview.png must be created");
+    assert_eq!(img.width(), 800);
+    assert_eq!(img.height(), 600);
+    save_golden_or_preview(&img, "counter.png");
 }
 
 #[test]
@@ -408,12 +413,10 @@ fn test_render_inspector_with_counter_component_state() {
     );
 
     let mut renderer = HeadlessRenderer::new().expect("init renderer");
-    let out_path = std::env::temp_dir().join("directedtype_inspector_counter_state.png");
     let img = renderer.render_scene(&scene, 360, 600).expect("render scene ok");
     assert_eq!(img.width(), 360);
     assert_eq!(img.height(), 600);
-    img.save(&out_path).expect("save preview ok");
-    assert!(out_path.exists());
+    save_golden_or_preview(&img, "inspector_counter.png");
 }
 
 #[test]
@@ -433,17 +436,13 @@ fn test_render_button_demo_example() {
 
     let mut renderer = HeadlessRenderer::new().expect("init renderer");
     let options = SceneOptions::default();
-    let brain_path = std::path::Path::new(
-        "/Users/hoefel/.gemini/antigravity-ide/brain/2dd669f3-e3a4-49a6-a651-eae26726be64/scratch/button_demo_preview.png",
-    );
-
     let img = renderer
         .render_layout(&compiled.layout, 800, 600, &options)
         .expect("render layout ok");
 
-    let _ = img.save(brain_path);
     assert_eq!(img.width(), 800);
     assert_eq!(img.height(), 600);
+    save_golden_or_preview(&img, "button_demo.png");
 }
 
 #[test]
@@ -463,17 +462,13 @@ fn test_render_vstack_demo_example() {
 
     let mut renderer = HeadlessRenderer::new().expect("init renderer");
     let options = SceneOptions::default();
-    let brain_path = std::path::Path::new(
-        "/Users/hoefel/.gemini/antigravity-ide/brain/2dd669f3-e3a4-49a6-a651-eae26726be64/scratch/vstack_demo_preview.png",
-    );
-
     let img = renderer
         .render_layout(&compiled.layout, 1000, 600, &options)
         .expect("render layout ok");
 
-    let _ = img.save(brain_path);
     assert_eq!(img.width(), 1000);
     assert_eq!(img.height(), 600);
+    save_golden_or_preview(&img, "vstack_demo.png");
 }
 
 #[test]
@@ -493,16 +488,12 @@ fn test_render_demo_example() {
 
     let mut renderer = HeadlessRenderer::new().expect("init renderer");
     let options = SceneOptions::default();
-    let brain_path = std::path::Path::new(
-        "/Users/hoefel/.gemini/antigravity-ide/brain/2dd669f3-e3a4-49a6-a651-eae26726be64/scratch/demo_preview.png",
-    );
-
     let img = renderer
         .render_layout(&compiled.layout, 800, 600, &options)
         .expect("render layout ok");
 
-    let _ = img.save(brain_path);
     assert_eq!(img.width(), 800);
     assert_eq!(img.height(), 600);
+    save_golden_or_preview(&img, "demo.png");
 }
 
