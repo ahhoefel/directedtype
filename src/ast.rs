@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt;
 
 use crate::dom::NodeHandle;
@@ -68,6 +69,39 @@ pub struct ComponentDef {
     pub params: Vec<ParamDef>,
     pub body: Vec<ComponentBodyItem>,
     pub span: Span,
+}
+
+impl ComponentDef {
+    /// Returns the set of all parameter names for this component signature.
+    pub fn param_names(&self) -> HashSet<String> {
+        self.params
+            .iter()
+            .map(|p| p.name.as_str().to_string())
+            .collect()
+    }
+
+    /// Returns the set of required parameter names (parameters without a default expression).
+    pub fn required_param_names(&self) -> HashSet<String> {
+        self.params
+            .iter()
+            .filter(|p| p.default_edge.is_none())
+            .map(|p| p.name.as_str().to_string())
+            .collect()
+    }
+
+    /// Returns the set of optional parameter names (parameters with a default expression).
+    pub fn optional_param_names(&self) -> HashSet<String> {
+        self.params
+            .iter()
+            .filter(|p| p.default_edge.is_some())
+            .map(|p| p.name.as_str().to_string())
+            .collect()
+    }
+
+    /// Returns true if this signature declares any parameters with default values.
+    pub fn has_defaults(&self) -> bool {
+        self.params.iter().any(|p| p.default_edge.is_some())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

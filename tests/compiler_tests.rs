@@ -2582,4 +2582,71 @@ fn test_raw_text_passed_directly_to_component_children() {
     assert_eq!(text_node.rect.y, 18.0); // parent.top (0) + 18
 }
 
+#[test]
+fn test_component_def_param_helpers() {
+    let input = r#"
+    \Component TestComp(a: String, b: Number: 10, c: Color) {
+        \Rect(width: 100, height: 100)
+    }
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let comp = match &doc.items[0] {
+        directedtype::ast::Item::Component(c) => c,
+        _ => panic!("Expected component"),
+    };
+
+    let all_params = comp.param_names();
+    assert_eq!(all_params.len(), 3);
+    assert!(all_params.contains("a"));
+    assert!(all_params.contains("b"));
+    assert!(all_params.contains("c"));
+
+    let req_params = comp.required_param_names();
+    assert_eq!(req_params.len(), 2);
+    assert!(req_params.contains("a"));
+    assert!(req_params.contains("c"));
+    assert!(!req_params.contains("b"));
+
+    let opt_params = comp.optional_param_names();
+    assert_eq!(opt_params.len(), 1);
+    assert!(opt_params.contains("b"));
+
+    assert!(comp.has_defaults());
+}
+
+#[test]
+fn test_overload_error_formatting() {
+    use directedtype::compiler::error::{AmbiguousOverloadDetails, CompileError, NoMatchingOverloadDetails};
+    use directedtype::span::Span;
+
+    let err1 = CompileError::PotentiallyAmbiguousOverloads(Box::new(AmbiguousOverloadDetails {
+        name: "Card".to_string(),
+        signature_a: vec!["text".to_string(), "width".to_string()],
+        signature_b: vec!["text".to_string(), "height".to_string()],
+        witness_overlap: vec!["text".to_string()],
+        span: Span::new(10, 20),
+        second_span: Span::new(30, 40),
+    }));
+    assert_eq!(err1.span(), Span::new(10, 20));
+    assert!(err1.to_string().contains("Potentially ambiguous overloads for component 'Card'"));
+
+    let err2 = CompileError::NoMatchingOverload(Box::new(NoMatchingOverloadDetails {
+        name: "Card".to_string(),
+        provided_ports: vec!["width".to_string()],
+        available_signatures: vec![vec!["height".to_string()]],
+        span: Span::new(5, 15),
+    }));
+    assert_eq!(err2.span(), Span::new(5, 15));
+    assert!(err2.to_string().contains("No matching overload for component 'Card'"));
+
+    let err3 = CompileError::DuplicateOverloadSignature {
+        name: "Card".to_string(),
+        signature: vec!["width".to_string()],
+        span: Span::new(1, 10),
+        second_span: Span::new(20, 30),
+    };
+    assert_eq!(err3.span(), Span::new(1, 10));
+    assert!(err3.to_string().contains("Duplicate overload signature for component 'Card'"));
+}
+
 

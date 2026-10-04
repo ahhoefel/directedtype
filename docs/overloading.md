@@ -15,6 +15,8 @@ Currently, DirectedType enforces a **single constructor signature** per componen
 
 This document proposes **Component Constructor Overloading based on Port Signatures**. Overloading enables components to declare distinct templates for distinct layout contracts. By selecting the matching overload at compile time during AST expansion, the resulting DAG contains only the exact edges for the chosen layout mode, completely eliminating phantom cycle hazards and enabling bidirectional layout patterns (such as `Text` taking `width` to calculate `height`, or taking `height` to calculate `width`).
 
+Furthermore, this design sets an explicit architectural goal: **moving away from default parameter values**. If overloading renders parameter defaults obsolete, overload candidate filtering collapses from a complex heuristic ranking of partial subsets into **strict, exact set matching on port names**, radically simplifying the compiler and language semantics.
+
 ---
 
 ## 2. Motivation & The Problem Today
@@ -118,20 +120,20 @@ Therefore, treating port presence as a **compile-time signature matching problem
 
 ### 4.1 Syntax
 
-A component may define multiple signatures under the same identifier. Each overload declares a distinct parameter signature, default values, and internal body wiring:
+A component may define multiple signatures under the same identifier. Each overload declares a distinct parameter signature and internal body wiring:
 
 ```dt
 // ============================================================================
 // Card Overload 1: Caller-Constrained Width (Leaf-Driven)
 // ============================================================================
 \Component Card(
-    x: Number: 0,
-    y: Number: 0,
-    width: Number, // Explicit required width from caller
-    color: Color: #1e293b,
-    padding_x: Number: 20,
-    padding_y: Number: 20,
-    gap: Number: 12
+    x: Number,
+    y: Number,
+    width: Number,
+    color: Color,
+    padding_x: Number,
+    padding_y: Number,
+    gap: Number
 ) {
     alias right = x + width;
     alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_y : y + (2 * padding_y);
@@ -148,12 +150,12 @@ A component may define multiple signatures under the same identifier. Each overl
 // Card Overload 2: Parent-Constrained Width (Extrinsic / Stretched)
 // ============================================================================
 \Component Card(
-    x: Number: 0,
-    y: Number: 0,
-    color: Color: #1e293b,
-    padding_x: Number: 20,
-    padding_y: Number: 20,
-    gap: Number: 12
+    x: Number,
+    y: Number,
+    color: Color,
+    padding_x: Number,
+    padding_y: Number,
+    gap: Number
 ) {
     let resolved_width = parent.width - (2 * x);
     alias right = x + resolved_width;
@@ -190,13 +192,13 @@ In a single component template, declaring formulas for both `width` and `height`
 
 ```dt
 // Overload A: Width-constrained paragraph
-\Component Text(width: Number, text: String, size: Number: 14) {
+\Component Text(width: Number, text: String, size: Number) {
     alias height = text_height_wrapped(text, size, width);
     ...
 }
 
 // Overload B: Natural intrinsic badge/label
-\Component Text(text: String, size: Number: 14) {
+\Component Text(text: String, size: Number) {
     alias width = text_width(text, size);
     alias height = text_height(size);
     ...
@@ -236,43 +238,171 @@ Instead of requiring complex fallback ladders for padding:
 
 ---
 
-## 5. Overload Resolution Semantics
+## 5. Architectural Goal: Moving Away from Default Parameter Values
+
+A central architectural goal of this design is to **eliminate default parameter values** once overloading is available.
+
+### 5.1 Why Default Parameter Values Add Accidental Complexity
+
+Default parameter values (e.g. `gap: Number: 12`, `color: Color: #1e293b`) were originally introduced because single-signature components had no other way to accommodate callers who omitted arguments. However, in a reactive DAG system, default values introduce significant friction:
+
+1. **Obscured Graph Topologies:** A parameter default like `width: Number: 0` is not just a fallback number; it is an invisible topological edge injected into the graph. When combined with sentinel checks (`width > 0 ? ...`), it generates phantom cycles.
+2. **Competing Sourcing Mechanisms:** DirectedType already features a first-class **Environmental System** (`env color: Color`, `env font`, etc.) specifically designed to propagate ambient defaults across subtrees. Having both parameter defaults and environmental defaults creates unnecessary precedence competition (Tier 1 default vs. Tier 2 environment vs. Tier 3 ambient children vs. Tier 4 explicit argument).
+3. **Combinatorial Signature Bloat:** If a component has 5 optional parameters with defaults, it technically represents $2^5 = 32$ possible invocation shapes, many of which may make no mathematical sense in the layout DAG.
+
+---
+
+### 5.2 Definition-Time Ambiguity Verification vs. Strict Exact-Set Matching
+
+Rather than allowing ambiguous overloads to exist at definition time and relying on complex call-site heuristics or ranking algorithms to disambiguate them, DirectedType enforces a **strict definition-time model**:
+
+> **Definition-Time Ambiguity Rule:**
+> If any two overloads could *possibly* be ambiguous for any valid caller invocation, compilation fails immediately at component definition/registration time (`CompileError::PotentiallyAmbiguousOverloads`).
+
+#### The Construction Principle & Mathematical Overlap Condition
+When a caller constructs a component, they **must** supply all required ports for that signature, and they **may** supply any optional ports:
+$$\text{Req}(O) \subseteq P \subseteq \text{All}(O)$$
+
+If the inputs required to construct overload $O_1$ also form a valid input for overload $O_2$, then supplying those ports is a source of ambiguity.
+
+Formally, an input $P$ valid for both $O_1$ and $O_2$ exists if and only if:
+$$\exists P \quad \text{such that} \quad (\text{Req}(O_1) \cup \text{Req}(O_2)) \subseteq P \subseteq (\text{All}(O_1) \cap \text{All}(O_2))$$
+
+This condition holds **if and only if**:
+$$\text{Req}(O_1) \subseteq \text{All}(O_2) \quad \text{AND} \quad \text{Req}(O_2) \subseteq \text{All}(O_1)$$
+
+#### Concrete Examples:
+Consider two overloads: `\Card(text: String, width: Number)` and `\Card(text: String, height: Number)`.
+1. **Ambiguous when differentiating ports (`width` or `height`) have defaults:**
+   - $O_1$: `\Card(text: String, width: Number: 0)` ($\text{Req} = \{\text{text}\}$, $\text{All} = \{\text{text}, \text{width}\}$)
+   - $O_2$: `\Card(text: String, height: Number: 0)` ($\text{Req} = \{\text{text}\}$, $\text{All} = \{\text{text}, \text{height}\}$)
+   - Here, $\text{Req}(O_1) = \{\text{text}\} \subseteq \text{All}(O_2)$ and $\text{Req}(O_2) = \{\text{text}\} \subseteq \text{All}(O_1)$.
+   - An invocation `\Card(text: "Hello")` satisfies both!
+   - **Result: COMPILE ERROR at component definition time.**
+2. **Ambiguous when one overload's required ports are accepted by another:**
+   - $O_1$: `\Card(text: String, width: Number: 0)` ($\text{Req} = \{\text{text}\}$, $\text{All} = \{\text{text}, \text{width}\}$)
+   - $O_2$: `\Card(text: String)` ($\text{Req} = \{\text{text}\}$, $\text{All} = \{\text{text}\}$)
+   - The required ports of $O_2$ ($\text{text}$) are accepted by $O_1$, and $O_1$'s required ports are satisfied by $O_2$.
+   - **Result: COMPILE ERROR at component definition time.**
+3. **Unambiguous when common ports (`text`) have defaults, but differentiating ports are required:**
+   - $O_1$: `\Card(text: String: "Default", width: Number)` ($\text{Req} = \{\text{width}\}$, $\text{All} = \{\text{text}, \text{width}\}$)
+   - $O_2$: `\Card(text: String: "Default", height: Number)` ($\text{Req} = \{\text{height}\}$, $\text{All} = \{\text{text}, \text{height}\}$)
+   - Here:
+     - $\text{Req}(O_1) = \{\text{width}\} \not\subseteq \text{All}(O_2)$ (because $O_2$ does not declare `width`)
+     - $\text{Req}(O_2) = \{\text{height}\} \not\subseteq \text{All}(O_1)$ (because $O_1$ does not declare `height`)
+   - Any valid invocation of $O_1$ must supply `width`, which $O_2$ rejects. Any valid invocation of $O_2$ must supply `height`, which $O_1$ rejects.
+   - **Result: VALID.** There is zero overlap in their valid input spaces.
+
+#### How Eliminating Defaults Collapses the Math to Exact Set Equality
+When parameter defaults are eliminated, every parameter in an overload signature is required:
+$$\text{Req}(O) = \text{All}(O) = \text{Params}(O)$$
+The definition-time ambiguity condition collapses from subset analysis into **exact set equality**:
+$$\text{Params}(O_1) \subseteq \text{Params}(O_2) \land \text{Params}(O_2) \subseteq \text{Params}(O_1) \iff \text{Params}(O_1) == \text{Params}(O_2)$$
+
+This guarantees:
+1. **Definition Time:** Two overloads are ambiguous if and only if they declare the exact same set of parameter names.
+2. **Call Site:** Because all overloads have mutually disjoint parameter sets, call-site resolution is a trivial $O(1)$ set lookup ($\text{Params}(O) == P_{\text{provided}}$) with zero heuristic ranking or ambiguity possible at runtime.
+
+---
+
+### 5.3 How Component Defaults Are Expressed Without Parameter Defaults
+
+Moving away from parameter defaults does not mean component users must specify every single property manually. Instead, defaults are handled through three clearer, more principled mechanisms:
+
+#### 1. Internal `let` Constants Inside Specific Overloads
+Common boilerplate configurations are defined as concise overloads that set internal constants:
+
+```dt
+// Zero-argument convenience overload: uses standard default styling
+\Component Card() {
+    let x = 0;
+    let y = 0;
+    let color = #1e293b;
+    let padding_x = 20;
+    let padding_y = 20;
+    let gap = 12;
+
+    let resolved_width = parent.width - (2 * x);
+    alias right = x + resolved_width;
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_y : y + (2 * padding_y);
+    alias height = bottom - y;
+
+    \Rect(x: x, y: y, width: resolved_width, height: height, color: color)
+    \Children {
+        x: parent.left + padding_x,
+        y: prev ? prev.bottom + gap : parent.top + padding_y
+    }
+}
+
+// Explicit dimensions overload:
+\Component Card(width: Number, height: Number) {
+    let x = 0;
+    let y = 0;
+    let color = #1e293b;
+    ...
+}
+```
+
+#### 2. Constructor Delegation / Composition
+A simpler overload can delegate to a richer overload or primitive, avoiding code duplication without needing parameter defaults:
+
+```dt
+\Component Card(width: Number) {
+    \Card(x: 0, y: 0, width: width)
+}
+```
+
+#### 3. Environmental Cascade (`env`)
+Theme properties (colors, corner radii, fonts) naturally belong in the environment:
+```dt
+\Component Button(label: String) {
+    env color: Color;     // Inherited from ambient ThemeProvider
+    env font: Font;       // Inherited from ambient Font declaration
+    \Rect(color: color) {
+        \Text(text: label, font: font)
+    }
+}
+```
+
+---
+
+## 6. Overload Resolution Semantics
 
 Overload resolution is performed statically during AST expansion in `compiler::expand`. It does not exist at runtime and incurs zero overhead in the DAG evaluation loop.
 
-### 5.1 Step 1: Input Port Collection
+### 6.1 Step 1: Input Port Collection
 For an element invocation `\Foo(...)`:
 1. Collect the set of **Provided Ports** ($P_{\text{provided}}$):
    - Explicit ports on the invocation (`\Foo(a: 10, b: "hi")` $\rightarrow \{a, b\}$).
    - Ambient ports applied by the parent `\Children` directive (Tier 3).
    - Environmental bindings in scope matching declared `env` parameters (Tier 2).
 
-### 5.2 Step 2: Candidate Filtering
-An overload definition $O$ with parameter set $\text{Params}(O)$ is a candidate if and only if:
-1. **Required Port Satisfaction:** Every required parameter (parameters without a default expression) in $\text{Params}(O)$ is present in $P_{\text{provided}}$.
-2. **Port Acceptance:** Every port in $P_{\text{provided}}$ corresponds to a valid parameter declared in $\text{Params}(O)$. If the invocation supplies a port that $O$ does not declare, $O$ is disqualified.
+### 6.2 Step 2: Signature Matching (Exact-Match Model)
+With default parameters removed, an overload $O$ matches if and only if:
+$$\text{Params}(O) == P_{\text{provided}}$$
 
-### 5.3 Step 3: Specificity Ranking
-If multiple overloads satisfy the candidate criteria, select the most specific overload:
-1. **Explicit Match Count:** The overload that matches the highest number of explicitly provided ports without falling back to default parameter values ranks higher.
-2. **Exact Parameter Set Match:** An overload whose parameter set exactly matches $P_{\text{provided}}$ beats an overload that relies on optional defaults.
-3. **Ambiguity Error:** If two or more candidates have identical specificity, compilation fails with `CompileError::AmbiguousOverload`:
-   ```text
-   error: Ambiguous overload for component 'Card'
-     --> src/main.dt:14:5
-      |
-   14 |     \Card(padding_x: 10, padding_y: 10)
-      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   note: Candidate 1: \Component Card(padding_x: Number, padding_y: Number)
-   note: Candidate 2: \Component Card(padding_x: Number: 0, padding_y: Number: 0, width: Number: 0)
-   help: Provide explicit disambiguating ports or consolidate overload definitions.
-   ```
+If no overload matches $P_{\text{provided}}$, compilation fails immediately with `CompileError::NoMatchingOverload`:
+```text
+error: No matching overload for component 'Card' with ports {width, padding_x}
+  --> src/main.dt:14:5
+   |
+14 |     \Card(width: 200, padding_x: 16)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: Available overloads for 'Card':
+      \Component Card()
+      \Component Card(width: Number)
+      \Component Card(width: Number, height: Number)
+      \Component Card(x: Number, y: Number, width: Number, color: Color)
+help: Did you mean to use '\Card(width: 200)'?
+```
+
+*(Note: During the transition phase, if default parameters are still supported, Model A subset ranking is applied as described in Section 5.2).*
 
 ---
 
-## 6. Architectural Changes
+## 7. Architectural Changes
 
-### 6.1 `ComponentRegistry`
+### 7.1 `ComponentRegistry`
 Currently, `ComponentRegistry` stores a single definition per name:
 ```rust
 // Current
@@ -280,6 +410,7 @@ pub struct ComponentRegistry {
     components: HashMap<String, ComponentDef>,
 }
 ```
+
 Update to support overload sets:
 ```rust
 // Proposed
@@ -288,6 +419,10 @@ pub struct ComponentRegistry {
 }
 
 impl ComponentRegistry {
+    /// Registers an overload. Returns an error if an identical signature already exists.
+    pub fn register(&mut self, comp: ComponentDef) -> Result<(), CompileError>;
+
+    /// Resolves the exact overload matching the provided port keys.
     pub fn resolve_overload(
         &self,
         name: &str,
@@ -297,42 +432,48 @@ impl ComponentRegistry {
 }
 ```
 
-### 6.2 Expansion Pipeline (`src/compiler/expand.rs`)
+### 7.2 Expansion Pipeline (`src/compiler/expand.rs`)
 In `expand_element`:
-1. When encountering a component invocation, query `registry.resolve_overload(comp_name, &provided_ports, span)`.
-2. Expand the component using the returned `ComponentDef` template.
-3. No sentinel checks or artificial expression pruners are required.
-
-### 6.3 Diagnostic Spans
-When an invocation matches no overloads, emit `CompileError::NoMatchingOverload` listing the signatures available in the registry and the ports provided by the caller.
+1. Collect provided port names from explicit ports, ambient rules, and env bindings.
+2. Query `registry.resolve_overload(comp_name, &provided_ports, span)`.
+3. Expand the component using the matching `ComponentDef` template.
+4. No sentinel checks, fallback ternaries, or artificial expression pruners are required.
 
 ---
 
-## 7. Interaction with Hot-Reloading & State
+## 8. Interaction with Hot-Reloading & State
 
-1. **Topological Invariant Preservation:** Because each overload expands into a strictly verified DAG, switching an overload (e.g. adding `width: 250` during live editing) triggers standard recompilation of that element's subtree.
-2. **Companion Component State:** Component state variables (`state count: Number: 0;`) operate within the component instance node. Overloads may declare the same state variables; state migration during live reload uses the existing structured component key system (`key: "button_0"`).
+1. **Topological Invariant Preservation:** Because each overload expands into a strictly verified DAG, switching an overload during live editing (e.g. adding `width: 250`) cleanly re-expands the element's subtree with the newly matched template.
+2. **Companion Component State:** Component state variables (`state count: Number: 0;`) operate within the component instance node. Overloads declaring companion state preserve state across live reloads via structured component keys (`key: "button_0"`).
 
 ---
 
-## 8. Summary Table: Sizing Workarounds vs. Overloading
+## 9. Summary Table: Evolution of Component Sizing & Parameters
 
-| Dimension | Sentinel Ternaries (Current) | `Optional<T>` Runtime Type | Component Overloading (Proposed) |
+| Dimension | Single-Signature with Defaults (Current) | Overloading WITH Parameter Defaults | Overloading WITHOUT Parameter Defaults (Target Goal) |
 | :--- | :--- | :--- | :--- |
-| **Cycle Hazard** | High (phantom branches enter DAG unless pruned) | High (un-taken branches still present in AST) | **Zero** (un-taken branches do not exist in AST) |
-| **Bidirectional Layout** | Impossible (creates static cycle) | Impossible | **Fully Supported** (different overloads for $W \to H$ vs $H \to W$) |
-| **Compiler Complexity** | Complex heuristic branch folding in `expand.rs` | Complex runtime unwrap checking | Clean signature pattern matching in `expand.rs` |
-| **API Clarity** | Magic numbers (`width: 0`) | Nested optionals | Clear, explicit component signatures |
-| **Performance** | Dependency traversal overhead | Runtime conditional evaluation | Zero runtime cost (evaluated purely at compile time) |
+| **Cycle Hazard** | High (sentinel branches enter DAG unless pruned) | Zero (un-taken branches omitted from AST) | **Zero** (exact topological graphs per overload) |
+| **Bidirectional Layout** | Impossible (creates static cycle) | Fully Supported | **Fully Supported** |
+| **Candidate Filtering** | N/A (single candidate) | Complex heuristic subset ranking | **Trivial exact set equality ($O(1)$ lookup)** |
+| **Default Handling** | Magic numbers (`width: 0`) and parameter defaults | Mixed parameter & env defaults | **Explicit internal `let` constants & `env` cascade** |
+| **API Clarity** | Monolithic parameter lists | Multiple signatures with default fallbacks | **Clear, distinct signatures with exact contracts** |
+| **Diagnostic Quality** | Cycles surface deep inside component internal formulas | Ambiguous overload errors if defaults overlap | **Immediate, precise `NoMatchingOverload` diagnostics** |
 
 ---
 
-## 9. Next Steps
+## 10. Next Steps & Implementation Roadmap
 
-1. **Spec & RFC Review:** Align with DirectedType roadmap goals (roadmap.md item 10).
-2. **Phase 1 Implementation:** Extend `ComponentRegistry` to group multiple `ComponentDef`s by name.
-3. **Phase 2 Implementation:** Implement candidate filtering and resolution algorithm in `src/compiler/expand.rs`.
-4. **Standard Library Refactor:**
+1. **Phase 1: Multi-Signature Registry & AST Support**
+   - Update `ComponentRegistry` to store `Vec<ComponentDef>` per component name.
+   - Disallow duplicate parameter sets for the same component name at registration time.
+2. **Phase 2: Overload Resolution in Compiler Expansion**
+   - Implement port collection and signature matching in `src/compiler/expand.rs`.
+   - Add `CompileError::NoMatchingOverload` and `CompileError::DuplicateOverloadSignature`.
+3. **Phase 3: Standard Library Transition & Testing**
    - Refactor [`components/Card.dt`](file:///Users/hoefel/dev/directedtype/components/Card.dt) into explicit-width and fluid-width overloads.
-   - Refactor [`components/VStack.dt`](file:///Users/hoefel/dev/directedtype/components/VStack.dt) and [`components/HStack.dt`](file:///Users/hoefel/dev/directedtype/components/HStack.dt).
-   - Author multi-mode [`components/Text.dt`](file:///Users/hoefel/dev/directedtype/components/Text.dt).
+   - Refactor [`components/HStack.dt`](file:///Users/hoefel/dev/directedtype/components/HStack.dt) and [`components/VStack.dt`](file:///Users/hoefel/dev/directedtype/components/VStack.dt).
+   - Implement multi-mode [`components/Text.dt`](file:///Users/hoefel/dev/directedtype/components/Text.dt) ($W \to H$, $H \to W$, and natural bounds).
+4. **Phase 4: Deprecation of Parameter Defaults**
+   - Assess whether any standard components genuinely require parameter defaults after overloading is available.
+   - Deprecate default parameter syntax in component headers in favor of internal `let` bindings and `env` declarations.
+   - Transition candidate filtering to pure exact-set matching.

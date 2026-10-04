@@ -114,11 +114,43 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Potentially ambiguous overloads for component '{}': signatures {:?} and {:?} both accept ports {:?}", .0.name, .0.signature_a, .0.signature_b, .0.witness_overlap)]
+    PotentiallyAmbiguousOverloads(Box<AmbiguousOverloadDetails>),
+
+    #[error("No matching overload for component '{}' with provided ports {:?}", .0.name, .0.provided_ports)]
+    NoMatchingOverload(Box<NoMatchingOverloadDetails>),
+
+    #[error("Duplicate overload signature for component '{name}' with ports {signature:?}")]
+    DuplicateOverloadSignature {
+        name: String,
+        signature: Vec<String>,
+        span: Span,
+        second_span: Span,
+    },
+
     #[error("{message}")]
     Custom {
         message: String,
         span: Span,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AmbiguousOverloadDetails {
+    pub name: String,
+    pub signature_a: Vec<String>,
+    pub signature_b: Vec<String>,
+    pub witness_overlap: Vec<String>,
+    pub span: Span,
+    pub second_span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NoMatchingOverloadDetails {
+    pub name: String,
+    pub provided_ports: Vec<String>,
+    pub available_signatures: Vec<Vec<String>>,
+    pub span: Span,
 }
 
 impl CompileError {
@@ -141,7 +173,10 @@ impl CompileError {
             | CompileError::UndefinedEnvVariable { span, .. }
             | CompileError::BlockedEnvVariable { span, .. }
             | CompileError::BareEnvUse { span, .. }
+            | CompileError::DuplicateOverloadSignature { span, .. }
             | CompileError::Custom { span, .. } => *span,
+            CompileError::PotentiallyAmbiguousOverloads(details) => details.span,
+            CompileError::NoMatchingOverload(details) => details.span,
         }
     }
 }
