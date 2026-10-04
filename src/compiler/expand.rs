@@ -369,22 +369,57 @@ struct ElementContext<'a> {
 fn select_component_overload<'a>(
     overloads: &'a [ComponentDef],
     comp_name: &str,
-    provided_ports: &HashSet<String>,
+    elem: &ElementNode,
+    ambient_authored_ports: Option<&HashMap<String, Expr>>,
+    env_scope: &HashMap<String, EnvEntry>,
     span: Span,
 ) -> Result<&'a ComponentDef, CompileError> {
+    let explicit_ports: HashSet<String> =
+        elem.ports.iter().map(|p| p.name.as_str().to_string()).collect();
+
     let matching: Vec<&ComponentDef> = overloads
         .iter()
         .filter(|o| {
-            let req = o.required_param_names();
             let all = o.param_names();
-            req.is_subset(provided_ports) && provided_ports.is_subset(&all)
+            // 1. All caller-authored ports must be accepted by this overload.
+            // Purely ambient ports injected by a container or standard spatial properties
+            // (x, y, z, clip) do not disqualify an overload.
+            for port in &elem.ports {
+                let name = port.name.as_str();
+                let is_purely_ambient = ambient_authored_ports.is_some_and(|a| a.contains_key(name));
+                if !is_purely_ambient && !all.contains(name) && !matches!(name, "x" | "y" | "z" | "clip") {
+                    return false;
+                }
+            }
+
+            // 2. All required parameters (those without defaults) must be satisfied
+            for param in &o.params {
+                if param.default_edge.is_none() {
+                    let name = param.name.as_str();
+                    let satisfied = explicit_ports.contains(name)
+                        || ambient_authored_ports.is_some_and(|a| a.contains_key(name))
+                        || (param.is_env && matches!(env_scope.get(name), Some(EnvEntry::Bound(_))));
+
+                    if !satisfied {
+                        return false;
+                    }
+                }
+            }
+
+            true
         })
         .collect();
 
     match matching.len() {
         1 => Ok(matching[0]),
         _ => {
-            let mut provided: Vec<String> = provided_ports.iter().cloned().collect();
+            let mut provided: Vec<String> = explicit_ports
+                .into_iter()
+                .filter(|p| {
+                    let is_ambient = ambient_authored_ports.is_some_and(|a| a.contains_key(p));
+                    !is_ambient
+                })
+                .collect();
             provided.sort();
             let available_signatures: Vec<Vec<String>> = overloads
                 .iter()
@@ -472,9 +507,14 @@ fn expand_element(
         let comp_def = if overloads.len() == 1 {
             &overloads[0]
         } else {
-            let provided_ports: HashSet<String> =
-                elem.ports.iter().map(|p| p.name.as_str().to_string()).collect();
-            select_component_overload(overloads, elem.name.as_str(), &provided_ports, elem.span)?
+            select_component_overload(
+                overloads,
+                elem.name.as_str(),
+                elem,
+                ctx.ambient_authored_ports,
+                ctx.env_scope,
+                elem.span,
+            )?
         };
         let inst_ctx = InstanceContext {
             comp_node_id: node_id,

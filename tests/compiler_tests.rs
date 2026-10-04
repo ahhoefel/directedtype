@@ -2789,5 +2789,109 @@ fn test_overload_dom_integration() {
     assert!(Dom::from_document(&doc_bad).is_err(), "Dom should reject ambiguous overloads");
 }
 
+#[test]
+fn test_overload_exact_selection_at_call_site() {
+    let input = r#"
+    \Component Badge(text: String) {
+        \Rect(x: 0, y: 0, width: 100, height: 20, color: #111111)
+    }
+    \Component Badge(text: String, count: Number) {
+        \Rect(x: 0, y: 0, width: 150, height: count, color: #222222)
+    }
+    \Component Badge(icon: String, count: Number) {
+        \Rect(x: 0, y: 0, width: 200, height: count, color: #333333)
+    }
+
+    \Badge(text: "Simple")
+    \Badge(text: "Counted", count: 35)
+    \Badge(icon: "star", count: 45)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Overload selection should succeed");
+    assert_eq!(layout.roots.len(), 3);
+
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 3);
+    assert_eq!(rects[0].rect.width, 100.0);
+    assert_eq!(rects[0].rect.height, 20.0);
+    assert_eq!(rects[1].rect.width, 150.0);
+    assert_eq!(rects[1].rect.height, 35.0);
+    assert_eq!(rects[2].rect.width, 200.0);
+    assert_eq!(rects[2].rect.height, 45.0);
+}
+
+#[test]
+fn test_overload_env_parameter_satisfaction() {
+    let input = r#"
+    let theme_val = "dark";
+    env theme = theme_val;
+
+    \Component ThemedBox(env theme: String, width: Number) {
+        \Rect(x: 0, y: 0, width: width, height: 40, color: #101010)
+    }
+    \Component ThemedBox(width: Number, height: Number) {
+        \Rect(x: 0, y: 0, width: width, height: height, color: #202020)
+    }
+
+    \ThemedBox(width: 80)
+    \ThemedBox(width: 80, height: 60)
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Env-satisfied overload should resolve cleanly");
+    assert_eq!(layout.roots.len(), 2);
+
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    // Overload 1 (env theme)
+    assert_eq!(rects[0].rect.width, 80.0);
+    assert_eq!(rects[0].rect.height, 40.0);
+    // Overload 2 (width + height)
+    assert_eq!(rects[1].rect.width, 80.0);
+    assert_eq!(rects[1].rect.height, 60.0);
+}
+
+#[test]
+fn test_overload_card_in_hstack_no_cycle() {
+    let input = r#"
+    \Component HBox() {
+        alias width = max(children.right);
+        alias right = x + width;
+        \Rect(x: 0, y: 0, width: width, height: 60, color: #000000)
+        \Children {
+            x: prev ? prev.right + 10 : parent.left
+        }
+    }
+
+    \Component Card(width: Number) {
+        alias right = x + width;
+        \Rect(x: x, y: y, width: width, height: 50, color: #111111)
+    }
+
+    \Component Card() {
+        let resolved_width = parent.width;
+        alias right = x + resolved_width;
+        \Rect(x: x, y: y, width: resolved_width, height: 50, color: #222222)
+    }
+
+    \HBox() {
+        \Card(width: 150)
+        \Card(width: 200)
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc)
+        .expect("Fixed Card overload in HBox should not produce cyclic dependency");
+    assert_eq!(layout.roots.len(), 1);
+
+    let hbox_node = &layout.nodes[layout.roots[0].0];
+    assert_eq!(hbox_node.name, "HBox");
+    // HBox width should be 150 + 10 + 200 = 360
+    assert_eq!(hbox_node.rect.width, 360.0);
+}
+
+
 
 
