@@ -377,27 +377,34 @@ fn select_component_overload<'a>(
     let explicit_ports: HashSet<String> =
         elem.ports.iter().map(|p| p.name.as_str().to_string()).collect();
 
+    let any_overload_accepts = |port_name: &str| -> bool {
+        overloads.iter().any(|o| o.param_names().contains(port_name))
+    };
+
     let matching: Vec<&ComponentDef> = overloads
         .iter()
         .filter(|o| {
             let all = o.param_names();
             // 1. All caller-authored ports must be accepted by this overload.
             // Purely ambient ports injected by a container or standard spatial properties
-            // (x, y, z, clip) do not disqualify an overload.
+            // (x, y, z, clip) only disqualify an overload if at least one overload of this
+            // component actually accepts the port (e.g. ambient width injected by stretch).
             for port in &elem.ports {
                 let name = port.name.as_str();
                 let is_purely_ambient = ambient_authored_ports.is_some_and(|a| a.contains_key(name));
-                if !is_purely_ambient && !all.contains(name) && !matches!(name, "x" | "y" | "z" | "clip") {
+                let is_unrelated_ambient = is_purely_ambient && !any_overload_accepts(name);
+                if !is_unrelated_ambient && !all.contains(name) && !matches!(name, "x" | "y" | "z" | "clip") {
                     return false;
                 }
             }
 
             // 2. All required parameters (those without defaults) must be satisfied
+            // by caller explicit arguments, container-injected ambient arguments,
+            // or by an ambient bound env variable.
             for param in &o.params {
                 if param.default_edge.is_none() {
                     let name = param.name.as_str();
                     let satisfied = explicit_ports.contains(name)
-                        || ambient_authored_ports.is_some_and(|a| a.contains_key(name))
                         || (param.is_env && matches!(env_scope.get(name), Some(EnvEntry::Bound(_))));
 
                     if !satisfied {
@@ -417,7 +424,7 @@ fn select_component_overload<'a>(
                 .into_iter()
                 .filter(|p| {
                     let is_ambient = ambient_authored_ports.is_some_and(|a| a.contains_key(p));
-                    !is_ambient
+                    !is_ambient || any_overload_accepts(p)
                 })
                 .collect();
             provided.sort();
@@ -504,6 +511,25 @@ fn expand_element(
 
     // If it's an invocation of a user-defined component:
     if let Some(overloads) = registry.get(elem.name.as_str()) {
+        // Validate that caller does not attempt to override immutable spatial alias ports or declared aliases
+        for port in &elem.ports {
+            let name = port.name.as_str();
+            if matches!(name, "left" | "top" | "right" | "bottom")
+                || overloads.iter().any(|o| {
+                    o.body.iter().any(|item| match item {
+                        ComponentBodyItem::Alias(a) => a.name.as_str() == name,
+                        _ => false,
+                    })
+                })
+            {
+                return Err(CompileError::ImmutableAliasPort {
+                    node: elem.name.as_str().to_string(),
+                    port: name.to_string(),
+                    span: port.name.span,
+                });
+            }
+        }
+
         let comp_def = if overloads.len() == 1 {
             &overloads[0]
         } else {

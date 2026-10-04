@@ -1,9 +1,42 @@
 // DirectedType Standard Component Library: HStack
 // Horizontally stacked flow container with cross-axis alignment, child spacing (gap), and padding.
 
+// 1. Explicit / Fixed Width HStack: specifies width directly
 \Component HStack(
-    x: Number: 0,
-    y: Number: 0,
+    width: Number,
+    x: Number,
+    y: Number,
+    gap: Number: 12,
+    align: String: "top",
+    padding_x: Number: 0,
+    padding_y: Number: 0
+) {
+    let inner_left = x + padding_x;
+    let inner_top = y + padding_y;
+
+    let is_center = align == "center" || align == "centered";
+    let is_bottom = align == "bottom";
+
+    alias max_child_height = max(children.height);
+    alias right = x + width;
+    alias width = width;
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_y : y + (2 * padding_y);
+    alias height = bottom - y;
+
+    \Children {
+        x: prev ? prev.right + gap : inner_left,
+        y: is_center ? (inner_top + (parent.max_child_height - child.height) / 2) : (
+            is_bottom ? (inner_top + parent.max_child_height - child.height) : (
+                inner_top
+            )
+        )
+    }
+}
+
+// 2. Intrinsic / Content-Wrapping HStack: automatically sizes width to wrap children
+\Component HStack(
+    x: Number,
+    y: Number,
     gap: Number: 12,
     align: String: "top",
     padding_x: Number: 0,
@@ -30,4 +63,3 @@
         )
     }
 }
-

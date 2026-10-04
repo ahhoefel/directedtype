@@ -54,10 +54,10 @@ fn test_button_variants_visual_ports() {
     let input = r#"
     \use "components/Button.dt"
 
-    \Button("primary"; label: "Primary", variant: "primary")
-    \Button("outline"; label: "Outline", variant: "outline")
-    \Button("danger"; label: "Danger", variant: "danger")
-    \Button("disabled"; label: "Disabled", disabled: true)
+    \Button("primary"; x: 10, y: 10, label: "Primary", variant: "primary")
+    \Button("outline"; x: 10, y: 60, label: "Outline", variant: "outline")
+    \Button("danger"; x: 10, y: 110, label: "Danger", variant: "danger")
+    \Button("disabled"; x: 10, y: 160, label: "Disabled", disabled: true)
     "#;
 
     let doc = parse(input).expect("parse ok");
@@ -277,7 +277,7 @@ fn test_button_show_count_reactive_sizing() {
     let input = r#"
     \use "components/Button.dt"
 
-    \Button("btn"; label: "Clicks", show_count: true, variant: "primary")
+    \Button("btn"; x: 0, y: 0, label: "Clicks", show_count: true, variant: "primary")
     "#;
 
     let doc = parse(input).expect("parse ok");

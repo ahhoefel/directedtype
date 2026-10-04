@@ -1,16 +1,49 @@
 // DirectedType Standard Component Library: VStack
 // Vertically stacked flow container with cross-axis alignment, child spacing (gap), and padding.
 
+// 1. Explicit / Fixed Width VStack: zero references to parent.width, preventing layout DAG cycles
 \Component VStack(
-    x: Number: 0,
-    y: Number: 0,
-    width: Number: 0,
+    width: Number,
+    x: Number,
+    y: Number,
     gap: Number: 12,
     align: String: "left",
     padding_x: Number: 0,
     padding_y: Number: 0
 ) {
-    let resolved_width = width > 0 ? width : (parent.width - (2 * x));
+    let inner_width = width - (2 * padding_x);
+    let inner_left = x + padding_x;
+
+    let is_stretch = align == "stretch";
+    let is_center = align == "center" || align == "centered";
+    let is_right = align == "right";
+
+    alias right = x + width;
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_y : y + padding_y;
+    alias height = bottom - y;
+
+    \Children {
+        x: is_center ? (inner_left + (inner_width - child.width) / 2) : (
+            is_right ? (inner_left + inner_width - child.width) : (
+                inner_left
+            )
+        ),
+        y: prev ? prev.bottom + gap : parent.top + padding_y,
+        width: is_stretch ? inner_width : auto,
+        text_align: align
+    }
+}
+
+// 2. Fluid / Parent-Filling VStack: automatically spans parent width
+\Component VStack(
+    x: Number,
+    y: Number,
+    gap: Number: 12,
+    align: String: "left",
+    padding_x: Number: 0,
+    padding_y: Number: 0
+) {
+    let resolved_width = parent.width - (2 * x);
     let inner_width = resolved_width - (2 * padding_x);
     let inner_left = x + padding_x;
 

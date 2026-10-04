@@ -132,7 +132,7 @@ fn test_hstack_with_button_and_card_composition() {
     \use "components/HStack.dt"
     \use "components/Button.dt"
 
-    \Card(padding_x: 20, padding_y: 16) {
+    \Card(x: 0, y: 0, padding_x: 20, padding_y: 16) {
         \HStack(gap: 12) {
             \Button(label: "First", variant: "primary")
             \Button(label: "Second", variant: "secondary")

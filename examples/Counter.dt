@@ -1,7 +1,7 @@
 // DirectedType (DTML) Reactive Counter Component
 // Accompanied by native Rust companion file: Counter.rs
 
-\Component Counter(x: Number: 0, y: Number: 0, initial: Number: 0) {
+\Component Counter(x: Number, y: Number, initial: Number: 0) {
     state count: Number: initial;
 
     let is_max = count >= 10;
