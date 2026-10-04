@@ -1,0 +1,69 @@
+// DirectedType Standard Component Library: Center
+// Declarative container that centers its children along both horizontal and vertical axes.
+// Works seamlessly with intrinsic-sized children (like Text) and fixed containers.
+
+// 1. Explicit Spatial Bounds Center
+\Component Center(
+    width: Number,
+    height: Number,
+    x: Number,
+    y: Number
+) {
+    alias right = x + width;
+    alias bottom = y + height;
+
+    \Children {
+        x: x + (width - child.width) / 2,
+        y: y + (height - child.height) / 2
+    }
+}
+
+// 2. Explicit Dimensions Center (inherits origin from parent container)
+\Component Center(
+    width: Number,
+    height: Number
+) {
+    alias x = parent.left;
+    alias y = parent.top;
+    alias right = parent.left + width;
+    alias bottom = parent.top + height;
+
+    \Children {
+        x: parent.left + (width - child.width) / 2,
+        y: parent.top + (height - child.height) / 2
+    }
+}
+
+// 3. Fluid Dimensions Center (explicit origin, fills remaining parent space)
+\Component Center(
+    x: Number,
+    y: Number
+) {
+    let resolved_width = parent.width - (2 * (x - parent.left));
+    let resolved_height = parent.height - (2 * (y - parent.top));
+
+    alias width = resolved_width;
+    alias height = resolved_height;
+    alias right = x + resolved_width;
+    alias bottom = y + resolved_height;
+
+    \Children {
+        x: x + (resolved_width - child.width) / 2,
+        y: y + (resolved_height - child.height) / 2
+    }
+}
+
+// 4. Fluid Parent-Fitting Center: automatically fits parent container bounds
+\Component Center {
+    alias width = parent.width;
+    alias height = parent.height;
+    alias x = parent.left;
+    alias y = parent.top;
+    alias right = parent.right;
+    alias bottom = parent.bottom;
+
+    \Children {
+        x: parent.left + (parent.width - child.width) / 2,
+        y: parent.top + (parent.height - child.height) / 2
+    }
+}
