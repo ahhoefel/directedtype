@@ -313,6 +313,6 @@ fn test_button_show_count_reactive_sizing() {
     let updated_rect = compiled.layout.nodes.iter().find(|n| n.parent == Some(btn_id) && n.name == "Rect").unwrap();
     assert!(updated_rect.rect.width > initial_width);
 
-    let text_node = compiled.layout.nodes.iter().find(|n| n.parent == Some(updated_rect.id) && n.name == "Text").unwrap();
+    let text_node = compiled.layout.nodes.iter().find(|n| n.name == "Text").unwrap();
     assert_eq!(text_node.properties.get("text"), Some(&Value::String("Clicks (1)".into())));
 }

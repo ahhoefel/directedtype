@@ -1,7 +1,8 @@
 // DirectedType Standard Component Library: Button
 // High-performance declarative button with variants, intrinsic text sizing, and companion state.
+\use "components/Center.dt"
 
-// 1. Explicit / Fixed Width Button
+// 1. Explicit / Fixed Width Button: zero text_width measurement needed
 \Component Button(
     width: Number,
     x: Number,
@@ -11,9 +12,14 @@
     variant: String: "primary",
     disabled: Boolean: false,
     radius: Number: 8,
+    size: Number: 14,
+    weight: Number: 600,
     show_count: Boolean: false
 ) {
     state click_count: Number: 0;
+
+    let font_size = size;
+    let font_weight = weight;
 
     let is_primary = variant == "primary";
     let is_secondary = variant == "secondary";
@@ -59,7 +65,6 @@
     );
 
     let display_label = (show_count && click_count > 0) ? (label + " (" + click_count + ")") : label;
-    let measured_label_w = text_width(display_label, 14, 600);
 
     alias right = x + width;
     alias bottom = y + height;
@@ -75,14 +80,14 @@
         border_width: border_w,
         on_click: self.click
     ) {
-        \Text(
-            x: parent.left + (width - measured_label_w) / 2,
-            y: parent.top + (parent.height - 14) / 2,
-            size: 14,
-            weight: 600,
-            color: text_color,
-            text: display_label
-        )
+        \Center {
+            \Text(
+                size: font_size,
+                weight: font_weight,
+                color: text_color,
+                text: display_label
+            )
+        }
     }
 }
 
@@ -95,9 +100,14 @@
     variant: String: "primary",
     disabled: Boolean: false,
     radius: Number: 8,
+    size: Number: 14,
+    weight: Number: 600,
     show_count: Boolean: false
 ) {
     state click_count: Number: 0;
+
+    let font_size = size;
+    let font_weight = weight;
 
     let is_primary = variant == "primary";
     let is_secondary = variant == "secondary";
@@ -143,7 +153,7 @@
     );
 
     let display_label = (show_count && click_count > 0) ? (label + " (" + click_count + ")") : label;
-    let measured_label_w = text_width(display_label, 14, 600);
+    let measured_label_w = text_width(display_label, font_size, font_weight);
     let resolved_width = max(64, measured_label_w + 32);
 
     alias right = x + resolved_width;
@@ -160,13 +170,13 @@
         border_width: border_w,
         on_click: self.click
     ) {
-        \Text(
-            x: parent.left + (resolved_width - measured_label_w) / 2,
-            y: parent.top + (parent.height - 14) / 2,
-            size: 14,
-            weight: 600,
-            color: text_color,
-            text: display_label
-        )
+        \Center {
+            \Text(
+                size: font_size,
+                weight: font_weight,
+                color: text_color,
+                text: display_label
+            )
+        }
     }
 }
