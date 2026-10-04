@@ -393,7 +393,13 @@ fn select_component_overload<'a>(
                 let name = port.name.as_str();
                 let is_purely_ambient = ambient_authored_ports.is_some_and(|a| a.contains_key(name));
                 let is_unrelated_ambient = is_purely_ambient && !any_overload_accepts(name);
-                if !is_unrelated_ambient && !all.contains(name) && !matches!(name, "x" | "y" | "z" | "clip") {
+                let is_standard_spatial = matches!(name, "x" | "y" | "z" | "clip");
+                let is_unrelated_spatial = is_standard_spatial && !any_overload_accepts(name);
+                if !is_unrelated_ambient
+                    && !is_unrelated_spatial
+                    && !all.contains(name)
+                    && !name.starts_with("on_")
+                {
                     return false;
                 }
             }
@@ -424,7 +430,7 @@ fn select_component_overload<'a>(
                 .into_iter()
                 .filter(|p| {
                     let is_ambient = ambient_authored_ports.is_some_and(|a| a.contains_key(p));
-                    !is_ambient || any_overload_accepts(p)
+                    (!is_ambient || any_overload_accepts(p)) && !p.starts_with("on_")
                 })
                 .collect();
             provided.sort();
@@ -1396,19 +1402,19 @@ fn expand_component_instance(
 
     let node = doc.get_node_mut(ctx.comp_node_id).unwrap();
     node.children = all_children_ids;
-    node.ports = rewritten_ports;
     node.authored_ports = comp_authored_ports;
     for (state_name, s) in &declared_states {
         let type_name = s.type_annotation.as_ref().map(|t| t.name.as_str().to_string());
         node.state_vars.insert(state_name.clone(), type_name);
     }
-    for (port_name, expr) in &comp_ports {
+    for (port_name, expr) in &rewritten_ports {
         if port_name.starts_with("on_") {
             if let Some(binding) = extract_event_binding(port_name, expr) {
                 node.event_handlers.insert(port_name.clone(), binding);
             }
         }
     }
+    node.ports = rewritten_ports;
 
     Ok(())
 }

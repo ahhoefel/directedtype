@@ -31,7 +31,8 @@ impl Component for Button {
     ) -> Result<(), DispatchError> {
         match method {
             "click" => {
-                if self.disabled {
+                let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
+                if is_disabled {
                     // Suppress further event bubbling when button is disabled
                     event.stop_propagation();
                 } else {

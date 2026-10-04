@@ -253,7 +253,8 @@ pub mod std_components {
         ) -> Result<(), DispatchError> {
             match method {
                 "click" => {
-                    if self.disabled {
+                    let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
+                    if is_disabled {
                         event.stop_propagation();
                     } else {
                         self.click_count += 1;
