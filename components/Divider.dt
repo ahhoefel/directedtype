@@ -1,0 +1,45 @@
+// DirectedType Standard Component Library: Divider
+// Clean 1px hairline separator rule for dividing sections, headers, and list items.
+
+// 1. Fluid Divider: spans full width of parent container
+\Component Divider(
+    x: Number,
+    y: Number,
+    color: Color: #334155,
+    thickness: Number: 1
+) {
+    let resolved_width = parent.width;
+
+    alias right = x + resolved_width;
+    alias bottom = y + thickness;
+    alias height = thickness;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: thickness,
+        color: color
+    )
+}
+
+// 2. Fixed Width Divider: renders hairline with explicit width
+\Component Divider(
+    width: Number,
+    x: Number,
+    y: Number,
+    color: Color: #334155,
+    thickness: Number: 1
+) {
+    alias right = x + width;
+    alias bottom = y + thickness;
+    alias height = thickness;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: thickness,
+        color: color
+    )
+}

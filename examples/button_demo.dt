@@ -5,6 +5,8 @@
 \use "../components/HStack.dt"
 \use "../components/Card.dt"
 \use "../components/Button.dt"
+\use "../components/Divider.dt"
+\use "../components/Spacer.dt"
 
 // Background Canvas
 \Rect(
@@ -15,33 +17,32 @@
     color: #0f172a
 )
 
-// Header Section
-\Text(
-    x: 40,
-    y: 36,
-    size: 26,
-    weight: 700,
-    color: #f8fafc,
-    text: "DirectedType Component Library"
-)
-
-\Text(
-    x: 40,
-    y: 72,
-    size: 15,
-    weight: 400,
-    color: #94a3b8,
-    text: "Standard \\Card and \\Button with intrinsic typography sizing, 6 variants, and direct text support."
-)
-
-// Vertical stack of cards with automatic spacing and stretch alignment
+// Main Page Layout
 \VStack(
     x: 40,
-    y: 110,
+    y: 36,
     width: min(window.width - 80, 720),
     gap: 14,
     align: "stretch"
 ) {
+    // Header Section
+    \Text(
+        size: 26,
+        weight: 700,
+        color: #f8fafc,
+        text: "DirectedType Component Library"
+    )
+
+    \Text(
+        size: 15,
+        weight: 400,
+        color: #94a3b8,
+        text: "Standard \\Card and \\Button with intrinsic typography sizing, 6 variants, and direct text support."
+    )
+
+    \Divider(color: #334155)
+    \Spacer(height: 6)
+
     // Section 1: Visual Variants
     \Card("card_variants"; padding_x: 20, padding_y: 16) {
         \Text(size: 13, weight: 700, color: #94a3b8) { 1. DESIGN VARIANTS (AUTO-SIZED) }

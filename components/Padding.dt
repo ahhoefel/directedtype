@@ -1,0 +1,134 @@
+// DirectedType Standard Component Library: Padding
+// Insets interior children by uniform, directional, or 4-sided padding bounds.
+// Exposes right, bottom, width, and height aliases with zero parameter defaults.
+
+// 1. Explicit Width Uniform Padding
+\Component Padding(
+    width: Number,
+    padding: Number,
+    x: Number,
+    y: Number
+) {
+    let inner_width = width - (2 * padding);
+
+    alias right = x + width;
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding : y + (2 * padding);
+    alias height = bottom - y;
+
+    \Children {
+        x: x + padding,
+        y: prev ? prev.bottom : y + padding,
+        width: inner_width
+    }
+}
+
+// 2. Fluid Width Uniform Padding: derives width from parent container
+\Component Padding(
+    padding: Number,
+    x: Number,
+    y: Number
+) {
+    let resolved_width = parent.width - (2 * x);
+    let inner_width = resolved_width - (2 * padding);
+
+    alias right = x + resolved_width;
+    alias width = resolved_width;
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding : y + (2 * padding);
+    alias height = bottom - y;
+
+    \Children {
+        x: x + padding,
+        y: prev ? prev.bottom : y + padding,
+        width: inner_width
+    }
+}
+
+// 3. Explicit Width Asymmetric Padding
+\Component Padding(
+    width: Number,
+    padding_x: Number,
+    padding_y: Number,
+    x: Number,
+    y: Number
+) {
+    let inner_width = width - (2 * padding_x);
+
+    alias right = x + width;
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_y : y + (2 * padding_y);
+    alias height = bottom - y;
+
+    \Children {
+        x: x + padding_x,
+        y: prev ? prev.bottom : y + padding_y,
+        width: inner_width
+    }
+}
+
+// 4. Fluid Width Asymmetric Padding: derives width from parent container
+\Component Padding(
+    padding_x: Number,
+    padding_y: Number,
+    x: Number,
+    y: Number
+) {
+    let resolved_width = parent.width - (2 * x);
+    let inner_width = resolved_width - (2 * padding_x);
+
+    alias right = x + resolved_width;
+    alias width = resolved_width;
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_y : y + (2 * padding_y);
+    alias height = bottom - y;
+
+    \Children {
+        x: x + padding_x,
+        y: prev ? prev.bottom : y + padding_y,
+        width: inner_width
+    }
+}
+
+// 5. Explicit Width 4-Sided Directional Padding
+\Component Padding(
+    width: Number,
+    padding_top: Number,
+    padding_right: Number,
+    padding_bottom: Number,
+    padding_left: Number,
+    x: Number,
+    y: Number
+) {
+    let inner_width = width - padding_left - padding_right;
+
+    alias right = x + width;
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_bottom : y + padding_top + padding_bottom;
+    alias height = bottom - y;
+
+    \Children {
+        x: x + padding_left,
+        y: prev ? prev.bottom : y + padding_top,
+        width: inner_width
+    }
+}
+
+// 6. Fluid Width 4-Sided Directional Padding: derives width from parent container
+\Component Padding(
+    padding_top: Number,
+    padding_right: Number,
+    padding_bottom: Number,
+    padding_left: Number,
+    x: Number,
+    y: Number
+) {
+    let resolved_width = parent.width - (2 * x);
+    let inner_width = resolved_width - padding_left - padding_right;
+
+    alias right = x + resolved_width;
+    alias width = resolved_width;
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_bottom : y + padding_top + padding_bottom;
+    alias height = bottom - y;
+
+    \Children {
+        x: x + padding_left,
+        y: prev ? prev.bottom : y + padding_top,
+        width: inner_width
+    }
+}

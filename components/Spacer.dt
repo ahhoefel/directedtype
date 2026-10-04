@@ -1,0 +1,36 @@
+// DirectedType Standard Component Library: Spacer
+// Invisible, non-visual layout element used inside VStack and HStack to insert
+// fixed intervals or custom spacing between sibling elements.
+
+// 1. Vertical Spacer: inserts vertical whitespace in VStack
+\Component Spacer(
+    height: Number,
+    x: Number,
+    y: Number
+) {
+    alias right = x;
+    alias bottom = y + height;
+    alias width = 0;
+}
+
+// 2. Horizontal Spacer: inserts horizontal whitespace in HStack
+\Component Spacer(
+    width: Number,
+    x: Number,
+    y: Number
+) {
+    alias right = x + width;
+    alias bottom = y;
+    alias height = 0;
+}
+
+// 3. 2D Box Spacer: inserts explicit 2D spatial separation
+\Component Spacer(
+    width: Number,
+    height: Number,
+    x: Number,
+    y: Number
+) {
+    alias right = x + width;
+    alias bottom = y + height;
+}

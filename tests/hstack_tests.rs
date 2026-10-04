@@ -8,7 +8,7 @@ fn test_hstack_default_top_alignment_and_gap() {
     let input = r#"
     \use "components/HStack.dt"
 
-    \HStack(x: 10, y: 20, gap: 16, padding_x: 20, padding_y: 24) {
+    \HStack(x: 10, y: 20, gap: 16) {
         \Rect(width: 100, height: 40, color: #3b82f6)
         \Rect(width: 150, height: 50, color: #10b981)
         \Rect(width: 80, height: 30, color: #f59e0b)
@@ -30,30 +30,30 @@ fn test_hstack_default_top_alignment_and_gap() {
     let rects: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Rect").collect();
     assert_eq!(rects.len(), 3);
 
-    // Top alignment (default): inner_top = y (20) + padding_y (24) = 44
-    assert_eq!(rects[0].rect.y, 44.0);
-    assert_eq!(rects[1].rect.y, 44.0);
-    assert_eq!(rects[2].rect.y, 44.0);
+    // Top alignment (default): inner_top = y (20)
+    assert_eq!(rects[0].rect.y, 20.0);
+    assert_eq!(rects[1].rect.y, 20.0);
+    assert_eq!(rects[2].rect.y, 20.0);
 
     // Horizontal stacking with gap: 16
-    // Item 1 x: x (10) + padding_x (20) = 30
-    assert_eq!(rects[0].rect.x, 30.0);
+    // Item 1 x: x (10)
+    assert_eq!(rects[0].rect.x, 10.0);
     assert_eq!(rects[0].rect.width, 100.0);
 
-    // Item 2 x: rects[0].right (30 + 100 = 130) + gap (16) = 146
-    assert_eq!(rects[1].rect.x, 146.0);
+    // Item 2 x: rects[0].right (10 + 100 = 110) + gap (16) = 126
+    assert_eq!(rects[1].rect.x, 126.0);
     assert_eq!(rects[1].rect.width, 150.0);
 
-    // Item 3 x: rects[1].right (146 + 150 = 296) + gap (16) = 312
-    assert_eq!(rects[2].rect.x, 312.0);
+    // Item 3 x: rects[1].right (126 + 150 = 276) + gap (16) = 292
+    assert_eq!(rects[2].rect.x, 292.0);
     assert_eq!(rects[2].rect.width, 80.0);
 
     // HStack dimensions:
-    // right: last rect right (312 + 80 = 392) + padding_x (20) = 412
-    // bottom: max rect bottom (44 + 50 = 94) + padding_y (24) = 118
+    // right: last rect right (292 + 80 = 372)
+    // bottom: max rect bottom (20 + 50 = 70)
     let hstack_node = compiled.layout.nodes.iter().find(|n| n.name == "HStack").expect("HStack found");
-    assert_eq!(hstack_node.rect.width, 402.0); // 412 - 10 (x)
-    assert_eq!(hstack_node.rect.height, 98.0); // 118 - 20 (y)
+    assert_eq!(hstack_node.rect.width, 362.0); // 372 - 10 (x)
+    assert_eq!(hstack_node.rect.height, 50.0); // 70 - 20 (y)
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn test_hstack_center_and_centered_alignment() {
     let input = r#"
     \use "components/HStack.dt"
 
-    \HStack(x: 0, y: 10, align: "center", gap: 10, padding_x: 0, padding_y: 10) {
+    \HStack(x: 0, y: 10, align: "center", gap: 10) {
         \Rect(width: 100, height: 60, color: #3b82f6)
         \Rect(width: 120, height: 40, color: #10b981)
     }
@@ -83,11 +83,11 @@ fn test_hstack_center_and_centered_alignment() {
     assert_eq!(rects.len(), 2);
 
     // max_h = 60
-    // inner_top = 10 + 10 = 20
-    // rect 0 (h=60): 20 + (60 - 60) / 2 = 20
-    assert_eq!(rects[0].rect.y, 20.0);
-    // rect 1 (h=40): 20 + (60 - 40) / 2 = 30
-    assert_eq!(rects[1].rect.y, 30.0);
+    // top = 10
+    // rect 0 (h=60): 10 + (60 - 60) / 2 = 10
+    assert_eq!(rects[0].rect.y, 10.0);
+    // rect 1 (h=40): 10 + (60 - 40) / 2 = 20
+    assert_eq!(rects[1].rect.y, 20.0);
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn test_hstack_bottom_alignment() {
     let input = r#"
     \use "components/HStack.dt"
 
-    \HStack(x: 0, y: 10, align: "bottom", gap: 10, padding_y: 15) {
+    \HStack(x: 0, y: 10, align: "bottom", gap: 10) {
         \Rect(width: 80, height: 70, color: #ef4444)
         \Rect(width: 80, height: 30, color: #3b82f6)
     }
@@ -117,12 +117,12 @@ fn test_hstack_bottom_alignment() {
     assert_eq!(rects.len(), 2);
 
     // max_h = 70
-    // inner_top = 10 + 15 = 25
-    // rect 0 (h=70): bottom edge = 25 + 70 = 95
-    assert_eq!(rects[0].rect.y + rects[0].rect.height, 95.0);
-    // rect 1 (h=30): bottom edge = 25 + 70 = 95 -> y = 65
-    assert_eq!(rects[1].rect.y, 65.0);
-    assert_eq!(rects[1].rect.y + rects[1].rect.height, 95.0);
+    // top = 10
+    // rect 0 (h=70): bottom edge = 10 + 70 = 80
+    assert_eq!(rects[0].rect.y + rects[0].rect.height, 80.0);
+    // rect 1 (h=30): bottom edge = 10 + 70 = 80 -> y = 50
+    assert_eq!(rects[1].rect.y, 50.0);
+    assert_eq!(rects[1].rect.y + rects[1].rect.height, 80.0);
 }
 
 #[test]
@@ -216,4 +216,3 @@ fn test_hstack_nested_in_vstack() {
     assert_eq!(rects[2].rect.y, 60.0);
     assert_eq!(rects[2].rect.height, 50.0);
 }
-

@@ -514,13 +514,15 @@ fn expand_element(
         // Validate that caller does not attempt to override immutable spatial alias ports or declared aliases
         for port in &elem.ports {
             let name = port.name.as_str();
-            if matches!(name, "left" | "top" | "right" | "bottom")
-                || overloads.iter().any(|o| {
-                    o.body.iter().any(|item| match item {
-                        ComponentBodyItem::Alias(a) => a.name.as_str() == name,
-                        _ => false,
-                    })
-                })
+            let is_accepted_param = overloads.iter().any(|o| o.param_names().contains(name));
+            if !is_accepted_param
+                && (matches!(name, "left" | "top" | "right" | "bottom")
+                    || overloads.iter().any(|o| {
+                        o.body.iter().any(|item| match item {
+                            ComponentBodyItem::Alias(a) => a.name.as_str() == name,
+                            _ => false,
+                        })
+                    }))
             {
                 return Err(CompileError::ImmutableAliasPort {
                     node: elem.name.as_str().to_string(),

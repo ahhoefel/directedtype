@@ -1,5 +1,6 @@
 // DirectedType (DTML) Reactive Counter Component
 // Accompanied by native Rust companion file: Counter.rs
+\use "components/HStack.dt"
 
 \Component Counter(x: Number, y: Number, initial: Number: 0) {
     state count: Number: initial;
@@ -71,45 +72,41 @@
         }
 
         // Interactive Button Row: [-], [+], [Reset]
-        \Rect(
-            x: parent.left + 24,
-            y: parent.top + 184,
-            width: 72,
-            height: 48,
-            color: is_zero ? #334155 : #475569,
-            radius: 10,
-            on_click: self.decrement
-        ) {
-            \Text(x: parent.left + 28, y: parent.top + 12, size: 22, weight: 700, color: #ffffff) {
-                -
+        \HStack(x: parent.left + 24, y: parent.top + 184, gap: 16) {
+            \Rect(
+                width: 72,
+                height: 48,
+                color: is_zero ? #334155 : #475569,
+                radius: 10,
+                on_click: self.decrement
+            ) {
+                \Text(x: parent.left + 28, y: parent.top + 12, size: 22, weight: 700, color: #ffffff) {
+                    -
+                }
             }
-        }
 
-        \Rect(
-            x: parent.left + 112,
-            y: parent.top + 184,
-            width: 72,
-            height: 48,
-            color: is_max ? #991b1b : #2563eb,
-            radius: 10,
-            on_click: self.increment
-        ) {
-            \Text(x: parent.left + 27, y: parent.top + 12, size: 22, weight: 700, color: #ffffff) {
-                +
+            \Rect(
+                width: 72,
+                height: 48,
+                color: is_max ? #991b1b : #2563eb,
+                radius: 10,
+                on_click: self.increment
+            ) {
+                \Text(x: parent.left + 27, y: parent.top + 12, size: 22, weight: 700, color: #ffffff) {
+                    +
+                }
             }
-        }
 
-        \Rect(
-            x: parent.left + 200,
-            y: parent.top + 184,
-            width: 136,
-            height: 48,
-            color: #334155,
-            radius: 10,
-            on_click: self.reset
-        ) {
-            \Text(x: parent.left + 46, y: parent.top + 16, size: 14, weight: 600, color: #e2e8f0) {
-                Reset
+            \Rect(
+                width: 136,
+                height: 48,
+                color: #334155,
+                radius: 10,
+                on_click: self.reset
+            ) {
+                \Text(x: parent.left + 46, y: parent.top + 16, size: 14, weight: 600, color: #e2e8f0) {
+                    Reset
+                }
             }
         }
     }

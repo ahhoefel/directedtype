@@ -1,5 +1,5 @@
 // DirectedType Standard Component Library: HStack
-// Horizontally stacked flow container with cross-axis alignment, child spacing (gap), and padding.
+// Horizontally stacked flow container with cross-axis alignment and child spacing (gap).
 
 // 1. Explicit / Fixed Width HStack: specifies width directly
 \Component HStack(
@@ -7,27 +7,21 @@
     x: Number,
     y: Number,
     gap: Number: 12,
-    align: String: "top",
-    padding_x: Number: 0,
-    padding_y: Number: 0
+    align: String: "top"
 ) {
-    let inner_left = x + padding_x;
-    let inner_top = y + padding_y;
-
     let is_center = align == "center" || align == "centered";
     let is_bottom = align == "bottom";
 
     alias max_child_height = max(children.height);
     alias right = x + width;
-    alias width = width;
-    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_y : y + (2 * padding_y);
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) : y;
     alias height = bottom - y;
 
     \Children {
-        x: prev ? prev.right + gap : inner_left,
-        y: is_center ? (inner_top + (parent.max_child_height - child.height) / 2) : (
-            is_bottom ? (inner_top + parent.max_child_height - child.height) : (
-                inner_top
+        x: prev ? prev.right + gap : x,
+        y: is_center ? (y + (parent.max_child_height - child.height) / 2) : (
+            is_bottom ? (y + parent.max_child_height - child.height) : (
+                y
             )
         )
     }
@@ -38,27 +32,22 @@
     x: Number,
     y: Number,
     gap: Number: 12,
-    align: String: "top",
-    padding_x: Number: 0,
-    padding_y: Number: 0
+    align: String: "top"
 ) {
-    let inner_left = x + padding_x;
-    let inner_top = y + padding_y;
-
     let is_center = align == "center" || align == "centered";
     let is_bottom = align == "bottom";
 
     alias max_child_height = max(children.height);
-    alias right = max(children.right) > 0 ? max(children.right) + padding_x : x + (2 * padding_x);
+    alias right = max(children.right) > 0 ? max(children.right) : x;
     alias width = right - x;
-    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_y : y + (2 * padding_y);
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) : y;
     alias height = bottom - y;
 
     \Children {
-        x: prev ? prev.right + gap : inner_left,
-        y: is_center ? (inner_top + (parent.max_child_height - child.height) / 2) : (
-            is_bottom ? (inner_top + parent.max_child_height - child.height) : (
-                inner_top
+        x: prev ? prev.right + gap : x,
+        y: is_center ? (y + (parent.max_child_height - child.height) / 2) : (
+            is_bottom ? (y + parent.max_child_height - child.height) : (
+                y
             )
         )
     }
