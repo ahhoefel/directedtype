@@ -476,3 +476,33 @@ fn test_render_vstack_demo_example() {
     assert_eq!(img.height(), 600);
 }
 
+#[test]
+fn test_render_demo_example() {
+    let source = std::fs::read_to_string("examples/demo.dt").expect("read demo.dt");
+    let doc = directedtype::parse(&source).expect("parse demo.dt");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile demo.dt ok");
+
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let options = SceneOptions::default();
+    let brain_path = std::path::Path::new(
+        "/Users/hoefel/.gemini/antigravity-ide/brain/2dd669f3-e3a4-49a6-a651-eae26726be64/scratch/demo_preview.png",
+    );
+
+    let img = renderer
+        .render_layout(&compiled.layout, 800, 600, &options)
+        .expect("render layout ok");
+
+    let _ = img.save(brain_path);
+    assert_eq!(img.width(), 800);
+    assert_eq!(img.height(), 600);
+}
+
