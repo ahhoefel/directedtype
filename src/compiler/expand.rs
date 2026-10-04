@@ -1,6 +1,7 @@
 use crate::ast::*;
-use crate::compiler::error::CompileError;
+use crate::compiler::error::{CompileError, NoMatchingOverloadDetails};
 use crate::compiler::expanded::{ExpandedDocument, ExpandedNode, NodeId};
+use crate::span::Span;
 use std::collections::{HashMap, HashSet};
 
 /// A lexical binding in the component or document scope.
@@ -364,11 +365,48 @@ struct ElementContext<'a> {
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
 }
 
+/// Statically selects the unique matching component overload for an invocation.
+fn select_component_overload<'a>(
+    overloads: &'a [ComponentDef],
+    comp_name: &str,
+    provided_ports: &HashSet<String>,
+    span: Span,
+) -> Result<&'a ComponentDef, CompileError> {
+    let matching: Vec<&ComponentDef> = overloads
+        .iter()
+        .filter(|o| {
+            let req = o.required_param_names();
+            let all = o.param_names();
+            req.is_subset(provided_ports) && provided_ports.is_subset(&all)
+        })
+        .collect();
+
+    match matching.len() {
+        1 => Ok(matching[0]),
+        _ => {
+            let mut provided: Vec<String> = provided_ports.iter().cloned().collect();
+            provided.sort();
+            let available_signatures: Vec<Vec<String>> = overloads
+                .iter()
+                .map(|o| o.params.iter().map(|p| p.name.as_str().to_string()).collect())
+                .collect();
+            Err(CompileError::NoMatchingOverload(Box::new(
+                NoMatchingOverloadDetails {
+                    name: comp_name.to_string(),
+                    provided_ports: provided,
+                    available_signatures,
+                    span,
+                },
+            )))
+        }
+    }
+}
+
 /// Expands a single element node (either a component invocation or a primitive).
 fn expand_element(
     elem: &ElementNode,
     ctx: &ElementContext<'_>,
-    registry: &HashMap<String, ComponentDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
     doc: &mut ExpandedDocument,
     node_fonts: &mut HashMap<NodeId, NodeId>,
 ) -> Result<NodeId, CompileError> {
@@ -430,7 +468,14 @@ fn expand_element(
     doc.nodes.push(expanded);
 
     // If it's an invocation of a user-defined component:
-    if let Some(comp_def) = registry.get(elem.name.as_str()).cloned() {
+    if let Some(overloads) = registry.get(elem.name.as_str()) {
+        let comp_def = if overloads.len() == 1 {
+            &overloads[0]
+        } else {
+            let provided_ports: HashSet<String> =
+                elem.ports.iter().map(|p| p.name.as_str().to_string()).collect();
+            select_component_overload(overloads, elem.name.as_str(), &provided_ports, elem.span)?
+        };
         let inst_ctx = InstanceContext {
             comp_node_id: node_id,
             parent_id: ctx.parent_id,
@@ -442,7 +487,7 @@ fn expand_element(
         expand_component_instance(
             &inst_ctx,
             elem,
-            &comp_def,
+            comp_def,
             registry,
             doc,
             ctx.lexical_scope,
@@ -470,7 +515,7 @@ fn expand_component_instance(
     ctx: &InstanceContext<'_>,
     instance: &ElementNode,
     comp_def: &ComponentDef,
-    registry: &HashMap<String, ComponentDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
     doc: &mut ExpandedDocument,
     lexical_scope: &HashMap<String, LexicalBinding>,
     caller_env_scope: &HashMap<String, EnvEntry>,
@@ -1305,7 +1350,7 @@ fn expand_primitive_element(
     node_id: NodeId,
     elem: &ElementNode,
     ctx: &ElementContext<'_>,
-    registry: &HashMap<String, ComponentDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
     doc: &mut ExpandedDocument,
     node_fonts: &mut HashMap<NodeId, NodeId>,
 ) -> Result<(), CompileError> {

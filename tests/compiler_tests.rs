@@ -1,4 +1,5 @@
 use directedtype::ast::*;
+use directedtype::compiler::error::CompileError;
 use directedtype::compiler::{compile_to_graph, VarId};
 use directedtype::parse;
 use directedtype::span::Span;
@@ -2648,5 +2649,145 @@ fn test_overload_error_formatting() {
     assert_eq!(err3.span(), Span::new(1, 10));
     assert!(err3.to_string().contains("Duplicate overload signature for component 'Card'"));
 }
+
+#[test]
+fn test_overload_definition_time_ambiguity_rejected() {
+    let input = r#"
+    \Component Card(text: String, width: Number: 0) {
+        \Rect(width: width, height: 100)
+    }
+    \Component Card(text: String, height: Number: 0) {
+        \Rect(width: 100, height: height)
+    }
+    \Card(text: "Hello")
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let err = directedtype::evaluate_document(&doc).expect_err("Ambiguous overloads should fail at definition time");
+    match err {
+        CompileError::PotentiallyAmbiguousOverloads(details) => {
+            assert_eq!(details.name, "Card");
+            assert_eq!(details.witness_overlap, vec!["text"]);
+        }
+        other => panic!("Expected PotentiallyAmbiguousOverloads, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_overload_subset_ambiguity_rejected() {
+    let input = r#"
+    \Component Box(width: Number: 100) {
+        \Rect(width: width, height: 100)
+    }
+    \Component Box() {
+        \Rect(width: 50, height: 50)
+    }
+    \Box()
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let err = directedtype::evaluate_document(&doc).expect_err("Subset overlap should fail at definition time");
+    match err {
+        CompileError::PotentiallyAmbiguousOverloads(details) => {
+            assert_eq!(details.name, "Box");
+            assert!(details.witness_overlap.is_empty());
+        }
+        other => panic!("Expected PotentiallyAmbiguousOverloads, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_overload_duplicate_signature_rejected() {
+    let input = r#"
+    \Component Foo(x: Number) {
+        \Rect(width: x, height: 10)
+    }
+    \Component Foo(x: Number) {
+        \Rect(width: x, height: 20)
+    }
+    \Foo(x: 10)
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let err = directedtype::evaluate_document(&doc).expect_err("Duplicate signature should fail at definition time");
+    match err {
+        CompileError::DuplicateOverloadSignature { name, signature, .. } => {
+            assert_eq!(name, "Foo");
+            assert_eq!(signature, vec!["x"]);
+        }
+        other => panic!("Expected DuplicateOverloadSignature, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_overload_non_overlapping_defaults_allowed() {
+    let input = r#"
+    \Component Card(text: String: "Default", width: Number) {
+        \Rect(x: 0, y: 0, width: width, height: 50, color: #111111)
+    }
+    \Component Card(text: String: "Default", height: Number) {
+        \Rect(x: 0, y: 0, width: 50, height: height, color: #222222)
+    }
+
+    \Card(width: 200)
+    \Card(height: 120)
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Disjoint overloads should compile and evaluate");
+    assert_eq!(layout.roots.len(), 2);
+
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    assert_eq!(rects[0].rect.width, 200.0);
+    assert_eq!(rects[0].rect.height, 50.0);
+    assert_eq!(rects[1].rect.width, 50.0);
+    assert_eq!(rects[1].rect.height, 120.0);
+}
+
+#[test]
+fn test_overload_no_matching_overload_diagnostic() {
+    let input = r#"
+    \Component Card(width: Number) {
+        \Rect(width: width, height: 50)
+    }
+    \Component Card(height: Number) {
+        \Rect(width: 50, height: height)
+    }
+
+    \Card(color: #ffffff)
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let err = directedtype::evaluate_document(&doc).expect_err("Missing matching overload should return NoMatchingOverload");
+    match err {
+        CompileError::NoMatchingOverload(details) => {
+            assert_eq!(details.name, "Card");
+            assert_eq!(details.provided_ports, vec!["color"]);
+            assert_eq!(details.available_signatures.len(), 2);
+        }
+        other => panic!("Expected NoMatchingOverload, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_overload_dom_integration() {
+    use directedtype::dom::Dom;
+
+    let valid_input = r#"
+    \Component Card(width: Number) { \Rect(width: width, height: 50) }
+    \Component Card(height: Number) { \Rect(width: 50, height: height) }
+    \Card(width: 100)
+    "#;
+    let doc = parse(valid_input).expect("Failed to parse");
+    let dom = Dom::from_document(&doc).expect("Dom should register disjoint overloads");
+    let roundtrip_doc = dom.to_document().expect("Dom to_document roundtrip");
+
+    let comp_count = roundtrip_doc.items.iter().filter(|i| matches!(i, directedtype::ast::Item::Component(_))).count();
+    assert_eq!(comp_count, 2, "Roundtripped document should preserve both overloads");
+
+    let invalid_input = r#"
+    \Component Card(width: Number: 10) { \Rect(width: width, height: 50) }
+    \Component Card(height: Number: 20) { \Rect(width: 50, height: height) }
+    "#;
+    let doc_bad = parse(invalid_input).expect("Failed to parse");
+    assert!(Dom::from_document(&doc_bad).is_err(), "Dom should reject ambiguous overloads");
+}
+
 
 

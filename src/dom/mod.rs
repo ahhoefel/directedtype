@@ -45,7 +45,7 @@ pub struct DomHitTestResult {
 struct DomStructuralSnapshot {
     arena: DomArena,
     roots: Vec<NodeHandle>,
-    components: HashMap<String, ComponentDef>,
+    components: HashMap<String, Vec<ComponentDef>>,
     let_bindings: Vec<LetBinding>,
     env_bindings: Vec<EnvBinding>,
     window_width: f64,
@@ -60,7 +60,7 @@ struct DomStructuralSnapshot {
 pub struct Dom {
     arena: DomArena,
     roots: Vec<NodeHandle>,
-    components: HashMap<String, ComponentDef>,
+    components: HashMap<String, Vec<ComponentDef>>,
     let_bindings: Vec<LetBinding>,
     env_bindings: Vec<EnvBinding>,
     window_width: f64,
@@ -114,7 +114,10 @@ impl Dom {
         for item in &doc.items {
             match item {
                 Item::Component(comp) => {
-                    dom.components.insert(comp.name.as_str().to_string(), comp.clone());
+                    crate::compiler::module::register_component_overload(
+                        &mut dom.components,
+                        comp.clone(),
+                    )?;
                 }
                 Item::Let(l) => {
                     dom.let_bindings.push(l.clone());
@@ -1082,8 +1085,8 @@ impl Dom {
     pub fn to_document(&self) -> Result<Document, DomError> {
         let mut items = Vec::new();
 
-        let mut sorted_comps: Vec<_> = self.components.values().collect();
-        sorted_comps.sort_by_key(|c| c.name.as_str());
+        let mut sorted_comps: Vec<_> = self.components.values().flatten().collect();
+        sorted_comps.sort_by_key(|c| (c.name.as_str(), c.span.start));
         for comp in sorted_comps {
             items.push(Item::Component(comp.clone()));
         }

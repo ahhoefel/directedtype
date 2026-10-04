@@ -1,5 +1,5 @@
 use crate::ast::{ComponentDef, Document, Ident, Item, UseDeclaration};
-use crate::compiler::error::CompileError;
+use crate::compiler::error::{AmbiguousOverloadDetails, CompileError};
 use crate::parser::parse_document;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -126,13 +126,149 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     }
 }
 
+/// Registers a component overload into the registry, performing strict definition-time ambiguity
+/// and duplicate checks.
+///
+/// If any two overloads could possibly accept the same set of ports for any valid caller invocation,
+/// this returns `CompileError::PotentiallyAmbiguousOverloads`.
+///
+/// An exact duplicate signature returns `CompileError::DuplicateOverloadSignature`.
+///
+/// If an identical `ComponentDef` is already registered (e.g. via diamond dependency import),
+/// this operation is an idempotent no-op and returns `Ok(())`.
+pub fn register_component_overload(
+    registry: &mut HashMap<String, Vec<ComponentDef>>,
+    comp: ComponentDef,
+) -> Result<(), CompileError> {
+    let name = comp.name.as_str().to_string();
+    let overloads = registry.entry(name.clone()).or_default();
+
+    for existing in overloads.iter() {
+        // Idempotent re-import / diamond import: exactly identical component definition
+        if existing == &comp
+            || (existing.name.as_str() == comp.name.as_str() && existing.span == comp.span)
+        {
+            return Ok(());
+        }
+
+        let req_existing = existing.required_param_names();
+        let all_existing = existing.param_names();
+        let req_new = comp.required_param_names();
+        let all_new = comp.param_names();
+
+        // 1. Exact duplicate signature
+        if req_existing == req_new && all_existing == all_new {
+            let signature: Vec<String> = comp
+                .params
+                .iter()
+                .map(|p| p.name.as_str().to_string())
+                .collect();
+            return Err(CompileError::DuplicateOverloadSignature {
+                name,
+                signature,
+                span: existing.span,
+                second_span: comp.span,
+            });
+        }
+
+        // 2. Strict Definition-Time Ambiguity Check:
+        // A potential ambiguity exists iff Req(O1) ⊆ All(O2) AND Req(O2) ⊆ All(O1).
+        if req_existing.is_subset(&all_new) && req_new.is_subset(&all_existing) {
+            let mut witness: Vec<String> = req_existing.union(&req_new).cloned().collect();
+            witness.sort();
+            let sig_a: Vec<String> = existing
+                .params
+                .iter()
+                .map(|p| p.name.as_str().to_string())
+                .collect();
+            let sig_b: Vec<String> = comp
+                .params
+                .iter()
+                .map(|p| p.name.as_str().to_string())
+                .collect();
+            return Err(CompileError::PotentiallyAmbiguousOverloads(Box::new(
+                AmbiguousOverloadDetails {
+                    name,
+                    signature_a: sig_a,
+                    signature_b: sig_b,
+                    witness_overlap: witness,
+                    span: existing.span,
+                    second_span: comp.span,
+                },
+            )));
+        }
+    }
+
+    overloads.push(comp);
+    Ok(())
+}
+
+/// Statically verifies that a slice of component overloads sharing the same name are mutually disjoint.
+pub fn verify_overload_set(name: &str, overloads: &[ComponentDef]) -> Result<(), CompileError> {
+    for i in 0..overloads.len() {
+        for j in (i + 1)..overloads.len() {
+            let o1 = &overloads[i];
+            let o2 = &overloads[j];
+
+            if o1 == o2 || (o1.name.as_str() == o2.name.as_str() && o1.span == o2.span) {
+                continue;
+            }
+
+            let req1 = o1.required_param_names();
+            let all1 = o1.param_names();
+            let req2 = o2.required_param_names();
+            let all2 = o2.param_names();
+
+            if req1 == req2 && all1 == all2 {
+                let signature: Vec<String> = o2
+                    .params
+                    .iter()
+                    .map(|p| p.name.as_str().to_string())
+                    .collect();
+                return Err(CompileError::DuplicateOverloadSignature {
+                    name: name.to_string(),
+                    signature,
+                    span: o1.span,
+                    second_span: o2.span,
+                });
+            }
+
+            if req1.is_subset(&all2) && req2.is_subset(&all1) {
+                let mut witness: Vec<String> = req1.union(&req2).cloned().collect();
+                witness.sort();
+                let sig_a: Vec<String> = o1
+                    .params
+                    .iter()
+                    .map(|p| p.name.as_str().to_string())
+                    .collect();
+                let sig_b: Vec<String> = o2
+                    .params
+                    .iter()
+                    .map(|p| p.name.as_str().to_string())
+                    .collect();
+                return Err(CompileError::PotentiallyAmbiguousOverloads(Box::new(
+                    AmbiguousOverloadDetails {
+                        name: name.to_string(),
+                        signature_a: sig_a,
+                        signature_b: sig_b,
+                        witness_overlap: witness,
+                        span: o1.span,
+                        second_span: o2.span,
+                    },
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Resolves all `\use` declarations in a document and returns the merged component registry.
 pub fn resolve_imports<R: FileResolver>(
     doc: &Document,
     base_dir: &Path,
     resolver: &R,
-) -> Result<HashMap<String, ComponentDef>, CompileError> {
-    let mut registry = HashMap::new();
+) -> Result<HashMap<String, Vec<ComponentDef>>, CompileError> {
+    let mut registry: HashMap<String, Vec<ComponentDef>> = HashMap::new();
     let mut active_stack = HashSet::new();
     let mut cache = HashMap::new();
     let mut module_exports = HashMap::new();
@@ -140,7 +276,7 @@ pub fn resolve_imports<R: FileResolver>(
     // 1. Index locally declared components in the root document
     for item in &doc.items {
         if let Item::Component(comp) = item {
-            registry.insert(comp.name.as_str().to_string(), comp.clone());
+            register_component_overload(&mut registry, comp.clone())?;
         }
     }
 
@@ -166,10 +302,10 @@ fn resolve_use_decl<R: FileResolver>(
     u: &UseDeclaration,
     base_dir: &Path,
     resolver: &R,
-    registry: &mut HashMap<String, ComponentDef>,
+    registry: &mut HashMap<String, Vec<ComponentDef>>,
     active_stack: &mut HashSet<PathBuf>,
     cache: &mut HashMap<PathBuf, Document>,
-    module_exports: &mut HashMap<PathBuf, HashMap<String, ComponentDef>>,
+    module_exports: &mut HashMap<PathBuf, HashMap<String, Vec<ComponentDef>>>,
 ) -> Result<(), CompileError> {
     let raw_path = Path::new(&u.path);
     let mut resolved_path = if raw_path.is_absolute() {
@@ -228,10 +364,10 @@ fn resolve_use_decl<R: FileResolver>(
         let imported_base_dir = resolved_path.parent().unwrap_or(Path::new("."));
 
         // Collect components from the imported file and transitively resolve its \use declarations
-        let mut components = HashMap::new();
+        let mut components: HashMap<String, Vec<ComponentDef>> = HashMap::new();
         for item in &imported_doc.items {
             if let Item::Component(comp) = item {
-                components.insert(comp.name.as_str().to_string(), comp.clone());
+                register_component_overload(&mut components, comp.clone())?;
             }
         }
         for item in &imported_doc.items {
@@ -260,12 +396,13 @@ fn resolve_use_decl<R: FileResolver>(
             .and_then(|s| s.to_str())
             .unwrap_or("");
 
-        let target_comp = if let Some(comp) = imported_components.get(file_stem) {
-            comp.clone()
+        let (original_name, target_comps) = if let Some(comps) = imported_components.get(file_stem) {
+            (file_stem.to_string(), comps.clone())
         } else if imported_components.len() == 1 {
-            imported_components.values().next().unwrap().clone()
-        } else if let Some(comp) = imported_components.get(alias_name) {
-            comp.clone()
+            let (name, comps) = imported_components.iter().next().unwrap();
+            (name.clone(), comps.clone())
+        } else if let Some(comps) = imported_components.get(alias_name) {
+            (alias_name.to_string(), comps.clone())
         } else {
             return Err(CompileError::ImportError {
                 path: u.path.clone(),
@@ -281,20 +418,26 @@ fn resolve_use_decl<R: FileResolver>(
             });
         };
 
-        let mut aliased = target_comp.clone();
-        aliased.name = Ident::new(alias_name, alias.span);
-        registry.insert(alias_name.to_string(), aliased);
+        for target_comp in target_comps {
+            let mut aliased = target_comp.clone();
+            aliased.name = Ident::new(alias_name, alias.span);
+            register_component_overload(registry, aliased)?;
+        }
 
         // Also bring in transitive dependencies needed by target_comp
-        for (name, comp) in &imported_components {
-            if name != target_comp.name.as_str() {
-                registry.entry(name.clone()).or_insert_with(|| comp.clone());
+        for (name, comps) in &imported_components {
+            if name != &original_name {
+                for comp in comps {
+                    register_component_overload(registry, comp.clone())?;
+                }
             }
         }
     } else {
         // No alias: import all components defined in the file
-        for (name, comp) in imported_components {
-            registry.insert(name, comp);
+        for (_name, comps) in imported_components {
+            for comp in comps {
+                register_component_overload(registry, comp)?;
+            }
         }
     }
 

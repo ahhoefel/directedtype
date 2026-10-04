@@ -458,3 +458,146 @@ fn test_fs_resolver_disk_import() {
     assert_eq!(rect_node.rect.width, 320.0);
     assert_eq!(rect_node.rect.height, 45.0);
 }
+
+#[test]
+fn test_module_import_overloads() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "components/Card.dt",
+        r#"
+        \Component Card(width: Number) {
+            \Rect(x: 0, y: 0, width: width, height: 40, color: #1E293B)
+        }
+        \Component Card(height: Number) {
+            \Rect(x: 0, y: 0, width: 80, height: height, color: #334155)
+        }
+        "#,
+    );
+
+    let main_src = r#"
+    \use "./components/Card.dt";
+
+    \Card(width: 150)
+    \Card(height: 90)
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let layout = evaluate_document_with_resolver(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect("Failed to evaluate layout with overloaded module imports");
+
+    assert_eq!(layout.roots.len(), 2);
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    assert_eq!(rects[0].rect.width, 150.0);
+    assert_eq!(rects[0].rect.height, 40.0);
+    assert_eq!(rects[1].rect.width, 80.0);
+    assert_eq!(rects[1].rect.height, 90.0);
+}
+
+#[test]
+fn test_aliased_module_import_overloads() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "components/Card.dt",
+        r#"
+        \Component Card(width: Number) {
+            \Rect(x: 0, y: 0, width: width, height: 40, color: #1E293B)
+        }
+        \Component Card(height: Number) {
+            \Rect(x: 0, y: 0, width: 80, height: height, color: #334155)
+        }
+        "#,
+    );
+
+    let main_src = r#"
+    \use "./components/Card.dt" as PrimaryCard;
+
+    \PrimaryCard(width: 220)
+    \PrimaryCard(height: 110)
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let layout = evaluate_document_with_resolver(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect("Failed to evaluate layout with aliased overloaded module");
+
+    assert_eq!(layout.roots.len(), 2);
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    assert_eq!(rects[0].rect.width, 220.0);
+    assert_eq!(rects[0].rect.height, 40.0);
+    assert_eq!(rects[1].rect.width, 80.0);
+    assert_eq!(rects[1].rect.height, 110.0);
+}
+
+#[test]
+fn test_diamond_dependency_with_overloads() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "core/Base.dt",
+        r#"
+        \Component BaseBox(width: Number) {
+            \Rect(x: 0, y: 0, width: width, height: 50, color: #000)
+        }
+        \Component BaseBox(height: Number) {
+            \Rect(x: 0, y: 0, width: 50, height: height, color: #111)
+        }
+        "#,
+    );
+    resolver.insert(
+        "core/Left.dt",
+        r#"
+        \use "./Base.dt";
+        \Component LeftComp() {
+            \BaseBox(width: 75)
+        }
+        "#,
+    );
+    resolver.insert(
+        "core/Right.dt",
+        r#"
+        \use "./Base.dt";
+        \Component RightComp() {
+            \BaseBox(height: 85)
+        }
+        "#,
+    );
+
+    let main_src = r#"
+    \use "./core/Left.dt";
+    \use "./core/Right.dt";
+
+    \LeftComp()
+    \RightComp()
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let layout = evaluate_document_with_resolver(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect("Diamond dependency with overloads should resolve idempotently");
+
+    assert_eq!(layout.roots.len(), 2);
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    assert_eq!(rects[0].rect.width, 75.0);
+    assert_eq!(rects[0].rect.height, 50.0);
+    assert_eq!(rects[1].rect.width, 50.0);
+    assert_eq!(rects[1].rect.height, 85.0);
+}
+
