@@ -229,7 +229,6 @@ pub mod std_components {
     #[derive(Default, Debug, Clone)]
     pub struct Button {
         pub disabled: bool,
-        pub click_count: u64,
     }
 
     impl Button {
@@ -256,9 +255,6 @@ pub mod std_components {
                     let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
                     if is_disabled {
                         event.stop_propagation();
-                    } else {
-                        self.click_count += 1;
-                        ctx.set_state("click_count", self.click_count as f64);
                     }
                     Ok(())
                 }

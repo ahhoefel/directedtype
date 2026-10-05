@@ -93,64 +93,6 @@ fn test_button_variants_visual_ports() {
 }
 
 #[test]
-fn test_button_click_companion_state_tracking() {
-    let input = r#"
-    \use "components/Button.dt"
-    \use "theme/default.dt"
-
-    \Button("btn"; style: button_primary, label: "Click Me", x: 20, y: 20, width: 120)
-    "#;
-
-    let doc = parse(input).expect("parse ok");
-    let registry = ComponentRegistry::standard();
-    let mut compiled = CompiledDocument::compile_with_registry(
-        &doc,
-        800.0,
-        600.0,
-        Path::new("."),
-        &directedtype::compiler::FsResolver,
-        &registry,
-    )
-    .expect("compile ok");
-
-    let btn_comp = compiled.find_by_key(None, &ComponentKey::string("btn")).unwrap();
-    let btn_id = btn_comp.id;
-    let rect_id = compiled.layout.nodes.iter().find(|n| n.parent == Some(btn_id) && n.name == "Rect").unwrap().id;
-
-    // Click the button rect
-    let mut click_event = Event::new(
-        EventKind::Click {
-            button: MouseButton::Left,
-        },
-        Point::new(30.0, 30.0),
-        Point::new(10.0, 10.0),
-        Modifiers::default(),
-        rect_id,
-    );
-
-    compiled.dispatch_event(&mut click_event).expect("dispatch ok");
-
-    // Check button click count in state
-    let state_val = compiled.get_state(btn_id, "click_count");
-    assert_eq!(state_val, Some(&Value::Number(1.0)));
-
-    // Click a second time
-    let mut click_event2 = Event::new(
-        EventKind::Click {
-            button: MouseButton::Left,
-        },
-        Point::new(30.0, 30.0),
-        Point::new(10.0, 10.0),
-        Modifiers::default(),
-        rect_id,
-    );
-    compiled.dispatch_event(&mut click_event2).expect("dispatch ok");
-
-    let state_val2 = compiled.get_state(btn_id, "click_count");
-    assert_eq!(state_val2, Some(&Value::Number(2.0)));
-}
-
-#[test]
 fn test_disabled_button_suppresses_event_bubbling() {
     #[derive(Default, Debug)]
     struct ParentContainer {
@@ -219,10 +161,6 @@ fn test_disabled_button_suppresses_event_bubbling() {
     // Propagation should have stopped, so Card did not receive the click
     assert!(click_disabled.propagation_stopped);
 
-    // Click count on disabled button should remain 0
-    let state_val = compiled.get_state(disabled_id, "click_count");
-    assert_eq!(state_val, Some(&Value::Number(0.0)));
-
     // Now click the active button rect
     let active_comp = compiled.find_by_key(None, &ComponentKey::string("active_btn")).unwrap();
     let active_id = active_comp.id;
@@ -242,8 +180,6 @@ fn test_disabled_button_suppresses_event_bubbling() {
 
     // Propagation was NOT stopped for active button
     assert!(!click_active.propagation_stopped);
-    let active_click_count = compiled.get_state(active_id, "click_count");
-    assert_eq!(active_click_count, Some(&Value::Number(1.0)));
 }
 
 #[test]
@@ -275,50 +211,4 @@ fn test_button_spatial_alias_flow() {
     let second_rect = compiled.layout.nodes.iter().find(|n| n.parent == Some(second_comp.id) && n.name == "Rect").unwrap();
 
     assert_eq!(second_rect.rect.x, first_rect.rect.x + first_rect.rect.width + 16.0);
-}
-
-#[test]
-fn test_button_show_count_reactive_sizing() {
-    let input = r#"
-    \use "components/Button.dt"
-    \use "theme/default.dt"
-
-    \Button("btn"; style: button_primary, x: 0, y: 0, label: "Clicks", show_count: true)
-    "#;
-
-    let doc = parse(input).expect("parse ok");
-    let registry = ComponentRegistry::standard();
-    let mut compiled = CompiledDocument::compile_with_registry(
-        &doc,
-        800.0,
-        600.0,
-        Path::new("."),
-        &directedtype::compiler::FsResolver,
-        &registry,
-    )
-    .expect("compile ok");
-
-    let btn_comp = compiled.find_by_key(None, &ComponentKey::string("btn")).unwrap();
-    let btn_id = btn_comp.id;
-    let initial_rect = compiled.layout.nodes.iter().find(|n| n.parent == Some(btn_id) && n.name == "Rect").unwrap();
-    let initial_width = initial_rect.rect.width;
-
-    // Click the button
-    let mut click_event = Event::new(
-        EventKind::Click {
-            button: MouseButton::Left,
-        },
-        Point::new(10.0, 10.0),
-        Point::new(10.0, 10.0),
-        Modifiers::default(),
-        initial_rect.id,
-    );
-    compiled.dispatch_event(&mut click_event).expect("dispatch ok");
-
-    // Layout updates dynamically: text becomes "Clicks (1)" -> width expands!
-    let updated_rect = compiled.layout.nodes.iter().find(|n| n.parent == Some(btn_id) && n.name == "Rect").unwrap();
-    assert!(updated_rect.rect.width > initial_width);
-
-    let text_node = compiled.layout.nodes.iter().find(|n| n.name == "Text").unwrap();
-    assert_eq!(text_node.properties.get("text"), Some(&Value::String("Clicks (1)".into())));
 }

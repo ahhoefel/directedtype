@@ -890,12 +890,24 @@ fn expand_component_instance(
     let mut instantiated_children_ids = Vec::new();
     let mut last_child_id: Option<NodeId> = None;
     let mut local_scope: HashMap<String, LexicalBinding> = lexical_scope.clone();
-    for (name, expr) in &comp_ports {
-        if let Expr::Ident(id) = expr {
-            if let Some(node_id) = NodeId::from_canonical_name(id.as_str()) {
-                local_scope.insert(name.clone(), LexicalBinding::Node(node_id));
+    for param in &comp_def.params {
+        let name = param.name.as_str().to_string();
+        if let Some(expr) = comp_ports.get(&name) {
+            if let Expr::Ident(id) = expr {
+                if let Some(node_id) = NodeId::from_canonical_name(id.as_str()) {
+                    local_scope.insert(name.clone(), LexicalBinding::Node(node_id));
+                    continue;
+                }
             }
         }
+        local_scope.insert(
+            name.clone(),
+            LexicalBinding::Expr(Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), param.name.span))),
+                member: param.name.clone(),
+                span: param.name.span,
+            })),
+        );
     }
 
     // Setup internal_body_env_scope (sealed black box for internal elements)

@@ -7,7 +7,6 @@ use directedtype::interaction::Event;
 #[derive(Default, Debug, Clone)]
 pub struct Button {
     pub disabled: bool,
-    pub click_count: u64,
 }
 
 impl Button {
@@ -35,9 +34,6 @@ impl Component for Button {
                 if is_disabled {
                     // Suppress further event bubbling when button is disabled
                     event.stop_propagation();
-                } else {
-                    self.click_count += 1;
-                    ctx.set_state("click_count", self.click_count as f64);
                 }
                 Ok(())
             }

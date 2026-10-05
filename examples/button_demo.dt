@@ -68,19 +68,19 @@
         }
     }
 
-    // Section 3: Interactive & Disabled States
+    // Section 3: Active vs Disabled States
     \Card("card_interactive"; style: card_dark, gap: 12) {
-        \Text(size: 13, weight: 700, color: #94a3b8) { 3. INTERACTIVE COUNTER & DISABLED EVENT SUPPRESSION }
+        \Text(size: 13, weight: 700, color: #94a3b8) { 3. ACTIVE VS DISABLED STATES }
         \HStack(gap: 16) {
-            \Button("btn_active"; style: button_primary, label: "Click To Test Tracking", show_count: true)
-            \Button("btn_disabled"; style: button_primary, label: "Disabled Button (Suppressed)", show_count: true, disabled: true)
+            \Button("btn_active"; style: button_primary, label: "Active Button")
+            \Button("btn_disabled"; style: button_primary, label: "Disabled Button (Suppressed)", disabled: true)
         }
 
         \Text(
             size: 13,
             weight: 500,
             color: #64748b,
-            text: "Clicking 'Click To Test Tracking' dynamically updates its reactive count badge; the disabled button suppresses clicks."
+            text: "Disabled buttons render with theme disabled styling and suppress pointer events."
         )
     }
 

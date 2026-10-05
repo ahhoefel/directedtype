@@ -10,17 +10,12 @@
     label: String,
     x: Number,
     y: Number,
-    disabled: Boolean: false,
-    show_count: Boolean: false
+    disabled: Boolean: false
 ) {
-    state click_count: Number: 0;
-
     let is_disabled = disabled;
     let bg_color = is_disabled ? style.disabled_bg : style.bg;
     let text_color = is_disabled ? style.disabled_text : style.text_color;
     let border_color = is_disabled ? style.disabled_border_color : style.border_color;
-
-    let display_label = (show_count && click_count > 0) ? (label + " (" + click_count + ")") : label;
 
     alias right = x + width;
     alias bottom = y + style.height;
@@ -42,7 +37,7 @@
                 size: style.size,
                 weight: style.weight,
                 color: text_color,
-                text: display_label
+                text: label
             )
         }
     }
@@ -54,18 +49,14 @@
     label: String,
     x: Number,
     y: Number,
-    disabled: Boolean: false,
-    show_count: Boolean: false
+    disabled: Boolean: false
 ) {
-    state click_count: Number: 0;
-
     let is_disabled = disabled;
     let bg_color = is_disabled ? style.disabled_bg : style.bg;
     let text_color = is_disabled ? style.disabled_text : style.text_color;
     let border_color = is_disabled ? style.disabled_border_color : style.border_color;
 
-    let display_label = (show_count && click_count > 0) ? (label + " (" + click_count + ")") : label;
-    let measured_label_w = text_width(display_label, style.size, style.weight);
+    let measured_label_w = text_width(label, style.size, style.weight);
     let resolved_width = max(64, measured_label_w + 32);
 
     alias right = x + resolved_width;
@@ -89,7 +80,7 @@
                 size: style.size,
                 weight: style.weight,
                 color: text_color,
-                text: display_label
+                text: label
             )
         }
     }
