@@ -6,7 +6,7 @@
     width: Number,
     x: Number,
     y: Number,
-    gap: Number: 12,
+    gap: Number: 0,
     align: String: "left"
 ) {
     let is_stretch = align == "stretch";
@@ -33,7 +33,7 @@
 \Component VStack(
     x: Number,
     y: Number,
-    gap: Number: 12,
+    gap: Number: 0,
     align: String: "left"
 ) {
     let resolved_width = parent.width - (2 * x);

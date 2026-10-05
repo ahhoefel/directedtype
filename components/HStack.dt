@@ -6,7 +6,7 @@
     width: Number,
     x: Number,
     y: Number,
-    gap: Number: 12,
+    gap: Number: 0,
     align: String: "top"
 ) {
     let is_center = align == "center" || align == "centered";
@@ -31,7 +31,7 @@
 \Component HStack(
     x: Number,
     y: Number,
-    gap: Number: 12,
+    gap: Number: 0,
     align: String: "top"
 ) {
     let is_center = align == "center" || align == "centered";

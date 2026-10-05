@@ -216,3 +216,34 @@ fn test_hstack_nested_in_vstack() {
     assert_eq!(rects[2].rect.y, 60.0);
     assert_eq!(rects[2].rect.height, 50.0);
 }
+
+#[test]
+fn test_hstack_default_zero_gap() {
+    let input = r#"
+    \use "components/HStack.dt"
+
+    \HStack(x: 10, y: 20) {
+        \Rect(width: 40, height: 30, color: #3b82f6)
+        \Rect(width: 50, height: 30, color: #10b981)
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let rects: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+
+    // Default gap is 0: rects[1].left == rects[0].right (10 + 40 = 50)
+    assert_eq!(rects[0].rect.x, 10.0);
+    assert_eq!(rects[1].rect.x, 50.0);
+}

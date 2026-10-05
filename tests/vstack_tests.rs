@@ -203,3 +203,34 @@ fn test_vstack_with_button_and_text_composition() {
     let btn_rect = compiled.layout.nodes.iter().find(|n| n.name == "Rect" && n.parent == Some(btn_node.id)).expect("Button Rect found");
     assert_eq!(btn_rect.rect.width, 350.0);
 }
+
+#[test]
+fn test_vstack_default_zero_gap() {
+    let input = r#"
+    \use "components/VStack.dt"
+
+    \VStack(x: 10, y: 20, width: 300) {
+        \Rect(width: 100, height: 40, color: #3b82f6)
+        \Rect(width: 150, height: 50, color: #10b981)
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let rects: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+
+    // Default gap is 0: rects[1].top == rects[0].bottom (20 + 40 = 60)
+    assert_eq!(rects[0].rect.y, 20.0);
+    assert_eq!(rects[1].rect.y, 60.0);
+}
