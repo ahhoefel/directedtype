@@ -262,16 +262,18 @@ pub fn verify_overload_set(name: &str, overloads: &[ComponentDef]) -> Result<(),
     Ok(())
 }
 
-/// Resolves all `\use` declarations in a document and returns the merged component registry.
+/// Resolves all `\use` declarations in a document and returns the merged component registry and imported items.
 pub fn resolve_imports<R: FileResolver>(
     doc: &Document,
     base_dir: &Path,
     resolver: &R,
-) -> Result<HashMap<String, Vec<ComponentDef>>, CompileError> {
+) -> Result<(HashMap<String, Vec<ComponentDef>>, Vec<crate::ast::Item>), CompileError> {
     let mut registry: HashMap<String, Vec<ComponentDef>> = HashMap::new();
+    let mut imported_items = Vec::new();
     let mut active_stack = HashSet::new();
     let mut cache = HashMap::new();
     let mut module_exports = HashMap::new();
+    let mut visited_files = HashSet::new();
 
     // 1. Index locally declared components in the root document
     for item in &doc.items {
@@ -288,14 +290,16 @@ pub fn resolve_imports<R: FileResolver>(
                 base_dir,
                 resolver,
                 &mut registry,
+                &mut imported_items,
                 &mut active_stack,
                 &mut cache,
                 &mut module_exports,
+                &mut visited_files,
             )?;
         }
     }
 
-    Ok(registry)
+    Ok((registry, imported_items))
 }
 
 fn resolve_use_decl<R: FileResolver>(
@@ -303,9 +307,11 @@ fn resolve_use_decl<R: FileResolver>(
     base_dir: &Path,
     resolver: &R,
     registry: &mut HashMap<String, Vec<ComponentDef>>,
+    imported_items: &mut Vec<crate::ast::Item>,
     active_stack: &mut HashSet<PathBuf>,
     cache: &mut HashMap<PathBuf, Document>,
     module_exports: &mut HashMap<PathBuf, HashMap<String, Vec<ComponentDef>>>,
+    visited_files: &mut HashSet<PathBuf>,
 ) -> Result<(), CompileError> {
     let raw_path = Path::new(&u.path);
     let mut resolved_path = if raw_path.is_absolute() {
@@ -338,6 +344,8 @@ fn resolve_use_decl<R: FileResolver>(
         });
     }
 
+    let is_first_visit = visited_files.insert(canonical_path.clone());
+
     let imported_components = if let Some(exported) = module_exports.get(&canonical_path) {
         exported.clone()
     } else {
@@ -363,24 +371,43 @@ fn resolve_use_decl<R: FileResolver>(
 
         let imported_base_dir = resolved_path.parent().unwrap_or(Path::new("."));
 
-        // Collect components from the imported file and transitively resolve its \use declarations
-        let mut components: HashMap<String, Vec<ComponentDef>> = HashMap::new();
-        for item in &imported_doc.items {
-            if let Item::Component(comp) = item {
-                register_component_overload(&mut components, comp.clone())?;
-            }
-        }
+        // Transitive imports first
         for item in &imported_doc.items {
             if let Item::Use(nested_u) = item {
                 resolve_use_decl(
                     nested_u,
                     imported_base_dir,
                     resolver,
-                    &mut components,
+                    registry,
+                    imported_items,
                     active_stack,
                     cache,
                     module_exports,
+                    visited_files,
                 )?;
+            }
+        }
+
+        // Collect components from the imported file
+        let mut components: HashMap<String, Vec<ComponentDef>> = HashMap::new();
+        for item in &imported_doc.items {
+            if let Item::Component(comp) = item {
+                register_component_overload(&mut components, comp.clone())?;
+            }
+        }
+
+        // Collect top-level let and env bindings if this is an unaliased import and first visit
+        if is_first_visit && u.alias.is_none() {
+            for item in &imported_doc.items {
+                match item {
+                    Item::Let(l) => {
+                        imported_items.push(Item::Let(l.clone()));
+                    }
+                    Item::Env(e) => {
+                        imported_items.push(Item::Env(e.clone()));
+                    }
+                    _ => {}
+                }
             }
         }
 

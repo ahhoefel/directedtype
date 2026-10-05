@@ -3,7 +3,10 @@
 \use "components/VStack.dt"
 \use "components/HStack.dt"
 \use "components/Card.dt"
+\use "components/CardStyle.dt"
 \use "components/Button.dt"
+\use "components/ButtonStyle.dt"
+\use "theme/default.dt"
 
 \Component Counter(x: Number, y: Number, initial: Number: 0) {
     state count: Number: initial;
@@ -19,16 +22,70 @@
     alias right = x + 360;
     alias bottom = y + 270;
 
+    let outer_card_style = \CardStyle(
+        bg: #1e293b,
+        border_color: is_max ? #ef4444 : #334155,
+        border_width: 2,
+        radius: 16,
+        padding: 24
+    );
+
+    let inner_card_style = \CardStyle(
+        bg: #0f172a,
+        border_color: is_max ? #7f1d1d : #1e293b,
+        border_width: 1,
+        radius: 10,
+        padding_x: 20,
+        padding_y: 16
+    );
+
+    let counter_btn_decrement = \ButtonStyle(
+        bg: #334155,
+        text_color: #ffffff,
+        border_color: #475569,
+        border_width: 1,
+        radius: 10,
+        height: 48,
+        size: 22,
+        weight: 700,
+        disabled_bg: #33415580,
+        disabled_text: #64748b,
+        disabled_border_color: #33415540
+    );
+
+    let counter_btn_increment = \ButtonStyle(
+        bg: is_max ? #dc2626 : #2563eb,
+        text_color: #ffffff,
+        border_color: is_max ? #ef4444 : #3b82f6,
+        border_width: 1,
+        radius: 10,
+        height: 48,
+        size: 22,
+        weight: 700,
+        disabled_bg: #33415580,
+        disabled_text: #64748b,
+        disabled_border_color: #33415540
+    );
+
+    let counter_btn_reset = \ButtonStyle(
+        bg: #334155,
+        text_color: #ffffff,
+        border_color: #475569,
+        border_width: 1,
+        radius: 10,
+        height: 48,
+        size: 14,
+        weight: 600,
+        disabled_bg: #33415580,
+        disabled_text: #64748b,
+        disabled_border_color: #33415540
+    );
+
     \Card(
+        style: outer_card_style,
         width: 360,
         x: x,
         y: y,
-        color: #1e293b,
-        radius: 16,
-        border_width: 2,
-        border_color: is_max ? #ef4444 : #334155,
-        padding_x: 24,
-        padding_y: 24,
         gap: 16
     ) {
         // Component Title & Subtitle via VStack
@@ -44,13 +101,8 @@
 
         // Count Value Display Surface via nested Card & HStack
         \Card(
-            width: 312,
-            color: #0f172a,
-            radius: 10,
-            border_width: 1,
-            border_color: is_max ? #7f1d1d : #1e293b,
-            padding_x: 20,
-            padding_y: 16
+            style: inner_card_style,
+            width: 312
         ) {
             \HStack(gap: 60, align: "center") {
                 \Text(
@@ -83,36 +135,24 @@
         // Interactive Button Row: [-], [+], [Reset] via HStack
         \HStack(gap: 16) {
             \Button(
+                style: counter_btn_decrement,
                 width: 72,
-                height: 48,
                 label: "-",
-                size: 22,
-                weight: 700,
                 disabled: is_zero,
-                variant: "secondary",
-                radius: 10,
                 on_click: self.decrement
             )
 
             \Button(
+                style: counter_btn_increment,
                 width: 72,
-                height: 48,
                 label: "+",
-                size: 22,
-                weight: 700,
-                variant: is_max ? "danger" : "primary",
-                radius: 10,
                 on_click: self.increment
             )
 
             \Button(
+                style: counter_btn_reset,
                 width: 136,
-                height: 48,
                 label: "Reset",
-                size: 14,
-                weight: 600,
-                variant: "secondary",
-                radius: 10,
                 on_click: self.reset
             )
         }

@@ -55,7 +55,14 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
     base_dir: &std::path::Path,
     resolver: &R,
 ) -> Result<ExpandedDocument, CompileError> {
-    let registry = crate::compiler::module::resolve_imports(doc, base_dir, resolver)?;
+    let (registry, imported_items) = crate::compiler::module::resolve_imports(doc, base_dir, resolver)?;
+    let mut merged_items = imported_items;
+    merged_items.extend(doc.items.clone());
+    let merged_doc = Document {
+        items: merged_items,
+        span: doc.span,
+    };
+    let doc = &merged_doc;
     let mut global_scope = HashMap::new();
     let mut global_env_scope: HashMap<String, EnvEntry> = HashMap::new();
     let mut node_fonts: HashMap<NodeId, NodeId> = HashMap::new();
@@ -883,6 +890,13 @@ fn expand_component_instance(
     let mut instantiated_children_ids = Vec::new();
     let mut last_child_id: Option<NodeId> = None;
     let mut local_scope: HashMap<String, LexicalBinding> = lexical_scope.clone();
+    for (name, expr) in &comp_ports {
+        if let Expr::Ident(id) = expr {
+            if let Some(node_id) = NodeId::from_canonical_name(id.as_str()) {
+                local_scope.insert(name.clone(), LexicalBinding::Node(node_id));
+            }
+        }
+    }
 
     // Setup internal_body_env_scope (sealed black box for internal elements)
     let mut internal_body_env_scope: HashMap<String, EnvEntry> = HashMap::new();

@@ -131,12 +131,13 @@ fn test_hstack_with_button_and_card_composition() {
     \use "components/Card.dt"
     \use "components/HStack.dt"
     \use "components/Button.dt"
+    \use "theme/default.dt"
 
-    \Card(x: 0, y: 0, padding_x: 20, padding_y: 16) {
+    \Card(style: card_dark, x: 0, y: 0) {
         \HStack(gap: 12) {
-            \Button(label: "First", variant: "primary")
-            \Button(label: "Second", variant: "secondary")
-            \Button(label: "Third", variant: "outline")
+            \Button(style: button_primary, label: "First")
+            \Button(style: button_secondary, label: "Second")
+            \Button(style: button_outline, label: "Third")
         }
     }
     "#;

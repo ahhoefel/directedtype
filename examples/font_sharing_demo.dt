@@ -4,6 +4,25 @@
 
 \use "components/VStack.dt"
 \use "components/Card.dt"
+\use "components/CardStyle.dt"
+
+let font_card_style_1 = \CardStyle(
+    bg: #f8fafc,
+    border_color: #e2e8f0,
+    border_width: 1,
+    radius: 12,
+    padding_x: 24,
+    padding_y: 20
+);
+
+let font_card_style_2 = \CardStyle(
+    bg: #f1f5f9,
+    border_color: #e2e8f0,
+    border_width: 1,
+    radius: 12,
+    padding_x: 24,
+    padding_y: 20
+);
 
 // 1. Reusable font resource definitions
 let heading_font = \Font(size: 28, weight: 700);
@@ -30,7 +49,7 @@ let badge_pad = 8;
     }
 
     // Card 1: Typographic badge centered using badge_font.cap_height
-    \Card(color: #f8fafc, border_color: #e2e8f0, padding_x: 24, padding_y: 20) {
+    \Card(style: font_card_style_1) {
         // Badge background sized to precisely fit cap_height + padding
         \Rect(
             width: 180,
@@ -58,7 +77,7 @@ let badge_pad = 8;
     }
 
     // Card 2: Shared font metrics across diverse UI elements
-    \Card(color: #f1f5f9, border_color: #e2e8f0, padding_x: 24, padding_y: 20) {
+    \Card(style: font_card_style_2) {
         \Text(font: body_font, color: #475569) {
             All four cards and text blocks reference the same Font nodes, minimizing duplicate measurement passes.
         }

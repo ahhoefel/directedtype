@@ -2,9 +2,20 @@
 \use "components/VStack.dt"
 \use "components/HStack.dt"
 \use "components/Card.dt"
+\use "components/CardStyle.dt"
 \use "components/Button.dt"
 \use "components/Divider.dt"
 \use "components/Spacer.dt"
+\use "theme/default.dt"
+
+let demo_card_style = \CardStyle(
+    bg: #0f172a,
+    border_color: #3b82f6,
+    border_width: 2,
+    radius: 12,
+    padding_x: 22,
+    padding_y: 20
+);
 
 // Main Page Layout with uniform window margin padding
 \Padding(padding: 40, x: 0, y: 0) {
@@ -26,12 +37,7 @@
 
         // Architecture Callout Surface using standard Card
         \Card(
-            color: #0f172a,
-            border_color: #3b82f6,
-            border_width: 2,
-            radius: 12,
-            padding_x: 22,
-            padding_y: 20,
+            style: demo_card_style,
             gap: 10
         ) {
             \Text(size: 13, weight: 700, color: #38bdf8) {
@@ -44,8 +50,8 @@
 
         // Action Buttons Row using standard HStack & Button
         \HStack(gap: 12) {
-            \Button(label: "Explore Architecture", variant: "primary")
-            \Button(label: "GPU Compute Shaders", variant: "outline")
+            \Button(style: button_primary, label: "Explore Architecture")
+            \Button(style: button_outline, label: "GPU Compute Shaders")
         }
 
         \Spacer(height: 6)

@@ -1,0 +1,107 @@
+// DirectedType Standard Theme: Default
+// Central library of standard, battle-tested style literals for Cards and Buttons.
+
+\use "components/CardStyle.dt"
+\use "components/ButtonStyle.dt"
+
+// 1. Standard Cards
+let card_dark = \CardStyle(
+    bg: #1e293b,
+    border_color: #334155,
+    border_width: 1,
+    radius: 12,
+    padding: 20
+);
+
+let card_light = \CardStyle(
+    bg: #f8fafc,
+    border_color: #e2e8f0,
+    border_width: 1,
+    radius: 12,
+    padding: 20
+);
+
+// 2. Standard Buttons
+let button_primary = \ButtonStyle(
+    bg: #2563eb,
+    text_color: #ffffff,
+    border_color: #3b82f6,
+    border_width: 1,
+    radius: 8,
+    height: 38,
+    size: 14,
+    weight: 600,
+    disabled_bg: #33415580,
+    disabled_text: #64748b,
+    disabled_border_color: #33415540
+);
+
+let button_secondary = \ButtonStyle(
+    bg: #334155,
+    text_color: #ffffff,
+    border_color: #475569,
+    border_width: 1,
+    radius: 8,
+    height: 38,
+    size: 14,
+    weight: 600,
+    disabled_bg: #33415580,
+    disabled_text: #64748b,
+    disabled_border_color: #33415540
+);
+
+let button_outline = \ButtonStyle(
+    bg: #0f172a,
+    text_color: #38bdf8,
+    border_color: #38bdf8,
+    border_width: 1.5,
+    radius: 8,
+    height: 38,
+    size: 14,
+    weight: 600,
+    disabled_bg: #33415580,
+    disabled_text: #64748b,
+    disabled_border_color: #33415540
+);
+
+let button_danger = \ButtonStyle(
+    bg: #dc2626,
+    text_color: #ffffff,
+    border_color: #ef4444,
+    border_width: 1,
+    radius: 8,
+    height: 38,
+    size: 14,
+    weight: 600,
+    disabled_bg: #33415580,
+    disabled_text: #64748b,
+    disabled_border_color: #33415540
+);
+
+let button_success = \ButtonStyle(
+    bg: #16a34a,
+    text_color: #ffffff,
+    border_color: #22c55e,
+    border_width: 1,
+    radius: 8,
+    height: 38,
+    size: 14,
+    weight: 600,
+    disabled_bg: #33415580,
+    disabled_text: #64748b,
+    disabled_border_color: #33415540
+);
+
+let button_ghost = \ButtonStyle(
+    bg: #00000000,
+    text_color: #94a3b8,
+    border_color: #00000000,
+    border_width: 0,
+    radius: 8,
+    height: 38,
+    size: 14,
+    weight: 600,
+    disabled_bg: #33415580,
+    disabled_text: #64748b,
+    disabled_border_color: #33415540
+);

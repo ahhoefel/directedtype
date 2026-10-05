@@ -1,0 +1,26 @@
+// DirectedType Standard Component Library: CardStyle
+// Styling bundle defining visual surface appearance and padding for Card components.
+
+// 1. Uniform Padding CardStyle
+\Component CardStyle(
+    bg: Color,
+    border_color: Color,
+    border_width: Number,
+    radius: Number,
+    padding: Number
+) {
+    alias padding_x = padding;
+    alias padding_y = padding;
+}
+
+// 2. Asymmetric Padding CardStyle
+\Component CardStyle(
+    bg: Color,
+    border_color: Color,
+    border_width: Number,
+    radius: Number,
+    padding_x: Number,
+    padding_y: Number
+) {
+    alias padding = padding_y;
+}

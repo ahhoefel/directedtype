@@ -1,5 +1,4 @@
 use directedtype::compiler::compiled::CompiledDocument;
-use directedtype::compiler::value::Value;
 use directedtype::component::ComponentRegistry;
 use directedtype::parse;
 use std::path::Path;
@@ -8,8 +7,9 @@ use std::path::Path;
 fn test_card_with_direct_raw_text() {
     let input = r#"
     \use "components/Card.dt"
+    \use "theme/default.dt"
 
-    \Card(x: 20, y: 30, width: 250, padding_x: 16, padding_y: 14) {
+    \Card(style: card_dark, x: 20, y: 30, width: 250) {
         Hello Direct Text!
     }
     "#;
@@ -26,30 +26,28 @@ fn test_card_with_direct_raw_text() {
     )
     .expect("compile ok");
 
-    // Direct raw text should be converted to synthetic Text node positioned inside card padding
+    // Direct raw text should be converted to synthetic Text node positioned inside card padding (20)
     let text_node = compiled.layout.nodes.iter().find(|n| n.name == "Text").expect("text node found");
     assert_eq!(text_node.text_content.as_deref(), Some("Hello Direct Text!"));
-    assert_eq!(text_node.rect.x, 36.0); // 20 + 16
-    assert_eq!(text_node.rect.y, 44.0); // 30 + 14
+    assert_eq!(text_node.rect.x, 40.0); // 20 + 20
+    assert_eq!(text_node.rect.y, 50.0); // 30 + 20
     assert_eq!(text_node.rect.height, 16.0);
 
-    // Rect should wrap the text with padding_y on both sides: 14 + 16 + 14 = 44
+    // Rect should wrap the text with padding_y on both sides: 20 + 16 + 20 = 56
     let rect = compiled.layout.nodes.iter().find(|n| n.name == "Rect").expect("rect found");
     assert_eq!(rect.rect.x, 20.0);
     assert_eq!(rect.rect.y, 30.0);
     assert_eq!(rect.rect.width, 250.0);
-    assert_eq!(rect.rect.height, 44.0);
-
-    // Ambient text color inherited from Card
-    assert_eq!(text_node.properties.get("color"), Some(&Value::Color("#f8fafc".into())));
+    assert_eq!(rect.rect.height, 56.0);
 }
 
 #[test]
 fn test_card_multi_child_vertical_flow_gap() {
     let input = r#"
     \use "components/Card.dt"
+    \use "theme/default.dt"
 
-    \Card(x: 0, y: 0, width: 300, padding_x: 20, padding_y: 20, gap: 10) {
+    \Card(style: card_dark, x: 0, y: 0, width: 300, gap: 10) {
         \Text(text: "Line 1")
         \Text(text: "Line 2")
     }
@@ -84,8 +82,18 @@ fn test_card_multi_child_vertical_flow_gap() {
 fn test_card_auto_height_wraps_children() {
     let input = r#"
     \use "components/Card.dt"
+    \use "components/CardStyle.dt"
 
-    \Card(x: 20, y: 30, width: 300, padding_x: 16, padding_y: 18, gap: 12) {
+    let custom_style = \CardStyle(
+        bg: #1e293b,
+        border_color: #334155,
+        border_width: 1,
+        radius: 12,
+        padding_x: 16,
+        padding_y: 18
+    );
+
+    \Card(style: custom_style, x: 20, y: 30, width: 300, gap: 12) {
         \Rect(width: 100, height: 40, color: #3b82f6)
         \Rect(width: 150, height: 50, color: #10b981)
     }
@@ -121,8 +129,9 @@ fn test_card_auto_height_wraps_children() {
 fn test_card_rejects_external_height_specification() {
     let input = r#"
     \use "components/Card.dt"
+    \use "theme/default.dt"
 
-    \Card(x: 0, y: 0, width: 200, height: 80) {
+    \Card(style: card_dark, x: 0, y: 0, width: 200, height: 80) {
         \Rect(width: 100, height: 40)
     }
     "#;

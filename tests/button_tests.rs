@@ -10,10 +10,11 @@ use std::path::Path;
 fn test_button_intrinsic_width_calculation() {
     let input = r#"
     \use "components/Button.dt"
+    \use "theme/default.dt"
 
-    \Button("auto"; label: "OK", x: 10, y: 10)
-    \Button("wide"; label: "Submit Application Form", x: 10, y: 60)
-    \Button("fixed"; label: "Fixed", width: 180, x: 10, y: 110)
+    \Button("auto"; style: button_primary, label: "OK", x: 10, y: 10)
+    \Button("wide"; style: button_primary, label: "Submit Application Form", x: 10, y: 60)
+    \Button("fixed"; style: button_primary, label: "Fixed", width: 180, x: 10, y: 110)
     "#;
 
     let doc = parse(input).expect("parse ok");
@@ -53,11 +54,12 @@ fn test_button_intrinsic_width_calculation() {
 fn test_button_variants_visual_ports() {
     let input = r#"
     \use "components/Button.dt"
+    \use "theme/default.dt"
 
-    \Button("primary"; x: 10, y: 10, label: "Primary", variant: "primary")
-    \Button("outline"; x: 10, y: 60, label: "Outline", variant: "outline")
-    \Button("danger"; x: 10, y: 110, label: "Danger", variant: "danger")
-    \Button("disabled"; x: 10, y: 160, label: "Disabled", disabled: true)
+    \Button("primary"; style: button_primary, x: 10, y: 10, label: "Primary")
+    \Button("outline"; style: button_outline, x: 10, y: 60, label: "Outline")
+    \Button("danger"; style: button_danger, x: 10, y: 110, label: "Danger")
+    \Button("disabled"; style: button_primary, x: 10, y: 160, label: "Disabled", disabled: true)
     "#;
 
     let doc = parse(input).expect("parse ok");
@@ -94,8 +96,9 @@ fn test_button_variants_visual_ports() {
 fn test_button_click_companion_state_tracking() {
     let input = r#"
     \use "components/Button.dt"
+    \use "theme/default.dt"
 
-    \Button("btn"; label: "Click Me", x: 20, y: 20, width: 120, height: 40)
+    \Button("btn"; style: button_primary, label: "Click Me", x: 20, y: 20, width: 120)
     "#;
 
     let doc = parse(input).expect("parse ok");
@@ -170,11 +173,12 @@ fn test_disabled_button_suppresses_event_bubbling() {
 
     let input = r#"
     \use "components/Button.dt"
+    \use "theme/default.dt"
 
     \Component Card {
         \Rect(x: 0, y: 0, width: 300, height: 200, color: #1e293b, on_click: self.on_parent_click) {
-            \Button("active_btn"; x: 20, y: 20, width: 100, height: 40, label: "Active", disabled: false)
-            \Button("disabled_btn"; x: 20, y: 80, width: 100, height: 40, label: "Disabled", disabled: true)
+            \Button("active_btn"; style: button_primary, x: 20, y: 20, width: 100, label: "Active", disabled: false)
+            \Button("disabled_btn"; style: button_primary, x: 20, y: 80, width: 100, label: "Disabled", disabled: true)
         }
     }
 
@@ -246,9 +250,10 @@ fn test_disabled_button_suppresses_event_bubbling() {
 fn test_button_spatial_alias_flow() {
     let input = r#"
     \use "components/Button.dt"
+    \use "theme/default.dt"
 
-    \Button("first"; x: 20, y: 20, label: "First Button")
-    \Button("second"; x: prev.right + 16, y: 20, label: "Second Button")
+    \Button("first"; style: button_primary, x: 20, y: 20, label: "First Button")
+    \Button("second"; style: button_primary, x: prev.right + 16, y: 20, label: "Second Button")
     "#;
 
     let doc = parse(input).expect("parse ok");
@@ -276,8 +281,9 @@ fn test_button_spatial_alias_flow() {
 fn test_button_show_count_reactive_sizing() {
     let input = r#"
     \use "components/Button.dt"
+    \use "theme/default.dt"
 
-    \Button("btn"; x: 0, y: 0, label: "Clicks", show_count: true, variant: "primary")
+    \Button("btn"; style: button_primary, x: 0, y: 0, label: "Clicks", show_count: true)
     "#;
 
     let doc = parse(input).expect("parse ok");

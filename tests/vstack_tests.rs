@@ -175,10 +175,11 @@ fn test_vstack_with_button_and_text_composition() {
     let input = r#"
     \use "components/VStack.dt"
     \use "components/Button.dt"
+    \use "theme/default.dt"
 
     \VStack(x: 20, y: 20, width: 350, align: "stretch", gap: 14) {
         \Text(size: 20, weight: 700) { Header Title }
-        \Button(label: "Submit Order", variant: "primary")
+        \Button(style: button_primary, label: "Submit Order")
     }
     "#;
 

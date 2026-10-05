@@ -7,6 +7,7 @@
 \use "../components/Button.dt"
 \use "../components/Divider.dt"
 \use "../components/Spacer.dt"
+\use "../theme/default.dt"
 
 // Background Canvas
 \Rect(
@@ -44,35 +45,35 @@
     \Spacer(height: 6)
 
     // Section 1: Visual Variants
-    \Card("card_variants"; padding_x: 20, padding_y: 16) {
+    \Card("card_variants"; style: card_dark, gap: 10) {
         \Text(size: 13, weight: 700, color: #94a3b8) { 1. DESIGN VARIANTS (AUTO-SIZED) }
         \HStack(gap: 12) {
-            \Button("btn_primary"; label: "Primary", variant: "primary")
-            \Button("btn_secondary"; label: "Secondary", variant: "secondary")
-            \Button("btn_outline"; label: "Outline", variant: "outline")
-            \Button("btn_ghost"; label: "Ghost", variant: "ghost")
-            \Button("btn_danger"; label: "Danger", variant: "danger")
-            \Button("btn_success"; label: "Success", variant: "success")
+            \Button("btn_primary"; style: button_primary, label: "Primary")
+            \Button("btn_secondary"; style: button_secondary, label: "Secondary")
+            \Button("btn_outline"; style: button_outline, label: "Outline")
+            \Button("btn_ghost"; style: button_ghost, label: "Ghost")
+            \Button("btn_danger"; style: button_danger, label: "Danger")
+            \Button("btn_success"; style: button_success, label: "Success")
         }
     }
 
     // Section 2: Dynamic Intrinsic Sizing vs Fixed Width
-    \Card("card_sizing"; padding_x: 20, padding_y: 16) {
+    \Card("card_sizing"; style: card_dark, gap: 10) {
         \Text(size: 13, weight: 700, color: #94a3b8) { 2. INTRINSIC TEXT METRIC SIZING VS FIXED OVERRIDE }
         \HStack(gap: 12) {
-            \Button("btn_short"; label: "OK")
-            \Button("btn_medium"; label: "Save Changes", variant: "secondary")
-            \Button("btn_wide"; label: "Export Diagnostics Report", variant: "outline")
-            \Button("btn_fixed"; width: 200, label: "Fixed Width (200px)", variant: "primary")
+            \Button("btn_short"; style: button_primary, label: "OK")
+            \Button("btn_medium"; style: button_secondary, label: "Save Changes")
+            \Button("btn_wide"; style: button_outline, label: "Export Diagnostics Report")
+            \Button("btn_fixed"; style: button_primary, width: 200, label: "Fixed Width (200px)")
         }
     }
 
     // Section 3: Interactive & Disabled States
-    \Card("card_interactive"; padding_x: 20, padding_y: 16) {
+    \Card("card_interactive"; style: card_dark, gap: 12) {
         \Text(size: 13, weight: 700, color: #94a3b8) { 3. INTERACTIVE COUNTER & DISABLED EVENT SUPPRESSION }
         \HStack(gap: 16) {
-            \Button("btn_active"; label: "Click To Test Tracking", show_count: true, variant: "primary")
-            \Button("btn_disabled"; label: "Disabled Button (Suppressed)", show_count: true, disabled: true)
+            \Button("btn_active"; style: button_primary, label: "Click To Test Tracking", show_count: true)
+            \Button("btn_disabled"; style: button_primary, label: "Disabled Button (Suppressed)", show_count: true, disabled: true)
         }
 
         \Text(
@@ -84,8 +85,10 @@
     }
 
     // Section 4: Direct Text in Card (Auto-Wrapping Height)
-    \Card("card_direct_text"; padding_x: 20, padding_y: 14) {
-        Direct text passed straight to Card with auto-wrapping height!
+    \Card("card_direct_text"; style: card_dark) {
+        \Text(color: #f8fafc) {
+            Direct text passed straight to Card with auto-wrapping height!
+        }
     }
 }
 

@@ -1,0 +1,16 @@
+// DirectedType Standard Component Library: ButtonStyle
+// Styling bundle defining geometry, colors, typography, and states for Button components.
+
+\Component ButtonStyle(
+    bg: Color,
+    text_color: Color,
+    border_color: Color,
+    border_width: Number,
+    radius: Number,
+    height: Number,
+    size: Number,
+    weight: Number,
+    disabled_bg: Color,
+    disabled_text: Color,
+    disabled_border_color: Color
+) {}
