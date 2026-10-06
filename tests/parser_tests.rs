@@ -1209,3 +1209,108 @@ fn test_parse_use_error_handling() {
     // Forgiving semicolon handling accepts this
     assert!(parse(input_missing_semi).is_ok());
 }
+
+#[test]
+fn test_inline_elements_whitespace_preserved() {
+    let input = r#"\Text { \Link(url: "https://a.com"){A} \Link(url: "https://b.com"){B} }"#;
+    let doc = parse(input).expect("Failed to parse adjacent inline links with space");
+    match &doc.items[0] {
+        Item::Node(text_node) => {
+            let slot = text_node.content.as_ref().expect("Expected content slot");
+            assert_eq!(slot.items.len(), 3);
+            match &slot.items[0] {
+                ContentItem::Node(link_a) => {
+                    assert_eq!(link_a.name.as_str(), "Link");
+                }
+                _ => panic!("Expected Node for Link A"),
+            }
+            match &slot.items[1] {
+                ContentItem::Text(space_chunk) => {
+                    assert_eq!(space_chunk.text, " ");
+                }
+                _ => panic!("Expected Text chunk with single space between links"),
+            }
+            match &slot.items[2] {
+                ContentItem::Node(link_b) => {
+                    assert_eq!(link_b.name.as_str(), "Link");
+                }
+                _ => panic!("Expected Node for Link B"),
+            }
+        }
+        _ => panic!("Expected Text node"),
+    }
+}
+
+#[test]
+fn test_inline_elements_multiple_spaces_collapsed() {
+    let input = r#"\Text { \Link(url: "https://a.com"){A}      \Link(url: "https://b.com"){B} }"#;
+    let doc = parse(input).expect("Failed to parse links with multiple spaces");
+    match &doc.items[0] {
+        Item::Node(text_node) => {
+            let slot = text_node.content.as_ref().expect("Expected content slot");
+            assert_eq!(slot.items.len(), 3);
+            match &slot.items[1] {
+                ContentItem::Text(space_chunk) => {
+                    assert_eq!(space_chunk.text, " ");
+                }
+                _ => panic!("Expected single collapsed space"),
+            }
+        }
+        _ => panic!("Expected Text node"),
+    }
+}
+
+#[test]
+fn test_inline_elements_no_space_when_tight() {
+    let input = r#"\Text { \Link(url: "https://a.com"){A}\Link(url: "https://b.com"){B} }"#;
+    let doc = parse(input).expect("Failed to parse tightly adjacent links");
+    match &doc.items[0] {
+        Item::Node(text_node) => {
+            let slot = text_node.content.as_ref().expect("Expected content slot");
+            assert_eq!(slot.items.len(), 2);
+            match &slot.items[0] {
+                ContentItem::Node(link_a) => assert_eq!(link_a.name.as_str(), "Link"),
+                _ => panic!("Expected Link A"),
+            }
+            match &slot.items[1] {
+                ContentItem::Node(link_b) => assert_eq!(link_b.name.as_str(), "Link"),
+                _ => panic!("Expected Link B"),
+            }
+        }
+        _ => panic!("Expected Text node"),
+    }
+}
+
+#[test]
+fn test_inline_elements_interleaved_with_text() {
+    let input = r#"\Text { Visit \Link(url: "https://a.com"){A} \Link(url: "https://b.com"){B} today }"#;
+    let doc = parse(input).expect("Failed to parse mixed text and inline links");
+    match &doc.items[0] {
+        Item::Node(text_node) => {
+            let slot = text_node.content.as_ref().expect("Expected content slot");
+            assert_eq!(slot.items.len(), 5);
+            match &slot.items[0] {
+                ContentItem::Text(t) => assert_eq!(t.text, "Visit "),
+                _ => panic!("Expected leading text"),
+            }
+            match &slot.items[1] {
+                ContentItem::Node(n) => assert_eq!(n.name.as_str(), "Link"),
+                _ => panic!("Expected Link A"),
+            }
+            match &slot.items[2] {
+                ContentItem::Text(t) => assert_eq!(t.text, " "),
+                _ => panic!("Expected separating space"),
+            }
+            match &slot.items[3] {
+                ContentItem::Node(n) => assert_eq!(n.name.as_str(), "Link"),
+                _ => panic!("Expected Link B"),
+            }
+            match &slot.items[4] {
+                ContentItem::Text(t) => assert_eq!(t.text, " today"),
+                _ => panic!("Expected trailing text"),
+            }
+        }
+        _ => panic!("Expected Text node"),
+    }
+}
+

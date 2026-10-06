@@ -162,10 +162,25 @@ impl<'a> ParserCursor<'a> {
                 return;
             }
             let normalized = normalize_whitespace(buf);
+            let has_newline = buf.contains('\n');
             buf.clear();
 
             // Discard pure whitespace chunks between elements or at boundaries
             if normalized.trim().is_empty() {
+                // If it is horizontal whitespace between elements on the same line,
+                // preserve it as a single space " " (unless the previous item is text ending in whitespace).
+                if !items.is_empty() && !is_end && !has_newline {
+                    let already_ends_with_space = match items.last() {
+                        Some(ContentItem::Text(t)) => t.text.ends_with(char::is_whitespace),
+                        _ => false,
+                    };
+                    if !already_ends_with_space {
+                        items.push(ContentItem::Text(TextChunk {
+                            text: " ".to_string(),
+                            span: Span::new(start, end),
+                        }));
+                    }
+                }
                 return;
             }
 
