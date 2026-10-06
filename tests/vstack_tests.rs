@@ -214,3 +214,104 @@ fn test_vstack_default_zero_gap() {
     assert_eq!(rects[0].rect.y, 20.0);
     assert_eq!(rects[1].rect.y, 60.0);
 }
+
+#[test]
+fn test_vstack_default_origin_standalone() {
+    let input = r#"
+    \use "components/VStack.dt"
+
+    \VStack(gap: 12) {
+        \Rect(width: 80, height: 30, color: #3b82f6)
+        \Rect(width: 90, height: 40, color: #10b981)
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let vstack_node = compiled.layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack found");
+    // Origin defaults to parent.left (0) and parent.top (0) when top-level
+    assert_eq!(vstack_node.rect.x, 0.0);
+    assert_eq!(vstack_node.rect.y, 0.0);
+    // Height: 30 + 12 (gap) + 40 = 82
+    assert_eq!(vstack_node.rect.height, 82.0);
+}
+
+#[test]
+fn test_vstack_shrink_wrap_width() {
+    let input = r#"
+    \use "components/VStack.dt"
+
+    \VStack(shrink: true, x: 20, y: 30, gap: 10, align: Align.Center) {
+        \Rect(width: 140, height: 40, color: #3b82f6)
+        \Rect(width: 200, height: 50, color: #10b981)
+        \Rect(width: 80, height: 30, color: #f59e0b)
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let vstack_node = compiled.layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack found");
+    // Width shrink-wraps to widest child (200)
+    assert_eq!(vstack_node.rect.width, 200.0);
+    assert_eq!(vstack_node.rect.x, 20.0);
+    assert_eq!(vstack_node.rect.y, 30.0);
+
+    let rects: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 3);
+
+    // Centered within the shrink-wrapped 200 width:
+    // Rect 1: width 140, centered -> 20 + (200 - 140) / 2 = 50
+    assert_eq!(rects[0].rect.x, 50.0);
+    // Rect 2: width 200, centered -> 20 + 0 = 20
+    assert_eq!(rects[1].rect.x, 20.0);
+    // Rect 3: width 80, centered -> 20 + (200 - 80) / 2 = 80
+    assert_eq!(rects[2].rect.x, 80.0);
+}
+
+#[test]
+fn test_vstack_fixed_height() {
+    let input = r#"
+    \use "components/VStack.dt"
+
+    \VStack(height: 250, width: 180, x: 10, y: 15) {
+        \Rect(width: 100, height: 40, color: #3b82f6)
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let vstack_node = compiled.layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack found");
+    assert_eq!(vstack_node.rect.width, 180.0);
+    assert_eq!(vstack_node.rect.height, 250.0);
+}
+

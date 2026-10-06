@@ -2,11 +2,39 @@
 // Vertically stacked flow container with cross-axis alignment and child spacing (gap).
 \use "components/Align.dt"
 
-// 1. Explicit / Fixed Width VStack: zero references to parent.width, preventing layout DAG cycles
+// 1. Explicit Fixed Width & Fixed Height VStack: supports explicit bounds in both dimensions
 \Component VStack(
     width: Number,
-    x: Number,
-    y: Number,
+    height: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
+    gap: Number: 0,
+    align: Align: Align.Left
+) {
+    let is_stretch = align == Align.Stretch;
+    let is_center = align == Align.Center;
+    let is_right = align == Align.Right;
+
+    alias right = x + width;
+    alias bottom = y + height;
+
+    \Children {
+        x: is_center ? (x + (width - child.width) / 2) : (
+            is_right ? (x + width - child.width) : (
+                x
+            )
+        ),
+        y: prev ? prev.bottom + gap : y,
+        width: is_stretch ? width : auto,
+        text_align: align
+    }
+}
+
+// 2. Explicit Fixed Width & Intrinsic Height VStack: zero references to parent.width
+\Component VStack(
+    width: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
     gap: Number: 0,
     align: Align: Align.Left
 ) {
@@ -30,10 +58,68 @@
     }
 }
 
-// 2. Fluid / Parent-Filling VStack: automatically spans parent width
+// 3. Fluid Width & Fixed Height VStack: fixed height with parent-filling fluid width
 \Component VStack(
-    x: Number,
-    y: Number,
+    height: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
+    gap: Number: 0,
+    align: Align: Align.Left
+) {
+    let resolved_width = parent.width - (2 * x);
+
+    let is_stretch = align == Align.Stretch;
+    let is_center = align == Align.Center;
+    let is_right = align == Align.Right;
+
+    alias right = x + resolved_width;
+    alias width = resolved_width;
+    alias bottom = y + height;
+
+    \Children {
+        x: is_center ? (x + (resolved_width - child.width) / 2) : (
+            is_right ? (x + resolved_width - child.width) : (
+                x
+            )
+        ),
+        y: prev ? prev.bottom + gap : y,
+        width: is_stretch ? resolved_width : auto,
+        text_align: align
+    }
+}
+
+// 4. Intrinsic Shrink-Wrapping Width VStack: wraps width to widest child
+\Component VStack(
+    shrink: Boolean,
+    x: Number: parent.left,
+    y: Number: parent.top,
+    gap: Number: 0,
+    align: Align: Align.Left
+) {
+    alias max_child_width = max(children.width);
+    let is_center = align == Align.Center;
+    let is_right = align == Align.Right;
+
+    alias right = max_child_width > 0 ? x + max_child_width : x;
+    alias width = max_child_width > 0 ? max_child_width : 0;
+    alias bottom = max(children.bottom) > 0 ? max(children.bottom) : y;
+    alias height = bottom - y;
+
+    \Children {
+        x: is_center ? (x + (parent.max_child_width - child.width) / 2) : (
+            is_right ? (x + parent.max_child_width - child.width) : (
+                x
+            )
+        ),
+        y: prev ? prev.bottom + gap : y,
+        text_align: align
+    }
+}
+
+// 5. Fluid / Parent-Filling VStack: automatically spans parent width
+\Component VStack(
+    x: Number: parent.left,
+    y: Number: parent.top,
     gap: Number: 0,
     align: Align: Align.Left
 ) {
