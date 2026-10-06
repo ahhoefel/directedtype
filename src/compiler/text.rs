@@ -141,7 +141,111 @@ pub fn measure_font_metrics(
 }
 
 use crate::compiler::expanded::NodeId;
+use crate::compiler::layout::Rect;
+use std::collections::HashMap;
 use std::ops::Range;
+
+/// Measures a rich text layout and returns the line fragment bounding boxes for each span.
+pub fn compute_span_fragments(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    max_width: Option<f64>,
+    align: Option<&str>,
+    spans: &[TextSpan],
+    origin_x: f64,
+    origin_y: f64,
+) -> HashMap<NodeId, Vec<Rect>> {
+    let mut result: HashMap<NodeId, Vec<Rect>> = HashMap::new();
+    if text.is_empty() || spans.is_empty() {
+        return result;
+    }
+
+    let size = if font_size > 0.0 { font_size as f32 } else { 16.0 };
+    let weight = if font_weight > 0.0 { font_weight as f32 } else { 400.0 };
+
+    FONT_CONTEXT.with(|font_cx_cell| {
+        let mut font_cx = font_cx_cell.borrow_mut();
+        let mut layout_cx = LayoutContext::<[u8; 4]>::new();
+
+        let mut builder = layout_cx.ranged_builder(&mut font_cx, text, 1.0, true);
+        builder.push_default(StyleProperty::FontSize(size));
+        builder.push_default(StyleProperty::Brush([0u8, 0u8, 0u8, 255u8]));
+        if (weight - 400.0).abs() > 1.0 {
+            builder.push_default(StyleProperty::FontWeight(FontWeight::new(weight)));
+        }
+        if let Some(family) = font_family {
+            if !family.is_empty() {
+                builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
+            }
+        }
+        for (idx, span) in spans.iter().enumerate() {
+            let brush_id = ((idx + 1) % 250 + 1) as u8;
+            builder.push(StyleProperty::Brush([brush_id, 0, 0, 255]), span.range.clone());
+            if span.style.underline {
+                builder.push(StyleProperty::Underline(true), span.range.clone());
+            }
+        }
+
+        let mut layout = builder.build(text);
+        if let Some(w) = max_width {
+            if w > 0.0 {
+                layout.break_all_lines(Some(w as f32));
+            }
+        }
+
+        let alignment = match align {
+            Some("center") | Some("Center") => parley::Alignment::Center,
+            Some("right") | Some("Right") | Some("end") | Some("End") => parley::Alignment::End,
+            Some("justify") | Some("Justify") => parley::Alignment::Justify,
+            _ => parley::Alignment::Start,
+        };
+        layout.align(alignment, parley::layout::AlignmentOptions::default());
+
+        for line in layout.lines() {
+            let line_metrics = line.metrics();
+            let line_top = origin_y + line_metrics.block_min_coord as f64;
+            let line_height = (line_metrics.block_max_coord - line_metrics.block_min_coord) as f64;
+
+            for (idx, span) in spans.iter().enumerate() {
+                if let Some(child_id) = span.node_id {
+                    let expected_brush_id = ((idx + 1) % 250 + 1) as u8;
+                    let mut min_gx = f32::MAX;
+                    let mut max_gx = f32::MIN;
+
+                    for item in line.items() {
+                        if let parley::layout::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                            if glyph_run.style().brush[0] == expected_brush_id {
+                                for g in glyph_run.positioned_glyphs() {
+                                    if g.x < min_gx {
+                                        min_gx = g.x;
+                                    }
+                                    let gx_end = g.x + g.advance;
+                                    if gx_end > max_gx {
+                                        max_gx = gx_end;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if min_gx < max_gx {
+                        let frag_rect = Rect::new(
+                            origin_x + min_gx as f64,
+                            line_top,
+                            (max_gx - min_gx) as f64,
+                            line_height,
+                        );
+                        result.entry(child_id).or_default().push(frag_rect);
+                    }
+                }
+            }
+        }
+    });
+
+    result
+}
 
 /// A styled range of text within a parent text element.
 #[derive(Debug, Clone, PartialEq)]

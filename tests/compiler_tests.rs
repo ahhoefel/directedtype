@@ -2992,6 +2992,59 @@ fn test_rect_bounding_union() {
     assert_eq!(union.height, 50.0);
 }
 
+#[test]
+fn test_single_line_link_fragments_projection() {
+    let input = r#"\Text(width: 500, size: 16) { Visit \Link(url: "https://google.com"){Google} now }"#;
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate");
+
+    let text_node = &layout.nodes[layout.roots[0].0];
+    assert_eq!(text_node.text_spans.len(), 3);
+
+    let link_child_id = text_node.text_spans[1].node_id.expect("Expected child node id");
+    let link_node = layout.get_node(link_child_id).expect("Link node should exist");
+
+    assert_eq!(link_node.fragments.len(), 1);
+    let frag = link_node.fragments[0];
+    assert!(frag.x > 0.0, "Expected positive x, got {}", frag.x);
+    assert!(frag.width > 20.0, "Expected positive width, got {}", frag.width);
+    assert!(frag.height > 10.0, "Expected positive height, got {}", frag.height);
+
+    assert_eq!(link_node.rect, frag);
+    assert_eq!(link_node.properties.get("url").and_then(|v| v.as_str()), Some("https://google.com"));
+    assert_eq!(link_node.properties.get("cursor").and_then(|v| v.as_str()), Some("Pointer"));
+}
+
+#[test]
+fn test_multiline_wrapped_link_fragments_projection() {
+    // Narrow width forces the link phrase to wrap across line boundaries
+    let input = r#"\Text(width: 160, size: 16) { Welcome and visit our \Link(url: "https://example.com"){comprehensive guide to documentation} today }"#;
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate");
+
+    let text_node = &layout.nodes[layout.roots[0].0];
+    let link_span = text_node.text_spans.iter().find(|s| s.node_id.is_some()).expect("Expected link span");
+    let link_node = layout.get_node(link_span.node_id.unwrap()).expect("Link node should exist");
+
+    assert!(
+        link_node.fragments.len() >= 2,
+        "Expected multi-line link to produce at least 2 fragments, got {}",
+        link_node.fragments.len()
+    );
+
+    let frag1 = link_node.fragments[0];
+    let frag2 = link_node.fragments[1];
+
+    // Frag 1 is on line 1, Frag 2 is on line 2 (strictly below)
+    assert!(frag1.y < frag2.y, "Frag 1 y ({}) should be < Frag 2 y ({})", frag1.y, frag2.y);
+    assert!(frag1.width > 0.0);
+    assert!(frag2.width > 0.0);
+
+    // Bounding union contains both fragments
+    assert_eq!(link_node.rect, directedtype::compiler::Rect::bounding_union(&link_node.fragments).unwrap());
+    assert!(link_node.rect.height >= frag1.height + frag2.height);
+}
+
 
 
 

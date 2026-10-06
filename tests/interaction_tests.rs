@@ -172,3 +172,72 @@ fn test_event_click_synthesis_and_bubbling() {
     assert_eq!(hit.target, rect_node.id);
     assert!(hit.bubble_path.contains(&button_node.id));
 }
+
+#[test]
+fn test_hit_test_inline_link_single_line() {
+    let input = r#"
+    \Text(x: 20, y: 30, width: 500, size: 16) {
+        Before link \Link(url: "https://directedtype.org"){ClickableLink} after link
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let layout = evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout error");
+
+    let text_node = layout.nodes.iter().find(|n| n.name == "Text").unwrap();
+    let link_node = layout.nodes.iter().find(|n| n.name == "Link").unwrap();
+
+    assert_eq!(link_node.fragments.len(), 1);
+    let frag = link_node.fragments[0];
+
+    // Center of the link fragment
+    let link_center = Point::new(frag.x + frag.width / 2.0, frag.y + frag.height / 2.0);
+    let hit = layout.hit_test(link_center).expect("Should hit link fragment");
+    assert_eq!(hit.target, link_node.id);
+    assert_eq!(hit.bubble_path[0], link_node.id);
+    assert_eq!(hit.bubble_path[1], text_node.id);
+
+    // Hit test on the "Before link" text area (x: 25, y: 35)
+    let before_hit = layout.hit_test(Point::new(25.0, 35.0)).expect("Should hit text node");
+    assert_eq!(before_hit.target, text_node.id);
+}
+
+#[test]
+fn test_hit_test_inline_link_multi_line_disjoint_fragments() {
+    // Narrow container forces link text to wrap across two lines
+    let input = r#"
+    \Text(x: 20, y: 30, width: 140, size: 16) {
+        Prefix text \Link(url: "https://example.com"){wrapped link that spans across multiple lines} suffix
+    }
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let layout = evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout error");
+
+    let text_node = layout.nodes.iter().find(|n| n.name == "Text").unwrap();
+    let link_node = layout.nodes.iter().find(|n| n.name == "Link").unwrap();
+
+    assert!(
+        link_node.fragments.len() >= 2,
+        "Expected at least 2 fragments, got {}",
+        link_node.fragments.len()
+    );
+
+    let frag1 = link_node.fragments[0];
+    let frag2 = link_node.fragments[1];
+
+    // 1. Point on Line 1 inside fragment 1 hits the Link
+    let p1 = Point::new(frag1.x + frag1.width / 2.0, frag1.y + frag1.height / 2.0);
+    let hit1 = layout.hit_test(p1).expect("Should hit fragment 1 of link");
+    assert_eq!(hit1.target, link_node.id);
+
+    // 2. Point on Line 2 inside fragment 2 hits the Link
+    let p2 = Point::new(frag2.x + frag2.width / 2.0, frag2.y + frag2.height / 2.0);
+    let hit2 = layout.hit_test(p2).expect("Should hit fragment 2 of link");
+    assert_eq!(hit2.target, link_node.id);
+
+    // 3. Point on Line 1 before fragment 1 (where "Prefix text" is) hits Text, not Link
+    let p_prefix = Point::new(frag1.x - 15.0, frag1.y + frag1.height / 2.0);
+    if p_prefix.x >= text_node.rect.x {
+        let hit_prefix = layout.hit_test(p_prefix).expect("Should hit prefix text");
+        assert_eq!(hit_prefix.target, text_node.id);
+    }
+}

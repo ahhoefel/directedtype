@@ -148,6 +148,8 @@ impl ResolvedNode {
     pub fn is_paint_primitive(&self) -> bool {
         self.name == "Rect"
             || self.name == "Text"
+            || self.name == "Link"
+            || !self.fragments.is_empty()
             || self.text_content.is_some()
             || self.properties.contains_key("text")
             || self.properties.contains_key("content")
@@ -285,7 +287,15 @@ impl ResolvedLayout {
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0);
 
-            if !rounded_rect_contains(&node.rect, radius, point) {
+            if !node.fragments.is_empty() {
+                let hits_fragment = node.fragments.iter().any(|frag| {
+                    point.x >= frag.x && point.x <= frag.x + frag.width
+                        && point.y >= frag.y && point.y <= frag.y + frag.height
+                });
+                if !hits_fragment {
+                    continue;
+                }
+            } else if !rounded_rect_contains(&node.rect, radius, point) {
                 continue;
             }
 
@@ -622,11 +632,15 @@ pub fn resolve_layout(
         });
     }
 
-    ResolvedLayout {
+    let mut layout = ResolvedLayout {
         roots: doc.roots.clone(),
         nodes: resolved_nodes,
         values,
-    }
+    };
+
+    project_inline_fragments(&mut layout);
+
+    layout
 }
 
 /// Updates an existing `ResolvedLayout` in-place using newly computed values for dirty/changed variables.
@@ -697,6 +711,130 @@ pub fn update_resolved_layout(
                     })
                     .collect();
                 node.key = Some(ComponentKey::new(resolved_parts, k.span));
+            }
+        }
+    }
+
+    project_inline_fragments(layout);
+}
+
+/// Projects Parley line fragments onto inline child nodes within rich text blocks.
+pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
+    let text_nodes: Vec<(
+        NodeId,
+        String,
+        f64,
+        f64,
+        Option<String>,
+        Option<f64>,
+        Option<String>,
+        Vec<TextSpan>,
+        f64,
+        f64,
+    )> = layout
+        .nodes
+        .iter()
+        .filter(|n| {
+            n.name == "Text"
+                && n.text_content.is_some()
+                && n.text_spans.iter().any(|s| s.node_id.is_some())
+        })
+        .map(|n| {
+            let text = n.text_content.clone().unwrap_or_default();
+            let font_size = n
+                .properties
+                .get("size")
+                .or_else(|| n.properties.get("font_size"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(16.0);
+            let font_weight = n
+                .properties
+                .get("weight")
+                .or_else(|| n.properties.get("font_weight"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(400.0);
+            let font_family = n
+                .properties
+                .get("family")
+                .or_else(|| n.properties.get("font_family"))
+                .and_then(|v| match v {
+                    Value::String(s) => Some(s.clone()),
+                    _ => None,
+                });
+            let max_width = if n.rect.width > 0.0 {
+                Some(n.rect.width)
+            } else {
+                None
+            };
+            let align = n
+                .properties
+                .get("align")
+                .or_else(|| n.properties.get("text_align"))
+                .and_then(|v| match v {
+                    Value::String(s) => Some(s.clone()),
+                    _ => None,
+                });
+            (
+                n.id,
+                text,
+                font_size,
+                font_weight,
+                font_family,
+                max_width,
+                align,
+                n.text_spans.clone(),
+                n.rect.x,
+                n.rect.y,
+            )
+        })
+        .collect();
+
+    for (_text_id, text, size, weight, family, max_w, align, spans, ox, oy) in text_nodes {
+        let child_frags = crate::compiler::text::compute_span_fragments(
+            &text,
+            size,
+            weight,
+            family.as_deref(),
+            max_w,
+            align.as_deref(),
+            &spans,
+            ox,
+            oy,
+        );
+
+        for (child_id, fragments) in child_frags {
+            if let Some(union_rect) = Rect::bounding_union(&fragments) {
+                let span_style = spans.iter().find(|s| s.node_id == Some(child_id)).map(|s| &s.style);
+
+                if let Some(child_node) = layout.nodes.iter_mut().find(|n| n.id == child_id) {
+                    child_node.fragments = fragments;
+                    child_node.rect = union_rect;
+
+                    child_node.properties.insert("x".to_string(), Value::Number(union_rect.x));
+                    child_node.properties.insert("y".to_string(), Value::Number(union_rect.y));
+                    child_node.properties.insert("width".to_string(), Value::Number(union_rect.width));
+                    child_node.properties.insert("height".to_string(), Value::Number(union_rect.height));
+
+                    if let Some(style) = span_style {
+                        if let Some(ref u) = style.url {
+                            child_node.properties.insert("url".to_string(), Value::String(u.clone()));
+                            layout.values.insert(VarId::new(child_id, "url"), Value::String(u.clone()));
+                        }
+                        if let Some(ref c) = style.cursor {
+                            let c_str = match c {
+                                CursorKind::Pointer => "Pointer",
+                                CursorKind::Default => "Default",
+                                CursorKind::Text => "Text",
+                            };
+                            child_node.properties.insert("cursor".to_string(), Value::String(c_str.to_string()));
+                        }
+                    }
+
+                    layout.values.insert(VarId::new(child_id, "x"), Value::Number(union_rect.x));
+                    layout.values.insert(VarId::new(child_id, "y"), Value::Number(union_rect.y));
+                    layout.values.insert(VarId::new(child_id, "width"), Value::Number(union_rect.width));
+                    layout.values.insert(VarId::new(child_id, "height"), Value::Number(union_rect.height));
+                }
             }
         }
     }

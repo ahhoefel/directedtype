@@ -17,8 +17,8 @@ pub use component::{
     EventHandlerTarget, InstanceManager,
 };
 pub use compiler::{
-    evaluate_document, evaluate_document_with_window, CursorKind, Rect, ResolvedLayout,
-    ResolvedNode, SpanStyle, TextSpan, Value,
+    evaluate_document, evaluate_document_with_window, project_inline_fragments, CursorKind, Rect,
+    ResolvedLayout, ResolvedNode, SpanStyle, TextSpan, Value,
 };
 pub use dom::{Dom, DomError, DomHitTestResult, NodeHandle, Transaction};
 pub use error::ParseError;

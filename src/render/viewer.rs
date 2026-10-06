@@ -890,6 +890,25 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     self.dispatch_event_with_bubble(move_event, &hit_res.bubble_path);
                 }
 
+                // Update cursor icon on hover (e.g. CursorIcon::Pointer when hovering over links or pointer elements)
+                if let Some(w) = &self.window {
+                    let is_pointer = hit.as_ref().map_or(false, |h| {
+                        h.bubble_path.iter().any(|&nid| {
+                            self.layout.get_node(nid).map_or(false, |node| {
+                                node.properties.contains_key("url")
+                                    || node.properties.get("cursor").and_then(|v| v.as_str()) == Some("Pointer")
+                                    || node.properties.get("cursor").and_then(|v| v.as_str()) == Some("pointer")
+                            })
+                        })
+                    });
+
+                    if is_pointer {
+                        w.set_cursor(winit::window::CursorIcon::Pointer);
+                    } else {
+                        w.set_cursor(winit::window::CursorIcon::Default);
+                    }
+                }
+
                 if self.inspect_mode {
                     let target_hover = if self.inspector_state.inspect_cursor_active {
                         new_hovered
@@ -1077,6 +1096,23 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                             hit_res.target,
                                         );
                                         self.dispatch_event_with_bubble(click_event, &hit_res.bubble_path);
+
+                                        if btn == MouseButton::Left {
+                                            for &nid in &hit_res.bubble_path {
+                                                if let Some(node) = self.layout.get_node(nid) {
+                                                    if let Some(url) = node.properties.get("url").and_then(|v| v.as_str()) {
+                                                        println!("[Viewer] Opening link: {}", url);
+                                                        #[cfg(target_os = "macos")]
+                                                        let _ = std::process::Command::new("open").arg(url).spawn();
+                                                        #[cfg(target_os = "linux")]
+                                                        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+                                                        #[cfg(target_os = "windows")]
+                                                        let _ = std::process::Command::new("cmd").args(["/C", "start", "", url]).spawn();
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

@@ -457,11 +457,11 @@ pub fn hit_test(&self, point: Point) -> Option<HitTestResult> {
 
 ## 7. Migration & Implementation Milestones
 
-| Phase | Scope | Key Deliverables |
-| :--- | :--- | :--- |
-| **Phase 1: Parser Whitespace** | `src/parser/cursor.rs` | Fix `flush_text` to preserve single space between inline elements (`\A{} \B{}`). |
-| **Phase 2: Rich Text Data Model** | `src/ast.rs`, `src/compiler/layout.rs` | Add `TextSpan`, `SpanStyle`, and `fragments: Vec<Rect>` to `ResolvedNode`. |
-| **Phase 3: Parley Ranged Styles** | `src/compiler/text.rs`, `src/render/scene.rs` | Support per-range font colors, weights, and underlines in Vello drawing. |
-| **Phase 4: Fragment Projection** | `src/compiler/expand.rs`, `layout.rs` | Project line fragment boxes from Parley layout onto inline child nodes. |
-| **Phase 5: Hit-Testing & Viewer** | `src/render/viewer.rs` | Multi-fragment hit testing, `CursorIcon::Pointer`, and host URL activation (`open::that`). |
-| **Phase 6: Standard Component** | `components/Link.dt` | Deliver `\Link` component in standard library with hover states and styles. |
+| Phase | Scope | Key Deliverables | Status |
+| :--- | :--- | :--- | :--- |
+| **Phase 1: Parser Whitespace** | `src/parser/cursor.rs` | Fix `flush_text` to preserve single space between inline elements (`\A{} \B{}`). | ✅ Complete |
+| **Phase 2: Rich Text Data Model** | `src/ast.rs`, `src/compiler/layout.rs` | Add `TextSpan`, `SpanStyle`, and `fragments: Vec<Rect>` to `ResolvedNode`. | ✅ Complete |
+| **Phase 3: Parley Ranged Styles** | `src/compiler/text.rs`, `src/render/scene.rs` | Support per-range font colors, weights, and underlines in Vello drawing. | ✅ Complete |
+| **Phase 4: Fragment Projection** | `src/compiler/text.rs`, `src/compiler/layout.rs` | Project line fragment boxes from Parley layout onto inline child nodes. | ✅ Complete |
+| **Phase 5: Hit-Testing & Viewer** | `src/compiler/layout.rs`, `src/render/viewer.rs` | Multi-fragment hit testing, `CursorIcon::Pointer`, and host URL activation. | ✅ Complete |
+| **Phase 6: Standard Component** | `components/Link.dt` | Deliver `\Link` component in standard library with hover states and styles. | ✅ Complete |

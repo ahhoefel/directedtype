@@ -21,7 +21,10 @@ pub use expanded::{ExpandedDocument, ExpandedNode, NodeId};
 pub use graph::{
     build_variable_graph, build_variable_graph_with_window, VarId, VariableGraph, VariableNode,
 };
-pub use layout::{resolve_layout, update_resolved_layout, Rect, ResolvedLayout, ResolvedNode};
+pub use layout::{
+    project_inline_fragments, resolve_layout, update_resolved_layout, Rect, ResolvedLayout,
+    ResolvedNode,
+};
 pub use module::{
     normalize_path, register_component_overload, resolve_imports, verify_overload_set,
     FileResolver, FsResolver, VirtualResolver,

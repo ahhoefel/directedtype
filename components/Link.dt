@@ -1,0 +1,13 @@
+// DirectedType Standard Component Library: Link
+// Declarative hypertext link component for inline typography and standalone navigation.
+
+\Component Link(
+    url: String,
+    color: Color: #1a73e8,
+    underline: Boolean: true,
+    cursor: String: "Pointer"
+) {
+    \Text(color: color) {
+        \children
+    }
+}
