@@ -36,16 +36,18 @@ let col_card_style = \CardStyle(
     \Text(
         size: 26,
         weight: 700,
-        color: #f8fafc,
-        text: "VStack Flow Component"
-    )
+        color: #f8fafc
+    ) {
+        VStack Flow Component
+    }
 
     \Text(
         size: 15,
         weight: 400,
-        color: #94a3b8,
-        text: "Declarative vertical stacking with gap recurrence, padding, and cross-axis alignment."
-    )
+        color: #94a3b8
+    ) {
+        Declarative vertical stacking with gap recurrence, padding, and cross-axis alignment.
+    }
 
     \Spacer(height: 8)
 

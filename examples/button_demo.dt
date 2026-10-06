@@ -30,16 +30,18 @@
     \Text(
         size: 26,
         weight: 700,
-        color: #f8fafc,
-        text: "DirectedType Component Library"
-    )
+        color: #f8fafc
+    ) {
+        DirectedType Component Library
+    }
 
     \Text(
         size: 15,
         weight: 400,
-        color: #94a3b8,
-        text: "Standard \\Card and \\Button with intrinsic typography sizing, 6 variants, and direct text support."
-    )
+        color: #94a3b8
+    ) {
+        Standard \\Card and \\Button with intrinsic typography sizing, 6 variants, and direct text support.
+    }
 
     \Divider(color: #334155)
     \Spacer(height: 6)
@@ -79,9 +81,10 @@
         \Text(
             size: 13,
             weight: 500,
-            color: #64748b,
-            text: "Disabled buttons render with theme disabled styling and suppress pointer events."
-        )
+            color: #64748b
+        ) {
+            Disabled buttons render with theme disabled styling and suppress pointer events.
+        }
     }
 
     // Section 4: Direct Text in Card (Auto-Wrapping Height)
