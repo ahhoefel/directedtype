@@ -301,9 +301,9 @@ pub fn build_scene(
                     .and_then(|v| v.as_str());
 
                 let alignment = match align_str {
-                    Some("center") => Alignment::Center,
-                    Some("right") | Some("end") => Alignment::End,
-                    Some("justify") => Alignment::Justify,
+                    Some("center") | Some("Center") => Alignment::Center,
+                    Some("right") | Some("Right") | Some("end") | Some("End") => Alignment::End,
+                    Some("justify") | Some("Justify") => Alignment::Justify,
                     _ => Alignment::Start,
                 };
                 layout.align(alignment, AlignmentOptions::default());

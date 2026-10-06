@@ -13,7 +13,7 @@ pub use transaction::Transaction;
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    ComponentDef, ComponentKey, ContentItem, ContentSlot, Document, ElementNode, EnvBinding, Expr,
+    ComponentDef, ComponentKey, ContentItem, ContentSlot, Document, ElementNode, EnumDef, EnvBinding, Expr,
     Ident, Item, LetBinding, PortBinding, TextChunk,
 };
 use crate::compiler::error::CompileError;
@@ -48,6 +48,7 @@ struct DomStructuralSnapshot {
     components: HashMap<String, Vec<ComponentDef>>,
     let_bindings: Vec<LetBinding>,
     env_bindings: Vec<EnvBinding>,
+    enums: Vec<EnumDef>,
     window_width: f64,
     window_height: f64,
     dirty: bool,
@@ -63,6 +64,7 @@ pub struct Dom {
     components: HashMap<String, Vec<ComponentDef>>,
     let_bindings: Vec<LetBinding>,
     env_bindings: Vec<EnvBinding>,
+    pub enums: Vec<EnumDef>,
     window_width: f64,
     window_height: f64,
     dirty: bool,
@@ -87,6 +89,7 @@ impl Dom {
             components: HashMap::new(),
             let_bindings: Vec::new(),
             env_bindings: Vec::new(),
+            enums: Vec::new(),
             window_width: width,
             window_height: height,
             dirty: true,
@@ -128,6 +131,9 @@ impl Dom {
                 Item::Node(node) => {
                     let handle = dom.insert_ast_element(node)?;
                     dom.roots.push(handle);
+                }
+                Item::Enum(e) => {
+                    dom.enums.push(e.clone());
                 }
                 Item::State(_) => {}
                 Item::Use(_) => {}
@@ -949,6 +955,7 @@ impl Dom {
             components: self.components.clone(),
             let_bindings: self.let_bindings.clone(),
             env_bindings: self.env_bindings.clone(),
+            enums: self.enums.clone(),
             window_width: self.window_width,
             window_height: self.window_height,
             dirty: self.dirty,
@@ -961,6 +968,7 @@ impl Dom {
         self.components = snapshot.components;
         self.let_bindings = snapshot.let_bindings;
         self.env_bindings = snapshot.env_bindings;
+        self.enums = snapshot.enums;
         self.window_width = snapshot.window_width;
         self.window_height = snapshot.window_height;
         self.dirty = snapshot.dirty;
@@ -1097,6 +1105,10 @@ impl Dom {
 
         for e in &self.env_bindings {
             items.push(Item::Env(e.clone()));
+        }
+
+        for e in &self.enums {
+            items.push(Item::Enum(e.clone()));
         }
 
         for &root_handle in &self.roots {

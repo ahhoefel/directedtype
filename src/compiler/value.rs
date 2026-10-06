@@ -9,6 +9,10 @@ pub enum Value {
     Bool(bool),
     Color(String),
     Node(NodeId),
+    Enum {
+        enum_name: String,
+        variant: String,
+    },
 }
 
 impl Value {
@@ -29,6 +33,7 @@ impl Value {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Value::String(s) | Value::Color(s) => Some(s.as_str()),
+            Value::Enum { variant, .. } => Some(variant.as_str()),
             _ => None,
         }
     }
@@ -47,6 +52,7 @@ impl Value {
             Value::String(s) => !s.is_empty(),
             Value::Color(_) => true,
             Value::Node(_) => true,
+            Value::Enum { .. } => true,
         }
     }
 
@@ -63,16 +69,18 @@ impl Value {
             Value::Bool(b) => format!("{b}"),
             Value::Color(c) => c.clone(),
             Value::Node(id) => id.canonical_name(),
+            Value::Enum { enum_name, variant } => format!("{}.{}", enum_name, variant),
         }
     }
 
-    pub fn type_name(&self) -> &'static str {
+    pub fn type_name(&self) -> &str {
         match self {
             Value::Number(_) => "Number",
             Value::String(_) => "String",
             Value::Bool(_) => "Boolean",
             Value::Color(_) => "Color",
             Value::Node(_) => "Node",
+            Value::Enum { enum_name, .. } => enum_name.as_str(),
         }
     }
 
@@ -83,7 +91,10 @@ impl Value {
             "Boolean" | "Bool" => matches!(self, Value::Bool(_)),
             "Color" => matches!(self, Value::Color(_)),
             "Node" => matches!(self, Value::Node(_)),
-            _ => true,
+            custom => match self {
+                Value::Enum { enum_name, .. } => enum_name == custom,
+                _ => false,
+            },
         }
     }
 }
@@ -96,6 +107,7 @@ impl fmt::Display for Value {
             Value::Bool(b) => write!(f, "{}", b),
             Value::Color(c) => write!(f, "{}", c),
             Value::Node(id) => write!(f, "{}", id.canonical_name()),
+            Value::Enum { enum_name, variant } => write!(f, "{}.{}", enum_name, variant),
         }
     }
 }

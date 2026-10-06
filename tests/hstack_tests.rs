@@ -61,7 +61,7 @@ fn test_hstack_center_and_centered_alignment() {
     let input = r#"
     \use "components/HStack.dt"
 
-    \HStack(x: 0, y: 10, align: "center", gap: 10) {
+    \HStack(x: 0, y: 10, align: Align.Center, gap: 10) {
         \Rect(width: 100, height: 60, color: #3b82f6)
         \Rect(width: 120, height: 40, color: #10b981)
     }
@@ -95,7 +95,7 @@ fn test_hstack_bottom_alignment() {
     let input = r#"
     \use "components/HStack.dt"
 
-    \HStack(x: 0, y: 10, align: "bottom", gap: 10) {
+    \HStack(x: 0, y: 10, align: Align.Bottom, gap: 10) {
         \Rect(width: 80, height: 70, color: #ef4444)
         \Rect(width: 80, height: 30, color: #3b82f6)
     }

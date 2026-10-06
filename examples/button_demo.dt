@@ -24,7 +24,7 @@
     y: 36,
     width: min(window.width - 80, 720),
     gap: 14,
-    align: "stretch"
+    align: Align.Stretch
 ) {
     // Header Section
     \Text(

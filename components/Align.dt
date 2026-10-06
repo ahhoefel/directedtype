@@ -1,0 +1,10 @@
+// DirectedType Standard Component Library: Align
+// Universal cross-axis and spatial alignment enum.
+\Enum Align {
+    Left,
+    Center,
+    Right,
+    Top,
+    Bottom,
+    Stretch,
+}

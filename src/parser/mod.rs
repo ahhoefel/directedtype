@@ -6,7 +6,7 @@ pub mod node;
 use crate::ast::{Document, Item};
 use crate::error::ParseError;
 use crate::parser::component::{
-    parse_component_def, parse_env_binding, parse_let_binding, parse_state_binding,
+    parse_component_def, parse_enum_def, parse_env_binding, parse_let_binding, parse_state_binding,
     parse_use_declaration,
 };
 use crate::parser::cursor::ParserCursor;
@@ -41,6 +41,10 @@ pub fn parse_document(source: &str) -> Result<Document, ParseError> {
                         let comp = parse_component_def(&mut cursor)?;
                         items.push(Item::Component(comp));
                     }
+                    Some((Token::Enum, _)) => {
+                        let enum_def = parse_enum_def(&mut cursor)?;
+                        items.push(Item::Enum(enum_def));
+                    }
                     Some((Token::Use, _)) => {
                         let use_decl = parse_use_declaration(&mut cursor)?;
                         items.push(Item::Use(use_decl));
@@ -51,14 +55,14 @@ pub fn parse_document(source: &str) -> Result<Document, ParseError> {
                     }
                     Some((other, other_span)) => {
                         return Err(ParseError::UnexpectedToken {
-                            expected: "Component, use, or element name after '\\'".to_string(),
+                            expected: "Component, Enum, use, or element name after '\\'".to_string(),
                             found: other.to_string(),
                             span: other_span,
                         });
                     }
                     None => {
                         return Err(ParseError::UnexpectedEof {
-                            expected: "Component, use, or element name after '\\'".to_string(),
+                            expected: "Component, Enum, use, or element name after '\\'".to_string(),
                             span,
                         });
                     }

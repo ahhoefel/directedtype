@@ -39,6 +39,7 @@ pub enum Item {
     Env(EnvBinding),
     State(StateBinding),
     Use(UseDeclaration),
+    Enum(EnumDef),
 }
 
 impl Item {
@@ -50,7 +51,22 @@ impl Item {
             Item::Env(e) => e.span,
             Item::State(s) => s.span,
             Item::Use(u) => u.span,
+            Item::Enum(e) => e.span,
         }
+    }
+}
+
+/// Enum definition: `\Enum Name { Variant1, Variant2, ... }`
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumDef {
+    pub name: Ident,
+    pub variants: Vec<Ident>,
+    pub span: Span,
+}
+
+impl EnumDef {
+    pub fn has_variant(&self, variant_name: &str) -> bool {
+        self.variants.iter().any(|v| v.as_str() == variant_name)
     }
 }
 
@@ -237,6 +253,7 @@ pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
             (Literal::String(s1, _), Literal::String(s2, _)) => s1 == s2,
             (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 == b2,
             (Literal::Color(c1, _), Literal::Color(c2, _)) => c1 == c2,
+            (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 == e2 && v1 == v2,
             _ => false,
         },
         (Expr::Ident(id1), Expr::Ident(id2)) => id1.as_str() == id2.as_str(),
@@ -505,6 +522,7 @@ pub enum Literal {
     String(String, Span),
     Bool(bool, Span),
     Color(String, Span),
+    Enum(String, String, Span),
 }
 
 impl Literal {
@@ -513,7 +531,31 @@ impl Literal {
             Literal::Number(_, span)
             | Literal::String(_, span)
             | Literal::Bool(_, span)
-            | Literal::Color(_, span) => *span,
+            | Literal::Color(_, span)
+            | Literal::Enum(_, _, span) => *span,
+        }
+    }
+
+    pub fn type_name(&self) -> &str {
+        match self {
+            Literal::Number(..) => "Number",
+            Literal::String(..) => "String",
+            Literal::Bool(..) => "Boolean",
+            Literal::Color(..) => "Color",
+            Literal::Enum(enum_name, ..) => enum_name.as_str(),
+        }
+    }
+
+    pub fn matches_type_name(&self, expected: &str) -> bool {
+        match expected {
+            "Number" => matches!(self, Literal::Number(..)),
+            "String" => matches!(self, Literal::String(..)),
+            "Boolean" | "Bool" => matches!(self, Literal::Bool(..)),
+            "Color" => matches!(self, Literal::Color(..)),
+            custom => match self {
+                Literal::Enum(enum_name, ..) => enum_name == custom,
+                _ => false,
+            },
         }
     }
 }
@@ -566,6 +608,7 @@ impl fmt::Display for Literal {
             Literal::String(s, _) => write!(f, "\"{}\"", s),
             Literal::Bool(b, _) => write!(f, "{}", b),
             Literal::Color(c, _) => write!(f, "{}", c),
+            Literal::Enum(e, v, _) => write!(f, "{}.{}", e, v),
         }
     }
 }

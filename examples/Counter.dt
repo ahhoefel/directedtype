@@ -104,7 +104,7 @@
             style: inner_card_style,
             width: 312
         ) {
-            \HStack(gap: 60, align: "center") {
+            \HStack(gap: 60, align: Align.Center) {
                 \Text(
                     size: 26,
                     weight: 700,

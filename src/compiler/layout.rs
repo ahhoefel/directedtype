@@ -461,6 +461,9 @@ impl ResolvedLayout {
                 match val {
                     Value::Number(n) => ports.push(format!("{}: {}", key, format_num(*n))),
                     Value::Color(c) | Value::String(c) => ports.push(format!("{}: {}", key, c)),
+                    Value::Enum { enum_name, variant } => {
+                        ports.push(format!("{}: {}.{}", key, enum_name, variant))
+                    }
                     Value::Node(id) => {
                         if id.is_window() {
                             ports.push(format!("{}: window", key));
@@ -547,6 +550,9 @@ pub fn resolve_layout(
                             Value::String(s) => Expr::Literal(Literal::String(s, part.span())),
                             Value::Bool(b) => Expr::Literal(Literal::Bool(b, part.span())),
                             Value::Color(c) => Expr::Literal(Literal::Color(c, part.span())),
+                            Value::Enum { enum_name, variant } => {
+                                Expr::Literal(Literal::Enum(enum_name, variant, part.span()))
+                            }
                             _ => part.clone(),
                         }
                     } else {
@@ -642,6 +648,9 @@ pub fn update_resolved_layout(
                                 Value::String(s) => Expr::Literal(Literal::String(s, part.span())),
                                 Value::Bool(b) => Expr::Literal(Literal::Bool(b, part.span())),
                                 Value::Color(c) => Expr::Literal(Literal::Color(c, part.span())),
+                                Value::Enum { enum_name, variant } => {
+                                    Expr::Literal(Literal::Enum(enum_name, variant, part.span()))
+                                }
                                 _ => part.clone(),
                             }
                         } else {

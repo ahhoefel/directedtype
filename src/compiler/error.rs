@@ -107,10 +107,29 @@ pub enum CompileError {
         span: Span,
     },
 
-    #[error("Type mismatch for state variable: expected '{expected}', found '{actual}'")]
+    #[error("Type mismatch: expected '{expected}', found '{actual}'")]
     TypeMismatch {
         expected: String,
         actual: String,
+        span: Span,
+    },
+
+    #[error("Unknown variant '{variant}' on enum '{enum_name}'")]
+    UnknownEnumVariant {
+        enum_name: String,
+        variant: String,
+        span: Span,
+    },
+
+    #[error("Cannot use bare enum '{name}' as an expression; use '{name}.<Variant>'")]
+    BareEnumUse {
+        name: String,
+        span: Span,
+    },
+
+    #[error("Duplicate enum declaration '{name}'")]
+    DuplicateEnum {
+        name: String,
         span: Span,
     },
 
@@ -168,6 +187,9 @@ impl CompileError {
             | CompileError::NodeNotFound { span, .. }
             | CompileError::NotAStateVariable { span, .. }
             | CompileError::TypeMismatch { span, .. }
+            | CompileError::UnknownEnumVariant { span, .. }
+            | CompileError::BareEnumUse { span, .. }
+            | CompileError::DuplicateEnum { span, .. }
             | CompileError::CyclicDependency { span, .. }
             | CompileError::UninitializedVariableUse { span, .. }
             | CompileError::UndefinedEnvVariable { span, .. }

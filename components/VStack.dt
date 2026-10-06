@@ -1,5 +1,6 @@
 // DirectedType Standard Component Library: VStack
 // Vertically stacked flow container with cross-axis alignment and child spacing (gap).
+\use "components/Align.dt"
 
 // 1. Explicit / Fixed Width VStack: zero references to parent.width, preventing layout DAG cycles
 \Component VStack(
@@ -7,11 +8,11 @@
     x: Number,
     y: Number,
     gap: Number: 0,
-    align: String: "left"
+    align: Align: Align.Left
 ) {
-    let is_stretch = align == "stretch";
-    let is_center = align == "center" || align == "centered";
-    let is_right = align == "right";
+    let is_stretch = align == Align.Stretch;
+    let is_center = align == Align.Center;
+    let is_right = align == Align.Right;
 
     alias right = x + width;
     alias bottom = max(children.bottom) > 0 ? max(children.bottom) : y;
@@ -34,13 +35,13 @@
     x: Number,
     y: Number,
     gap: Number: 0,
-    align: String: "left"
+    align: Align: Align.Left
 ) {
     let resolved_width = parent.width - (2 * x);
 
-    let is_stretch = align == "stretch";
-    let is_center = align == "center" || align == "centered";
-    let is_right = align == "right";
+    let is_stretch = align == Align.Stretch;
+    let is_center = align == Align.Center;
+    let is_right = align == Align.Right;
 
     alias right = x + resolved_width;
     alias width = resolved_width;

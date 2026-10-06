@@ -1,6 +1,6 @@
 use crate::ast::{
-    AliasBinding, ComponentBodyItem, ComponentDef, EnvBinding, Ident, LetBinding, LetValue,
-    ParamDef, StateBinding, TypeRef, UseDeclaration,
+    AliasBinding, ComponentBodyItem, ComponentDef, EnumDef, EnvBinding, Ident, LetBinding,
+    LetValue, ParamDef, StateBinding, TypeRef, UseDeclaration,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::ParserCursor;
@@ -468,4 +468,45 @@ pub fn parse_use_declaration(cursor: &mut ParserCursor<'_>) -> Result<UseDeclara
 
     let span = bs_span.merge(semi_span);
     Ok(UseDeclaration { path, alias, span })
+}
+
+/// Parses an enum definition: `\Enum Name { Variant1, Variant2, ... }`
+pub fn parse_enum_def(cursor: &mut ParserCursor<'_>) -> Result<EnumDef, ParseError> {
+    let slash_span = cursor.consume_token(&Token::Backslash)?;
+    cursor.consume_token(&Token::Enum)?;
+    let name = parse_ident(cursor)?;
+    cursor.consume_token(&Token::LBrace)?;
+
+    let mut variants = Vec::new();
+    while let Some((tok, _)) = cursor.peek_token()? {
+        if tok == &Token::RBrace {
+            break;
+        }
+        let variant = parse_ident(cursor)?;
+        variants.push(variant);
+
+        if let Some((Token::Comma, _)) = cursor.peek_token()? {
+            cursor.consume_token(&Token::Comma)?;
+        } else {
+            break;
+        }
+    }
+
+    let rbrace_span = cursor.consume_token(&Token::RBrace)?;
+
+    // Optional trailing semicolon: e.g. `\Enum Align { ... };`
+    let end_span = if let Some((Token::Semicolon, semi_span)) = cursor.peek_token()? {
+        let span = *semi_span;
+        cursor.consume_token(&Token::Semicolon)?;
+        span
+    } else {
+        rbrace_span
+    };
+
+    let span = slash_span.merge(end_span);
+    Ok(EnumDef {
+        name,
+        variants,
+        span,
+    })
 }

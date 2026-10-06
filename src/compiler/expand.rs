@@ -34,6 +34,7 @@ pub struct ScopeContext<'a> {
     pub enclosing_component: Option<NodeId>,
     pub comp_ports: Option<&'a HashMap<String, Expr>>,
     pub declared_state_names: Option<&'a HashSet<String>>,
+    pub enums: &'a HashMap<String, EnumDef>,
 }
 
 /// Expands a parsed AST `Document` into an `ExpandedDocument` using default current directory.
@@ -63,6 +64,21 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         span: doc.span,
     };
     let doc = &merged_doc;
+
+    let mut enums: HashMap<String, EnumDef> = HashMap::new();
+    for item in &doc.items {
+        if let Item::Enum(e) = item {
+            let name = e.name.as_str().to_string();
+            if enums.contains_key(&name) {
+                return Err(CompileError::DuplicateEnum {
+                    name,
+                    span: e.name.span,
+                });
+            }
+            enums.insert(name, e.clone());
+        }
+    }
+
     let mut global_scope = HashMap::new();
     let mut global_env_scope: HashMap<String, EnvEntry> = HashMap::new();
     let mut node_fonts: HashMap<NodeId, NodeId> = HashMap::new();
@@ -170,6 +186,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             enclosing_component: None,
                             comp_ports: None,
                             declared_state_names: None,
+                            enums: &enums,
                         };
                         let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                         if let Some(LexicalBinding::Expr(existing)) = global_scope.get(let_binding.name.as_str()) {
@@ -202,6 +219,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                                 enclosing_component: None,
                                 comp_ports: None,
                                 declared_state_names: None,
+                                enums: &enums,
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             if let Some(LexicalBinding::Expr(existing)) = global_scope.get(env_binding.name.as_str()) {
@@ -236,6 +254,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         enclosing_component: None,
         comp_ports: None,
         declared_state_names: None,
+        enums: &enums,
     };
     for (name, expr) in expanded_doc.window_ports.clone() {
         let rewritten = rewrite_expr(&expr, &window_scope_ctx)?;
@@ -259,6 +278,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         enclosing_component_id: None,
                         is_let: true,
                         ambient_authored_ports: None,
+                        enums: &enums,
                     };
                     let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
                     expanded_doc.get_node_mut(root_id).unwrap().var_name = Some(env_binding.name.as_str().to_string());
@@ -290,6 +310,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         enclosing_component: None,
                         comp_ports: None,
                         declared_state_names: None,
+                        enums: &enums,
                     };
                     if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
                         global_scope.insert(
@@ -313,6 +334,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                     enclosing_component_id: None,
                     is_let: false,
                     ambient_authored_ports: None,
+                    enums: &enums,
                 };
                 let root_id = expand_element(node, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
                 expanded_doc.roots.push(root_id);
@@ -330,6 +352,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         enclosing_component_id: None,
                         is_let: true,
                         ambient_authored_ports: None,
+                        enums: &enums,
                     };
                     let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
                     expanded_doc.get_node_mut(root_id).unwrap().var_name = Some(let_binding.name.as_str().to_string());
@@ -346,6 +369,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
             }
             Item::State(_) => {}
             Item::Use(_) => {}
+            Item::Enum(_) => {}
         }
     }
 
@@ -359,6 +383,7 @@ struct InstanceContext<'a> {
     pub parent_ports: &'a [String],
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
     pub enclosing_component_id: Option<NodeId>,
+    pub enums: &'a HashMap<String, EnumDef>,
 }
 
 struct ElementContext<'a> {
@@ -370,6 +395,7 @@ struct ElementContext<'a> {
     pub enclosing_component_id: Option<NodeId>,
     pub is_let: bool,
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
+    pub enums: &'a HashMap<String, EnumDef>,
 }
 
 /// Statically selects the unique matching component overload for an invocation.
@@ -498,6 +524,7 @@ fn expand_element(
             enclosing_component: ctx.enclosing_component_id,
             comp_ports: None,
             declared_state_names: None,
+            enums: ctx.enums,
         };
         let mut rewritten_parts = Vec::new();
         for part in &key.parts {
@@ -564,6 +591,7 @@ fn expand_element(
             parent_ports: ctx.parent_ports,
             ambient_authored_ports: ctx.ambient_authored_ports,
             enclosing_component_id: ctx.enclosing_component_id,
+            enums: ctx.enums,
         };
         expand_component_instance(
             &inst_ctx,
@@ -730,6 +758,7 @@ fn expand_component_instance(
                     enclosing_component_id: None,
                     is_let: false,
                     ambient_authored_ports: None,
+                    enums: ctx.enums,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
                 Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span))
@@ -748,6 +777,7 @@ fn expand_component_instance(
                     enclosing_component: ctx.enclosing_component_id,
                     comp_ports: None,
                     declared_state_names: None,
+                    enums: ctx.enums,
                 };
                 rewrite_expr(other, &caller_scope_ctx)?
             }
@@ -1009,6 +1039,7 @@ fn expand_component_instance(
                             enclosing_component: Some(ctx.comp_node_id),
                             comp_ports: Some(&comp_ports),
                             declared_state_names: Some(&declared_state_names),
+                            enums: ctx.enums,
                         };
                         let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                         if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
@@ -1040,6 +1071,7 @@ fn expand_component_instance(
                                 enclosing_component: Some(ctx.comp_node_id),
                                 comp_ports: None,
                                 declared_state_names: None,
+                                enums: ctx.enums,
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             if let Some(LexicalBinding::Expr(existing)) = local_scope.get(env_binding.name.as_str()) {
@@ -1084,6 +1116,7 @@ fn expand_component_instance(
                         enclosing_component_id: Some(ctx.comp_node_id),
                         is_let: true,
                         ambient_authored_ports: None,
+                        enums: ctx.enums,
                     };
                     let node_id = expand_element(
                         elem,
@@ -1116,6 +1149,7 @@ fn expand_component_instance(
                                 enclosing_component_id: Some(ctx.comp_node_id),
                                 is_let: true,
                                 ambient_authored_ports: None,
+                                enums: ctx.enums,
                             };
                             let node_id = expand_element(
                                 elem,
@@ -1151,6 +1185,7 @@ fn expand_component_instance(
                                 enclosing_component: Some(ctx.comp_node_id),
                                 comp_ports: None,
                                 declared_state_names: None,
+                                enums: ctx.enums,
                             };
                             let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
                             local_scope.insert(
@@ -1178,6 +1213,7 @@ fn expand_component_instance(
                     enclosing_component_id: Some(ctx.comp_node_id),
                     is_let: false,
                     ambient_authored_ports: None,
+                    enums: ctx.enums,
                 };
                 let body_id = expand_element(
                     body_node,
@@ -1221,6 +1257,7 @@ fn expand_component_instance(
                         enclosing_component: None,
                         comp_ports: Some(&comp_ports),
                         declared_state_names: Some(&declared_state_names),
+                        enums: ctx.enums,
                     };
 
                     for ambient in &dir.ports {
@@ -1273,6 +1310,7 @@ fn expand_component_instance(
                         enclosing_component_id: ctx.enclosing_component_id,
                         is_let: false,
                         ambient_authored_ports: Some(&authored_ambient_ports),
+                        enums: ctx.enums,
                     };
                     let child_id = expand_element(
                         &wired_elem,
@@ -1306,11 +1344,31 @@ fn expand_component_instance(
         enclosing_component: ctx.enclosing_component_id,
         comp_ports: Some(&comp_ports),
         declared_state_names: Some(&declared_state_names),
+        enums: ctx.enums,
     };
 
     let mut rewritten_ports = HashMap::new();
     for (port_name, port_expr) in &comp_ports {
         rewritten_ports.insert(port_name.clone(), rewrite_expr(port_expr, &scope_ctx)?);
+    }
+
+    // Validate parameter types
+    for param in &comp_def.params {
+        if let Some(type_ref) = &param.type_annotation {
+            let expected_type = type_ref.name.as_str();
+            let name = param.name.as_str();
+            if let Some(expr) = rewritten_ports.get(name) {
+                if let Some(lit) = resolve_ident_or_member_to_literal(expr, &scope_ctx) {
+                    if !lit.matches_type_name(expected_type) {
+                        return Err(CompileError::TypeMismatch {
+                            expected: expected_type.to_string(),
+                            actual: lit.type_name().to_string(),
+                            span: expr.span(),
+                        });
+                    }
+                }
+            }
+        }
     }
 
     let mut comp_authored_ports = HashMap::new();
@@ -1351,6 +1409,7 @@ fn expand_component_instance(
         enclosing_component: Some(ctx.comp_node_id),
         comp_ports: Some(&comp_ports),
         declared_state_names: Some(&declared_state_names),
+        enums: ctx.enums,
     };
     for (alias_name, alias_binding) in &declared_aliases {
         let rewritten_alias = rewrite_expr(&alias_binding.value, &alias_scope_ctx)?;
@@ -1481,6 +1540,7 @@ fn expand_primitive_element(
                     enclosing_component_id: ctx.enclosing_component_id,
                     is_let: false,
                     ambient_authored_ports: None,
+                    enums: ctx.enums,
                 };
                 let child_id = expand_element(
                     child_elem,
@@ -1514,6 +1574,7 @@ fn expand_primitive_element(
                     enclosing_component_id: ctx.enclosing_component_id,
                     is_let: ctx.is_let,
                     ambient_authored_ports: None,
+                    enums: ctx.enums,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
                 child_ids.push(child_id);
@@ -1567,6 +1628,7 @@ fn expand_primitive_element(
             enclosing_component: ctx.enclosing_component_id,
             comp_ports: None,
             declared_state_names: None,
+            enums: ctx.enums,
         };
         if let Ok(Expr::Ident(id)) = rewrite_expr(raw_font_expr, &temp_scope_ctx) {
             if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
@@ -1587,6 +1649,7 @@ fn expand_primitive_element(
             enclosing_component: ctx.enclosing_component_id,
             comp_ports: None,
             declared_state_names: None,
+            enums: ctx.enums,
         };
         if let Ok(rewritten) = rewrite_expr(env_expr, &temp_scope_ctx) {
             if let Expr::Ident(id) = &rewritten {
@@ -1621,6 +1684,7 @@ fn expand_primitive_element(
         enclosing_component: ctx.enclosing_component_id,
         comp_ports: None,
         declared_state_names: None,
+        enums: ctx.enums,
     };
 
     let mut ports = HashMap::new();
@@ -2118,8 +2182,24 @@ fn resolve_ident_or_member_to_literal<'a>(
         Expr::Paren(inner, _) => resolve_ident_or_member_to_literal(inner, ctx),
         Expr::Ident(id) => {
             if let Some(comp_ports) = ctx.comp_ports {
-                if let Some(Expr::Literal(lit)) = comp_ports.get(id.as_str()) {
-                    return Some(lit.clone());
+                if let Some(port_expr) = comp_ports.get(id.as_str()) {
+                    match port_expr {
+                        Expr::Literal(lit) => return Some(lit.clone()),
+                        Expr::MemberAccess(m) => {
+                            if let Expr::Ident(target_id) = m.target.as_ref() {
+                                if let Some(enum_def) = ctx.enums.get(target_id.as_str()) {
+                                    if enum_def.has_variant(m.member.as_str()) {
+                                        return Some(Literal::Enum(
+                                            target_id.as_str().to_string(),
+                                            m.member.as_str().to_string(),
+                                            m.span,
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
             if let Some(LexicalBinding::Expr(e)) = ctx.lexical_scope.get(id.as_str()) {
@@ -2129,14 +2209,39 @@ fn resolve_ident_or_member_to_literal<'a>(
         }
         Expr::MemberAccess(m) => {
             if let Expr::Ident(target_id) = m.target.as_ref() {
+                if let Some(enum_def) = ctx.enums.get(target_id.as_str()) {
+                    if enum_def.has_variant(m.member.as_str()) {
+                        return Some(Literal::Enum(
+                            target_id.as_str().to_string(),
+                            m.member.as_str().to_string(),
+                            m.span,
+                        ));
+                    }
+                }
                 let is_target = target_id.as_str() == "parent"
                     || target_id.as_str() == "self"
                     || ctx.parent_node.is_some_and(|p| target_id.as_str() == p.canonical_name())
                     || target_id.as_str() == ctx.current_node.canonical_name();
                 if is_target {
                     if let Some(comp_ports) = ctx.comp_ports {
-                        if let Some(Expr::Literal(lit)) = comp_ports.get(m.member.as_str()) {
-                            return Some(lit.clone());
+                        if let Some(port_expr) = comp_ports.get(m.member.as_str()) {
+                            match port_expr {
+                                Expr::Literal(lit) => return Some(lit.clone()),
+                                Expr::MemberAccess(sub_m) => {
+                                    if let Expr::Ident(sub_target_id) = sub_m.target.as_ref() {
+                                        if let Some(enum_def) = ctx.enums.get(sub_target_id.as_str()) {
+                                            if enum_def.has_variant(sub_m.member.as_str()) {
+                                                return Some(Literal::Enum(
+                                                    sub_target_id.as_str().to_string(),
+                                                    sub_m.member.as_str().to_string(),
+                                                    sub_m.span,
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
                         }
                     }
                 }
@@ -2152,6 +2257,7 @@ fn resolve_ident_or_member_to_literal<'a>(
                         (Literal::String(s1, _), Literal::String(s2, _)) => s1 == s2,
                         (Literal::Number(n1, _), Literal::Number(n2, _)) => n1 == n2,
                         (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 == b2,
+                        (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 == e2 && v1 == v2,
                         _ => false,
                     };
                     Some(Literal::Bool(eq, bin.span))
@@ -2161,6 +2267,7 @@ fn resolve_ident_or_member_to_literal<'a>(
                         (Literal::String(s1, _), Literal::String(s2, _)) => s1 != s2,
                         (Literal::Number(n1, _), Literal::Number(n2, _)) => n1 != n2,
                         (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 != b2,
+                        (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 != e2 || v1 != v2,
                         _ => true,
                     };
                     Some(Literal::Bool(ne, bin.span))
@@ -2199,6 +2306,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
         Expr::Ident(id) => {
             if id.as_str() == "env" {
                 return Err(CompileError::BareEnvUse { span: id.span });
+            }
+            if ctx.enums.contains_key(id.as_str()) {
+                return Err(CompileError::BareEnumUse {
+                    name: id.as_str().to_string(),
+                    span: id.span,
+                });
             }
 
             // Check lexical scope first (let bindings shadow ambient parent ports)
@@ -2287,7 +2400,19 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             continue;
                         }
                     }
-                    if let Ok(val) = crate::compiler::eval::eval_expr(port_expr, &HashMap::new()) {
+                    if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, ctx) {
+                        let val = match lit {
+                            Literal::Number(n, _) => crate::compiler::value::Value::Number(n),
+                            Literal::String(s, _) => crate::compiler::value::Value::String(s),
+                            Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
+                            Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
+                            Literal::Enum(e, v, _) => crate::compiler::value::Value::Enum { enum_name: e, variant: v },
+                        };
+                        const_env.insert(crate::compiler::graph::VarId::new(ctx.current_node, port_name), val.clone());
+                        if let Some(parent) = ctx.parent_node {
+                            const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
+                        }
+                    } else if let Ok(val) = crate::compiler::eval::eval_expr(port_expr, &HashMap::new()) {
                         const_env.insert(crate::compiler::graph::VarId::new(ctx.current_node, port_name), val.clone());
                         if let Some(parent) = ctx.parent_node {
                             const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
@@ -2317,6 +2442,26 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 Expr::Ident(id) => Some(id.as_str().to_string()),
                 _ => None,
             };
+
+            // Enum variant access: EnumName.VariantName
+            if let Some(target_name) = &target_ident_name {
+                if let Some(enum_def) = ctx.enums.get(target_name) {
+                    let variant_name = m.member.as_str();
+                    if enum_def.has_variant(variant_name) {
+                        return Ok(Expr::Literal(Literal::Enum(
+                            target_name.clone(),
+                            variant_name.to_string(),
+                            m.span,
+                        )));
+                    } else {
+                        return Err(CompileError::UnknownEnumVariant {
+                            enum_name: target_name.clone(),
+                            variant: variant_name.to_string(),
+                            span: m.member.span,
+                        });
+                    }
+                }
+            }
 
             if target_ident_name.as_deref() == Some("env") {
                 let member_name = m.member.as_str();

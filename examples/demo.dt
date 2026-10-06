@@ -22,7 +22,7 @@ let demo_card_style = \CardStyle(
     \VStack(
         width: min(max(window.width - 80, 400), 720),
         gap: 20,
-        align: "stretch"
+        align: Align.Stretch
     ) {
         // Document Header
         \Text(size: 34, weight: 700, color: #0f172a) {

@@ -58,7 +58,7 @@ fn test_vstack_center_and_centered_alignment() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(x: 0, y: 0, width: 400, align: "center", gap: 10) {
+    \VStack(x: 0, y: 0, width: 400, align: Align.Center, gap: 10) {
         \Rect(width: 100, height: 40, color: #3b82f6)
         \Rect(width: 250, height: 50, color: #10b981)
     }
@@ -82,27 +82,6 @@ fn test_vstack_center_and_centered_alignment() {
     // Centered: (400 - child.width) / 2
     assert_eq!(rects[0].rect.x, 150.0); // (400 - 100) / 2
     assert_eq!(rects[1].rect.x, 75.0);  // (400 - 250) / 2
-
-    // Also test "centered" spelling
-    let input2 = r#"
-    \use "components/VStack.dt"
-
-    \VStack(x: 0, y: 0, width: 400, align: "centered") {
-        \Rect(width: 120, height: 40, color: #3b82f6)
-    }
-    "#;
-    let doc2 = parse(input2).expect("parse ok");
-    let compiled2 = CompiledDocument::compile_with_registry(
-        &doc2,
-        800.0,
-        600.0,
-        Path::new("."),
-        &directedtype::compiler::FsResolver,
-        &registry,
-    )
-    .expect("compile ok");
-    let rect2 = compiled2.layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect found");
-    assert_eq!(rect2.rect.x, 140.0); // (400 - 120) / 2
 }
 
 #[test]
@@ -110,7 +89,7 @@ fn test_vstack_right_alignment() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(x: 50, y: 0, width: 400, align: "right") {
+    \VStack(x: 50, y: 0, width: 400, align: Align.Right) {
         \Rect(width: 120, height: 40, color: #ef4444)
     }
     "#;
@@ -140,7 +119,7 @@ fn test_vstack_stretch_alignment() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(x: 0, y: 0, width: 500, align: "stretch") {
+    \VStack(x: 0, y: 0, width: 500, align: Align.Stretch) {
         \Rect(height: 50, color: #8b5cf6)
         \Rect(width: 200, height: 40, color: #ec4899)
     }
@@ -177,7 +156,7 @@ fn test_vstack_with_button_and_text_composition() {
     \use "components/Button.dt"
     \use "theme/default.dt"
 
-    \VStack(x: 20, y: 20, width: 350, align: "stretch", gap: 14) {
+    \VStack(x: 20, y: 20, width: 350, align: Align.Stretch, gap: 14) {
         \Text(size: 20, weight: 700) { Header Title }
         \Button(style: button_primary, label: "Submit Order")
     }

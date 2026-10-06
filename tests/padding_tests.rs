@@ -205,7 +205,7 @@ fn test_stretch_alignment_inside_explicit_width_padding() {
     \use "components/VStack.dt"
 
     \Padding(width: 400, padding_x: 25, padding_y: 20, x: 0, y: 0) {
-        \VStack(align: "stretch", gap: 10) {
+        \VStack(align: Align.Stretch, gap: 10) {
             \Rect(height: 40, color: #8b5cf6)
             \Rect(width: 150, height: 40, color: #ec4899)
         }

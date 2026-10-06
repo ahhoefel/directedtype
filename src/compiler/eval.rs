@@ -116,6 +116,10 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
             Literal::String(s, _) => Ok(Value::String(s.clone())),
             Literal::Bool(b, _) => Ok(Value::Bool(*b)),
             Literal::Color(c, _) => Ok(Value::Color(c.clone())),
+            Literal::Enum(e, v, _) => Ok(Value::Enum {
+                enum_name: e.clone(),
+                variant: v.clone(),
+            }),
         },
 
         Expr::Ident(id) => match id.as_str() {

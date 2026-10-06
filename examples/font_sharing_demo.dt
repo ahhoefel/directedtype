@@ -37,7 +37,7 @@ let badge_pad = 8;
     y: 40,
     gap: 24,
     width: min(max(window.width - 80, 400), 800),
-    align: "stretch"
+    align: Align.Stretch
 ) {
     // Section Header using shared heading_font
     \Text(font: heading_font, color: #0f172a) {

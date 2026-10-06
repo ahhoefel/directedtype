@@ -346,74 +346,84 @@ fn resolve_use_decl<R: FileResolver>(
 
     let is_first_visit = visited_files.insert(canonical_path.clone());
 
+    // Fetch parsed document from cache or load and parse it
+    let imported_doc = if let Some(cached) = cache.get(&canonical_path) {
+        cached.clone()
+    } else {
+        let source = resolver.read(&resolved_path).map_err(|e| CompileError::ImportError {
+            path: u.path.clone(),
+            message: e,
+            span: u.span,
+        })?;
+
+        let parsed = parse_document(&source).map_err(|e| CompileError::ImportError {
+            path: u.path.clone(),
+            message: format!("Parse error in '{}': {}", u.path, e),
+            span: u.span,
+        })?;
+
+        cache.insert(canonical_path.clone(), parsed.clone());
+        parsed
+    };
+
+    let imported_base_dir = resolved_path.parent().unwrap_or(Path::new("."));
+
+    // Transitive imports first
+    for item in &imported_doc.items {
+        if let Item::Use(nested_u) = item {
+            resolve_use_decl(
+                nested_u,
+                imported_base_dir,
+                resolver,
+                registry,
+                imported_items,
+                active_stack,
+                cache,
+                module_exports,
+                visited_files,
+            )?;
+        }
+    }
+
+    // Collect components from the imported file
     let imported_components = if let Some(exported) = module_exports.get(&canonical_path) {
         exported.clone()
     } else {
-        // Fetch parsed document from cache or load and parse it
-        let imported_doc = if let Some(cached) = cache.get(&canonical_path) {
-            cached.clone()
-        } else {
-            let source = resolver.read(&resolved_path).map_err(|e| CompileError::ImportError {
-                path: u.path.clone(),
-                message: e,
-                span: u.span,
-            })?;
-
-            let parsed = parse_document(&source).map_err(|e| CompileError::ImportError {
-                path: u.path.clone(),
-                message: format!("Parse error in '{}': {}", u.path, e),
-                span: u.span,
-            })?;
-
-            cache.insert(canonical_path.clone(), parsed.clone());
-            parsed
-        };
-
-        let imported_base_dir = resolved_path.parent().unwrap_or(Path::new("."));
-
-        // Transitive imports first
-        for item in &imported_doc.items {
-            if let Item::Use(nested_u) = item {
-                resolve_use_decl(
-                    nested_u,
-                    imported_base_dir,
-                    resolver,
-                    registry,
-                    imported_items,
-                    active_stack,
-                    cache,
-                    module_exports,
-                    visited_files,
-                )?;
-            }
-        }
-
-        // Collect components from the imported file
         let mut components: HashMap<String, Vec<ComponentDef>> = HashMap::new();
         for item in &imported_doc.items {
             if let Item::Component(comp) = item {
                 register_component_overload(&mut components, comp.clone())?;
             }
         }
-
-        // Collect top-level let and env bindings if this is an unaliased import and first visit
-        if is_first_visit && u.alias.is_none() {
-            for item in &imported_doc.items {
-                match item {
-                    Item::Let(l) => {
-                        imported_items.push(Item::Let(l.clone()));
-                    }
-                    Item::Env(e) => {
-                        imported_items.push(Item::Env(e.clone()));
-                    }
-                    _ => {}
-                }
-            }
-        }
-
         module_exports.insert(canonical_path.clone(), components.clone());
         components
     };
+
+    // Collect top-level let, env, and enum bindings
+    if let Some(alias) = &u.alias {
+        for item in &imported_doc.items {
+            if let Item::Enum(e) = item {
+                let mut aliased_enum = e.clone();
+                aliased_enum.name = alias.clone();
+                imported_items.push(Item::Enum(aliased_enum));
+            }
+        }
+    } else if is_first_visit {
+        for item in &imported_doc.items {
+            match item {
+                Item::Let(l) => {
+                    imported_items.push(Item::Let(l.clone()));
+                }
+                Item::Env(e) => {
+                    imported_items.push(Item::Env(e.clone()));
+                }
+                Item::Enum(e) => {
+                    imported_items.push(Item::Enum(e.clone()));
+                }
+                _ => {}
+            }
+        }
+    }
 
     // Register into caller's registry
     if let Some(alias) = &u.alias {
@@ -423,39 +433,41 @@ fn resolve_use_decl<R: FileResolver>(
             .and_then(|s| s.to_str())
             .unwrap_or("");
 
-        let (original_name, target_comps) = if let Some(comps) = imported_components.get(file_stem) {
-            (file_stem.to_string(), comps.clone())
-        } else if imported_components.len() == 1 {
-            let (name, comps) = imported_components.iter().next().unwrap();
-            (name.clone(), comps.clone())
-        } else if let Some(comps) = imported_components.get(alias_name) {
-            (alias_name.to_string(), comps.clone())
-        } else {
-            return Err(CompileError::ImportError {
-                path: u.path.clone(),
-                message: format!(
-                    "Cannot alias import '{}' as '{}': file defines {} components ({:?}) and none matches file stem '{}'",
-                    u.path,
-                    alias_name,
-                    imported_components.len(),
-                    imported_components.keys().collect::<Vec<_>>(),
-                    file_stem
-                ),
-                span: alias.span,
-            });
-        };
+        if !imported_components.is_empty() {
+            let (original_name, target_comps) = if let Some(comps) = imported_components.get(file_stem) {
+                (file_stem.to_string(), comps.clone())
+            } else if imported_components.len() == 1 {
+                let (name, comps) = imported_components.iter().next().unwrap();
+                (name.clone(), comps.clone())
+            } else if let Some(comps) = imported_components.get(alias_name) {
+                (alias_name.to_string(), comps.clone())
+            } else {
+                return Err(CompileError::ImportError {
+                    path: u.path.clone(),
+                    message: format!(
+                        "Cannot alias import '{}' as '{}': file defines {} components ({:?}) and none matches file stem '{}'",
+                        u.path,
+                        alias_name,
+                        imported_components.len(),
+                        imported_components.keys().collect::<Vec<_>>(),
+                        file_stem
+                    ),
+                    span: alias.span,
+                });
+            };
 
-        for target_comp in target_comps {
-            let mut aliased = target_comp.clone();
-            aliased.name = Ident::new(alias_name, alias.span);
-            register_component_overload(registry, aliased)?;
-        }
+            for target_comp in target_comps {
+                let mut aliased = target_comp.clone();
+                aliased.name = Ident::new(alias_name, alias.span);
+                register_component_overload(registry, aliased)?;
+            }
 
-        // Also bring in transitive dependencies needed by target_comp
-        for (name, comps) in &imported_components {
-            if name != &original_name {
-                for comp in comps {
-                    register_component_overload(registry, comp.clone())?;
+            // Also bring in transitive dependencies needed by target_comp
+            for (name, comps) in &imported_components {
+                if name != &original_name {
+                    for comp in comps {
+                        register_component_overload(registry, comp.clone())?;
+                    }
                 }
             }
         }

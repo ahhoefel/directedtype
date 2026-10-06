@@ -1,5 +1,6 @@
 // DirectedType Standard Component Library: HStack
 // Horizontally stacked flow container with cross-axis alignment and child spacing (gap).
+\use "components/Align.dt"
 
 // 1. Explicit / Fixed Width HStack: specifies width directly
 \Component HStack(
@@ -7,10 +8,10 @@
     x: Number,
     y: Number,
     gap: Number: 0,
-    align: String: "top"
+    align: Align: Align.Top
 ) {
-    let is_center = align == "center" || align == "centered";
-    let is_bottom = align == "bottom";
+    let is_center = align == Align.Center;
+    let is_bottom = align == Align.Bottom;
 
     alias max_child_height = max(children.height);
     alias right = x + width;
@@ -32,10 +33,10 @@
     x: Number,
     y: Number,
     gap: Number: 0,
-    align: String: "top"
+    align: Align: Align.Top
 ) {
-    let is_center = align == "center" || align == "centered";
-    let is_bottom = align == "bottom";
+    let is_center = align == Align.Center;
+    let is_bottom = align == Align.Bottom;
 
     alias max_child_height = max(children.height);
     alias right = max(children.right) > 0 ? max(children.right) : x;
