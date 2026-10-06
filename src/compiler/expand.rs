@@ -1,6 +1,7 @@
 use crate::ast::*;
 use crate::compiler::error::{CompileError, NoMatchingOverloadDetails};
 use crate::compiler::expanded::{ExpandedDocument, ExpandedNode, NodeId};
+use crate::compiler::text::{CursorKind, SpanStyle, TextSpan};
 use crate::span::Span;
 use std::collections::{HashMap, HashSet};
 
@@ -1527,32 +1528,122 @@ fn expand_primitive_element(
     // 1. Expand nested child nodes in content slot
     let mut child_ids = Vec::new();
     let mut last_child_id = None;
+    let mut full_text = String::new();
+    let mut text_spans = Vec::new();
 
     if let Some(slot) = &elem.content {
         for item in &slot.items {
-            if let ContentItem::Node(child_elem) = item {
-                let child_ctx = ElementContext {
-                    parent_id: Some(node_id),
-                    prev_sibling_id: last_child_id,
-                    parent_ports: ctx.parent_ports,
-                    lexical_scope: ctx.lexical_scope,
-                    env_scope: ctx.env_scope,
-                    enclosing_component_id: ctx.enclosing_component_id,
-                    is_let: false,
-                    ambient_authored_ports: None,
-                    enums: ctx.enums,
-                };
-                let child_id = expand_element(
-                    child_elem,
-                    &child_ctx,
-                    registry,
-                    doc,
-                    node_fonts,
-                )?;
-                child_ids.push(child_id);
-                last_child_id = Some(child_id);
+            match item {
+                ContentItem::Text(chunk) => {
+                    if elem.name.as_str() == "Text" {
+                        let start = full_text.len();
+                        full_text.push_str(&chunk.text);
+                        let end = full_text.len();
+                        text_spans.push(TextSpan::new(start..end));
+                    }
+                }
+                ContentItem::Node(child_elem) => {
+                    let child_ctx = ElementContext {
+                        parent_id: Some(node_id),
+                        prev_sibling_id: last_child_id,
+                        parent_ports: ctx.parent_ports,
+                        lexical_scope: ctx.lexical_scope,
+                        env_scope: ctx.env_scope,
+                        enclosing_component_id: ctx.enclosing_component_id,
+                        is_let: false,
+                        ambient_authored_ports: None,
+                        enums: ctx.enums,
+                    };
+                    let child_id = expand_element(
+                        child_elem,
+                        &child_ctx,
+                        registry,
+                        doc,
+                        node_fonts,
+                    )?;
+                    child_ids.push(child_id);
+                    last_child_id = Some(child_id);
+
+                    if elem.name.as_str() == "Text" {
+                        // Extract text from the expanded child node
+                        let child_text = doc.nodes[child_id.0]
+                            .text_content
+                            .clone()
+                            .or_else(|| {
+                                if let Some(c_slot) = &child_elem.content {
+                                    let mut parts = Vec::new();
+                                    for it in &c_slot.items {
+                                        if let ContentItem::Text(t) = it {
+                                            parts.push(t.text.as_str());
+                                        }
+                                    }
+                                    if !parts.is_empty() {
+                                        return Some(parts.join(" "));
+                                    }
+                                }
+                                None
+                            })
+                            .unwrap_or_default();
+
+                        let start = full_text.len();
+                        full_text.push_str(&child_text);
+                        let end = full_text.len();
+
+                        let is_link = child_elem.name.as_str() == "Link"
+                            || child_elem.ports.iter().any(|p| p.name.as_str() == "url");
+
+                        let mut style = SpanStyle::default();
+                        if is_link {
+                            let mut url_val = None;
+                            let mut color_val = Some("#1a73e8".to_string());
+                            let mut underline_val = true;
+
+                            for p in &child_elem.ports {
+                                match p.name.as_str() {
+                                    "url" => {
+                                        if let Expr::Literal(Literal::String(s, _)) = &p.expr {
+                                            url_val = Some(s.clone());
+                                        }
+                                    }
+                                    "color" => {
+                                        if let Expr::Literal(Literal::Color(c, _))
+                                        | Expr::Literal(Literal::String(c, _)) = &p.expr
+                                        {
+                                            color_val = Some(c.clone());
+                                        }
+                                    }
+                                    "underline" => {
+                                        if let Expr::Literal(Literal::Bool(b, _)) = &p.expr {
+                                            underline_val = *b;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+
+                            style.url = url_val;
+                            style.color = color_val;
+                            style.underline = underline_val;
+                            style.cursor = Some(CursorKind::Pointer);
+                        }
+
+                        text_spans.push(TextSpan {
+                            range: start..end,
+                            node_id: Some(child_id),
+                            style,
+                        });
+                    }
+                }
+                ContentItem::Children(_) => {}
             }
         }
+    }
+
+    if elem.name.as_str() == "Text" && !full_text.is_empty() {
+        doc.nodes[node_id.0].text_content = Some(full_text);
+        doc.nodes[node_id.0].text_spans = text_spans;
+    } else if let Some(tc) = &doc.nodes[node_id.0].text_content {
+        doc.nodes[node_id.0].text_spans = vec![TextSpan::new(0..tc.len())];
     }
 
     // 1b. Expand any inline node element expressions in ports

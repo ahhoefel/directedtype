@@ -8,7 +8,7 @@ use vello::Scene;
 use crate::compiler::expanded::NodeId;
 use crate::compiler::layout::ResolvedLayout;
 use crate::compiler::value::Value;
-use crate::render::color::parse_color;
+use crate::render::color::{color_to_rgba8, parse_color};
 
 /// Options for building a Vello scene from a ResolvedLayout.
 #[derive(Debug, Clone)]
@@ -55,10 +55,11 @@ fn get_clip_chain(
 pub fn build_scene(
     layout: &ResolvedLayout,
     font_cx: &mut FontContext,
-    layout_cx: &mut LayoutContext<()>,
+    _layout_cx: &mut LayoutContext<()>,
     options: &SceneOptions,
 ) -> Scene {
     let mut scene = Scene::new();
+    let mut text_layout_cx = LayoutContext::<[u8; 4]>::new();
 
     // 1. Draw canvas background if requested
     if let Some(bg) = options.background {
@@ -83,6 +84,13 @@ pub fn build_scene(
     for node in layout.render_order() {
         if !node.is_paint_primitive() {
             continue;
+        }
+
+        // Inline children of a Text node are rendered as styled spans by the parent Text node
+        if let Some(parent_id) = node.parent {
+            if layout.get_node(parent_id).map(|p| p.name.as_str()) == Some("Text") {
+                continue;
+            }
         }
 
         let target_chain = get_clip_chain(node.clip, layout);
@@ -280,13 +288,25 @@ pub fn build_scene(
                     })
                     .unwrap_or(Color::BLACK);
 
-                let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
+                let mut builder = text_layout_cx.ranged_builder(font_cx, text, 1.0, true);
                 builder.push_default(StyleProperty::FontSize(font_size));
+                builder.push_default(StyleProperty::Brush(color_to_rgba8(&text_color)));
                 if (font_weight - 400.0).abs() > 1.0 {
                     builder.push_default(StyleProperty::FontWeight(FontWeight::new(font_weight)));
                 }
                 if let Some(family) = font_family {
                     builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
+                }
+
+                // Push span styles (colors & underlines) to range builder
+                for span in &node.text_spans {
+                    if let Some(c_str) = &span.style.color {
+                        let c = parse_color(c_str);
+                        builder.push(StyleProperty::Brush(color_to_rgba8(&c)), span.range.clone());
+                    }
+                    if span.style.underline {
+                        builder.push(StyleProperty::Underline(true), span.range.clone());
+                    }
                 }
 
                 let mut layout = builder.build(text);
@@ -314,6 +334,9 @@ pub fn build_scene(
                         if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
                             let run = glyph_run.run();
                             let font = run.font();
+                            let brush_u8 = glyph_run.style().brush;
+                            let run_color = Color::from_rgba8(brush_u8[0], brush_u8[1], brush_u8[2], brush_u8[3]);
+
                             let glyphs = glyph_run.positioned_glyphs().map(|g| vello::Glyph {
                                 id: g.id,
                                 x: g.x,
@@ -323,8 +346,41 @@ pub fn build_scene(
                                 .draw_glyphs(font)
                                 .font_size(run.font_size())
                                 .transform(Affine::translate((node.rect.x, node.rect.y)))
-                                .brush(Brush::Solid(text_color))
+                                .brush(Brush::Solid(run_color))
                                 .draw(Fill::NonZero, glyphs);
+
+                            // Draw underline if requested by span/style
+                            if glyph_run.style().underline.is_some() {
+                                let mut min_gx = f32::MAX;
+                                let mut max_gx = f32::MIN;
+                                let mut gy = 0.0;
+                                for g in glyph_run.positioned_glyphs() {
+                                    if g.x < min_gx {
+                                        min_gx = g.x;
+                                    }
+                                    let end_x = g.x + g.advance;
+                                    if end_x > max_gx {
+                                        max_gx = end_x;
+                                    }
+                                    gy = g.y;
+                                }
+
+                                if min_gx < max_gx {
+                                    let underline_rect = vello::kurbo::Rect::new(
+                                        node.rect.x + min_gx as f64,
+                                        node.rect.y + gy as f64 + 2.0,
+                                        node.rect.x + max_gx as f64,
+                                        node.rect.y + gy as f64 + 3.2,
+                                    );
+                                    scene.fill(
+                                        Fill::NonZero,
+                                        Affine::IDENTITY,
+                                        Brush::Solid(run_color),
+                                        None,
+                                        &underline_rect,
+                                    );
+                                }
+                            }
                         }
                     }
                 }

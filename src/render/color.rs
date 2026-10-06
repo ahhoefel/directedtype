@@ -61,6 +61,15 @@ pub fn parse_color(s: &str) -> Color {
     }
 }
 
+/// Converts a `vello::peniko::Color` into `[u8; 4]` RGBA components.
+pub fn color_to_rgba8(c: &Color) -> [u8; 4] {
+    let r = (c.components[0] * 255.0).round().clamp(0.0, 255.0) as u8;
+    let g = (c.components[1] * 255.0).round().clamp(0.0, 255.0) as u8;
+    let b = (c.components[2] * 255.0).round().clamp(0.0, 255.0) as u8;
+    let a = (c.components[3] * 255.0).round().clamp(0.0, 255.0) as u8;
+    [r, g, b, a]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

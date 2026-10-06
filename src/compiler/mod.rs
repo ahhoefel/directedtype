@@ -27,6 +27,7 @@ pub use module::{
     FileResolver, FsResolver, VirtualResolver,
 };
 pub use topo::{sort_graph, TopologicalSchedule};
+pub use text::{CursorKind, FontMetrics, SpanStyle, TextSpan};
 pub use value::Value;
 
 use crate::ast::Document;

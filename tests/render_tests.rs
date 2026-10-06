@@ -497,3 +497,28 @@ fn test_render_demo_example() {
     save_golden_or_preview(&img, "demo.png");
 }
 
+#[test]
+fn test_render_link_demo_example() {
+    let source = std::fs::read_to_string("examples/link_demo.dt").expect("read link_demo.dt");
+    let doc = directedtype::parse(&source).expect("parse link_demo.dt");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile link_demo.dt ok");
+
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let options = SceneOptions::default();
+    let img = renderer
+        .render_layout(&compiled.layout, 800, 600, &options)
+        .expect("render layout ok");
+
+    assert_eq!(img.width(), 800);
+    assert_eq!(img.height(), 600);
+}
+

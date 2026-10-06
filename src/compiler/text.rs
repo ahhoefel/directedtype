@@ -139,3 +139,59 @@ pub fn measure_font_metrics(
         })
     })
 }
+
+use crate::compiler::expanded::NodeId;
+use std::ops::Range;
+
+/// A styled range of text within a parent text element.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextSpan {
+    /// Byte range within the parent node's concatenated `text_content`.
+    pub range: Range<usize>,
+    /// Associated inline component (e.g. NodeId of \Link), if this span corresponds to a node.
+    pub node_id: Option<NodeId>,
+    /// Typographic style overrides for this range.
+    pub style: SpanStyle,
+}
+
+impl TextSpan {
+    pub fn new(range: Range<usize>) -> Self {
+        Self {
+            range,
+            node_id: None,
+            style: SpanStyle::default(),
+        }
+    }
+
+    pub fn with_node(mut self, node_id: NodeId) -> Self {
+        self.node_id = Some(node_id);
+        self
+    }
+
+    pub fn with_style(mut self, style: SpanStyle) -> Self {
+        self.style = style;
+        self
+    }
+}
+
+/// Typographic style overrides for a `TextSpan`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SpanStyle {
+    pub color: Option<String>,
+    pub font_size: Option<f64>,
+    pub font_weight: Option<f64>,
+    pub font_family: Option<String>,
+    pub underline: bool,
+    pub url: Option<String>,
+    pub cursor: Option<CursorKind>,
+}
+
+/// Mouse cursor representation for interactive inline elements.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum CursorKind {
+    #[default]
+    Default,
+    Pointer,
+    Text,
+}
+

@@ -2,6 +2,7 @@ use crate::ast::{ComponentKey, Expr, Literal};
 use crate::compiler::eval::eval_expr;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::graph::VarId;
+pub use crate::compiler::text::{CursorKind, SpanStyle, TextSpan};
 use crate::compiler::value::Value;
 use crate::dom::NodeHandle;
 use crate::interaction::{HitTestResult, Point};
@@ -55,6 +56,34 @@ impl Rect {
             && py >= self.y
             && py <= self.y + self.height
     }
+
+    /// Computes the minimal bounding box enclosing all given rectangles.
+    pub fn bounding_union(rects: &[Rect]) -> Option<Rect> {
+        let first = rects.first()?;
+        let mut min_x = first.x;
+        let mut min_y = first.y;
+        let mut max_x = first.x + first.width;
+        let mut max_y = first.y + first.height;
+
+        for r in &rects[1..] {
+            if r.x < min_x {
+                min_x = r.x;
+            }
+            if r.y < min_y {
+                min_y = r.y;
+            }
+            let right = r.x + r.width;
+            let bottom = r.y + r.height;
+            if right > max_x {
+                max_x = right;
+            }
+            if bottom > max_y {
+                max_y = bottom;
+            }
+        }
+
+        Some(Rect::new(min_x, min_y, max_x - min_x, max_y - min_y))
+    }
 }
 
 /// Tests whether a point is inside a rectangle with an optional corner radius.
@@ -103,6 +132,8 @@ pub struct ResolvedNode {
     pub z: f64,
     pub clip: Option<NodeId>,
     pub text_content: Option<String>,
+    pub text_spans: Vec<TextSpan>,
+    pub fragments: Vec<Rect>,
     pub properties: HashMap<String, Value>,
     pub state_vars: HashMap<String, Option<String>>,
     pub event_handlers: HashMap<String, crate::component::EventHandlerBinding>,
@@ -120,6 +151,11 @@ impl ResolvedNode {
             || self.text_content.is_some()
             || self.properties.contains_key("text")
             || self.properties.contains_key("content")
+    }
+
+    /// Returns the text span associated with a child node, if any.
+    pub fn span_for_node(&self, child_id: NodeId) -> Option<&TextSpan> {
+        self.text_spans.iter().find(|s| s.node_id == Some(child_id))
     }
 }
 
@@ -573,6 +609,8 @@ pub fn resolve_layout(
             z,
             clip,
             text_content: node.text_content.clone(),
+            text_spans: node.text_spans.clone(),
+            fragments: Vec::new(),
             properties,
             state_vars: node.state_vars.clone(),
             event_handlers: node.event_handlers.clone(),

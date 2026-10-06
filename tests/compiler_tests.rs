@@ -2892,6 +2892,107 @@ fn test_overload_card_in_hstack_no_cycle() {
     assert_eq!(hbox_node.rect.width, 360.0);
 }
 
+#[test]
+fn test_text_with_inline_link_spans() {
+    let input = r#"
+    \Text(width: 400) {
+        Visit \Link(url: "https://www.google.com"){Google} today
+    }
+    "#;
+    let doc = parse(input).expect("Failed to parse Text with Link");
+    let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate layout");
+    assert_eq!(layout.roots.len(), 1);
+
+    let text_node = &layout.nodes[layout.roots[0].0];
+    assert_eq!(text_node.name, "Text");
+    assert_eq!(text_node.text_content.as_deref(), Some("Visit Google today"));
+
+    // Verify text spans
+    assert_eq!(text_node.text_spans.len(), 3);
+
+    // Span 0: "Visit "
+    assert_eq!(text_node.text_spans[0].range, 0..6);
+    assert_eq!(text_node.text_spans[0].node_id, None);
+    assert_eq!(text_node.text_spans[0].style.url, None);
+
+    // Span 1: "Google" (associated with Link node)
+    assert_eq!(text_node.text_spans[1].range, 6..12);
+    let link_node_id = text_node.text_spans[1].node_id.expect("Expected Link node ID on span");
+    assert_eq!(text_node.text_spans[1].style.url.as_deref(), Some("https://www.google.com"));
+    assert_eq!(text_node.text_spans[1].style.color.as_deref(), Some("#1a73e8"));
+    assert!(text_node.text_spans[1].style.underline);
+    assert_eq!(text_node.text_spans[1].style.cursor, Some(directedtype::compiler::CursorKind::Pointer));
+
+    // Span 2: " today"
+    assert_eq!(text_node.text_spans[2].range, 12..18);
+    assert_eq!(text_node.text_spans[2].node_id, None);
+
+    // Verify Link child node in hierarchy
+    assert!(text_node.children.contains(&link_node_id));
+    let link_node = &layout.nodes[link_node_id.0];
+    assert_eq!(link_node.name, "Link");
+    assert_eq!(link_node.text_content.as_deref(), Some("Google"));
+
+    // Verify span lookup helper
+    assert_eq!(text_node.span_for_node(link_node_id), Some(&text_node.text_spans[1]));
+}
+
+#[test]
+fn test_text_with_custom_styled_link_span() {
+    let input = r#"
+    \Text {
+        Check \Link(url: "https://github.com", color: #2563eb, underline: false){GitHub}
+    }
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate");
+
+    let text_node = &layout.nodes[layout.roots[0].0];
+    assert_eq!(text_node.text_content.as_deref(), Some("Check GitHub"));
+    assert_eq!(text_node.text_spans.len(), 2);
+
+    let link_span = &text_node.text_spans[1];
+    assert_eq!(link_span.range, 6..12);
+    assert_eq!(link_span.style.url.as_deref(), Some("https://github.com"));
+    assert_eq!(link_span.style.color.as_deref(), Some("#2563eb"));
+    assert!(!link_span.style.underline);
+    assert_eq!(link_span.style.cursor, Some(directedtype::compiler::CursorKind::Pointer));
+}
+
+#[test]
+fn test_plain_text_has_default_span() {
+    let input = r#"\Text { Plain text here }"#;
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate");
+
+    let text_node = &layout.nodes[layout.roots[0].0];
+    assert_eq!(text_node.text_content.as_deref(), Some("Plain text here"));
+    assert_eq!(text_node.text_spans.len(), 1);
+    assert_eq!(text_node.text_spans[0].range, 0..15);
+    assert_eq!(text_node.text_spans[0].node_id, None);
+    assert_eq!(text_node.text_spans[0].style, directedtype::compiler::SpanStyle::default());
+}
+
+#[test]
+fn test_rect_bounding_union() {
+    use directedtype::compiler::Rect;
+
+    assert_eq!(Rect::bounding_union(&[]), None);
+
+    let r1 = Rect::new(10.0, 5.0, 100.0, 20.0);
+    assert_eq!(Rect::bounding_union(&[r1]), Some(r1));
+
+    let r2 = Rect::new(0.0, 30.0, 80.0, 25.0);
+    // Combined: min_x = 0, min_y = 5, max_x = 110, max_y = 55
+    // width = 110, height = 50
+    let union = Rect::bounding_union(&[r1, r2]).expect("Expected union");
+    assert_eq!(union.x, 0.0);
+    assert_eq!(union.y, 5.0);
+    assert_eq!(union.width, 110.0);
+    assert_eq!(union.height, 50.0);
+}
+
+
 
 
 
