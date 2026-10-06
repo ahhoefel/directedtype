@@ -248,3 +248,35 @@ fn test_hstack_default_zero_gap() {
     assert_eq!(rects[0].rect.x, 10.0);
     assert_eq!(rects[1].rect.x, 50.0);
 }
+
+#[test]
+fn test_hstack_stretch_alignment() {
+    let input = r#"
+    \use "components/HStack.dt"
+
+    \HStack(height: 120, x: 10, y: 20, gap: 16, align: Align.Stretch) {
+        \Rect(width: 100, color: #3b82f6)
+        \Rect(width: 150, color: #10b981)
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let rects: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+
+    // Both rects stretched to height: 120
+    assert_eq!(rects[0].rect.height, 120.0);
+    assert_eq!(rects[1].rect.height, 120.0);
+}
+

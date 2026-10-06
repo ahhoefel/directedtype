@@ -15,10 +15,15 @@
     }
 }
 
+\Enum Theme {
+    Dark,
+    Light
+}
+
 // 1. Translator / Provider: Takes parameter and exposes as ambient environment
-\Component ThemeProvider(theme: String: "dark") {
-    env text_color = (self.theme == "dark") ? #f8fafc : #0f172a
-    env card_bg = (self.theme == "dark") ? #1e293b : #e2e8f0
+\Component ThemeProvider(theme: Theme: Theme.Dark) {
+    env text_color = (self.theme == Theme.Dark) ? #f8fafc : #0f172a
+    env card_bg = (self.theme == Theme.Dark) ? #1e293b : #e2e8f0
     env accent_color = #3b82f6
     \Children {
         x: parent.left,
@@ -140,7 +145,7 @@
     }
 
     // Outer Dark Theme Provider
-    \ThemeProvider(theme: "dark") {
+    \ThemeProvider(theme: Theme.Dark) {
         \AmbientCard()
 
         // Nested subtree with Interceptor (Pink Accent)

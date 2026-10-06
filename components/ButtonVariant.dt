@@ -1,0 +1,10 @@
+// DirectedType Standard Component Library: ButtonVariant
+// Standard visual variant enum for Button components.
+\Enum ButtonVariant {
+    Primary,
+    Secondary,
+    Outline,
+    Danger,
+    Success,
+    Ghost,
+}

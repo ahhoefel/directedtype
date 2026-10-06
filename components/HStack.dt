@@ -2,11 +2,65 @@
 // Horizontally stacked flow container with cross-axis alignment and child spacing (gap).
 \use "components/Align.dt"
 
-// 1. Explicit / Fixed Width HStack: specifies width directly
+// 1. Explicit Fixed Width & Fixed Height HStack: supports cross-axis Align.Stretch
 \Component HStack(
     width: Number,
-    x: Number,
-    y: Number,
+    height: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
+    gap: Number: 0,
+    align: Align: Align.Top
+) {
+    let is_stretch = align == Align.Stretch;
+    let is_center = align == Align.Center;
+    let is_bottom = align == Align.Bottom;
+
+    alias right = x + width;
+    alias bottom = y + height;
+
+    \Children {
+        x: prev ? prev.right + gap : x,
+        y: is_center ? (y + (height - child.height) / 2) : (
+            is_bottom ? (y + height - child.height) : (
+                y
+            )
+        ),
+        height: is_stretch ? height : auto
+    }
+}
+
+// 2. Intrinsic Width & Fixed Height HStack: content-wrapping width with cross-axis Align.Stretch
+\Component HStack(
+    height: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
+    gap: Number: 0,
+    align: Align: Align.Top
+) {
+    let is_stretch = align == Align.Stretch;
+    let is_center = align == Align.Center;
+    let is_bottom = align == Align.Bottom;
+
+    alias right = max(children.right) > 0 ? max(children.right) : x;
+    alias width = right - x;
+    alias bottom = y + height;
+
+    \Children {
+        x: prev ? prev.right + gap : x,
+        y: is_center ? (y + (height - child.height) / 2) : (
+            is_bottom ? (y + height - child.height) : (
+                y
+            )
+        ),
+        height: is_stretch ? height : auto
+    }
+}
+
+// 3. Explicit / Fixed Width HStack: specifies width directly, intrinsic height
+\Component HStack(
+    width: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
     gap: Number: 0,
     align: Align: Align.Top
 ) {
@@ -28,10 +82,10 @@
     }
 }
 
-// 2. Intrinsic / Content-Wrapping HStack: automatically sizes width to wrap children
+// 4. Intrinsic / Content-Wrapping HStack: automatically sizes width and height to wrap children
 \Component HStack(
-    x: Number,
-    y: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
     gap: Number: 0,
     align: Align: Align.Top
 ) {

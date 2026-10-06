@@ -1,15 +1,16 @@
 // DirectedType Standard Component Library: Button
-// High-performance declarative button styled by a ButtonStyle bundle.
+// High-performance declarative button styled by a ButtonStyle bundle or a ButtonVariant enum.
 \use "components/Center.dt"
 \use "components/ButtonStyle.dt"
+\use "components/ButtonVariant.dt"
 
-// 1. Explicit / Fixed Width Button: zero text_width measurement needed
+// 1. Explicit / Fixed Width Button by Style
 \Component Button(
     style: ButtonStyle,
     width: Number,
     label: String,
-    x: Number,
-    y: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
     disabled: Boolean: false
 ) {
     let is_disabled = disabled;
@@ -43,12 +44,12 @@
     }
 }
 
-// 2. Intrinsic Text-Sized Button: automatically sizes width based on label measurement
+// 2. Intrinsic Text-Sized Button by Style
 \Component Button(
     style: ButtonStyle,
     label: String,
-    x: Number,
-    y: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
     disabled: Boolean: false
 ) {
     let is_disabled = disabled;
@@ -79,6 +80,151 @@
             \Text(
                 size: style.size,
                 weight: style.weight,
+                color: text_color,
+                text: label
+            )
+        }
+    }
+}
+
+// 3. Explicit / Fixed Width Button by Variant
+\Component Button(
+    variant: ButtonVariant: ButtonVariant.Primary,
+    width: Number,
+    label: String,
+    x: Number: parent.left,
+    y: Number: parent.top,
+    disabled: Boolean: false
+) {
+    let is_primary = variant == ButtonVariant.Primary;
+    let is_secondary = variant == ButtonVariant.Secondary;
+    let is_outline = variant == ButtonVariant.Outline;
+    let is_danger = variant == ButtonVariant.Danger;
+    let is_success = variant == ButtonVariant.Success;
+    let is_ghost = variant == ButtonVariant.Ghost;
+
+    let default_bg = is_primary ? #2563eb : (
+        is_secondary ? #334155 : (
+            is_outline ? #0f172a : (
+                is_danger ? #dc2626 : (
+                    is_success ? #16a34a : #00000000
+                )
+            )
+        )
+    );
+
+    let default_text = (is_outline ? #38bdf8 : (is_ghost ? #94a3b8 : #ffffff));
+
+    let default_border = is_primary ? #3b82f6 : (
+        is_secondary ? #475569 : (
+            is_outline ? #38bdf8 : (
+                is_danger ? #ef4444 : (
+                    is_success ? #22c55e : #00000000
+                )
+            )
+        )
+    );
+
+    let default_border_w = is_outline ? 1.5 : (is_ghost ? 0 : 1);
+
+    let is_disabled = disabled;
+    let bg_color = is_disabled ? #33415580 : default_bg;
+    let text_color = is_disabled ? #64748b : default_text;
+    let border_color = is_disabled ? #33415540 : default_border;
+
+    alias right = x + width;
+    alias bottom = y + 38;
+    alias height = 38;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: 38,
+        color: bg_color,
+        radius: 8,
+        border_color: border_color,
+        border_width: default_border_w,
+        on_click: self.click
+    ) {
+        \Center {
+            \Text(
+                size: 14,
+                weight: 600,
+                color: text_color,
+                text: label
+            )
+        }
+    }
+}
+
+// 4. Intrinsic Text-Sized Button by Variant
+\Component Button(
+    variant: ButtonVariant: ButtonVariant.Primary,
+    label: String,
+    x: Number: parent.left,
+    y: Number: parent.top,
+    disabled: Boolean: false
+) {
+    let is_primary = variant == ButtonVariant.Primary;
+    let is_secondary = variant == ButtonVariant.Secondary;
+    let is_outline = variant == ButtonVariant.Outline;
+    let is_danger = variant == ButtonVariant.Danger;
+    let is_success = variant == ButtonVariant.Success;
+    let is_ghost = variant == ButtonVariant.Ghost;
+
+    let default_bg = is_primary ? #2563eb : (
+        is_secondary ? #334155 : (
+            is_outline ? #0f172a : (
+                is_danger ? #dc2626 : (
+                    is_success ? #16a34a : #00000000
+                )
+            )
+        )
+    );
+
+    let default_text = (is_outline ? #38bdf8 : (is_ghost ? #94a3b8 : #ffffff));
+
+    let default_border = is_primary ? #3b82f6 : (
+        is_secondary ? #475569 : (
+            is_outline ? #38bdf8 : (
+                is_danger ? #ef4444 : (
+                    is_success ? #22c55e : #00000000
+                )
+            )
+        )
+    );
+
+    let default_border_w = is_outline ? 1.5 : (is_ghost ? 0 : 1);
+
+    let is_disabled = disabled;
+    let bg_color = is_disabled ? #33415580 : default_bg;
+    let text_color = is_disabled ? #64748b : default_text;
+    let border_color = is_disabled ? #33415540 : default_border;
+
+    let measured_label_w = text_width(label, 14, 600);
+    let resolved_width = max(64, measured_label_w + 32);
+
+    alias right = x + resolved_width;
+    alias width = resolved_width;
+    alias bottom = y + 38;
+    alias height = 38;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: 38,
+        color: bg_color,
+        radius: 8,
+        border_color: border_color,
+        border_width: default_border_w,
+        on_click: self.click
+    ) {
+        \Center {
+            \Text(
+                size: 14,
+                weight: 600,
                 color: text_color,
                 text: label
             )

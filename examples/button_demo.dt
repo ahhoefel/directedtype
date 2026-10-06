@@ -5,6 +5,7 @@
 \use "../components/HStack.dt"
 \use "../components/Card.dt"
 \use "../components/Button.dt"
+\use "../components/ButtonVariant.dt"
 \use "../components/Divider.dt"
 \use "../components/Spacer.dt"
 \use "../theme/default.dt"
@@ -50,12 +51,12 @@
     \Card("card_variants"; style: card_dark, gap: 10) {
         \Text(size: 13, weight: 700, color: #94a3b8) { 1. DESIGN VARIANTS (AUTO-SIZED) }
         \HStack(gap: 12) {
-            \Button("btn_primary"; style: button_primary, label: "Primary")
-            \Button("btn_secondary"; style: button_secondary, label: "Secondary")
-            \Button("btn_outline"; style: button_outline, label: "Outline")
-            \Button("btn_ghost"; style: button_ghost, label: "Ghost")
-            \Button("btn_danger"; style: button_danger, label: "Danger")
-            \Button("btn_success"; style: button_success, label: "Success")
+            \Button("btn_primary"; variant: ButtonVariant.Primary, label: "Primary")
+            \Button("btn_secondary"; variant: ButtonVariant.Secondary, label: "Secondary")
+            \Button("btn_outline"; variant: ButtonVariant.Outline, label: "Outline")
+            \Button("btn_ghost"; variant: ButtonVariant.Ghost, label: "Ghost")
+            \Button("btn_danger"; variant: ButtonVariant.Danger, label: "Danger")
+            \Button("btn_success"; variant: ButtonVariant.Success, label: "Success")
         }
     }
 
