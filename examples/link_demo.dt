@@ -6,6 +6,7 @@
 \use "components/Button.dt"
 \use "components/Divider.dt"
 \use "components/Spacer.dt"
+\use "components/Link.dt"
 \use "theme/default.dt"
 
 let link_card_style = \CardStyle(
@@ -80,7 +81,7 @@ let callout_card_style = \CardStyle(
 
         // Footer Note
         \Text(size: 13, color: #94a3b8) {
-            Phase 1 (Inline Whitespace Preservation) & Phase 2/3 (Span Extraction & Visual Styling) active.
+            All Phases Complete: Inline Whitespace, Rich Spans, Ranged Styles, Fragment Projection & Multi-Fragment Hit Testing with Click Navigation.
         }
     }
 }
