@@ -3,6 +3,7 @@
 
 \use "components/CardStyle.dt"
 \use "components/ButtonStyle.dt"
+\use "components/LinkStyle.dt"
 
 // 1. Standard Cards
 let card_dark = \CardStyle(
@@ -105,3 +106,42 @@ let button_ghost = \ButtonStyle(
     disabled_text: #64748b,
     disabled_border_color: #33415540
 );
+
+// 3. Standard Links
+let link_default = \LinkStyle(
+    color: #2563eb,
+    underline: true,
+    bg: #00000000,
+    hover_color: #1d4ed8,
+    hover_underline: true,
+    hover_bg: #00000000,
+    focused_color: #1e40af,
+    focused_underline: true,
+    focused_bg: #dbeafe
+);
+
+let link_subtle = \LinkStyle(
+    color: #475569,
+    underline: false,
+    bg: #00000000,
+    hover_color: #0f172a,
+    hover_underline: true,
+    hover_bg: #00000000,
+    focused_color: #0f172a,
+    focused_underline: true,
+    focused_bg: #e2e8f0
+);
+
+let link_danger = \LinkStyle(
+    color: #dc2626,
+    underline: true,
+    bg: #00000000,
+    hover_color: #b91c1c,
+    hover_underline: true,
+    hover_bg: #00000000,
+    focused_color: #991b1b,
+    focused_underline: true,
+    focused_bg: #fee2e2
+);
+
+env style = link_default;

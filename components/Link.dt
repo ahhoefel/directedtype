@@ -1,23 +1,24 @@
 // DirectedType Standard Component Library: Link
-// Declarative hypertext link component for inline typography and standalone navigation with reactive focus styling.
+// Declarative hypertext link component for inline typography and standalone navigation
+// styled by an environmental LinkStyle bundle with reactive hover and focus styling.
+\use "components/LinkStyle.dt"
 
 \Component Link(
     url: String,
-    color: Color: #1a73e8,
-    underline: Boolean: true,
+    env style: LinkStyle,
     cursor: String: "Pointer",
-    focused_color: Color: #1557b0,
-    focused_underline: Boolean: true,
-    focused_bg: Color: #00000000,
     on_click = self.click,
     on_focus = self.focus,
-    on_blur = self.blur
+    on_blur = self.blur,
+    on_pointer_enter = self.pointer_enter,
+    on_pointer_leave = self.pointer_leave
 ) {
     state focused: Boolean = false;
+    state hovered: Boolean = false;
 
-    let active_color = focused ? focused_color : color;
-    let active_underline = focused ? focused_underline : underline;
-    let active_bg = focused ? focused_bg : #00000000;
+    let active_color = focused ? style.focused_color : (hovered ? style.hover_color : style.color);
+    let active_underline = focused ? style.focused_underline : (hovered ? style.hover_underline : style.underline);
+    let active_bg = focused ? style.focused_bg : (hovered ? style.hover_bg : style.bg);
 
     alias current_color = active_color;
     alias current_underline = active_underline;
@@ -28,7 +29,9 @@
         underline: active_underline,
         on_click: on_click,
         on_focus: on_focus,
-        on_blur: on_blur
+        on_blur: on_blur,
+        on_pointer_enter: on_pointer_enter,
+        on_pointer_leave: on_pointer_leave
     ) {
         \children
     }

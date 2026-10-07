@@ -1,6 +1,6 @@
 // DirectedType Standard Component Library: Link Companion
 // Native companion struct providing click navigation, internal anchor scrolling, external URL routing,
-// and reactive on_focus / on_blur visual styling.
+// and reactive hover/focus visual styling.
 
 use directedtype::component::{Component, Context, DispatchError};
 use directedtype::interaction::Event;
@@ -8,6 +8,7 @@ use directedtype::interaction::Event;
 #[derive(Default, Debug, Clone)]
 pub struct Link {
     pub focused: bool,
+    pub hovered: bool,
 }
 
 impl Link {
@@ -24,7 +25,7 @@ impl Component for Link {
         ctx: &mut Context<'_>,
     ) -> Result<(), DispatchError> {
         match method {
-            "click" => {
+            "click" | "on_click" => {
                 if event.propagation_stopped {
                     return Ok(());
                 }
@@ -46,16 +47,26 @@ impl Component for Link {
                 }
                 Ok(())
             }
-            "focus" => {
+            "focus" | "on_focus" => {
                 self.focused = true;
                 ctx.set_state("focused", true);
                 event.stop_propagation();
                 Ok(())
             }
-            "blur" => {
+            "blur" | "on_blur" => {
                 self.focused = false;
                 ctx.set_state("focused", false);
                 event.stop_propagation();
+                Ok(())
+            }
+            "pointer_enter" | "on_pointer_enter" => {
+                self.hovered = true;
+                ctx.set_state("hovered", true);
+                Ok(())
+            }
+            "pointer_leave" | "on_pointer_leave" => {
+                self.hovered = false;
+                ctx.set_state("hovered", false);
                 Ok(())
             }
             _ => Err(DispatchError::MethodNotFound {

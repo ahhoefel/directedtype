@@ -343,6 +343,7 @@ pub mod std_components {
     #[derive(Default, Debug, Clone)]
     pub struct Link {
         pub focused: bool,
+        pub hovered: bool,
     }
 
     impl Link {
@@ -359,7 +360,7 @@ pub mod std_components {
             ctx: &mut Context<'_>,
         ) -> Result<(), DispatchError> {
             match method {
-                "click" => {
+                "click" | "on_click" => {
                     if event.propagation_stopped {
                         return Ok(());
                     }
@@ -381,16 +382,26 @@ pub mod std_components {
                     }
                     Ok(())
                 }
-                "focus" => {
+                "focus" | "on_focus" => {
                     self.focused = true;
                     ctx.set_state("focused", true);
                     event.stop_propagation();
                     Ok(())
                 }
-                "blur" => {
+                "blur" | "on_blur" => {
                     self.focused = false;
                     ctx.set_state("focused", false);
                     event.stop_propagation();
+                    Ok(())
+                }
+                "pointer_enter" | "on_pointer_enter" => {
+                    self.hovered = true;
+                    ctx.set_state("hovered", true);
+                    Ok(())
+                }
+                "pointer_leave" | "on_pointer_leave" => {
+                    self.hovered = false;
+                    ctx.set_state("hovered", false);
                     Ok(())
                 }
                 _ => Err(DispatchError::MethodNotFound {

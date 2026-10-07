@@ -1,0 +1,29 @@
+// DirectedType Standard Component Library: LinkStyle
+// Styling bundle defining colors, typography decoration, and background for Link components across interaction states.
+
+// 1. Comprehensive LinkStyle (explicit normal, hover, and focus styling)
+\Component LinkStyle(
+    color: Color,
+    underline: Boolean,
+    bg: Color,
+    hover_color: Color,
+    hover_underline: Boolean,
+    hover_bg: Color,
+    focused_color: Color,
+    focused_underline: Boolean,
+    focused_bg: Color
+) {}
+
+// 2. Uniform LinkStyle (derives hover and focus from normal state)
+\Component LinkStyle(
+    color: Color,
+    underline: Boolean,
+    bg: Color
+) {
+    alias hover_color = color;
+    alias hover_underline = underline;
+    alias hover_bg = bg;
+    alias focused_color = color;
+    alias focused_underline = underline;
+    alias focused_bg = bg;
+}

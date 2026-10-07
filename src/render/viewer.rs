@@ -1362,16 +1362,15 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         // Clear canvas hover state when moving into panel
                         if let Some(old_id) = self.hovered_node.take() {
                             let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
-                            let mut leave_event = Event::new(
+                            let leave_event = Event::new(
                                 EventKind::PointerLeave,
                                 doc_point,
                                 Point::new(0.0, 0.0),
                                 self.modifiers,
                                 old_id,
                             );
-                            if let Some(handler) = &mut self.event_handler {
-                                handler(&mut leave_event, &self.layout);
-                            }
+                            let bubble = self.layout.bubble_path_for_node(old_id);
+                            self.dispatch_event_with_bubble(leave_event, &bubble);
                         }
                         return;
                     } else if self.inspector_state.inspect_cursor_hovered {
@@ -1389,16 +1388,15 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                 if new_hovered != self.hovered_node {
                     if let Some(old_id) = self.hovered_node {
-                        let mut leave_event = Event::new(
+                        let leave_event = Event::new(
                             EventKind::PointerLeave,
                             doc_point,
                             Point::new(0.0, 0.0),
                             self.modifiers,
                             old_id,
                         );
-                        if let Some(handler) = &mut self.event_handler {
-                            handler(&mut leave_event, &self.layout);
-                        }
+                        let bubble = self.layout.bubble_path_for_node(old_id);
+                        self.dispatch_event_with_bubble(leave_event, &bubble);
                     }
 
                     if let Some(ref hit_res) = hit {
@@ -1748,16 +1746,15 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 if let Some(old_id) = self.hovered_node.take() {
                     let pt = self.cursor_pos.unwrap_or_default();
                     let doc_pt = Point::new(pt.x + self.scroll_x, pt.y + self.scroll_y);
-                    let mut leave_event = Event::new(
+                    let leave_event = Event::new(
                         EventKind::PointerLeave,
                         doc_pt,
                         Point::new(0.0, 0.0),
                         self.modifiers,
                         old_id,
                     );
-                    if let Some(handler) = &mut self.event_handler {
-                        handler(&mut leave_event, &self.layout);
-                    }
+                    let bubble = self.layout.bubble_path_for_node(old_id);
+                    self.dispatch_event_with_bubble(leave_event, &bubble);
                 }
                 self.inspector_state.set_hovered_id(None);
                 self.inspector_state.inspect_cursor_hovered = false;
