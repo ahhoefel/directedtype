@@ -11,11 +11,14 @@ pub mod render;
 pub mod span;
 pub mod token;
 
+extern crate self as directedtype;
+
 pub use ast::Document;
 pub use component::{
     Component, ComponentFactory, ComponentRegistry, Context, DispatchError, EventHandlerBinding,
     EventHandlerTarget, InstanceManager,
 };
+pub use directedtype_macros::component;
 pub use compiler::{
     evaluate_document, evaluate_document_with_window, project_inline_fragments, CursorKind, Rect,
     ResolvedLayout, ResolvedNode, SpanStyle, TextSpan, Value,

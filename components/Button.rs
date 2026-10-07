@@ -1,8 +1,9 @@
 // DirectedType Standard Component Library: Button Companion
 // Native companion struct providing click tracking, disabled state, and event propagation control.
 
-use directedtype::component::{Component, Context, DispatchError};
+use directedtype::component::{Context, DispatchError};
 use directedtype::interaction::Event;
+use directedtype_macros::component;
 
 #[derive(Default, Debug, Clone)]
 pub struct Button {
@@ -15,32 +16,21 @@ impl Button {
     }
 }
 
-impl Component for Button {
-    fn on_mount(&mut self, ctx: &mut Context<'_>) {
+#[component]
+impl Button {
+    pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
         if let Some(d) = ctx.get_port_bool("disabled") {
             self.disabled = d;
         }
     }
 
-    fn dispatch(
-        &mut self,
-        method: &str,
-        event: &mut Event,
-        ctx: &mut Context<'_>,
-    ) -> Result<(), DispatchError> {
-        match method {
-            "click" => {
-                let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
-                if is_disabled {
-                    // Suppress further event bubbling when button is disabled
-                    event.stop_propagation();
-                }
-                Ok(())
-            }
-            _ => Err(DispatchError::MethodNotFound {
-                component: "Button".into(),
-                method: method.into(),
-            }),
+    pub fn click(&mut self, event: &mut Event, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
+        if is_disabled {
+            // Suppress further event bubbling when button is disabled
+            event.stop_propagation();
         }
+        Ok(())
     }
 }
+
