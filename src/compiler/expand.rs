@@ -1,6 +1,7 @@
 use crate::ast::*;
 use crate::compiler::error::{CompileError, NoMatchingOverloadDetails};
 use crate::compiler::expanded::{ExpandedDocument, ExpandedNode, NodeId};
+use crate::compiler::scope::ScopeId;
 use crate::compiler::text::{CursorKind, SpanStyle, TextSpan};
 use crate::span::Span;
 use std::collections::{HashMap, HashSet};
@@ -280,6 +281,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         is_let: true,
                         ambient_authored_ports: None,
                         enums: &enums,
+                        active_scope_id: ScopeId::ROOT,
                     };
                     let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
                     expanded_doc.get_node_mut(root_id).unwrap().var_name = Some(env_binding.name.as_str().to_string());
@@ -336,6 +338,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                     is_let: false,
                     ambient_authored_ports: None,
                     enums: &enums,
+                    active_scope_id: ScopeId::ROOT,
                 };
                 let root_id = expand_element(node, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
                 expanded_doc.roots.push(root_id);
@@ -354,6 +357,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         is_let: true,
                         ambient_authored_ports: None,
                         enums: &enums,
+                        active_scope_id: ScopeId::ROOT,
                     };
                     let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
                     expanded_doc.get_node_mut(root_id).unwrap().var_name = Some(let_binding.name.as_str().to_string());
@@ -385,6 +389,7 @@ struct InstanceContext<'a> {
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
     pub enclosing_component_id: Option<NodeId>,
     pub enums: &'a HashMap<String, EnumDef>,
+    pub active_scope_id: ScopeId,
 }
 
 struct ElementContext<'a> {
@@ -397,6 +402,7 @@ struct ElementContext<'a> {
     pub is_let: bool,
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
     pub enums: &'a HashMap<String, EnumDef>,
+    pub active_scope_id: ScopeId,
 }
 
 /// Statically selects the unique matching component overload for an invocation.
@@ -507,6 +513,8 @@ fn expand_element(
     expanded.handle = elem.handle;
     expanded.parent = ctx.parent_id;
     expanded.prev_sibling = ctx.prev_sibling_id;
+    expanded.scope_id = Some(ctx.active_scope_id);
+    doc.scope_tree.node_to_scope.insert(node_id, ctx.active_scope_id);
 
     if let Some(key) = &elem.key {
         validate_component_key(elem.name.as_str(), key, ctx.lexical_scope)?;
@@ -593,6 +601,7 @@ fn expand_element(
             ambient_authored_ports: ctx.ambient_authored_ports,
             enclosing_component_id: ctx.enclosing_component_id,
             enums: ctx.enums,
+            active_scope_id: ctx.active_scope_id,
         };
         expand_component_instance(
             &inst_ctx,
@@ -760,6 +769,7 @@ fn expand_component_instance(
                     is_let: false,
                     ambient_authored_ports: None,
                     enums: ctx.enums,
+                    active_scope_id: ctx.active_scope_id,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
                 Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span))
@@ -1118,6 +1128,7 @@ fn expand_component_instance(
                         is_let: true,
                         ambient_authored_ports: None,
                         enums: ctx.enums,
+                        active_scope_id: ctx.active_scope_id,
                     };
                     let node_id = expand_element(
                         elem,
@@ -1151,6 +1162,7 @@ fn expand_component_instance(
                                 is_let: true,
                                 ambient_authored_ports: None,
                                 enums: ctx.enums,
+                                active_scope_id: ctx.active_scope_id,
                             };
                             let node_id = expand_element(
                                 elem,
@@ -1215,6 +1227,7 @@ fn expand_component_instance(
                     is_let: false,
                     ambient_authored_ports: None,
                     enums: ctx.enums,
+                    active_scope_id: ctx.active_scope_id,
                 };
                 let body_id = expand_element(
                     body_node,
@@ -1312,6 +1325,7 @@ fn expand_component_instance(
                         is_let: false,
                         ambient_authored_ports: Some(&authored_ambient_ports),
                         enums: ctx.enums,
+                        active_scope_id: ctx.active_scope_id,
                     };
                     let child_id = expand_element(
                         &wired_elem,
@@ -1525,6 +1539,63 @@ fn expand_primitive_element(
         }
     }
 
+    // Handle Navigation Scopes and Anchors
+    let mut active_scope_for_children = ctx.active_scope_id;
+
+    if elem.name.as_str() == "AnchorScope" {
+        let scope_name = elem.ports.iter().find(|p| p.name.as_str() == "name").and_then(|p| match &p.expr {
+            Expr::Literal(Literal::String(s, _)) => Some(s.clone()),
+            Expr::Ident(id) => Some(id.as_str().to_string()),
+            _ => None,
+        });
+
+        let name_str = match scope_name {
+            Some(n) => n,
+            None => {
+                return Err(CompileError::MissingPort {
+                    node: "AnchorScope".to_string(),
+                    port: "name".to_string(),
+                    span: elem.span,
+                });
+            }
+        };
+
+        let new_scope_id = doc.scope_tree.add_scope(
+            &name_str,
+            ctx.active_scope_id,
+            Some(node_id),
+            elem.span,
+        )?;
+        doc.nodes[node_id.0].scope_id = Some(new_scope_id);
+        doc.scope_tree.node_to_scope.insert(node_id, new_scope_id);
+        active_scope_for_children = new_scope_id;
+    } else if elem.name.as_str() == "Anchor" {
+        let anchor_name = elem.ports.iter().find(|p| p.name.as_str() == "name").and_then(|p| match &p.expr {
+            Expr::Literal(Literal::String(s, _)) => Some(s.clone()),
+            Expr::Ident(id) => Some(id.as_str().to_string()),
+            _ => None,
+        });
+
+        let name_str = match anchor_name {
+            Some(n) => n,
+            None => {
+                return Err(CompileError::MissingPort {
+                    node: "Anchor".to_string(),
+                    port: "name".to_string(),
+                    span: elem.span,
+                });
+            }
+        };
+
+        doc.scope_tree.register_anchor(
+            ctx.active_scope_id,
+            &name_str,
+            node_id,
+            elem.span,
+        )?;
+        doc.nodes[node_id.0].anchor_name = Some(name_str);
+    }
+
     // 1. Expand nested child nodes in content slot
     let mut child_ids = Vec::new();
     let mut last_child_id = None;
@@ -1553,9 +1624,46 @@ fn expand_primitive_element(
                         is_let: false,
                         ambient_authored_ports: None,
                         enums: ctx.enums,
+                        active_scope_id: active_scope_for_children,
                     };
+
+                    let is_wrapper = elem.name.as_str() == "Anchor" || elem.name.as_str() == "AnchorScope";
+                    let wired_child_elem;
+                    let target_elem = if is_wrapper {
+                        let mut child = child_elem.clone();
+                        let has_x = child.ports.iter().any(|p| p.name.as_str() == "x");
+                        let has_y = child.ports.iter().any(|p| p.name.as_str() == "y");
+
+                        if !has_x {
+                            child.ports.push(PortBinding {
+                                name: Ident::new("x", child.span),
+                                expr: Expr::MemberAccess(MemberAccessExpr {
+                                    target: Box::new(Expr::Ident(Ident::new("parent", child.span))),
+                                    member: Ident::new("left", child.span),
+                                    span: child.span,
+                                }),
+                                span: child.span,
+                            });
+                        }
+                        if !has_y {
+                            child.ports.push(PortBinding {
+                                name: Ident::new("y", child.span),
+                                expr: Expr::MemberAccess(MemberAccessExpr {
+                                    target: Box::new(Expr::Ident(Ident::new("parent", child.span))),
+                                    member: Ident::new("top", child.span),
+                                    span: child.span,
+                                }),
+                                span: child.span,
+                            });
+                        }
+                        wired_child_elem = child;
+                        &wired_child_elem
+                    } else {
+                        child_elem
+                    };
+
                     let child_id = expand_element(
-                        child_elem,
+                        target_elem,
                         &child_ctx,
                         registry,
                         doc,
@@ -1666,6 +1774,7 @@ fn expand_primitive_element(
                     is_let: ctx.is_let,
                     ambient_authored_ports: None,
                     enums: ctx.enums,
+                    active_scope_id: ctx.active_scope_id,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
                 child_ids.push(child_id);
@@ -1798,6 +1907,17 @@ fn expand_primitive_element(
 
         let rewritten = rewrite_expr(&expr, &scope_ctx)?;
         ports.insert(port_name, rewritten);
+    }
+
+    if elem.name.as_str() == "AnchorScope" {
+        let canonical_path = doc.scope_tree.scopes[active_scope_for_children.0].canonical_path.clone();
+        let name_str = doc.scope_tree.scopes[active_scope_for_children.0].name.clone();
+        ports.insert("name".to_string(), Expr::Literal(Literal::String(name_str, elem.span)));
+        ports.insert("path".to_string(), Expr::Literal(Literal::String(canonical_path, elem.span)));
+    } else if elem.name.as_str() == "Anchor" {
+        if let Some(ref a_name) = doc.nodes[node_id.0].anchor_name {
+            ports.insert("name".to_string(), Expr::Literal(Literal::String(a_name.clone(), elem.span)));
+        }
     }
 
     if elem.name.as_str() == "Font" {
@@ -2100,8 +2220,118 @@ fn expand_primitive_element(
         Expr::Literal(Literal::String(text_str, elem.span))
     };
 
+    let is_anchor_like = elem.name.as_str() == "Anchor" || elem.name.as_str() == "AnchorScope";
+
+    if is_anchor_like {
+        if child_ids.len() == 1 {
+            let cid = child_ids[0];
+            let cid_ident = Expr::Ident(Ident::new(cid.canonical_name(), elem.span));
+
+            // Child origin defaults to Anchor origin
+            doc.nodes[cid.0].ports.entry("x".to_string()).or_insert_with(|| {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("x", elem.span),
+                    span: elem.span,
+                })
+            });
+            doc.nodes[cid.0].ports.entry("y".to_string()).or_insert_with(|| {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("y", elem.span),
+                    span: elem.span,
+                })
+            });
+
+            // Anchor dimensions inherit from Child dimensions if not explicitly set
+            if !ports.contains_key("width") {
+                ports.insert(
+                    "width".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(cid_ident.clone()),
+                        member: Ident::new("width", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            } else {
+                doc.nodes[cid.0].ports.entry("width".to_string()).or_insert_with(|| {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(self_ident.clone()),
+                        member: Ident::new("width", elem.span),
+                        span: elem.span,
+                    })
+                });
+            }
+
+            if !ports.contains_key("height") {
+                ports.insert(
+                    "height".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(cid_ident.clone()),
+                        member: Ident::new("height", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            } else {
+                doc.nodes[cid.0].ports.entry("height".to_string()).or_insert_with(|| {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(self_ident.clone()),
+                        member: Ident::new("height", elem.span),
+                        span: elem.span,
+                    })
+                });
+            }
+        } else if child_ids.is_empty() {
+            ports.entry("x".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+            ports.entry("y".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+            ports.entry("width".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+            ports.entry("height".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+        } else {
+            for cid in &child_ids {
+                doc.nodes[cid.0].ports.entry("x".to_string()).or_insert_with(|| {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(self_ident.clone()),
+                        member: Ident::new("x", elem.span),
+                        span: elem.span,
+                    })
+                });
+                doc.nodes[cid.0].ports.entry("y".to_string()).or_insert_with(|| {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(self_ident.clone()),
+                        member: Ident::new("y", elem.span),
+                        span: elem.span,
+                    })
+                });
+            }
+            if !ports.contains_key("width") {
+                let first_cid = child_ids[0];
+                ports.insert(
+                    "width".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(first_cid.canonical_name(), elem.span))),
+                        member: Ident::new("width", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            }
+            if !ports.contains_key("height") {
+                let first_cid = child_ids[0];
+                ports.insert(
+                    "height".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(first_cid.canonical_name(), elem.span))),
+                        member: Ident::new("height", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            }
+        }
+
+        ports.entry("z".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+    }
+
     // Height defaults
-    if !ports.contains_key("height") {
+    if !is_anchor_like && !ports.contains_key("height") {
         if (elem.name.as_str() == "Text" || ports.contains_key("width")) && has_text {
             // Text wrapping with Parley: height depends on width, size, weight, font
             let width_expr = Expr::MemberAccess(MemberAccessExpr {
@@ -2140,7 +2370,7 @@ fn expand_primitive_element(
     }
 
     // Width defaults
-    if !ports.contains_key("width") {
+    if !is_anchor_like && !ports.contains_key("width") {
         if elem.name.as_str() == "Text" && has_text {
             let width_call = Expr::Call(CallExpr {
                 callee: Ident::new("text_width", elem.span),
@@ -2668,6 +2898,19 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }))
         }
 
+        Expr::MethodCall(mc) => {
+            let mut rewritten_args = Vec::new();
+            for arg in &mc.args {
+                rewritten_args.push(rewrite_expr(arg, ctx)?);
+            }
+            Ok(Expr::MethodCall(MethodCallExpr {
+                target: Box::new(rewrite_expr(&mc.target, ctx)?),
+                method: mc.method.clone(),
+                args: rewritten_args,
+                span: mc.span,
+            }))
+        }
+
         Expr::Binary(bin) => Ok(Expr::Binary(BinaryExpr {
             op: bin.op,
             left: Box::new(rewrite_expr(&bin.left, ctx)?),
@@ -2791,6 +3034,13 @@ fn validate_key_expr(
         }
         Expr::Call(c) => {
             for arg in &c.args {
+                validate_key_expr(node_name, arg, lexical_scope)?;
+            }
+            Ok(())
+        }
+        Expr::MethodCall(mc) => {
+            validate_key_expr(node_name, &mc.target, lexical_scope)?;
+            for arg in &mc.args {
                 validate_key_expr(node_name, arg, lexical_scope)?;
             }
             Ok(())

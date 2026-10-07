@@ -368,6 +368,52 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
             }
         }
 
+        Expr::MethodCall(mc) => {
+            let target_val = eval_expr(&mc.target, env)?;
+            let evaluated_args: Vec<Value> = mc
+                .args
+                .iter()
+                .map(|arg| eval_expr(arg, env))
+                .collect::<Result<_, _>>()?;
+
+            match mc.method.as_str() {
+                "append" => {
+                    let target_str = evaluated_args
+                        .first()
+                        .map(|v| v.to_display_string())
+                        .unwrap_or_default();
+
+                    let base_path = match target_val {
+                        Value::Node(id) => env
+                            .get(&VarId::new(id, "path"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        Value::String(s) => Some(s),
+                        _ => None,
+                    };
+
+                    if let Some(path) = base_path {
+                        let path_str = path.trim_start_matches('#');
+                        let base = path_str.trim_matches('/');
+                        let target = target_str.trim_matches('/');
+                        let full_path = if base.is_empty() {
+                            format!("#/{}", target)
+                        } else {
+                            format!("#/{}/{}", base, target)
+                        };
+                        Ok(Value::String(full_path))
+                    } else {
+                        let target = target_str.trim_matches('/');
+                        Ok(Value::String(format!("#/{}", target)))
+                    }
+                }
+                other => Err(CompileError::Custom {
+                    message: format!("Unknown method '{}' called on expression", other),
+                    span: mc.span,
+                }),
+            }
+        }
+
         Expr::Paren(inner, _) => eval_expr(inner, env),
         Expr::Node(n) => Err(CompileError::Custom {
             message: format!("Unexpanded node in expression: '{}'", n.name.as_str()),

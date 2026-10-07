@@ -1,6 +1,6 @@
 use crate::ast::{
-    BinaryExpr, BinaryOp, CallExpr, Expr, Ident, Literal, MemberAccessExpr, TernaryExpr, UnaryExpr,
-    UnaryOp,
+    BinaryExpr, BinaryOp, CallExpr, Expr, Ident, Literal, MemberAccessExpr, MethodCallExpr,
+    TernaryExpr, UnaryExpr, UnaryOp,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::ParserCursor;
@@ -29,9 +29,34 @@ fn parse_expr_bp(cursor: &mut ParserCursor<'_>, min_bp: u8) -> Result<Expr, Pars
             continue;
         }
 
-        // Postfix: Function call `(...)`
-        // Only valid if lhs is an Ident
+        // Postfix: Method call `obj.method(...)` or function call `func(...)`
         if peeked.0 == Token::LParen {
+            if let Expr::MemberAccess(m) = lhs {
+                let open_span = cursor.consume_token(&Token::LParen)?;
+                let mut args = Vec::new();
+                while let Some((tok, _)) = cursor.peek_token()? {
+                    if tok == &Token::RParen {
+                        break;
+                    }
+                    args.push(parse_expr_bp(cursor, 0)?);
+                    if let Some((Token::Comma, _)) = cursor.peek_token()? {
+                        cursor.consume_token(&Token::Comma)?;
+                    } else {
+                        break;
+                    }
+                }
+                let close_span = cursor.consume_token(&Token::RParen)?;
+                let call_span = open_span.merge(close_span);
+                let full_span = m.span.merge(call_span);
+                lhs = Expr::MethodCall(MethodCallExpr {
+                    target: m.target,
+                    method: m.member,
+                    args,
+                    span: full_span,
+                });
+                continue;
+            }
+
             if let Expr::Ident(callee) = &lhs {
                 let callee = callee.clone();
                 let open_span = cursor.consume_token(&Token::LParen)?;

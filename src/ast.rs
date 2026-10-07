@@ -284,6 +284,16 @@ pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
                     .zip(&c2.args)
                     .all(|(a1, a2)| expr_eq_ignore_span(a1, a2))
         }
+        (Expr::MethodCall(m1), Expr::MethodCall(m2)) => {
+            m1.method.as_str() == m2.method.as_str()
+                && expr_eq_ignore_span(&m1.target, &m2.target)
+                && m1.args.len() == m2.args.len()
+                && m1
+                    .args
+                    .iter()
+                    .zip(&m2.args)
+                    .all(|(a1, a2)| expr_eq_ignore_span(a1, a2))
+        }
         _ => false,
     }
 }
@@ -414,6 +424,7 @@ pub enum Expr {
     MemberAccess(MemberAccessExpr),
     Ternary(TernaryExpr),
     Call(CallExpr),
+    MethodCall(MethodCallExpr),
     Binary(BinaryExpr),
     Unary(UnaryExpr),
     Paren(Box<Expr>, Span),
@@ -428,6 +439,7 @@ impl Expr {
             Expr::MemberAccess(m) => m.span,
             Expr::Ternary(t) => t.span,
             Expr::Call(c) => c.span,
+            Expr::MethodCall(m) => m.span,
             Expr::Binary(b) => b.span,
             Expr::Unary(u) => u.span,
             Expr::Paren(_, span) => *span,
@@ -474,6 +486,14 @@ pub struct TernaryExpr {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallExpr {
     pub callee: Ident,
+    pub args: Vec<Expr>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MethodCallExpr {
+    pub target: Box<Expr>,
+    pub method: Ident,
     pub args: Vec<Expr>,
     pub span: Span,
 }
@@ -623,6 +643,16 @@ impl fmt::Display for Expr {
             Expr::Call(c) => {
                 write!(f, "{}(", c.callee)?;
                 for (i, arg) in c.args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
+            }
+            Expr::MethodCall(m) => {
+                write!(f, "{}.{}(", m.target, m.method)?;
+                for (i, arg) in m.args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }

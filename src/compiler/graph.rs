@@ -351,6 +351,19 @@ fn collect_dependencies(expr: &Expr, out: &mut Vec<VarId>) {
                 collect_dependencies(arg, out);
             }
         }
+        Expr::MethodCall(mc) => {
+            if mc.method.as_str() == "append" {
+                if let Expr::Ident(target_id) = mc.target.as_ref() {
+                    if let Some(node_id) = NodeId::from_canonical_name(target_id.as_str()) {
+                        out.push(VarId::new(node_id, "path"));
+                    }
+                }
+            }
+            collect_dependencies(&mc.target, out);
+            for arg in &mc.args {
+                collect_dependencies(arg, out);
+            }
+        }
         Expr::Ternary(t) => {
             collect_dependencies(&t.condition, out);
             collect_dependencies(&t.then_expr, out);

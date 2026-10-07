@@ -3,6 +3,7 @@ use crate::compiler::eval::eval_expr;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::graph::VarId;
 pub use crate::compiler::text::{CursorKind, SpanStyle, TextSpan};
+use crate::compiler::scope::{ScopeId, ScopeTree};
 use crate::compiler::value::Value;
 use crate::dom::NodeHandle;
 use crate::interaction::{HitTestResult, Point};
@@ -134,6 +135,8 @@ pub struct ResolvedNode {
     pub text_content: Option<String>,
     pub text_spans: Vec<TextSpan>,
     pub fragments: Vec<Rect>,
+    pub anchor_name: Option<String>,
+    pub scope_id: Option<ScopeId>,
     pub properties: HashMap<String, Value>,
     pub state_vars: HashMap<String, Option<String>>,
     pub event_handlers: HashMap<String, crate::component::EventHandlerBinding>,
@@ -167,9 +170,21 @@ pub struct ResolvedLayout {
     pub roots: Vec<NodeId>,
     pub nodes: Vec<ResolvedNode>,
     pub values: HashMap<VarId, Value>,
+    pub scope_tree: ScopeTree,
 }
 
 impl ResolvedLayout {
+    /// Resolves an anchor URL or path from a given source node.
+    pub fn resolve_anchor(&self, from_node: NodeId, target_path: &str) -> Option<(NodeId, ScopeId)> {
+        let from_scope = self
+            .nodes
+            .iter()
+            .find(|n| n.id == from_node)
+            .and_then(|n| n.scope_id)
+            .or_else(|| self.scope_tree.node_to_scope.get(&from_node).copied())
+            .unwrap_or(ScopeId::ROOT);
+        self.scope_tree.resolve_anchor(from_scope, target_path)
+    }
     /// Returns the nodes ordered for rendering (Painter's Algorithm).
     ///
     /// Primitives are sorted primarily by `z` coordinate ascending,
@@ -621,6 +636,8 @@ pub fn resolve_layout(
             text_content: node.text_content.clone(),
             text_spans: node.text_spans.clone(),
             fragments: Vec::new(),
+            anchor_name: node.anchor_name.clone(),
+            scope_id: node.scope_id,
             properties,
             state_vars: node.state_vars.clone(),
             event_handlers: node.event_handlers.clone(),
@@ -636,6 +653,7 @@ pub fn resolve_layout(
         roots: doc.roots.clone(),
         nodes: resolved_nodes,
         values,
+        scope_tree: doc.scope_tree.clone(),
     };
 
     project_inline_fragments(&mut layout);

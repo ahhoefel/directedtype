@@ -86,6 +86,27 @@ pub fn parse_element_args(
         if tok == &Token::RParen {
             break;
         }
+
+        // Positional shorthand for name argument: e.g. \Anchor("intro") or \AnchorScope("main")
+        if let Some((Token::String(_), _)) = cursor.peek_token()? {
+            let next_tok = cursor.peek_nth(1)?;
+            if !matches!(next_tok, Some((Token::Colon, _))) {
+                let expr = parse_expr(cursor)?;
+                let span = expr.span();
+                ports.push(PortBinding {
+                    name: crate::ast::Ident::new("name", span),
+                    expr,
+                    span,
+                });
+                if let Some((Token::Comma, _)) = cursor.peek_token()? {
+                    cursor.consume_token(&Token::Comma)?;
+                } else {
+                    break;
+                }
+                continue;
+            }
+        }
+
         ports.push(parse_port_binding(cursor)?);
         if let Some((Token::Comma, _)) = cursor.peek_token()? {
             cursor.consume_token(&Token::Comma)?;

@@ -6,6 +6,7 @@ pub mod expanded;
 pub mod graph;
 pub mod layout;
 pub mod module;
+pub mod scope;
 pub mod text;
 pub mod topo;
 pub mod value;
@@ -29,6 +30,7 @@ pub use module::{
     normalize_path, register_component_overload, resolve_imports, verify_overload_set,
     FileResolver, FsResolver, VirtualResolver,
 };
+pub use scope::{NavigationScope, ScopeId, ScopeTree};
 pub use topo::{sort_graph, TopologicalSchedule};
 pub use text::{CursorKind, FontMetrics, SpanStyle, TextSpan};
 pub use value::Value;

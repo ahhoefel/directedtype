@@ -6,6 +6,7 @@ use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::graph::{build_variable_graph_with_window, VarId, VariableGraph};
 use crate::compiler::layout::{resolve_layout, update_resolved_layout, ResolvedLayout, ResolvedNode};
 use crate::compiler::module::{FileResolver, FsResolver};
+use crate::compiler::scope::ScopeId;
 use crate::compiler::topo::{sort_graph, TopologicalSchedule};
 use crate::compiler::value::Value;
 use crate::span::Span;
@@ -255,6 +256,15 @@ impl CompiledDocument {
     /// Finds a resolved node by its structured key.
     pub fn find_by_key(&self, parent: Option<NodeId>, key: &ComponentKey) -> Option<&ResolvedNode> {
         self.layout.find_by_key(parent, key)
+    }
+
+    /// Resolves an anchor path from a given source node.
+    pub fn resolve_anchor(
+        &self,
+        from_node: NodeId,
+        target_path: &str,
+    ) -> Option<(NodeId, ScopeId)> {
+        self.layout.resolve_anchor(from_node, target_path)
     }
 
     /// Dispatches an interaction event through the component hierarchy.

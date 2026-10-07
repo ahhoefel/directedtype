@@ -37,6 +37,8 @@ impl NodeId {
 use crate::compiler::text::TextSpan;
 
 /// An expanded layout element with concrete node identity, hierarchy, and port equations.
+use crate::compiler::scope::{ScopeId, ScopeTree};
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExpandedNode {
     pub id: NodeId,
@@ -51,6 +53,8 @@ pub struct ExpandedNode {
     pub event_handlers: HashMap<String, crate::component::EventHandlerBinding>,
     pub text_content: Option<String>,
     pub text_spans: Vec<TextSpan>,
+    pub anchor_name: Option<String>,
+    pub scope_id: Option<ScopeId>,
     pub span: Span,
     pub handle: Option<NodeHandle>,
     pub font: Option<NodeId>,
@@ -72,6 +76,8 @@ impl ExpandedNode {
             event_handlers: HashMap::new(),
             text_content: None,
             text_spans: Vec::new(),
+            anchor_name: None,
+            scope_id: None,
             span,
             handle: None,
             font: None,
@@ -95,6 +101,7 @@ pub struct ExpandedDocument {
     pub roots: Vec<NodeId>,
     pub window_ports: HashMap<String, Expr>,
     pub window_state_vars: HashMap<String, Option<String>>,
+    pub scope_tree: ScopeTree,
 }
 
 impl ExpandedDocument {
@@ -104,6 +111,7 @@ impl ExpandedDocument {
             roots: Vec::new(),
             window_ports: HashMap::new(),
             window_state_vars: HashMap::new(),
+            scope_tree: ScopeTree::new(),
         }
     }
 

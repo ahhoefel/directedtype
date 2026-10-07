@@ -181,10 +181,12 @@ pub fn compute_span_fragments(
             }
         }
         for (idx, span) in spans.iter().enumerate() {
-            let brush_id = ((idx + 1) % 250 + 1) as u8;
-            builder.push(StyleProperty::Brush([brush_id, 0, 0, 255]), span.range.clone());
-            if span.style.underline {
-                builder.push(StyleProperty::Underline(true), span.range.clone());
+            if !span.range.is_empty() {
+                let brush_id = ((idx + 1) % 250 + 1) as u8;
+                builder.push(StyleProperty::Brush([brush_id, 0, 0, 255]), span.range.clone());
+                if span.style.underline {
+                    builder.push(StyleProperty::Underline(true), span.range.clone());
+                }
             }
         }
 
@@ -243,6 +245,21 @@ pub fn compute_span_fragments(
             }
         }
     });
+
+    // Handle zero-width inline bookmark spans (e.g. \Anchor("bookmark") inside \Text)
+    for span in spans {
+        if span.range.is_empty() {
+            if let Some(child_id) = span.node_id {
+                result.entry(child_id).or_insert_with(|| {
+                    let char_offset = span.range.start;
+                    let prefix_text = &text[0..char_offset.min(text.len())];
+                    let (px, py) = measure_text_bounds(prefix_text, font_size, font_weight, font_family, max_width);
+                    let frag_rect = Rect::new(origin_x + px, origin_y + py, 0.0, font_size);
+                    vec![frag_rect]
+                });
+            }
+        }
+    }
 
     result
 }
