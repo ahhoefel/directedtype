@@ -17,6 +17,8 @@ pub struct SceneOptions {
     pub background: Option<Color>,
     /// Display / DPI scale factor (e.g. 2.0 on macOS Retina displays).
     pub scale_factor: f64,
+    /// Scroll offset (scroll_x, scroll_y) in logical document coordinates.
+    pub scroll_offset: (f64, f64),
 }
 
 impl Default for SceneOptions {
@@ -24,6 +26,7 @@ impl Default for SceneOptions {
         Self {
             background: Some(Color::WHITE),
             scale_factor: 1.0,
+            scroll_offset: (0.0, 0.0),
         }
     }
 }
@@ -398,10 +401,14 @@ pub fn build_scene(
     } else {
         1.0
     };
-    if (scale - 1.0).abs() > 0.001 {
-        let mut scaled_scene = Scene::new();
-        scaled_scene.append(&scene, Some(Affine::scale(scale)));
-        scaled_scene
+    let has_scale = (scale - 1.0).abs() > 0.001;
+    let has_scroll = options.scroll_offset.0.abs() > 0.001 || options.scroll_offset.1.abs() > 0.001;
+
+    if has_scale || has_scroll {
+        let transform = Affine::scale(scale) * Affine::translate((-options.scroll_offset.0, -options.scroll_offset.1));
+        let mut transformed_scene = Scene::new();
+        transformed_scene.append(&scene, Some(transform));
+        transformed_scene
     } else {
         scene
     }

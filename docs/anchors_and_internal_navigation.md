@@ -242,15 +242,15 @@ When a link with `url` (e.g. `"#..."`) is activated:
 
 ### A. Scroll-To Execution
 Once the target `NodeId` is resolved:
-1. **Find Target Geometry:** Look up `target_node.rect` in `ResolvedLayout`.
-2. **Identify Scroll Viewport:** Walk up the target's ancestor chain to find the nearest scrollable container (e.g. `\ScrollView` or the root `\Window`).
-3. **Compute Target Offset:**
-   ```rust
-   let target_scroll_y = (target_rect.y - container_rect.y + current_scroll_y).max(0.0);
-   ```
-4. **Apply Scroll Mutation:**
-   - Smoothly animate or directly set `container.scroll_offset = target_scroll_y`.
-   - Issue a layout update for the viewport.
+1. **Find Target Geometry:** Look up `target_node.rect.y` (or `target_node.fragments[0].y` for inline bookmarks) in `ResolvedLayout`.
+2. **Window-Level Scrolling:**
+   - Scrolling targets the window directly without heuristic ancestor tree walking or fallback guesswork.
+   - The window computes `max_scroll_y = (content_height - win_h).max(0.0)`.
+   - The vertical scroll offset updates to `target_y.clamp(0.0, max_scroll_y)`.
+   - The scene translates content vertically by `-scroll_y` while keeping docked inspector chrome fixed.
+3. **Future `\ScrollPane` Architecture:**
+   - When a DirectedType component for `\ScrollPane` is introduced, links will feature an explicit `pane:` port (e.g. `\Link(url: "#section", pane: left_pane)`).
+   - This maintains explicit, deterministic dataflow without relying on runtime ancestor heuristics.
 
 ### B. Focus Management (`focused_node`)
 1. **Active Focus Tracking:**

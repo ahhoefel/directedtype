@@ -1,5 +1,8 @@
 use directedtype::compiler::compiled::CompiledDocument;
+use directedtype::interaction::Point;
 use directedtype::parser::parse_document;
+use directedtype::render::{HeadlessRenderer, SceneOptions, ViewerApp, ViewerConfig};
+use vello::peniko::Color;
 
 #[test]
 fn test_block_anchor_geometry_passthrough_in_vstack() {
@@ -222,3 +225,166 @@ fn test_anchor_scope_first_class_port_and_append_method() {
         .expect("Should resolve anchor from generated URL");
     assert_eq!(target_id, setup_anchor.id);
 }
+
+#[test]
+fn test_viewer_window_scrolling_to_anchors() {
+    let source = r##"
+        \use "components/VStack.dt";
+
+        \VStack(gap: 50) {
+            \Anchor("top") {
+                \Rect(width: 400, height: 100, color: "#111111")
+            }
+            \Rect(width: 400, height: 1000, color: "#222222")
+            \Anchor("middle") {
+                \Rect(width: 400, height: 100, color: "#333333")
+            }
+            \Rect(width: 400, height: 1000, color: "#444444")
+            \Anchor("bottom") {
+                \Rect(width: 400, height: 100, color: "#555555")
+            }
+        }
+    "##;
+
+    let ast = parse_document(source).expect("Failed to parse document");
+    let compiled = CompiledDocument::compile(&ast).expect("Compilation failed");
+    let mut viewer = ViewerApp::new(
+        compiled.layout().clone(),
+        ViewerConfig {
+            width: 800,
+            height: 600,
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(viewer.scroll_y(), 0.0);
+    assert!(viewer.content_height() > 2200.0);
+    assert!(viewer.max_scroll_y(600.0) > 1600.0);
+
+    // Scroll to middle anchor
+    let scrolled = viewer.scroll_to_anchor(None, "#middle");
+    assert!(scrolled);
+    let middle_node = viewer
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| n.anchor_name.as_deref() == Some("middle"))
+        .unwrap();
+    assert_eq!(viewer.scroll_y(), middle_node.rect.y);
+
+    // Scroll to bottom anchor
+    let scrolled = viewer.scroll_to_anchor(None, "#bottom");
+    assert!(scrolled);
+    let bottom_node = viewer
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| n.anchor_name.as_deref() == Some("bottom"))
+        .unwrap();
+    let expected_bottom_scroll = bottom_node.rect.y.min(viewer.max_scroll_y(600.0));
+    assert_eq!(viewer.scroll_y(), expected_bottom_scroll);
+
+    // Scroll back to top
+    let scrolled = viewer.scroll_to_anchor(None, "#top");
+    assert!(scrolled);
+    assert_eq!(viewer.scroll_y(), 0.0);
+}
+
+#[test]
+fn test_headless_render_with_scroll_offset() {
+    let source = r##"
+        \use "components/VStack.dt";
+
+        \VStack {
+            \Rect(width: 200, height: 100, color: "#ff0000")
+            \Rect(width: 200, height: 100, color: "#0000ff")
+        }
+    "##;
+
+    let ast = parse_document(source).expect("Failed to parse document");
+    let compiled = CompiledDocument::compile(&ast).expect("Compilation failed");
+
+    let mut renderer = HeadlessRenderer::new().expect("Failed to init renderer");
+
+    // Unscrolled: top 100px is red
+    let img_unscrolled = renderer
+        .render_layout(
+            compiled.layout(),
+            200,
+            200,
+            &SceneOptions {
+                background: Some(Color::WHITE),
+                scale_factor: 1.0,
+                scroll_offset: (0.0, 0.0),
+            },
+        )
+        .expect("Render unscrolled");
+
+    let pixel_top = img_unscrolled.get_pixel(50, 50);
+    assert!(pixel_top[0] > 200, "Expected red pixel at (50, 50), got: {:?}", pixel_top);
+    assert!(pixel_top[2] < 50);
+
+    // Scrolled by 100px: the blue rect (originally at y=100) is now at y=0!
+    let img_scrolled = renderer
+        .render_layout(
+            compiled.layout(),
+            200,
+            200,
+            &SceneOptions {
+                background: Some(Color::WHITE),
+                scale_factor: 1.0,
+                scroll_offset: (0.0, 100.0),
+            },
+        )
+        .expect("Render scrolled");
+
+    let pixel_scrolled = img_scrolled.get_pixel(50, 50);
+    assert!(pixel_scrolled[2] > 200, "Expected blue pixel at (50, 50) when scrolled, got: {:?}", pixel_scrolled);
+    assert!(pixel_scrolled[0] < 50);
+}
+
+#[test]
+fn test_scrolled_coordinate_hit_testing() {
+    let source = r##"
+        \use "components/VStack.dt";
+
+        \VStack {
+            \Rect(width: 300, height: 500, color: "#111111")
+            \Anchor("target") {
+                \Rect(width: 300, height: 200, color: "#222222")
+            }
+            \Rect(width: 300, height: 800, color: "#333333")
+        }
+    "##;
+
+    let ast = parse_document(source).expect("Failed to parse document");
+    let compiled = CompiledDocument::compile(&ast).expect("Compilation failed");
+    let mut viewer = ViewerApp::new(
+        compiled.layout().clone(),
+        ViewerConfig {
+            width: 800,
+            height: 600,
+            ..Default::default()
+        },
+    );
+
+    // Scroll to target anchor (which is at y = 500)
+    let scrolled = viewer.scroll_to_anchor(None, "#target");
+    assert!(scrolled);
+    assert_eq!(viewer.scroll_y(), 500.0);
+
+    // A click at window logical point (50.0, 20.0) corresponds to doc point (50.0, 520.0)
+    let window_point = Point::new(50.0, 20.0);
+    let doc_point = Point::new(window_point.x + viewer.scroll_x(), window_point.y + viewer.scroll_y());
+
+    let hit = viewer.layout().hit_test(doc_point).expect("Should hit target node");
+    let target_anchor = viewer
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| n.anchor_name.as_deref() == Some("target"))
+        .unwrap();
+
+    assert!(hit.bubble_path.contains(&target_anchor.id));
+}
+

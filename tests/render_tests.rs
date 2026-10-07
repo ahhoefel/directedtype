@@ -520,5 +520,6 @@ fn test_render_link_demo_example() {
 
     assert_eq!(img.width(), 800);
     assert_eq!(img.height(), 600);
+    save_golden_or_preview(&img, "link_demo.png");
 }
 

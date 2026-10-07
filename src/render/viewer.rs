@@ -113,6 +113,7 @@ impl Default for ViewerConfig {
             scene_options: SceneOptions {
                 background: Some(Color::WHITE),
                 scale_factor: 1.0,
+                scroll_offset: (0.0, 0.0),
             },
         }
     }
@@ -151,6 +152,13 @@ pub struct ViewerApp {
     event_handler: Option<EventHandler>,
     inspector_state: crate::inspector::InspectorState,
     panel_component: crate::inspector::InspectPanelComponent,
+
+    // Scrolling state
+    scroll_x: f64,
+    scroll_y: f64,
+    is_dragging_scrollbar: bool,
+    scrollbar_drag_start_y: f64,
+    scrollbar_start_scroll_y: f64,
 }
 
 /// Type alias for event callbacks dispatched by `ViewerApp`.
@@ -182,6 +190,11 @@ impl ViewerApp {
             event_handler: None,
             inspector_state: crate::inspector::InspectorState::new(),
             panel_component: crate::inspector::InspectPanelComponent::default(),
+            scroll_x: 0.0,
+            scroll_y: 0.0,
+            is_dragging_scrollbar: false,
+            scrollbar_drag_start_y: 0.0,
+            scrollbar_start_scroll_y: 0.0,
         }
     }
 
@@ -243,6 +256,110 @@ impl ViewerApp {
     /// Returns a mutable reference to the internal inspector state.
     pub fn inspector_state_mut(&mut self) -> &mut crate::inspector::InspectorState {
         &mut self.inspector_state
+    }
+
+    /// Returns the current vertical scroll offset.
+    pub fn scroll_y(&self) -> f64 {
+        self.scroll_y
+    }
+
+    /// Sets the vertical scroll offset directly.
+    pub fn set_scroll_y(&mut self, y: f64) {
+        self.scroll_y = y.max(0.0);
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Returns the current horizontal scroll offset.
+    pub fn scroll_x(&self) -> f64 {
+        self.scroll_x
+    }
+
+    /// Sets the horizontal scroll offset directly.
+    pub fn set_scroll_x(&mut self, x: f64) {
+        self.scroll_x = x.max(0.0);
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Returns the current scroll offset `(scroll_x, scroll_y)`.
+    pub fn scroll_offset(&self) -> (f64, f64) {
+        (self.scroll_x, self.scroll_y)
+    }
+
+    /// Sets the scroll offset directly.
+    pub fn set_scroll_offset(&mut self, x: f64, y: f64) {
+        self.scroll_x = x.max(0.0);
+        self.scroll_y = y.max(0.0);
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Computes the total content width across all layout nodes.
+    pub fn content_width(&self) -> f64 {
+        let mut max_x: f64 = 0.0;
+        for node in &self.layout.nodes {
+            max_x = max_x.max(node.rect.x + node.rect.width);
+        }
+        max_x
+    }
+
+    /// Computes the total content height across all layout nodes.
+    pub fn content_height(&self) -> f64 {
+        let mut max_y: f64 = 0.0;
+        for node in &self.layout.nodes {
+            max_y = max_y.max(node.rect.y + node.rect.height);
+        }
+        max_y
+    }
+
+    /// Computes the maximum vertical scroll offset for a given viewport height.
+    pub fn max_scroll_y(&self, viewport_h: f64) -> f64 {
+        (self.content_height() - viewport_h).max(0.0)
+    }
+
+    /// Scrolls vertically to a target Y position, clamping to valid scroll range.
+    pub fn scroll_to_y(&mut self, target_y: f64) {
+        let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+        let win_h = if let Some(w) = &self.window {
+            let size = w.inner_size();
+            size.height as f64 / scale
+        } else {
+            self.config.height as f64
+        };
+        let max_scroll = self.max_scroll_y(win_h);
+        self.scroll_y = target_y.clamp(0.0, max_scroll);
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Scrolls to bring a specific node into view at the top of the viewport.
+    pub fn scroll_to_node(&mut self, node_id: NodeId) -> bool {
+        if let Some(node) = self.layout.get_node(node_id) {
+            let target_y = if !node.fragments.is_empty() {
+                node.fragments[0].y
+            } else {
+                node.rect.y
+            };
+            self.scroll_to_y(target_y);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Resolves an anchor link (e.g. `"#section"` or `"#/scope/target"`) and scrolls the window to it.
+    pub fn scroll_to_anchor(&mut self, source_node: Option<NodeId>, url: &str) -> bool {
+        let from_node = source_node.unwrap_or(NodeId(0));
+        if let Some((target_id, _scope_id)) = self.layout.resolve_anchor(from_node, url) {
+            self.scroll_to_node(target_id)
+        } else {
+            false
+        }
     }
 
     fn dispatch_event_with_bubble(&mut self, mut event: Event, bubble_path: &[NodeId]) {
@@ -487,6 +604,7 @@ impl ViewerApp {
 
         let mut scene_opts = self.config.scene_options.clone();
         scene_opts.scale_factor = window.scale_factor();
+        scene_opts.scroll_offset = (self.scroll_x, self.scroll_y);
 
         let mut scene = build_scene(
             &self.layout,
@@ -495,24 +613,30 @@ impl ViewerApp {
             &scene_opts,
         );
 
+        let scale = window.scale_factor();
+        let size = window.inner_size();
+        let win_w = if size.width > 0 {
+            size.width as f64 / scale
+        } else {
+            self.config.width as f64
+        };
+        let win_h = if size.height > 0 {
+            size.height as f64 / scale
+        } else {
+            self.config.height as f64
+        };
+
+        let canvas_w = if self.inspect_mode {
+            (win_w - self.panel_component.width).max(100.0)
+        } else {
+            win_w
+        };
+
         if self.inspect_mode {
             let overlay = crate::inspector::InspectOverlayComponent::default();
-            let scale = window.scale_factor();
-            let size = window.inner_size();
-            let win_w = if size.width > 0 {
-                size.width as f64 / scale
-            } else {
-                self.config.width as f64
-            };
-            let win_h = if size.height > 0 {
-                size.height as f64 / scale
-            } else {
-                self.config.height as f64
-            };
-
+            let overlay_transform = vello::kurbo::Affine::translate((-self.scroll_x, -self.scroll_y));
             let panel_w = self.panel_component.width;
             let panel_x = win_w - panel_w;
-            let canvas_w = (win_w - panel_w).max(100.0);
 
             let mut overlay_scene = Scene::new();
 
@@ -522,7 +646,7 @@ impl ViewerApp {
                     if let Some(info) = crate::inspector::InspectTargetInfo::from_layout(&self.layout, selected_id) {
                         overlay.render_to_scene(
                             &mut overlay_scene,
-                            vello::kurbo::Affine::IDENTITY,
+                            overlay_transform,
                             &info,
                             true,
                             &mut self.font_cx,
@@ -540,7 +664,7 @@ impl ViewerApp {
                     let is_selected = self.selected_node == Some(hovered_id);
                     overlay.render_to_scene(
                         &mut overlay_scene,
-                        vello::kurbo::Affine::IDENTITY,
+                        overlay_transform,
                         &info,
                         is_selected,
                         &mut self.font_cx,
@@ -575,6 +699,45 @@ impl ViewerApp {
             } else {
                 scene.append(&overlay_scene, None);
                 scene.append(&panel_scene, None);
+            }
+        }
+
+        // Render subtle scrollbar thumb if document height exceeds viewport
+        let content_h = self
+            .layout
+            .nodes
+            .iter()
+            .fold(0.0f64, |acc, n| acc.max(n.rect.y + n.rect.height));
+        if content_h > win_h {
+            let max_scroll = (content_h - win_h).max(1.0);
+            let track_h = win_h;
+            let thumb_h = ((win_h / content_h) * track_h).max(24.0).min(track_h);
+            let scroll_ratio = (self.scroll_y / max_scroll).clamp(0.0, 1.0);
+            let thumb_y = scroll_ratio * (track_h - thumb_h);
+            let thumb_w = 6.0;
+            let thumb_x = canvas_w - thumb_w - 3.0;
+
+            let mut scrollbar_scene = Scene::new();
+            let thumb_rrect = vello::kurbo::RoundedRect::new(
+                thumb_x,
+                thumb_y,
+                thumb_x + thumb_w,
+                thumb_y + thumb_h,
+                3.0,
+            );
+            let thumb_color = Color::from_rgba8(120, 120, 128, 140);
+            scrollbar_scene.fill(
+                vello::peniko::Fill::NonZero,
+                vello::kurbo::Affine::IDENTITY,
+                vello::peniko::Brush::Solid(thumb_color),
+                None,
+                &thumb_rrect,
+            );
+
+            if (scale - 1.0).abs() > 0.001 {
+                scene.append(&scrollbar_scene, Some(vello::kurbo::Affine::scale(scale)));
+            } else {
+                scene.append(&scrollbar_scene, None);
             }
         }
 
@@ -753,6 +916,8 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         let logical_w = size.width as f64 / scale;
                         let logical_h = size.height as f64 / scale;
                         self.update_layout_for_size(logical_w, logical_h);
+                        let max_scroll = self.max_scroll_y(logical_h);
+                        self.scroll_y = self.scroll_y.clamp(0.0, max_scroll);
                     }
                     // Immediately render frame synchronously on resize!
                     // This prevents macOS CAMetalLayer from stretching the previous frame's texture.
@@ -772,6 +937,8 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         let logical_w = size.width as f64 / scale;
                         let logical_h = size.height as f64 / scale;
                         self.update_layout_for_size(logical_w, logical_h);
+                        let max_scroll = self.max_scroll_y(logical_h);
+                        self.scroll_y = self.scroll_y.clamp(0.0, max_scroll);
                         self.render_frame();
                     }
                 }
@@ -783,6 +950,29 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
                 let point = Point::new(position.x / scale, position.y / scale);
                 self.cursor_pos = Some(point);
+
+                if self.is_dragging_scrollbar {
+                    let (_win_w, win_h) = if let Some(w) = &self.window {
+                        let size = w.inner_size();
+                        (size.width as f64 / scale, size.height as f64 / scale)
+                    } else {
+                        (self.config.width as f64, self.config.height as f64)
+                    };
+                    let content_h = self.content_height();
+                    if content_h > win_h {
+                        let track_h = win_h;
+                        let thumb_h = ((win_h / content_h) * track_h).max(24.0).min(track_h);
+                        let available_track = (track_h - thumb_h).max(1.0);
+                        let max_scroll = (content_h - win_h).max(0.0);
+                        let dy = point.y - self.scrollbar_drag_start_y;
+                        let scroll_delta = (dy / available_track) * max_scroll;
+                        self.scroll_y = (self.scrollbar_start_scroll_y + scroll_delta).clamp(0.0, max_scroll);
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
+                    return;
+                }
 
                 if self.inspect_mode {
                     let (win_w, win_h) = if let Some(w) = &self.window {
@@ -827,9 +1017,10 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                         // Clear canvas hover state when moving into panel
                         if let Some(old_id) = self.hovered_node.take() {
+                            let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
                             let mut leave_event = Event::new(
                                 EventKind::PointerLeave,
-                                point,
+                                doc_point,
                                 Point::new(0.0, 0.0),
                                 self.modifiers,
                                 old_id,
@@ -848,14 +1039,15 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 }
 
                 // Cursor is over the canvas
-                let hit = self.layout.hit_test(point);
+                let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
+                let hit = self.layout.hit_test(doc_point);
                 let new_hovered = hit.as_ref().map(|h| h.target);
 
                 if new_hovered != self.hovered_node {
                     if let Some(old_id) = self.hovered_node {
                         let mut leave_event = Event::new(
                             EventKind::PointerLeave,
-                            point,
+                            doc_point,
                             Point::new(0.0, 0.0),
                             self.modifiers,
                             old_id,
@@ -868,7 +1060,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     if let Some(ref hit_res) = hit {
                         let enter_event = Event::new(
                             EventKind::PointerEnter,
-                            point,
+                            doc_point,
                             hit_res.local_point,
                             self.modifiers,
                             hit_res.target,
@@ -882,7 +1074,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 if let Some(ref hit_res) = hit {
                     let move_event = Event::new(
                         EventKind::PointerMove,
-                        point,
+                        doc_point,
                         hit_res.local_point,
                         self.modifiers,
                         hit_res.target,
@@ -1006,8 +1198,28 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         }
                     }
 
+                    let content_h = self.content_height();
+                    let canvas_w = if self.inspect_mode {
+                        (win_w - self.panel_component.width).max(100.0)
+                    } else {
+                        win_w
+                    };
+
+                    if state == ElementState::Pressed {
+                        if content_h > win_h && point.x >= canvas_w - 14.0 && point.x <= canvas_w {
+                            self.is_dragging_scrollbar = true;
+                            self.scrollbar_drag_start_y = point.y;
+                            self.scrollbar_start_scroll_y = self.scroll_y;
+                            return;
+                        }
+                    } else if self.is_dragging_scrollbar {
+                        self.is_dragging_scrollbar = false;
+                        return;
+                    }
+
                     // Mouse input is over canvas area
-                    let hit = self.layout.hit_test(point);
+                    let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
+                    let hit = self.layout.hit_test(doc_point);
                     match state {
                         ElementState::Pressed => {
                             if self.inspect_mode && self.inspector_state.inspect_cursor_active {
@@ -1065,7 +1277,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                 self.pressed_node = Some((hit_res.target, btn));
                                 let down_event = Event::new(
                                     EventKind::PointerDown { button: btn },
-                                    point,
+                                    doc_point,
                                     hit_res.local_point,
                                     self.modifiers,
                                     hit_res.target,
@@ -1080,7 +1292,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                 if let Some(ref hit_res) = hit {
                                     let up_event = Event::new(
                                         EventKind::PointerUp { button: btn },
-                                        point,
+                                        doc_point,
                                         hit_res.local_point,
                                         self.modifiers,
                                         hit_res.target,
@@ -1090,7 +1302,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                     if pressed_btn == btn && hit_res.bubble_path.contains(&pressed_id) {
                                         let click_event = Event::new(
                                             EventKind::Click { button: btn },
-                                            point,
+                                            doc_point,
                                             hit_res.local_point,
                                             self.modifiers,
                                             hit_res.target,
@@ -1099,15 +1311,25 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                                         if btn == MouseButton::Left {
                                             for &nid in &hit_res.bubble_path {
-                                                if let Some(node) = self.layout.get_node(nid) {
-                                                    if let Some(url) = node.properties.get("url").and_then(|v| v.as_str()) {
+                                                let maybe_url = self.layout.get_node(nid).and_then(|node| {
+                                                    node.properties.get("url").and_then(|v| v.as_str()).map(|s| s.to_string())
+                                                });
+                                                if let Some(url) = maybe_url {
+                                                    if url.starts_with('#') {
+                                                        if !self.scroll_to_anchor(Some(nid), &url) {
+                                                            eprintln!("[Viewer] In-page anchor not found: {}", url);
+                                                        }
+                                                        break;
+                                                    } else if self.scroll_to_anchor(Some(nid), &url) {
+                                                        break;
+                                                    } else {
                                                         println!("[Viewer] Opening link: {}", url);
                                                         #[cfg(target_os = "macos")]
-                                                        let _ = std::process::Command::new("open").arg(url).spawn();
+                                                        let _ = std::process::Command::new("open").arg(&url).spawn();
                                                         #[cfg(target_os = "linux")]
-                                                        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+                                                        let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
                                                         #[cfg(target_os = "windows")]
-                                                        let _ = std::process::Command::new("cmd").args(["/C", "start", "", url]).spawn();
+                                                        let _ = std::process::Command::new("cmd").args(["/C", "start", "", &url]).spawn();
                                                         break;
                                                     }
                                                 }
@@ -1159,10 +1381,21 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         return;
                     }
 
-                    if let Some(ref hit_res) = self.layout.hit_test(point) {
+                    // Window document scrolling:
+                    let max_scroll = self.max_scroll_y(win_h);
+                    let old_scroll = self.scroll_y;
+                    self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
+                    if (self.scroll_y - old_scroll).abs() > 0.001 {
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
+
+                    let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
+                    if let Some(ref hit_res) = self.layout.hit_test(doc_point) {
                         let scroll_event = Event::new(
                             EventKind::Scroll { delta_x, delta_y },
-                            point,
+                            doc_point,
                             hit_res.local_point,
                             self.modifiers,
                             hit_res.target,
@@ -1172,11 +1405,13 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 }
             }
             WindowEvent::CursorLeft { .. } => {
+                self.is_dragging_scrollbar = false;
                 if let Some(old_id) = self.hovered_node.take() {
                     let pt = self.cursor_pos.unwrap_or_default();
+                    let doc_pt = Point::new(pt.x + self.scroll_x, pt.y + self.scroll_y);
                     let mut leave_event = Event::new(
                         EventKind::PointerLeave,
-                        pt,
+                        doc_pt,
                         Point::new(0.0, 0.0),
                         self.modifiers,
                         old_id,

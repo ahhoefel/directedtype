@@ -33,47 +33,91 @@ let callout_card_style = \CardStyle(
         gap: 22,
         align: Align.Stretch
     ) {
+        \Anchor("top")
+
         // Title & Header
         \VStack(gap: 8) {
             \Text(size: 32, weight: 700, color: #0f172a) {
-                Hypertext Links & Inline Spans
+                Hypertext Links & In-Page Navigation
             }
             \Text(size: 16, color: #64748b) {
-                Demonstrating inline component composition and styled link spans in DirectedType.
+                Demonstrating inline links, in-page anchor navigation, and window-level scrolling.
+            }
+        }
+
+        // Table of Contents Card
+        \Card(style: callout_card_style, gap: 10) {
+            \Text(size: 14, weight: 700, color: #1d4ed8) {
+                TABLE OF CONTENTS (IN-PAGE ANCHORS)
+            }
+            \VStack(gap: 6) {
+                \Text(size: 15, color: #1e293b) {
+                    • \Link(url: "#inline-links", color: #2563eb){1. Inline Text Hyperlinks}
+                }
+                \Text(size: 15, color: #1e293b) {
+                    • \Link(url: "#custom-styling", color: #2563eb){2. Custom Link Styling & Accents}
+                }
+                \Text(size: 15, color: #1e293b) {
+                    • \Link(url: "#quick-nav", color: #2563eb){3. External Resource Links}
+                }
+                \Text(size: 15, color: #1e293b) {
+                    • \Link(url: "#deep-section", color: #2563eb){4. Deep Document Section (Scroll Test)}
+                }
             }
         }
 
         \Divider(thickness: 1, color: #e2e8f0)
 
-        // Main Paragraph with Inline Links
-        \Card(style: link_card_style, gap: 14) {
-            \Text(size: 14, weight: 700, color: #475569) {
-                INLINE TEXT WITH EMBEDDED HYPERLINKS
-            }
-            \Text(size: 16, width: parent.width - 48, color: #1e293b) {
-                DirectedType now supports first-class inline components. You can read the documentation at \Link(url: "https://directedtype.org"){directedtype.org} or check out our project repository on \Link(url: "https://github.com", color: #2563eb){GitHub}. Notice how spaces between adjacent inline links and plain words are naturally preserved by the cursor stream.
-            }
-        }
-
-        // Callout with Distinct Link Styles
-        \Card(style: callout_card_style, gap: 12) {
-            \Text(size: 14, weight: 700, color: #1d4ed8) {
-                CUSTOM LINK STYLING & ACCENTS
-            }
-            \Text(size: 16, width: parent.width - 48, color: #1e293b) {
-                Links can define custom colors and underline styles: visit \Link(url: "https://vello.dev", color: #7c3aed){Vello 2D Graphics} for GPU compute rendering, \Link(url: "https://parley.dev", color: #059669){Parley} for typographic shaping, or \Link(url: "https://crates.io", color: #d97706, underline: false){Crates.io} without an underline.
+        // Section 1
+        \Anchor("inline-links") {
+            \Card(style: link_card_style, gap: 14) {
+                \Text(size: 14, weight: 700, color: #475569) {
+                    1. INLINE TEXT WITH EMBEDDED HYPERLINKS
+                }
+                \Text(size: 16, width: parent.width - 48, color: #1e293b) {
+                    DirectedType now supports first-class inline components. You can read the documentation at \Link(url: "https://directedtype.org"){directedtype.org} or check out our project repository on \Link(url: "https://github.com", color: #2563eb){GitHub}. Notice how spaces between adjacent inline links and plain words are naturally preserved by the cursor stream.
+                }
             }
         }
 
-        \Spacer(height: 4)
-
-        // Multiple Adjacent Links in Flow
-        \VStack(gap: 10) {
-            \Text(size: 15, weight: 600, color: #334155) {
-                Quick Navigation:
+        // Section 2
+        \Anchor("custom-styling") {
+            \Card(style: callout_card_style, gap: 12) {
+                \Text(size: 14, weight: 700, color: #1d4ed8) {
+                    2. CUSTOM LINK STYLING & ACCENTS
+                }
+                \Text(size: 16, width: parent.width - 48, color: #1e293b) {
+                    Links can define custom colors and underline styles: visit \Link(url: "https://vello.dev", color: #7c3aed){Vello 2D Graphics} for GPU compute rendering, \Link(url: "https://parley.dev", color: #059669){Parley} for typographic shaping, or \Link(url: "https://crates.io", color: #d97706, underline: false){Crates.io} without an underline.
+                }
             }
-            \Text(size: 15, color: #334155) {
-                Explore: \Link(url: "https://google.com"){Google} | \Link(url: "https://rust-lang.org", color: #ea580c){Rust Language} | \Link(url: "https://w3.org", color: #0284c7){W3C Standards} | \Link(url: "https://github.com/directedtype", color: #4338ca){Source Repository}
+        }
+
+        // Section 3
+        \Anchor("quick-nav") {
+            \VStack(gap: 10) {
+                \Text(size: 15, weight: 600, color: #334155) {
+                    3. External Resource Links:
+                }
+                \Text(size: 15, color: #334155) {
+                    Explore: \Link(url: "https://google.com"){Google} | \Link(url: "https://rust-lang.org", color: #ea580c){Rust Language} | \Link(url: "https://w3.org", color: #0284c7){W3C Standards} | \Link(url: "https://github.com/directedtype", color: #4338ca){Source Repository}
+                }
+            }
+        }
+
+        \Spacer(height: 120)
+
+        // Section 4 (Deep Section to test window scrolling)
+        \Anchor("deep-section") {
+            \Card(style: link_card_style, gap: 14) {
+                \Text(size: 14, weight: 700, color: #0f766e) {
+                    4. DEEP DOCUMENT SECTION
+                }
+                \Text(size: 16, width: parent.width - 48, color: #1e293b) {
+                    You navigated here via an in-page anchor! Clicking on \Text(weight: 600){#deep-section} scrolled the window directly to this element. Notice the subtle overlay scrollbar indicator on the right edge of the window.
+                }
+                \Text(size: 15, color: #2563eb) {
+                    \Link(url: "#top", color: #2563eb){↑ Back to top}
+                }
             }
         }
 
@@ -81,7 +125,7 @@ let callout_card_style = \CardStyle(
 
         // Footer Note
         \Text(size: 13, color: #94a3b8) {
-            All Phases Complete: Inline Whitespace, Rich Spans, Ranged Styles, Fragment Projection & Multi-Fragment Hit Testing with Click Navigation.
+            DirectedType Hypertext Navigation: Inline Spans, Anchor Scopes, Window Scrolling, and Trackpad/Wheel Interaction.
         }
     }
 }
