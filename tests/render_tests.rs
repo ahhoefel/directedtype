@@ -610,7 +610,7 @@ let red_link_style = \LinkStyle(
 \Padding(padding: 30, x: 0, y: 0) {
     \VStack(gap: 16) {
         \Text(size: 20) {
-            Check out \Link(url: "https://directedtype.org", style: red_link_style){DirectedType Engine} today.
+            Check out \Link(url: "https://directedtype.org", link_style: red_link_style){DirectedType Engine} today.
         }
     }
 }
@@ -684,7 +684,7 @@ let blue_hover_link_style = \LinkStyle(
 \Padding(padding: 30, x: 0, y: 0) {
     \VStack(gap: 16) {
         \Text(size: 20) {
-            Hovering over \Link(url: "https://directedtype.org", style: blue_hover_link_style){DirectedType Engine} reveals hover styles.
+            Hovering over \Link(url: "https://directedtype.org", link_style: blue_hover_link_style){DirectedType Engine} reveals hover styles.
         }
     }
 }

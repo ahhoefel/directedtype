@@ -10,6 +10,8 @@
 \use "components/Link.dt"
 \use "theme/default.dt"
 
+env link_style = link_default;
+
 let link_card_style = \CardStyle(
     bg: #f8fafc,
     border_color: #cbd5e1,
@@ -107,7 +109,7 @@ let w3c_link_style = \LinkStyle(
             }
         }
 
-        // Table of Contents Card (relies on ambient env style = link_default from theme/default.dt)
+        // Table of Contents Card (relies on ambient env link_style = link_default)
         \Card(style: callout_card_style, gap: 10) {
             \Text(size: 14, weight: 700, color: #1d4ed8) {
                 TABLE OF CONTENTS (IN-PAGE ANCHORS)
@@ -162,7 +164,7 @@ let w3c_link_style = \LinkStyle(
                 }
             }
             \Text(size: 16, width: parent.width - 48, color: #1e293b) {
-                Links can define custom LinkStyle bundles: visit \Link(url: "https://vello.dev", style: vello_link_style){Vello 2D Graphics} for GPU compute rendering, \Link(url: "https://parley.dev", style: parley_link_style){Parley} for typographic shaping, or \Link(url: "https://crates.io", style: crates_link_style){Crates.io} without an initial underline.
+                Links can define custom LinkStyle bundles: visit \Link(url: "https://vello.dev", link_style: vello_link_style){Vello 2D Graphics} for GPU compute rendering, \Link(url: "https://parley.dev", link_style: parley_link_style){Parley} for typographic shaping, or \Link(url: "https://crates.io", link_style: crates_link_style){Crates.io} without an initial underline.
             }
         }
 
@@ -180,7 +182,7 @@ let w3c_link_style = \LinkStyle(
                 }
             }
             \Text(size: 15, width: parent.width - 48, color: #334155) {
-                Explore: \Link(url: "https://google.com"){Google} | \Link(url: "https://rust-lang.org", style: rust_link_style){Rust Language} | \Link(url: "https://w3.org", style: w3c_link_style){W3C Standards} | \Link(url: "https://github.com/directedtype"){Source Repository}
+                Explore: \Link(url: "https://google.com"){Google} | \Link(url: "https://rust-lang.org", link_style: rust_link_style){Rust Language} | \Link(url: "https://w3.org", link_style: w3c_link_style){W3C Standards} | \Link(url: "https://github.com/directedtype"){Source Repository}
             }
         }
 

@@ -5,7 +5,7 @@
 
 \Component Link(
     url: String,
-    env style: LinkStyle,
+    env link_style: LinkStyle,
     cursor: String: "Pointer",
     on_click = self.click,
     on_focus = self.focus,
@@ -16,9 +16,9 @@
     state focused: Boolean = false;
     state hovered: Boolean = false;
 
-    let active_color = focused ? style.focused_color : (hovered ? style.hover_color : style.color);
-    let active_underline = focused ? style.focused_underline : (hovered ? style.hover_underline : style.underline);
-    let active_bg = focused ? style.focused_bg : (hovered ? style.hover_bg : style.bg);
+    let active_color = focused ? link_style.focused_color : (hovered ? link_style.hover_color : link_style.color);
+    let active_underline = focused ? link_style.focused_underline : (hovered ? link_style.hover_underline : link_style.underline);
+    let active_bg = focused ? link_style.focused_bg : (hovered ? link_style.hover_bg : link_style.bg);
 
     alias current_color = active_color;
     alias current_underline = active_underline;

@@ -143,5 +143,3 @@ let link_danger = \LinkStyle(
     focused_underline: true,
     focused_bg: #fee2e2
 );
-
-env style = link_default;

@@ -169,7 +169,7 @@ fn test_anchor_scope_first_class_port_and_append_method() {
         \use "theme/default.dt";
 
         \Component TableOfContents(target_scope: Node) {
-            \Link(url: target_scope.append("setup"), style: link_default) {
+            \Link(url: target_scope.append("setup"), link_style: link_default) {
                 Setup Link
             }
         }
@@ -496,6 +496,8 @@ fn test_keyboard_focus_traversal_reading_order() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
+        env link_style = link_default;
+
         \VStack(gap: 20) {
             \Link(url: "#sec1") { Link 1 }
             \HStack(gap: 10) {
@@ -562,6 +564,8 @@ fn test_keyboard_focus_scrolls_into_view() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
+        env link_style = link_default;
+
         \VStack(gap: 40) {
             \Link(url: "#top") { Top Link }
             \Rect(width: 300, height: 1200, color: "#111111")
@@ -606,6 +610,8 @@ fn test_keyboard_activation_triggers_anchor_navigation() {
         \use "components/VStack.dt";
         \use "components/Link.dt";
         \use "theme/default.dt";
+
+        env link_style = link_default;
 
         \VStack(gap: 30) {
             \Link(url: "#deep") { Jump to Deep Anchor }
@@ -772,6 +778,8 @@ fn test_link_component_click_handler_and_action_queue() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
+        env link_style = link_default;
+
         \VStack(gap: 20) {
             \Link(url: "#dest") { Go to Destination }
             \Link(url: "#nonexistent") { Broken Link }
@@ -874,7 +882,7 @@ fn test_link_component_custom_on_click_override() {
         \Component CustomPage {
             state custom_clicked: Boolean = false;
 
-            \Link(url: "#ignored", style: link_default, on_click: self.handle_custom_click) {
+            \Link(url: "#ignored", link_style: link_default, on_click: self.handle_custom_click) {
                 Custom Action Link
             }
         }
@@ -1105,7 +1113,7 @@ fn test_link_component_focus_and_blur_transitions() {
         );
 
         \VStack {
-            \Link(url: "https://example.com", style: custom_style) {
+            \Link(url: "https://example.com", link_style: custom_style) {
                 Visit Example
             }
         }
@@ -1269,7 +1277,7 @@ fn test_link_styling_required_no_default() {
     match err {
         directedtype::compiler::CompileError::MissingPort { node, port, .. } => {
             assert_eq!(node, "Link");
-            assert_eq!(port, "style");
+            assert_eq!(port, "link_style");
         }
         other => panic!("Expected MissingPort, got: {:?}", other),
     }
@@ -1277,10 +1285,12 @@ fn test_link_styling_required_no_default() {
 
 #[test]
 fn test_link_styling_environmental_from_theme() {
-    // Importing theme/default.dt provides ambient `env style = link_default`
+    // Environmental link_style provides ambient styling to Link components
     let source = r##"
         \use "components/Link.dt";
         \use "theme/default.dt";
+
+        env link_style = link_default;
 
         \Link(url: "https://example.com") {
             Ambiently Styled Link
@@ -1297,7 +1307,7 @@ fn test_link_styling_environmental_from_theme() {
         &directedtype::compiler::FsResolver,
         &registry,
     )
-    .expect("compile ok with ambient env style");
+    .expect("compile ok with ambient env link_style");
 
     let link_node = compiled
         .layout
