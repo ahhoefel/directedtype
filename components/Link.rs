@@ -20,12 +20,7 @@ impl Link {
 
 #[component]
 impl Link {
-    pub fn click(&mut self, event: &mut Event, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
-        if event.propagation_stopped {
-            return Ok(());
-        }
-        event.stop_propagation();
-
+    pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         if let Some(url) = ctx.get_port_string("url") {
             let url = url.to_string();
             let pane_container = ctx.get_port("pane").and_then(|v| v.as_node());
@@ -43,17 +38,15 @@ impl Link {
         Ok(())
     }
 
-    pub fn focus(&mut self, event: &mut Event, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+    pub fn focus(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         self.focused = true;
         ctx.set_state("focused", true);
-        event.stop_propagation();
         Ok(())
     }
 
-    pub fn blur(&mut self, event: &mut Event, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+    pub fn blur(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         self.focused = false;
         ctx.set_state("focused", false);
-        event.stop_propagation();
         Ok(())
     }
 

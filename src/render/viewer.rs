@@ -712,8 +712,9 @@ impl ViewerApp {
         if let Some(handler) = &mut self.event_handler {
             for &ancestor_id in bubble_path {
                 event.current_target = ancestor_id;
+                event.propagation_continued = false;
                 handler(&mut event, &self.layout);
-                if event.propagation_stopped {
+                if !event.propagation_continued {
                     break;
                 }
             }

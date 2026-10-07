@@ -79,8 +79,8 @@ pub struct Event {
     /// The chain of ancestor nodes from the hit node up to the root.
     pub bubble_path: Vec<NodeId>,
 
-    /// Flag to halt further bubbling up the ancestor chain.
-    pub propagation_stopped: bool,
+    /// Flag requesting event propagation to continue to the next ancestor node.
+    pub propagation_continued: bool,
 }
 
 impl Event {
@@ -99,7 +99,7 @@ impl Event {
             target,
             current_target: target,
             bubble_path: Vec::new(),
-            propagation_stopped: false,
+            propagation_continued: false,
         }
     }
 
@@ -109,8 +109,9 @@ impl Event {
         self
     }
 
-    /// Stops the event from propagating further up the ancestor bubble path.
-    pub fn stop_propagation(&mut self) {
-        self.propagation_stopped = true;
+    /// Requests that event propagation continue to the next ancestor node with a matching handler.
+    /// By default, event propagation stops on the first node with a matching handler.
+    pub fn continue_propagation(&mut self) {
+        self.propagation_continued = true;
     }
 }

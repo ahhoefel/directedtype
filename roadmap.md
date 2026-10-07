@@ -10,8 +10,7 @@
 * Support overloaded Component constructors with different selections of ports ([docs/overloading.md](docs/overloading.md)). For example, a text component could take a width value and determine its own height, or take its height and determine its width. For another example, you might want variants with padding, padding_x & padding_y, or padding_{top,left,bottom,right}.
 * Understand what auto is and whether we want to keep it in the design.
 * Named Symbol Imports: Explicitly name symbols pulled in from module imports (e.g. `\use { card_dark, button_primary } from "theme/default.dt"`) rather than implicitly pulling all top-level symbols into scope.
-* Event propagation should stop by default and be allowed to continue only with event.continue_propagation().
-* The dispatch code should be replaced with individual methods.
+* Implement ScrollPane/ScrollView component. It should have a method on it that scrolls to a given node.
 
 1. Live Hot-Reloading in the Viewer (Completed)
 2. Declarative Reactive State & Object-Oriented Rust Components ([docs/state_and_logic.md](file:///Users/hoefel/dev/directedtype/docs/state_and_logic.md))

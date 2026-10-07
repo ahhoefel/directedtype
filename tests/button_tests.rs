@@ -158,8 +158,8 @@ fn test_disabled_button_suppresses_event_bubbling() {
 
     compiled.dispatch_event(&mut click_disabled).expect("dispatch ok");
 
-    // Propagation should have stopped, so Card did not receive the click
-    assert!(click_disabled.propagation_stopped);
+    // Propagation stops by default on the first handler
+    assert!(!click_disabled.propagation_continued);
 
     // Now click the active button rect
     let active_comp = compiled.find_by_key(None, &ComponentKey::string("active_btn")).unwrap();
@@ -178,8 +178,8 @@ fn test_disabled_button_suppresses_event_bubbling() {
 
     compiled.dispatch_event(&mut click_active).expect("dispatch ok");
 
-    // Propagation was NOT stopped for active button
-    assert!(!click_active.propagation_stopped);
+    // Under the new convention, event propagation stops on the first node with a handler by default
+    assert!(!click_active.propagation_continued);
 }
 
 #[test]

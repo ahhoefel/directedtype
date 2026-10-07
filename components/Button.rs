@@ -2,7 +2,6 @@
 // Native companion struct providing click tracking, disabled state, and event propagation control.
 
 use directedtype::component::{Context, DispatchError};
-use directedtype::interaction::Event;
 use directedtype_macros::component;
 
 #[derive(Default, Debug, Clone)]
@@ -24,12 +23,7 @@ impl Button {
         }
     }
 
-    pub fn click(&mut self, event: &mut Event, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
-        let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
-        if is_disabled {
-            // Suppress further event bubbling when button is disabled
-            event.stop_propagation();
-        }
+    pub fn click(&mut self) -> Result<(), DispatchError> {
         Ok(())
     }
 }

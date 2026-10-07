@@ -296,7 +296,6 @@ impl ComponentRegistry {
 
 pub mod std_components {
     use super::{Context, DispatchError};
-    use crate::interaction::Event;
     use directedtype_macros::component;
 
     /// Standard interactive Button companion component.
@@ -319,10 +318,10 @@ pub mod std_components {
             }
         }
 
-        pub fn click(&mut self, event: &mut Event, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
             let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
             if is_disabled {
-                event.stop_propagation();
+                // Disabled button does nothing; click propagation is consumed by default
             }
             Ok(())
         }
@@ -343,12 +342,7 @@ pub mod std_components {
 
     #[component]
     impl Link {
-        pub fn click(&mut self, event: &mut Event, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
-            if event.propagation_stopped {
-                return Ok(());
-            }
-            event.stop_propagation();
-
+        pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
             if let Some(url) = ctx.get_port_string("url") {
                 let url = url.to_string();
                 let pane_container = ctx.get_port("pane").and_then(|v| v.as_node());
@@ -366,17 +360,15 @@ pub mod std_components {
             Ok(())
         }
 
-        pub fn focus(&mut self, event: &mut Event, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        pub fn focus(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
             self.focused = true;
             ctx.set_state("focused", true);
-            event.stop_propagation();
             Ok(())
         }
 
-        pub fn blur(&mut self, event: &mut Event, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        pub fn blur(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
             self.focused = false;
             ctx.set_state("focused", false);
-            event.stop_propagation();
             Ok(())
         }
 

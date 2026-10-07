@@ -154,7 +154,7 @@ fn test_event_click_synthesis_and_bubbling() {
     let rect_node = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
     let button_node = layout.nodes.iter().find(|n| n.name == "Button").unwrap();
 
-    // Verify manually constructing an event and checking stop_propagation
+    // Verify manually constructing an event and checking continue_propagation
     let mut click_event = Event::new(
         EventKind::Click { button: MouseButton::Left },
         Point::new(50.0, 30.0),
@@ -163,9 +163,9 @@ fn test_event_click_synthesis_and_bubbling() {
         rect_node.id,
     );
 
-    assert!(!click_event.propagation_stopped);
-    click_event.stop_propagation();
-    assert!(click_event.propagation_stopped);
+    assert!(!click_event.propagation_continued);
+    click_event.continue_propagation();
+    assert!(click_event.propagation_continued);
 
     // Hit test target
     let hit = layout.hit_test(Point::new(50.0, 30.0)).expect("Should hit Button's Rect");

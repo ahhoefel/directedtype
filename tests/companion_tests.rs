@@ -366,31 +366,20 @@ fn test_dom_integration_register_and_dispatch() {
 }
 
 #[test]
-fn test_event_propagation_stopping() {
-    #[derive(Default, Debug)]
-    struct BubbleTestComponent {
-        pub inner_clicked: bool,
-        pub outer_clicked: bool,
-    }
+fn test_event_propagation_stops_by_default() {
+    use std::sync::{Arc, Mutex};
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let log_clone = log.clone();
 
-    impl Component for BubbleTestComponent {
-        fn dispatch(
-            &mut self,
-            method: &str,
-            _event: &mut Event,
-            _ctx: &mut Context<'_>,
-        ) -> Result<(), DispatchError> {
-            match method {
-                "on_inner" => {
-                    self.inner_clicked = true;
-                    Ok(())
-                }
-                "on_outer" => {
-                    self.outer_clicked = true;
-                    Ok(())
-                }
-                _ => Ok(()),
-            }
+    struct BubbleTestComponent(Arc<Mutex<Vec<&'static str>>>);
+
+    #[directedtype_macros::component]
+    impl BubbleTestComponent {
+        pub fn on_inner(&mut self) {
+            self.0.lock().unwrap().push("inner");
+        }
+        pub fn on_outer(&mut self) {
+            self.0.lock().unwrap().push("outer");
         }
     }
 
@@ -406,7 +395,7 @@ fn test_event_propagation_stopping() {
 
     let doc = parse(input).expect("parse ok");
     let mut registry = ComponentRegistry::new();
-    registry.register("Parent", || Box::new(BubbleTestComponent::default()));
+    registry.register("Parent", move || Box::new(BubbleTestComponent(log_clone.clone())));
 
     let mut compiled = compile_document_with_registry(
         &doc,
@@ -419,6 +408,7 @@ fn test_event_propagation_stopping() {
     .expect("compile ok");
 
     let inner_rect = compiled.layout.nodes.iter().find(|n| n.rect.width == 50.0).unwrap();
+    let outer_rect = compiled.layout.nodes.iter().find(|n| n.rect.width == 200.0).unwrap();
     let mut click_event = Event::new(
         EventKind::Click {
             button: MouseButton::Left,
@@ -427,12 +417,12 @@ fn test_event_propagation_stopping() {
         Point::new(5.0, 5.0),
         Modifiers::default(),
         inner_rect.id,
-    );
-
-    // Set stop_propagation on event
-    click_event.stop_propagation();
+    )
+    .with_bubble_path(vec![inner_rect.id, outer_rect.id]);
 
     compiled.dispatch_event(&mut click_event).expect("dispatch ok");
+    assert_eq!(*log.lock().unwrap(), vec!["inner"], "Propagation should stop at inner handler by default");
+    assert!(!click_event.propagation_continued);
 }
 
 #[test]
@@ -655,4 +645,149 @@ fn test_examples_counter_dt_and_rs_integration() {
     assert_eq!(img.width(), 800);
     assert_eq!(img.height(), 600);
 }
+
+#[test]
+fn test_click_propagation_stops_by_default() {
+    use std::sync::{Arc, Mutex};
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let log_child = log.clone();
+    let log_parent = log.clone();
+
+    struct ChildComp(Arc<Mutex<Vec<&'static str>>>);
+    #[directedtype_macros::component]
+    impl ChildComp {
+        pub fn child_click(&mut self) {
+            self.0.lock().unwrap().push("child");
+        }
+    }
+
+    struct ParentComp(Arc<Mutex<Vec<&'static str>>>);
+    #[directedtype_macros::component]
+    impl ParentComp {
+        pub fn parent_click(&mut self) {
+            self.0.lock().unwrap().push("parent");
+        }
+    }
+
+    let input = r#"
+    \Component Parent {
+        \Rect(x: 0, y: 0, width: 200, height: 200, color: #1e293b, on_click: self.parent_click) {
+            \Child
+        }
+    }
+
+    \Component Child {
+        \Rect(x: 10, y: 10, width: 50, height: 50, color: #3b82f6, on_click: self.child_click)
+    }
+
+    \Parent
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let mut registry = ComponentRegistry::new();
+    registry.register("Child", move || Box::new(ChildComp(log_child.clone())));
+    registry.register("Parent", move || Box::new(ParentComp(log_parent.clone())));
+
+    let mut compiled = compile_document_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let child_rect = compiled.layout.nodes.iter().find(|n| n.rect.width == 50.0).unwrap();
+    let parent_rect = compiled.layout.nodes.iter().find(|n| n.rect.width == 200.0).unwrap();
+
+    let mut click_child = Event::new(
+        EventKind::Click {
+            button: MouseButton::Left,
+        },
+        Point::new(20.0, 20.0),
+        Point::new(10.0, 10.0),
+        Modifiers::default(),
+        child_rect.id,
+    )
+    .with_bubble_path(vec![child_rect.id, parent_rect.id]);
+
+    compiled.dispatch_event(&mut click_child).expect("dispatch ok");
+
+    assert!(!click_child.propagation_continued);
+    assert_eq!(*log.lock().unwrap(), vec!["child"], "Click must stop on the first handler by default");
+}
+
+#[test]
+fn test_click_propagation_continue_propagation() {
+    use std::sync::{Arc, Mutex};
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let log_child = log.clone();
+    let log_parent = log.clone();
+
+    struct ChildComp(Arc<Mutex<Vec<&'static str>>>);
+    #[directedtype_macros::component]
+    impl ChildComp {
+        pub fn child_click(&mut self, event: &mut Event) {
+            self.0.lock().unwrap().push("child");
+            event.continue_propagation();
+        }
+    }
+
+    struct ParentComp(Arc<Mutex<Vec<&'static str>>>);
+    #[directedtype_macros::component]
+    impl ParentComp {
+        pub fn parent_click(&mut self) {
+            self.0.lock().unwrap().push("parent");
+        }
+    }
+
+    let input = r#"
+    \Component Parent {
+        \Rect(x: 0, y: 0, width: 200, height: 200, color: #1e293b, on_click: self.parent_click) {
+            \Child
+        }
+    }
+
+    \Component Child {
+        \Rect(x: 10, y: 10, width: 50, height: 50, color: #3b82f6, on_click: self.child_click)
+    }
+
+    \Parent
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let mut registry = ComponentRegistry::new();
+    registry.register("Child", move || Box::new(ChildComp(log_child.clone())));
+    registry.register("Parent", move || Box::new(ParentComp(log_parent.clone())));
+
+    let mut compiled = compile_document_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let child_rect = compiled.layout.nodes.iter().find(|n| n.rect.width == 50.0).unwrap();
+    let parent_rect = compiled.layout.nodes.iter().find(|n| n.rect.width == 200.0).unwrap();
+
+    let mut click_child = Event::new(
+        EventKind::Click {
+            button: MouseButton::Left,
+        },
+        Point::new(20.0, 20.0),
+        Point::new(10.0, 10.0),
+        Modifiers::default(),
+        child_rect.id,
+    )
+    .with_bubble_path(vec![child_rect.id, parent_rect.id]);
+
+    compiled.dispatch_event(&mut click_child).expect("dispatch ok");
+
+    assert_eq!(*log.lock().unwrap(), vec!["child", "parent"], "Calling continue_propagation must allow ancestor handler to run");
+}
+
 

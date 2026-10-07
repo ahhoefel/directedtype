@@ -370,10 +370,6 @@ impl CompiledDocument {
         // 2. Bubble up the ancestor chain
         let bubble_nodes = event.bubble_path.clone();
         for node_id in bubble_nodes {
-            if event.propagation_stopped {
-                break;
-            }
-
             let handler_opt = self
                 .layout
                 .get_node(node_id)
@@ -399,6 +395,8 @@ impl CompiledDocument {
                                 &self.layout,
                             );
 
+                            event.propagation_continued = false;
+
                             component.dispatch(&handler.method, event, &mut ctx)?;
 
                             let mutations = ctx.take_mutations();
@@ -413,7 +411,9 @@ impl CompiledDocument {
 
                             self.actions.extend(actions);
 
-                            if event.propagation_stopped {
+                            // By default, event propagation stops on the first node with a matching handler,
+                            // unless event.continue_propagation() was called.
+                            if !event.propagation_continued {
                                 break;
                             }
                         } else {

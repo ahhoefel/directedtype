@@ -895,12 +895,11 @@ fn test_link_component_custom_on_click_override() {
         fn dispatch(
             &mut self,
             method: &str,
-            event: &mut Event,
+            _event: &mut Event,
             ctx: &mut Context<'_>,
         ) -> Result<(), DispatchError> {
             match method {
                 "handle_custom_click" => {
-                    event.stop_propagation();
                     ctx.set_state("custom_clicked", true);
                     Ok(())
                 }
