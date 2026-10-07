@@ -41,10 +41,30 @@ pub enum DispatchError {
     Custom(String),
 }
 
+/// An action emitted by a component method (e.g. navigation, scrolling, external URL opening).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ContextAction {
+    /// Scroll to bring a target node into view.
+    /// `container: None` scrolls the window/viewport.
+    /// `container: Some(pane_id)` will scroll a specific ScrollPane node.
+    ScrollToNode {
+        target: NodeId,
+        container: Option<NodeId>,
+    },
+    /// Request the host application/viewer to open an external URL.
+    OpenUrl {
+        url: String,
+    },
+    /// Request focus shift to a target node (or clear focus if None).
+    SetFocus {
+        target: Option<NodeId>,
+    },
+}
+
 /// Execution context passed to component lifecycle and event methods.
 ///
 /// Gives components access to read their input ports, query children by structured key,
-/// and record state mutations for the one-way pipeline.
+/// record state mutations for the one-way pipeline, and queue high-level context actions.
 pub struct Context<'a> {
     node_id: NodeId,
     parent_id: Option<NodeId>,
@@ -52,6 +72,7 @@ pub struct Context<'a> {
     ports: &'a HashMap<String, Value>,
     layout: &'a ResolvedLayout,
     mutations: Vec<(String, Value)>,
+    actions: Vec<ContextAction>,
 }
 
 impl<'a> Context<'a> {
@@ -69,6 +90,7 @@ impl<'a> Context<'a> {
             ports,
             layout,
             mutations: Vec::new(),
+            actions: Vec::new(),
         }
     }
 
@@ -138,6 +160,51 @@ impl<'a> Context<'a> {
     /// Drains and returns all recorded state mutations.
     pub fn take_mutations(&mut self) -> Vec<(String, Value)> {
         std::mem::take(&mut self.mutations)
+    }
+
+    /// Scrolls to bring `target` into view. Returns `true` if `target` exists in the layout, `false` otherwise.
+    pub fn scroll_to_node(&mut self, target: NodeId) -> bool {
+        self.scroll_to_node_in_container(target, None)
+    }
+
+    /// Scrolls to bring `target` into view within an optional container (e.g. ScrollPane).
+    pub fn scroll_to_node_in_container(&mut self, target: NodeId, container: Option<NodeId>) -> bool {
+        if self.layout.get_node(target).is_some() {
+            self.actions.push(ContextAction::ScrollToNode { target, container });
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Resolves an anchor link (relative or absolute) from the current component's position
+    /// and queues a scroll action if found. Returns `true` if the anchor was resolved, `false` otherwise.
+    pub fn scroll_to_anchor(&mut self, url: &str) -> bool {
+        self.scroll_to_anchor_in_container(url, None)
+    }
+
+    /// Resolves an anchor link and queues a scroll action within a specific container (e.g. ScrollPane).
+    pub fn scroll_to_anchor_in_container(&mut self, url: &str, container: Option<NodeId>) -> bool {
+        if let Some((target_id, _scope_id)) = self.layout.resolve_anchor(self.node_id, url) {
+            self.scroll_to_node_in_container(target_id, container)
+        } else {
+            false
+        }
+    }
+
+    /// Queues an action to open an external URL.
+    pub fn open_url(&mut self, url: impl Into<String>) {
+        self.actions.push(ContextAction::OpenUrl { url: url.into() });
+    }
+
+    /// Queues an action to update focus to a target node.
+    pub fn set_focus(&mut self, target: Option<NodeId>) {
+        self.actions.push(ContextAction::SetFocus { target });
+    }
+
+    /// Drains and returns all recorded context actions.
+    pub fn take_actions(&mut self) -> Vec<ContextAction> {
+        std::mem::take(&mut self.actions)
     }
 }
 
@@ -217,6 +284,12 @@ impl ComponentRegistry {
         registry.register_companion("Button", "components/Button.rs", || {
             Box::new(std_components::Button::default())
         });
+        registry.register_companion("Link", "components/Link.rs", || {
+            Box::new(std_components::Link::default())
+        });
+        registry.register_companion("Card", "components/Card.rs", || {
+            Box::new(std_components::Card::default())
+        });
         registry
     }
 }
@@ -265,9 +338,109 @@ pub mod std_components {
             }
         }
     }
+
+    /// Standard hypertext Link companion component.
+    #[derive(Default, Debug, Clone)]
+    pub struct Link {
+        pub focused: bool,
+    }
+
+    impl Link {
+        pub fn new() -> Self {
+            Self::default()
+        }
+    }
+
+    impl Component for Link {
+        fn dispatch(
+            &mut self,
+            method: &str,
+            event: &mut Event,
+            ctx: &mut Context<'_>,
+        ) -> Result<(), DispatchError> {
+            match method {
+                "click" => {
+                    if event.propagation_stopped {
+                        return Ok(());
+                    }
+                    event.stop_propagation();
+
+                    if let Some(url) = ctx.get_port_string("url") {
+                        let url = url.to_string();
+                        let pane_container = ctx.get_port("pane").and_then(|v| v.as_node());
+
+                        if url.starts_with('#') {
+                            if !ctx.scroll_to_anchor_in_container(&url, pane_container) {
+                                eprintln!("[Link] In-page anchor not found: {}", url);
+                            }
+                        } else if ctx.scroll_to_anchor_in_container(&url, pane_container) {
+                            // Scrolled to relative/scoped anchor path without '#'
+                        } else {
+                            ctx.open_url(url);
+                        }
+                    }
+                    Ok(())
+                }
+                "focus" => {
+                    self.focused = true;
+                    ctx.set_state("focused", true);
+                    event.stop_propagation();
+                    Ok(())
+                }
+                "blur" => {
+                    self.focused = false;
+                    ctx.set_state("focused", false);
+                    event.stop_propagation();
+                    Ok(())
+                }
+                _ => Err(DispatchError::MethodNotFound {
+                    component: "Link".into(),
+                    method: method.into(),
+                }),
+            }
+        }
+    }
+
+    /// Standard surface container Card companion component.
+    #[derive(Default, Debug, Clone)]
+    pub struct Card {
+        pub focused: bool,
+    }
+
+    impl Card {
+        pub fn new() -> Self {
+            Self::default()
+        }
+    }
+
+    impl Component for Card {
+        fn dispatch(
+            &mut self,
+            method: &str,
+            _event: &mut Event,
+            ctx: &mut Context<'_>,
+        ) -> Result<(), DispatchError> {
+            match method {
+                "focus" => {
+                    self.focused = true;
+                    ctx.set_state("focused", true);
+                    Ok(())
+                }
+                "blur" => {
+                    self.focused = false;
+                    ctx.set_state("focused", false);
+                    Ok(())
+                }
+                _ => Err(DispatchError::MethodNotFound {
+                    component: "Card".into(),
+                    method: method.into(),
+                }),
+            }
+        }
+    }
 }
 
-pub use std_components::Button;
+pub use std_components::{Button, Card, Link};
 
 
 /// Container managing live `Component` instances keyed by their `NodeId`.

@@ -205,6 +205,27 @@ impl ResolvedLayout {
         self.nodes.iter().find(|n| n.id == id)
     }
 
+    /// Constructs the bubble path (from target up to the root window) for a given node.
+    pub fn bubble_path_for_node(&self, target: NodeId) -> Vec<NodeId> {
+        let mut bubble_path = Vec::new();
+        bubble_path.push(target);
+
+        let mut curr_parent = self.get_node(target).and_then(|n| n.parent);
+        let mut visited = std::collections::HashSet::new();
+        visited.insert(target);
+
+        let max_depth = self.nodes.len() + 1;
+        while let Some(parent_id) = curr_parent {
+            if parent_id.is_window() || bubble_path.len() >= max_depth || !visited.insert(parent_id) {
+                break;
+            }
+            bubble_path.push(parent_id);
+            curr_parent = self.get_node(parent_id).and_then(|n| n.parent);
+        }
+
+        bubble_path
+    }
+
     pub fn get_by_handle(&self, handle: NodeHandle) -> Option<&ResolvedNode> {
         self.nodes.iter().find(|n| n.handle == Some(handle))
     }
@@ -314,22 +335,7 @@ impl ResolvedLayout {
                 continue;
             }
 
-            // Construct bubble path from leaf target up to root
-            let mut bubble_path = Vec::new();
-            bubble_path.push(node.id);
-
-            let mut curr_parent = node.parent;
-            let mut visited = std::collections::HashSet::new();
-            visited.insert(node.id);
-
-            let max_depth = self.nodes.len() + 1;
-            while let Some(parent_id) = curr_parent {
-                if parent_id.is_window() || bubble_path.len() >= max_depth || !visited.insert(parent_id) {
-                    break;
-                }
-                bubble_path.push(parent_id);
-                curr_parent = self.get_node(parent_id).and_then(|n| n.parent);
-            }
+            let bubble_path = self.bubble_path_for_node(node.id);
 
             let local_point = Point::new(point.x - node.rect.x, point.y - node.rect.y);
 

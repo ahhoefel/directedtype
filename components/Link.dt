@@ -1,13 +1,35 @@
 // DirectedType Standard Component Library: Link
-// Declarative hypertext link component for inline typography and standalone navigation.
+// Declarative hypertext link component for inline typography and standalone navigation with reactive focus styling.
 
 \Component Link(
     url: String,
     color: Color: #1a73e8,
     underline: Boolean: true,
-    cursor: String: "Pointer"
+    cursor: String: "Pointer",
+    focused_color: Color: #1557b0,
+    focused_underline: Boolean: true,
+    focused_bg: Color: #00000000,
+    on_click = self.click,
+    on_focus = self.focus,
+    on_blur = self.blur
 ) {
-    \Text(color: color) {
+    state focused: Boolean = false;
+
+    let active_color = focused ? focused_color : color;
+    let active_underline = focused ? focused_underline : underline;
+    let active_bg = focused ? focused_bg : #00000000;
+
+    alias current_color = active_color;
+    alias current_underline = active_underline;
+    alias current_bg = active_bg;
+
+    \Text(
+        color: active_color,
+        underline: active_underline,
+        on_click: on_click,
+        on_focus: on_focus,
+        on_blur: on_blur
+    ) {
         \children
     }
 }

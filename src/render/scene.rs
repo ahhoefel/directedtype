@@ -301,13 +301,56 @@ pub fn build_scene(
                     builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
                 }
 
+                // Draw any span background highlights (e.g. focused_bg on links)
+                for span in &node.text_spans {
+                    if let Some(child_id) = span.node_id {
+                        if let Some(child_node) = layout.get_node(child_id) {
+                            if let Some(bg_str) = child_node.properties.get("current_bg").and_then(|v| v.as_str()) {
+                                let bg_color = parse_color(bg_str);
+                                if bg_color.components[3] > 0.0 {
+                                    for frag in &child_node.fragments {
+                                        let pad_rect = Rect::new(
+                                            frag.x - 2.0,
+                                            frag.y - 1.0,
+                                            frag.x + frag.width + 2.0,
+                                            frag.y + frag.height + 1.0,
+                                        );
+                                        let rounded = RoundedRect::from_rect(pad_rect, 4.0);
+                                        scene.fill(
+                                            Fill::NonZero,
+                                            Affine::IDENTITY,
+                                            Brush::Solid(bg_color),
+                                            None,
+                                            &rounded,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Push span styles (colors & underlines) to range builder
                 for span in &node.text_spans {
-                    if let Some(c_str) = &span.style.color {
+                    let mut color_str = span.style.color.as_deref();
+                    let mut underline = span.style.underline;
+
+                    if let Some(child_id) = span.node_id {
+                        if let Some(child_node) = layout.get_node(child_id) {
+                            if let Some(c) = child_node.properties.get("current_color").and_then(|v| v.as_str()) {
+                                color_str = Some(c);
+                            }
+                            if let Some(u) = child_node.properties.get("current_underline").and_then(|v| v.as_bool()) {
+                                underline = u;
+                            }
+                        }
+                    }
+
+                    if let Some(c_str) = color_str {
                         let c = parse_color(c_str);
                         builder.push(StyleProperty::Brush(color_to_rgba8(&c)), span.range.clone());
                     }
-                    if span.style.underline {
+                    if underline {
                         builder.push(StyleProperty::Underline(true), span.range.clone());
                     }
                 }

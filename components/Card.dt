@@ -1,5 +1,5 @@
 // DirectedType Standard Component Library: Card
-// Universal surface container styled by a CardStyle bundle.
+// Universal surface container styled by a CardStyle bundle with reactive focus/blur styling.
 // Always automatically sized to wrap its interior components; exposes read-only height and bottom aliases.
 \use "components/CardStyle.dt"
 
@@ -9,21 +9,32 @@
     width: Number,
     x: Number,
     y: Number,
-    gap: Number: 0
+    gap: Number: 0,
+    focused_bg: Color: #eff6ff,
+    focused_border_color: Color: #3b82f6,
+    focused_border_width: Number: 2,
+    on_focus = self.focus,
+    on_blur = self.blur
 ) {
+    state focused: Boolean = false;
+
     alias right = x + width;
     alias bottom = max(children.bottom) > 0 ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
     alias height = bottom - y;
+
+    let current_bg = focused ? focused_bg : style.bg;
+    let current_border_color = focused ? focused_border_color : style.border_color;
+    let current_border_width = focused ? focused_border_width : style.border_width;
 
     \Rect(
         x: x,
         y: y,
         width: width,
         height: height,
-        color: style.bg,
+        color: current_bg,
         radius: style.radius,
-        border_color: style.border_color,
-        border_width: style.border_width
+        border_color: current_border_color,
+        border_width: current_border_width
     )
 
     \Children {
@@ -37,8 +48,15 @@
     style: CardStyle,
     x: Number,
     y: Number,
-    gap: Number: 0
+    gap: Number: 0,
+    focused_bg: Color: #eff6ff,
+    focused_border_color: Color: #3b82f6,
+    focused_border_width: Number: 2,
+    on_focus = self.focus,
+    on_blur = self.blur
 ) {
+    state focused: Boolean = false;
+
     let resolved_width = parent.width - (2 * x);
 
     alias right = x + resolved_width;
@@ -46,15 +64,19 @@
     alias bottom = max(children.bottom) > 0 ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
     alias height = bottom - y;
 
+    let current_bg = focused ? focused_bg : style.bg;
+    let current_border_color = focused ? focused_border_color : style.border_color;
+    let current_border_width = focused ? focused_border_width : style.border_width;
+
     \Rect(
         x: x,
         y: y,
         width: resolved_width,
         height: height,
-        color: style.bg,
+        color: current_bg,
         radius: style.radius,
-        border_color: style.border_color,
-        border_width: style.border_width
+        border_color: current_border_color,
+        border_width: current_border_width
     )
 
     \Children {
@@ -62,4 +84,3 @@
         y: prev ? prev.bottom + gap : parent.top + style.padding_y
     }
 }
-

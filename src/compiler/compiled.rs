@@ -25,6 +25,8 @@ pub struct CompiledDocument {
     pub layout: ResolvedLayout,
     pub state_overrides: HashMap<VarId, Value>,
     pub instances: crate::component::InstanceManager,
+    pub focused_node: Option<NodeId>,
+    pub actions: Vec<crate::component::ContextAction>,
 }
 
 impl CompiledDocument {
@@ -42,6 +44,8 @@ impl CompiledDocument {
             layout,
             state_overrides,
             instances: crate::component::InstanceManager::new(),
+            focused_node: None,
+            actions: Vec::new(),
         }
     }
 
@@ -87,6 +91,8 @@ impl CompiledDocument {
             layout,
             state_overrides,
             instances: crate::component::InstanceManager::new(),
+            focused_node: None,
+            actions: Vec::new(),
         })
     }
 
@@ -134,6 +140,9 @@ impl CompiledDocument {
                 for (state_name, val) in mutations {
                     initial_mutations.push((node.id, state_name, val));
                 }
+
+                let actions = ctx.take_actions();
+                self.actions.extend(actions);
 
                 self.instances.insert(node.id, instance);
             }
@@ -267,6 +276,53 @@ impl CompiledDocument {
         self.layout.resolve_anchor(from_node, target_path)
     }
 
+    /// Returns the currently focused node ID, if any.
+    pub fn focused_node(&self) -> Option<NodeId> {
+        self.focused_node
+    }
+
+    /// Sets the currently focused node, dispatching `Blur` to the previous node and `Focus` to the new node.
+    pub fn set_focused_node(
+        &mut self,
+        new_focus: Option<NodeId>,
+    ) -> Result<HashSet<VarId>, crate::component::DispatchError> {
+        if self.focused_node == new_focus {
+            return Ok(HashSet::new());
+        }
+
+        let mut changed_vars = HashSet::new();
+        let old_focus = self.focused_node;
+        self.focused_node = new_focus;
+
+        if let Some(old_id) = old_focus {
+            let mut blur_event = crate::interaction::Event::new(
+                crate::interaction::EventKind::Blur,
+                crate::interaction::Point::default(),
+                crate::interaction::Point::default(),
+                crate::interaction::Modifiers::default(),
+                old_id,
+            );
+            blur_event.bubble_path = self.layout.bubble_path_for_node(old_id);
+            let vars = self.dispatch_event(&mut blur_event)?;
+            changed_vars.extend(vars);
+        }
+
+        if let Some(new_id) = new_focus {
+            let mut focus_event = crate::interaction::Event::new(
+                crate::interaction::EventKind::Focus,
+                crate::interaction::Point::default(),
+                crate::interaction::Point::default(),
+                crate::interaction::Modifiers::default(),
+                new_id,
+            );
+            focus_event.bubble_path = self.layout.bubble_path_for_node(new_id);
+            let vars = self.dispatch_event(&mut focus_event)?;
+            changed_vars.extend(vars);
+        }
+
+        Ok(changed_vars)
+    }
+
     /// Dispatches an interaction event through the component hierarchy.
     ///
     /// The event bubbles up from the hit target along `bubble_path`. At each node,
@@ -280,9 +336,15 @@ impl CompiledDocument {
         use crate::component::{Context, DispatchError, EventHandlerTarget};
         use crate::interaction::EventKind;
 
-        // 1. Populate bubble path if empty via spatial hit-testing
+        // 1. Populate bubble path if empty via spatial hit-testing or direct target node lookup
         if event.bubble_path.is_empty() {
-            if let Some(hit) = self.layout.hit_test(event.global_point) {
+            if event.kind == EventKind::Focus || event.kind == EventKind::Blur {
+                if self.layout.get_node(event.target).is_some() {
+                    event.bubble_path = self.layout.bubble_path_for_node(event.target);
+                } else {
+                    return Ok(HashSet::new());
+                }
+            } else if let Some(hit) = self.layout.hit_test(event.global_point) {
                 event.target = hit.target;
                 event.local_point = hit.local_point;
                 event.bubble_path = hit.bubble_path;
@@ -299,6 +361,8 @@ impl CompiledDocument {
             EventKind::PointerEnter => "on_pointer_enter",
             EventKind::PointerLeave => "on_pointer_leave",
             EventKind::Scroll { .. } => "on_scroll",
+            EventKind::Focus => "on_focus",
+            EventKind::Blur => "on_blur",
         };
 
         let mut all_changed_vars = HashSet::new();
@@ -338,11 +402,16 @@ impl CompiledDocument {
                             component.dispatch(&handler.method, event, &mut ctx)?;
 
                             let mutations = ctx.take_mutations();
+                            let actions = ctx.take_actions();
+                            drop(ctx);
+
                             for (state_name, val) in mutations {
                                 if let Ok(changed) = self.set_state(target_node_id, &state_name, val) {
                                     all_changed_vars.extend(changed);
                                 }
                             }
+
+                            self.actions.extend(actions);
 
                             if event.propagation_stopped {
                                 break;
@@ -359,6 +428,29 @@ impl CompiledDocument {
         }
 
         Ok(all_changed_vars)
+    }
+
+    /// Drains and returns all queued context actions emitted during event dispatch or lifecycle hooks.
+    pub fn take_actions(&mut self) -> Vec<crate::component::ContextAction> {
+        std::mem::take(&mut self.actions)
+    }
+
+    /// Executes a context action on the compiled document (e.g. updating focus on scroll_to actions).
+    pub fn execute_action(
+        &mut self,
+        action: crate::component::ContextAction,
+    ) -> Result<HashSet<VarId>, crate::component::DispatchError> {
+        match action {
+            crate::component::ContextAction::ScrollToNode { target, .. } => {
+                self.set_focused_node(Some(target))
+            }
+            crate::component::ContextAction::SetFocus { target } => {
+                self.set_focused_node(target)
+            }
+            crate::component::ContextAction::OpenUrl { .. } => {
+                Ok(HashSet::new())
+            }
+        }
     }
 
     /// Returns a reference to the active `InstanceManager`.

@@ -58,6 +58,8 @@ pub enum EventKind {
     PointerEnter,
     PointerLeave,
     Scroll { delta_x: f64, delta_y: f64 },
+    Focus,
+    Blur,
 }
 
 /// A high-level DirectedType interaction event.
