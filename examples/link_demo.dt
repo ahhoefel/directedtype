@@ -52,16 +52,16 @@ let callout_card_style = \CardStyle(
             }
             \VStack(gap: 6) {
                 \Text(size: 15, color: #1e293b) {
-                    • \Link(url: "#inline-links", color: #2563eb){1. Inline Text Hyperlinks}
+                    • \Link(url: "#inline-links", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){1. Inline Text Hyperlinks}
                 }
                 \Text(size: 15, color: #1e293b) {
-                    • \Link(url: "#custom-styling", color: #2563eb){2. Custom Link Styling & Accents}
+                    • \Link(url: "#custom-styling", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){2. Custom Link Styling & Accents}
                 }
                 \Text(size: 15, color: #1e293b) {
-                    • \Link(url: "#quick-nav", color: #2563eb){3. External Resource Links}
+                    • \Link(url: "#quick-nav", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){3. External Resource Links}
                 }
                 \Text(size: 15, color: #1e293b) {
-                    • \Link(url: "#deep-section", color: #2563eb){4. Deep Document Section (Scroll Test)}
+                    • \Link(url: "#deep-section", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){4. Deep Document Section (Scroll Test)}
                 }
             }
         }
@@ -69,55 +69,79 @@ let callout_card_style = \CardStyle(
         \Divider(thickness: 1, color: #e2e8f0)
 
         // Section 1
-        \Anchor("inline-links") {
-            \Card(style: link_card_style, gap: 14) {
+        \Card(
+            style: link_card_style,
+            gap: 14,
+            focused_bg: #eff6ff,
+            focused_border_color: #3b82f6,
+            focused_border_width: 2
+        ) {
+            \Anchor("inline-links") {
                 \Text(size: 14, weight: 700, color: #475569) {
                     1. INLINE TEXT WITH EMBEDDED HYPERLINKS
                 }
-                \Text(size: 16, width: parent.width - 48, color: #1e293b) {
-                    DirectedType now supports first-class inline components. You can read the documentation at \Link(url: "https://directedtype.org"){directedtype.org} or check out our project repository on \Link(url: "https://github.com", color: #2563eb){GitHub}. Notice how spaces between adjacent inline links and plain words are naturally preserved by the cursor stream.
-                }
+            }
+            \Text(size: 16, width: parent.width - 48, color: #1e293b) {
+                DirectedType now supports first-class inline components. You can read the documentation at \Link(url: "https://directedtype.org", focused_color: #1d4ed8, focused_bg: #e0f2fe){directedtype.org} or check out our project repository on \Link(url: "https://github.com", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){GitHub}. Notice how spaces between adjacent inline links and plain words are naturally preserved by the cursor stream.
             }
         }
 
         // Section 2
-        \Anchor("custom-styling") {
-            \Card(style: callout_card_style, gap: 12) {
+        \Card(
+            style: callout_card_style,
+            gap: 12,
+            focused_bg: #dbeafe,
+            focused_border_color: #2563eb,
+            focused_border_width: 2
+        ) {
+            \Anchor("custom-styling") {
                 \Text(size: 14, weight: 700, color: #1d4ed8) {
                     2. CUSTOM LINK STYLING & ACCENTS
                 }
-                \Text(size: 16, width: parent.width - 48, color: #1e293b) {
-                    Links can define custom colors and underline styles: visit \Link(url: "https://vello.dev", color: #7c3aed){Vello 2D Graphics} for GPU compute rendering, \Link(url: "https://parley.dev", color: #059669){Parley} for typographic shaping, or \Link(url: "https://crates.io", color: #d97706, underline: false){Crates.io} without an underline.
-                }
+            }
+            \Text(size: 16, width: parent.width - 48, color: #1e293b) {
+                Links can define custom colors and underline styles: visit \Link(url: "https://vello.dev", color: #7c3aed, focused_color: #5b21b6, focused_bg: #ede9fe){Vello 2D Graphics} for GPU compute rendering, \Link(url: "https://parley.dev", color: #059669, focused_color: #047857, focused_bg: #d1fae5){Parley} for typographic shaping, or \Link(url: "https://crates.io", color: #d97706, underline: false, focused_color: #b45309, focused_underline: true, focused_bg: #fef3c7){Crates.io} without an underline.
             }
         }
 
         // Section 3
-        \Anchor("quick-nav") {
-            \VStack(gap: 10) {
-                \Text(size: 15, weight: 600, color: #334155) {
-                    3. External Resource Links:
+        \Card(
+            style: link_card_style,
+            gap: 10,
+            focused_bg: #f8fafc,
+            focused_border_color: #6366f1,
+            focused_border_width: 2
+        ) {
+            \Anchor("quick-nav") {
+                \Text(size: 14, weight: 700, color: #334155) {
+                    3. EXTERNAL RESOURCE LINKS
                 }
-                \Text(size: 15, color: #334155) {
-                    Explore: \Link(url: "https://google.com"){Google} | \Link(url: "https://rust-lang.org", color: #ea580c){Rust Language} | \Link(url: "https://w3.org", color: #0284c7){W3C Standards} | \Link(url: "https://github.com/directedtype", color: #4338ca){Source Repository}
-                }
+            }
+            \Text(size: 15, width: parent.width - 48, color: #334155) {
+                Explore: \Link(url: "https://google.com", focused_color: #1d4ed8, focused_bg: #e0f2fe){Google} | \Link(url: "https://rust-lang.org", color: #ea580c, focused_color: #c2410c, focused_bg: #ffedd5){Rust Language} | \Link(url: "https://w3.org", color: #0284c7, focused_color: #0369a1, focused_bg: #e0f2fe){W3C Standards} | \Link(url: "https://github.com/directedtype", color: #4338ca, focused_color: #3730a3, focused_bg: #e0e7ff){Source Repository}
             }
         }
 
         \Spacer(height: 120)
 
         // Section 4 (Deep Section to test window scrolling)
-        \Anchor("deep-section") {
-            \Card(style: link_card_style, gap: 14) {
+        \Card(
+            style: link_card_style,
+            gap: 14,
+            focused_bg: #f0fdf4,
+            focused_border_color: #059669,
+            focused_border_width: 2
+        ) {
+            \Anchor("deep-section") {
                 \Text(size: 14, weight: 700, color: #0f766e) {
                     4. DEEP DOCUMENT SECTION
                 }
-                \Text(size: 16, width: parent.width - 48, color: #1e293b) {
-                    You navigated here via an in-page anchor! Clicking on \Text(weight: 600){#deep-section} scrolled the window directly to this element. Notice the subtle overlay scrollbar indicator on the right edge of the window.
-                }
-                \Text(size: 15, color: #2563eb) {
-                    \Link(url: "#top", color: #2563eb){↑ Back to top}
-                }
+            }
+            \Text(size: 16, width: parent.width - 48, color: #1e293b) {
+                You navigated here via an in-page anchor! Clicking on \Text(weight: 600){#deep-section} scrolled the window directly to this element. Notice the subtle overlay scrollbar indicator on the right edge of the window.
+            }
+            \Text(size: 15, color: #2563eb) {
+                \Link(url: "#top", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){↑ Back to top}
             }
         }
 

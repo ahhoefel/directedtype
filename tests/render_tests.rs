@@ -523,3 +523,128 @@ fn test_render_link_demo_example() {
     save_golden_or_preview(&img, "link_demo.png");
 }
 
+#[test]
+fn test_render_link_demo_with_target_highlight() {
+    let source = std::fs::read_to_string("examples/link_demo.dt").expect("read link_demo.dt");
+    let doc = parse_document(&source).expect("parse link_demo.dt ok");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let mut compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile link_demo.dt ok");
+
+    let deep_anchor = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.anchor_name.as_deref() == Some("deep-section"))
+        .expect("deep-section anchor not found");
+    let deep_anchor_id = deep_anchor.id;
+    let deep_anchor_y = deep_anchor.rect.y;
+
+    // Execute scroll_to action targeting deep-section -> triggers Focus event bubbling to Card!
+    let scroll_act = directedtype::component::ContextAction::ScrollToNode {
+        target: deep_anchor_id,
+        container: None,
+    };
+    let changed = compiled.execute_action(scroll_act).expect("execute action ok");
+    assert!(!changed.is_empty(), "State change must be emitted on focus");
+
+    // Verify deep section Card is now focused with emerald highlight styling
+    let deep_card_rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Rect" && (n.rect.y - (deep_anchor_y - 20.0)).abs() < 2.0)
+        .expect("deep section Rect not found");
+    assert_eq!(
+        deep_card_rect.properties.get("color").and_then(|v| v.as_str()),
+        Some("#f0fdf4")
+    );
+    assert_eq!(
+        deep_card_rect.properties.get("border_color").and_then(|v| v.as_str()),
+        Some("#059669")
+    );
+
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let options = SceneOptions {
+        background: Some(Color::from_rgba8(248, 250, 252, 255)),
+        scale_factor: 1.0,
+        scroll_offset: (0.0, deep_card_rect.rect.y),
+    };
+    let img = renderer
+        .render_layout(&compiled.layout, 800, 600, &options)
+        .expect("render layout ok");
+
+    assert_eq!(img.width(), 800);
+    assert_eq!(img.height(), 600);
+    save_golden_or_preview(&img, "link_demo_target_highlight.png");
+}
+
+#[test]
+fn test_render_link_focus_highlight() {
+    let source = r#"
+\use "components/Padding.dt"
+\use "components/VStack.dt"
+\use "components/Link.dt"
+
+\Padding(padding: 30, x: 0, y: 0) {
+    \VStack(gap: 16) {
+        \Text(size: 20) {
+            Check out \Link(url: "https://directedtype.org", color: #2563eb, focused_color: #dc2626, focused_bg: #fee2e2){DirectedType Engine} today.
+        }
+    }
+}
+"#;
+    let doc = parse_document(source).expect("parse ok");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let mut compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        600.0,
+        200.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let link_id = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Link")
+        .expect("Link node found")
+        .id;
+
+    // Focus link
+    compiled.set_focused_node(Some(link_id)).expect("set focus ok");
+
+    assert_eq!(
+        compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_color").and_then(|v| v.as_str()),
+        Some("#dc2626")
+    );
+    assert_eq!(
+        compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_bg").and_then(|v| v.as_str()),
+        Some("#fee2e2")
+    );
+
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let options = SceneOptions {
+        background: Some(Color::WHITE),
+        ..Default::default()
+    };
+    let img = renderer
+        .render_layout(&compiled.layout, 600, 200, &options)
+        .expect("render layout ok");
+
+    assert_eq!(img.width(), 600);
+    assert_eq!(img.height(), 200);
+    save_golden_or_preview(&img, "link_focus_highlight.png");
+}
+
+
