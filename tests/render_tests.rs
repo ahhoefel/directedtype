@@ -1,4 +1,5 @@
 use directedtype::compiler::evaluate_document;
+use directedtype::interaction::{Event, EventKind, Modifiers, Point};
 use directedtype::parser::parse_document;
 use directedtype::render::{HeadlessRenderer, SceneOptions, ViewerApp, ViewerConfig};
 use vello::peniko::Color;
@@ -591,12 +592,25 @@ fn test_render_link_focus_highlight() {
     let source = r#"
 \use "components/Padding.dt"
 \use "components/VStack.dt"
+\use "components/LinkStyle.dt"
 \use "components/Link.dt"
+
+let red_link_style = \LinkStyle(
+    color: #2563eb,
+    underline: true,
+    bg: #00000000,
+    hover_color: #1d4ed8,
+    hover_underline: true,
+    hover_bg: #dbeafe80,
+    focused_color: #dc2626,
+    focused_underline: true,
+    focused_bg: #fee2e2
+);
 
 \Padding(padding: 30, x: 0, y: 0) {
     \VStack(gap: 16) {
         \Text(size: 20) {
-            Check out \Link(url: "https://directedtype.org", color: #2563eb, focused_color: #dc2626, focused_bg: #fee2e2){DirectedType Engine} today.
+            Check out \Link(url: "https://directedtype.org", style: red_link_style){DirectedType Engine} today.
         }
     }
 }
@@ -645,6 +659,91 @@ fn test_render_link_focus_highlight() {
     assert_eq!(img.width(), 600);
     assert_eq!(img.height(), 200);
     save_golden_or_preview(&img, "link_focus_highlight.png");
+}
+
+#[test]
+fn test_render_link_hover_highlight() {
+    let source = r#"
+\use "components/Padding.dt"
+\use "components/VStack.dt"
+\use "components/LinkStyle.dt"
+\use "components/Link.dt"
+
+let blue_hover_link_style = \LinkStyle(
+    color: #2563eb,
+    underline: false,
+    bg: #00000000,
+    hover_color: #1d4ed8,
+    hover_underline: true,
+    hover_bg: #dbeafe,
+    focused_color: #dc2626,
+    focused_underline: true,
+    focused_bg: #fee2e2
+);
+
+\Padding(padding: 30, x: 0, y: 0) {
+    \VStack(gap: 16) {
+        \Text(size: 20) {
+            Hovering over \Link(url: "https://directedtype.org", style: blue_hover_link_style){DirectedType Engine} reveals hover styles.
+        }
+    }
+}
+"#;
+    let doc = parse_document(source).expect("parse ok");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let mut compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        650.0,
+        200.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let link_id = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Link")
+        .expect("Link node found")
+        .id;
+
+    // Simulate pointer_enter on link
+    let mut enter_event = Event::new(
+        EventKind::PointerEnter,
+        Point::default(),
+        Point::default(),
+        Modifiers::default(),
+        link_id,
+    );
+    compiled.dispatch_event(&mut enter_event).expect("dispatch pointer_enter ok");
+
+    assert_eq!(
+        compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_color").and_then(|v| v.as_str()),
+        Some("#1d4ed8")
+    );
+    assert_eq!(
+        compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_underline").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_bg").and_then(|v| v.as_str()),
+        Some("#dbeafe")
+    );
+
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let options = SceneOptions {
+        background: Some(Color::WHITE),
+        ..Default::default()
+    };
+    let img = renderer
+        .render_layout(&compiled.layout, 650, 200, &options)
+        .expect("render layout ok");
+
+    assert_eq!(img.width(), 650);
+    assert_eq!(img.height(), 200);
+    save_golden_or_preview(&img, "link_hover_highlight.png");
 }
 
 

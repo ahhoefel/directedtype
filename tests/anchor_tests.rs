@@ -166,9 +166,10 @@ fn test_duplicate_anchor_in_same_scope_rejected() {
 fn test_anchor_scope_first_class_port_and_append_method() {
     let source = r##"
         \use "components/Link.dt";
+        \use "theme/default.dt";
 
         \Component TableOfContents(target_scope: Node) {
-            \Link(url: target_scope.append("setup")) {
+            \Link(url: target_scope.append("setup"), style: link_default) {
                 Setup Link
             }
         }
@@ -493,6 +494,7 @@ fn test_keyboard_focus_traversal_reading_order() {
         \use "components/VStack.dt";
         \use "components/HStack.dt";
         \use "components/Link.dt";
+        \use "theme/default.dt";
 
         \VStack(gap: 20) {
             \Link(url: "#sec1") { Link 1 }
@@ -558,6 +560,7 @@ fn test_keyboard_focus_scrolls_into_view() {
     let source = r##"
         \use "components/VStack.dt";
         \use "components/Link.dt";
+        \use "theme/default.dt";
 
         \VStack(gap: 40) {
             \Link(url: "#top") { Top Link }
@@ -602,6 +605,7 @@ fn test_keyboard_activation_triggers_anchor_navigation() {
     let source = r##"
         \use "components/VStack.dt";
         \use "components/Link.dt";
+        \use "theme/default.dt";
 
         \VStack(gap: 30) {
             \Link(url: "#deep") { Jump to Deep Anchor }
@@ -766,6 +770,7 @@ fn test_link_component_click_handler_and_action_queue() {
     let source = r##"
         \use "components/VStack.dt";
         \use "components/Link.dt";
+        \use "theme/default.dt";
 
         \VStack(gap: 20) {
             \Link(url: "#dest") { Go to Destination }
@@ -864,11 +869,12 @@ fn test_link_component_click_handler_and_action_queue() {
 fn test_link_component_custom_on_click_override() {
     let source = r##"
         \use "components/Link.dt";
+        \use "theme/default.dt";
 
         \Component CustomPage {
             state custom_clicked: Boolean = false;
 
-            \Link(url: "#ignored", on_click: self.handle_custom_click) {
+            \Link(url: "#ignored", style: link_default, on_click: self.handle_custom_click) {
                 Custom Action Link
             }
         }
@@ -1082,11 +1088,24 @@ fn test_link_demo_focus_and_blur_target_highlight_transitions() {
 #[test]
 fn test_link_component_focus_and_blur_transitions() {
     let source = r##"
+        \use "components/LinkStyle.dt";
         \use "components/Link.dt";
         \use "components/VStack.dt";
 
+        let custom_style = \LinkStyle(
+            color: #1a73e8,
+            underline: false,
+            bg: #00000000,
+            hover_color: #2563eb,
+            hover_underline: true,
+            hover_bg: #dbeafe80,
+            focused_color: #d97706,
+            focused_underline: true,
+            focused_bg: #fef3c7
+        );
+
         \VStack {
-            \Link(url: "https://example.com", color: #1a73e8, focused_color: #d97706, underline: false, focused_underline: true) {
+            \Link(url: "https://example.com", style: custom_style) {
                 Visit Example
             }
         }
@@ -1112,9 +1131,13 @@ fn test_link_component_focus_and_blur_transitions() {
         .expect("Link node found");
     let link_id = link_node.id;
 
-    // Initially unfocused
+    // 1. Initially unfocused & unhovered -> base style
     assert_eq!(
         compiled.get_state(link_id, "focused"),
+        Some(&directedtype::compiler::Value::Bool(false))
+    );
+    assert_eq!(
+        compiled.get_state(link_id, "hovered"),
         Some(&directedtype::compiler::Value::Bool(false))
     );
     assert_eq!(
@@ -1126,7 +1149,35 @@ fn test_link_component_focus_and_blur_transitions() {
         Some(false)
     );
 
-    // Set focus on link -> on_focus runs, state becomes true, current_color becomes #d97706, current_underline becomes true
+    // 2. Hover over link (PointerEnter) -> hover style
+    let mut enter_event = Event::new(
+        EventKind::PointerEnter,
+        Point::default(),
+        Point::default(),
+        Modifiers::default(),
+        link_id,
+    );
+    enter_event.bubble_path = compiled.layout.bubble_path_for_node(link_id);
+    let changed = compiled.dispatch_event(&mut enter_event).expect("pointer_enter ok");
+    assert!(!changed.is_empty());
+    assert_eq!(
+        compiled.get_state(link_id, "hovered"),
+        Some(&directedtype::compiler::Value::Bool(true))
+    );
+    assert_eq!(
+        compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_color").and_then(|v| v.as_str()),
+        Some("#2563eb")
+    );
+    assert_eq!(
+        compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_underline").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_bg").and_then(|v| v.as_str()),
+        Some("#dbeafe80")
+    );
+
+    // 3. Focus link while hovered -> focus style takes precedence
     let changed = compiled.set_focused_node(Some(link_id)).expect("set focus ok");
     assert!(!changed.is_empty());
     assert_eq!(
@@ -1141,12 +1192,44 @@ fn test_link_component_focus_and_blur_transitions() {
         compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_underline").and_then(|v| v.as_bool()),
         Some(true)
     );
+    assert_eq!(
+        compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_bg").and_then(|v| v.as_str()),
+        Some("#fef3c7")
+    );
 
-    // Blur link -> on_blur runs, state becomes false, color and underline restored
+    // 4. Blur link while still hovered -> falls back to hover style
     let changed = compiled.set_focused_node(None).expect("blur ok");
     assert!(!changed.is_empty());
     assert_eq!(
         compiled.get_state(link_id, "focused"),
+        Some(&directedtype::compiler::Value::Bool(false))
+    );
+    assert_eq!(
+        compiled.get_state(link_id, "hovered"),
+        Some(&directedtype::compiler::Value::Bool(true))
+    );
+    assert_eq!(
+        compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_color").and_then(|v| v.as_str()),
+        Some("#2563eb")
+    );
+    assert_eq!(
+        compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_underline").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+
+    // 5. Unhover link (PointerLeave) -> restored to base normal style
+    let mut leave_event = Event::new(
+        EventKind::PointerLeave,
+        Point::default(),
+        Point::default(),
+        Modifiers::default(),
+        link_id,
+    );
+    leave_event.bubble_path = compiled.layout.bubble_path_for_node(link_id);
+    let changed = compiled.dispatch_event(&mut leave_event).expect("pointer_leave ok");
+    assert!(!changed.is_empty());
+    assert_eq!(
+        compiled.get_state(link_id, "hovered"),
         Some(&directedtype::compiler::Value::Bool(false))
     );
     assert_eq!(
@@ -1156,6 +1239,81 @@ fn test_link_component_focus_and_blur_transitions() {
     assert_eq!(
         compiled.layout.nodes.iter().find(|n| n.id == link_id).unwrap().properties.get("current_underline").and_then(|v| v.as_bool()),
         Some(false)
+    );
+}
+
+#[test]
+fn test_link_styling_required_no_default() {
+    // Omitting style when no ambient theme is in scope must fail compilation with MissingPort
+    let source = r##"
+        \use "components/Link.dt";
+
+        \Link(url: "https://example.com") {
+            Unstyled Link
+        }
+    "##;
+
+    let doc = parse_document(source).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let result = CompiledDocument::compile_with_registry(
+        &doc,
+        400.0,
+        300.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    );
+
+    assert!(result.is_err(), "Expected compilation failure due to missing required style");
+    let err = result.unwrap_err();
+    match err {
+        directedtype::compiler::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "Link");
+            assert_eq!(port, "style");
+        }
+        other => panic!("Expected MissingPort, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_link_styling_environmental_from_theme() {
+    // Importing theme/default.dt provides ambient `env style = link_default`
+    let source = r##"
+        \use "components/Link.dt";
+        \use "theme/default.dt";
+
+        \Link(url: "https://example.com") {
+            Ambiently Styled Link
+        }
+    "##;
+
+    let doc = parse_document(source).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        400.0,
+        300.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok with ambient env style");
+
+    let link_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Link")
+        .expect("Link node found");
+
+    // Inherited link_default styling: color #2563eb, underline true
+    assert_eq!(
+        link_node.properties.get("current_color").and_then(|v| v.as_str()),
+        Some("#2563eb")
+    );
+    assert_eq!(
+        link_node.properties.get("current_underline").and_then(|v| v.as_bool()),
+        Some(true)
     );
 }
 

@@ -6,6 +6,7 @@
 \use "components/Button.dt"
 \use "components/Divider.dt"
 \use "components/Spacer.dt"
+\use "components/LinkStyle.dt"
 \use "components/Link.dt"
 \use "theme/default.dt"
 
@@ -27,6 +28,67 @@ let callout_card_style = \CardStyle(
     padding_y: 20
 );
 
+// Custom Brand LinkStyles demonstrating LinkStyle component polymorphism
+let vello_link_style = \LinkStyle(
+    color: #7c3aed,
+    underline: true,
+    bg: #00000000,
+    hover_color: #6d28d9,
+    hover_underline: true,
+    hover_bg: #ede9fe80,
+    focused_color: #5b21b6,
+    focused_underline: true,
+    focused_bg: #ede9fe
+);
+
+let parley_link_style = \LinkStyle(
+    color: #059669,
+    underline: true,
+    bg: #00000000,
+    hover_color: #047857,
+    hover_underline: true,
+    hover_bg: #d1fae580,
+    focused_color: #065f46,
+    focused_underline: true,
+    focused_bg: #d1fae5
+);
+
+let crates_link_style = \LinkStyle(
+    color: #d97706,
+    underline: false,
+    bg: #00000000,
+    hover_color: #b45309,
+    hover_underline: true,
+    hover_bg: #fef3c780,
+    focused_color: #92400e,
+    focused_underline: true,
+    focused_bg: #fef3c7
+);
+
+let rust_link_style = \LinkStyle(
+    color: #ea580c,
+    underline: true,
+    bg: #00000000,
+    hover_color: #c2410c,
+    hover_underline: true,
+    hover_bg: #ffedd580,
+    focused_color: #9a3412,
+    focused_underline: true,
+    focused_bg: #ffedd5
+);
+
+let w3c_link_style = \LinkStyle(
+    color: #0284c7,
+    underline: true,
+    bg: #00000000,
+    hover_color: #0369a1,
+    hover_underline: true,
+    hover_bg: #e0f2fe80,
+    focused_color: #075985,
+    focused_underline: true,
+    focused_bg: #e0f2fe
+);
+
 \Padding(padding: 40, x: 0, y: 0) {
     \VStack(
         width: min(max(window.width - 80, 400), 740),
@@ -45,23 +107,23 @@ let callout_card_style = \CardStyle(
             }
         }
 
-        // Table of Contents Card
+        // Table of Contents Card (relies on ambient env style = link_default from theme/default.dt)
         \Card(style: callout_card_style, gap: 10) {
             \Text(size: 14, weight: 700, color: #1d4ed8) {
                 TABLE OF CONTENTS (IN-PAGE ANCHORS)
             }
             \VStack(gap: 6) {
                 \Text(size: 15, color: #1e293b) {
-                    • \Link(url: "#inline-links", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){1. Inline Text Hyperlinks}
+                    • \Link(url: "#inline-links"){1. Inline Text Hyperlinks}
                 }
                 \Text(size: 15, color: #1e293b) {
-                    • \Link(url: "#custom-styling", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){2. Custom Link Styling & Accents}
+                    • \Link(url: "#custom-styling"){2. Custom Link Styling & Accents}
                 }
                 \Text(size: 15, color: #1e293b) {
-                    • \Link(url: "#quick-nav", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){3. External Resource Links}
+                    • \Link(url: "#quick-nav"){3. External Resource Links}
                 }
                 \Text(size: 15, color: #1e293b) {
-                    • \Link(url: "#deep-section", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){4. Deep Document Section (Scroll Test)}
+                    • \Link(url: "#deep-section"){4. Deep Document Section (Scroll Test)}
                 }
             }
         }
@@ -82,7 +144,7 @@ let callout_card_style = \CardStyle(
                 }
             }
             \Text(size: 16, width: parent.width - 48, color: #1e293b) {
-                DirectedType now supports first-class inline components. You can read the documentation at \Link(url: "https://directedtype.org", focused_color: #1d4ed8, focused_bg: #e0f2fe){directedtype.org} or check out our project repository on \Link(url: "https://github.com", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){GitHub}. Notice how spaces between adjacent inline links and plain words are naturally preserved by the cursor stream.
+                DirectedType now supports first-class inline components. You can read the documentation at \Link(url: "https://directedtype.org"){directedtype.org} or check out our project repository on \Link(url: "https://github.com"){GitHub}. Notice how spaces between adjacent inline links and plain words are naturally preserved by the cursor stream.
             }
         }
 
@@ -100,7 +162,7 @@ let callout_card_style = \CardStyle(
                 }
             }
             \Text(size: 16, width: parent.width - 48, color: #1e293b) {
-                Links can define custom colors and underline styles: visit \Link(url: "https://vello.dev", color: #7c3aed, focused_color: #5b21b6, focused_bg: #ede9fe){Vello 2D Graphics} for GPU compute rendering, \Link(url: "https://parley.dev", color: #059669, focused_color: #047857, focused_bg: #d1fae5){Parley} for typographic shaping, or \Link(url: "https://crates.io", color: #d97706, underline: false, focused_color: #b45309, focused_underline: true, focused_bg: #fef3c7){Crates.io} without an underline.
+                Links can define custom LinkStyle bundles: visit \Link(url: "https://vello.dev", style: vello_link_style){Vello 2D Graphics} for GPU compute rendering, \Link(url: "https://parley.dev", style: parley_link_style){Parley} for typographic shaping, or \Link(url: "https://crates.io", style: crates_link_style){Crates.io} without an initial underline.
             }
         }
 
@@ -118,7 +180,7 @@ let callout_card_style = \CardStyle(
                 }
             }
             \Text(size: 15, width: parent.width - 48, color: #334155) {
-                Explore: \Link(url: "https://google.com", focused_color: #1d4ed8, focused_bg: #e0f2fe){Google} | \Link(url: "https://rust-lang.org", color: #ea580c, focused_color: #c2410c, focused_bg: #ffedd5){Rust Language} | \Link(url: "https://w3.org", color: #0284c7, focused_color: #0369a1, focused_bg: #e0f2fe){W3C Standards} | \Link(url: "https://github.com/directedtype", color: #4338ca, focused_color: #3730a3, focused_bg: #e0e7ff){Source Repository}
+                Explore: \Link(url: "https://google.com"){Google} | \Link(url: "https://rust-lang.org", style: rust_link_style){Rust Language} | \Link(url: "https://w3.org", style: w3c_link_style){W3C Standards} | \Link(url: "https://github.com/directedtype"){Source Repository}
             }
         }
 
@@ -141,7 +203,7 @@ let callout_card_style = \CardStyle(
                 You navigated here via an in-page anchor! Clicking on \Text(weight: 600){#deep-section} scrolled the window directly to this element. Notice the subtle overlay scrollbar indicator on the right edge of the window.
             }
             \Text(size: 15, color: #2563eb) {
-                \Link(url: "#top", color: #2563eb, focused_color: #1d4ed8, focused_bg: #dbeafe){↑ Back to top}
+                \Link(url: "#top"){↑ Back to top}
             }
         }
 
