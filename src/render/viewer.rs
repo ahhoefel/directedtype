@@ -16,7 +16,7 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 use crate::ast::Document;
-use crate::component::ComponentRegistry;
+use crate::component::{ComponentRegistry, ContextAction};
 use crate::compiler::evaluate_document_with_window;
 use crate::compiler::expanded::NodeId;
 use crate::compiler::layout::ResolvedLayout;
@@ -114,6 +114,7 @@ impl Default for ViewerConfig {
                 background: Some(Color::WHITE),
                 scale_factor: 1.0,
                 scroll_offset: (0.0, 0.0),
+                ..Default::default()
             },
         }
     }
@@ -159,6 +160,10 @@ pub struct ViewerApp {
     is_dragging_scrollbar: bool,
     scrollbar_drag_start_y: f64,
     scrollbar_start_scroll_y: f64,
+
+    // Focus & target highlighting state
+    focused_node: Option<NodeId>,
+    target_node: Option<NodeId>,
 }
 
 /// Type alias for event callbacks dispatched by `ViewerApp`.
@@ -172,7 +177,7 @@ impl ViewerApp {
             _watcher: None,
             doc: None,
             compiled: None,
-            component_registry: ComponentRegistry::new(),
+            component_registry: ComponentRegistry::standard(),
             layout,
             render_cx: RenderContext::new(),
             surface: None,
@@ -195,6 +200,8 @@ impl ViewerApp {
             is_dragging_scrollbar: false,
             scrollbar_drag_start_y: 0.0,
             scrollbar_start_scroll_y: 0.0,
+            focused_node: None,
+            target_node: None,
         }
     }
 
@@ -356,15 +363,340 @@ impl ViewerApp {
     pub fn scroll_to_anchor(&mut self, source_node: Option<NodeId>, url: &str) -> bool {
         let from_node = source_node.unwrap_or(NodeId(0));
         if let Some((target_id, _scope_id)) = self.layout.resolve_anchor(from_node, url) {
+            self.target_node = Some(target_id);
+            self.set_focused_node(Some(target_id));
             self.scroll_to_node(target_id)
         } else {
             false
         }
     }
 
+    /// Returns the currently focused node ID, if any.
+    pub fn focused_node(&self) -> Option<NodeId> {
+        self.focused_node
+    }
+
+    /// Returns the active in-page navigation target node ID, if any.
+    pub fn target_node(&self) -> Option<NodeId> {
+        self.target_node
+    }
+
+    /// Sets the active in-page navigation target node ID.
+    pub fn set_target_node(&mut self, target: Option<NodeId>) {
+        self.target_node = target;
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Sets the currently focused node, dispatching `Blur` to the previous node and `Focus` to the new node.
+    pub fn set_focused_node(&mut self, new_focus: Option<NodeId>) {
+        if self.focused_node == new_focus {
+            return;
+        }
+
+        let old_focus = self.focused_node;
+        self.focused_node = new_focus;
+
+        if let Some(compiled) = &mut self.compiled {
+            compiled.focused_node = new_focus;
+        }
+
+        if let Some(old_id) = old_focus {
+            let blur_event = Event::new(
+                EventKind::Blur,
+                Point::default(),
+                Point::default(),
+                self.modifiers,
+                old_id,
+            );
+            let bubble = self.layout.bubble_path_for_node(old_id);
+            self.dispatch_event_with_bubble(blur_event, &bubble);
+        }
+
+        if let Some(new_id) = new_focus {
+            let focus_event = Event::new(
+                EventKind::Focus,
+                Point::default(),
+                Point::default(),
+                self.modifiers,
+                new_id,
+            );
+            let bubble = self.layout.bubble_path_for_node(new_id);
+            self.dispatch_event_with_bubble(focus_event, &bubble);
+        }
+
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Returns all focusable nodes in reading order (top-to-bottom, left-to-right).
+    pub fn focusable_nodes(&self) -> Vec<NodeId> {
+        let mut focusable = Vec::new();
+        for node in &self.layout.nodes {
+            if node.id.is_window() {
+                continue;
+            }
+
+            // Check tabindex override
+            if let Some(val) = node.properties.get("tabindex").and_then(|v| v.as_f64()) {
+                if val >= 0.0 {
+                    focusable.push(node);
+                }
+                continue;
+            }
+
+            // If an ancestor is already a Link or Button, this inner node is internal implementation detail:
+            let is_inside_interactive_component = {
+                let mut curr = node.parent;
+                let mut is_inside = false;
+                while let Some(pid) = curr {
+                    if let Some(p) = self.layout.get_node(pid) {
+                        if p.name == "Link" || p.name == "Button" {
+                            is_inside = true;
+                            break;
+                        }
+                        curr = p.parent;
+                    } else {
+                        break;
+                    }
+                }
+                is_inside
+            };
+            if is_inside_interactive_component {
+                continue;
+            }
+
+            // Sequentially focusable controls: Links, Buttons, or nodes with an explicit URL or custom on_click
+            let is_interactive = node.name == "Link"
+                || node.name == "Button"
+                || node.properties.contains_key("url")
+                || node.event_handlers.contains_key("on_click");
+
+            if is_interactive {
+                focusable.push(node);
+            }
+        }
+
+        focusable.sort_by(|a, b| {
+            let ay = if !a.fragments.is_empty() { a.fragments[0].y } else { a.rect.y };
+            let by = if !b.fragments.is_empty() { b.fragments[0].y } else { b.rect.y };
+            ay.partial_cmp(&by).unwrap_or(std::cmp::Ordering::Equal).then_with(|| {
+                let ax = if !a.fragments.is_empty() { a.fragments[0].x } else { a.rect.x };
+                let bx = if !b.fragments.is_empty() { b.fragments[0].x } else { b.rect.x };
+                ax.partial_cmp(&bx).unwrap_or(std::cmp::Ordering::Equal)
+            })
+        });
+
+        focusable.into_iter().map(|n| n.id).collect()
+    }
+
+    /// Advances focus to the next focusable node in reading order.
+    pub fn focus_next(&mut self) -> Option<NodeId> {
+        let focusable = self.focusable_nodes();
+        if focusable.is_empty() {
+            return None;
+        }
+
+        let next_idx = match self.focused_node {
+            Some(curr) => {
+                if let Some(pos) = focusable.iter().position(|&id| id == curr) {
+                    (pos + 1) % focusable.len()
+                } else {
+                    // curr is not in focusable list (e.g. an in-page navigation Anchor target or container).
+                    // Advance to the first focusable node whose reading position is after curr:
+                    let curr_node = self.layout.get_node(curr);
+                    let (curr_y, curr_x) = if let Some(n) = curr_node {
+                        let y = if !n.fragments.is_empty() { n.fragments[0].y } else { n.rect.y };
+                        let x = if !n.fragments.is_empty() { n.fragments[0].x } else { n.rect.x };
+                        (y, x)
+                    } else {
+                        (0.0, 0.0)
+                    };
+
+                    let pos_after = focusable.iter().position(|&id| {
+                        if let Some(n) = self.layout.get_node(id) {
+                            let y = if !n.fragments.is_empty() { n.fragments[0].y } else { n.rect.y };
+                            let x = if !n.fragments.is_empty() { n.fragments[0].x } else { n.rect.x };
+                            y > curr_y || ((y - curr_y).abs() < 1.0 && x > curr_x)
+                        } else {
+                            false
+                        }
+                    });
+                    pos_after.unwrap_or(0)
+                }
+            }
+            None => 0,
+        };
+
+        let next_id = focusable[next_idx];
+        self.set_focused_node(Some(next_id));
+        self.scroll_into_view(next_id);
+        Some(next_id)
+    }
+
+    /// Moves focus to the previous focusable node in reading order.
+    pub fn focus_previous(&mut self) -> Option<NodeId> {
+        let focusable = self.focusable_nodes();
+        if focusable.is_empty() {
+            return None;
+        }
+
+        let prev_idx = match self.focused_node {
+            Some(curr) => {
+                if let Some(pos) = focusable.iter().position(|&id| id == curr) {
+                    if pos == 0 {
+                        focusable.len() - 1
+                    } else {
+                        pos - 1
+                    }
+                } else {
+                    // curr is not in focusable list (e.g. an in-page navigation Anchor target).
+                    // Move to the last focusable node whose reading position is before curr:
+                    let curr_node = self.layout.get_node(curr);
+                    let (curr_y, curr_x) = if let Some(n) = curr_node {
+                        let y = if !n.fragments.is_empty() { n.fragments[0].y } else { n.rect.y };
+                        let x = if !n.fragments.is_empty() { n.fragments[0].x } else { n.rect.x };
+                        (y, x)
+                    } else {
+                        (0.0, 0.0)
+                    };
+
+                    let pos_before = focusable.iter().rposition(|&id| {
+                        if let Some(n) = self.layout.get_node(id) {
+                            let y = if !n.fragments.is_empty() { n.fragments[0].y } else { n.rect.y };
+                            let x = if !n.fragments.is_empty() { n.fragments[0].x } else { n.rect.x };
+                            y < curr_y || ((y - curr_y).abs() < 1.0 && x < curr_x)
+                        } else {
+                            false
+                        }
+                    });
+                    pos_before.unwrap_or(focusable.len() - 1)
+                }
+            }
+            None => focusable.len() - 1,
+        };
+
+        let prev_id = focusable[prev_idx];
+        self.set_focused_node(Some(prev_id));
+        self.scroll_into_view(prev_id);
+        Some(prev_id)
+    }
+
+    /// Ensures that the given node is visible within the viewport, scrolling vertically if necessary.
+    pub fn scroll_into_view(&mut self, node_id: NodeId) -> bool {
+        let node = match self.layout.get_node(node_id) {
+            Some(n) => n,
+            None => return false,
+        };
+
+        let (node_y, node_h) = if !node.fragments.is_empty() {
+            let f = &node.fragments[0];
+            (f.y, f.height)
+        } else {
+            (node.rect.y, node.rect.height)
+        };
+
+        let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+        let win_h = if let Some(w) = &self.window {
+            let size = w.inner_size();
+            size.height as f64 / scale
+        } else {
+            self.config.height as f64
+        };
+
+        let max_scroll = self.max_scroll_y(win_h);
+        let padding = 20.0;
+
+        let node_top = node_y;
+        let node_bottom = node_y + node_h;
+
+        let view_top = self.scroll_y;
+        let view_bottom = self.scroll_y + win_h;
+
+        let new_scroll_y = if node_top < view_top + padding {
+            (node_top - padding).clamp(0.0, max_scroll)
+        } else if node_bottom > view_bottom - padding {
+            (node_bottom + padding - win_h).clamp(0.0, max_scroll)
+        } else {
+            return false;
+        };
+
+        if (new_scroll_y - self.scroll_y).abs() > 0.001 {
+            self.scroll_y = new_scroll_y;
+            if let Some(w) = &self.window {
+                w.request_redraw();
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Activates the currently focused node (e.g. triggering click and link navigation).
+    pub fn activate_focused_node(&mut self) -> bool {
+        let target_id = match self.focused_node {
+            Some(id) => id,
+            None => return false,
+        };
+
+        let bubble_path = self.layout.bubble_path_for_node(target_id);
+        let node = match self.layout.get_node(target_id) {
+            Some(n) => n,
+            None => return false,
+        };
+
+        let (px, py) = if !node.fragments.is_empty() {
+            (node.fragments[0].x, node.fragments[0].y)
+        } else {
+            (node.rect.x, node.rect.y)
+        };
+        let doc_point = Point::new(px, py);
+
+        let click_event = Event::new(
+            EventKind::Click { button: MouseButton::Left },
+            doc_point,
+            Point::default(),
+            self.modifiers,
+            target_id,
+        );
+        self.dispatch_event_with_bubble(click_event, &bubble_path);
+
+        true
+    }
+
+    /// Executes a high-level context action emitted during component interaction.
+    pub fn execute_action(&mut self, action: ContextAction) {
+        match action {
+            ContextAction::ScrollToNode { target, container } => {
+                if let Some(_pane_id) = container {
+                    // Future phase: target a specific \ScrollPane component
+                } else {
+                    self.target_node = Some(target);
+                    self.set_focused_node(Some(target));
+                    self.scroll_to_node(target);
+                }
+            }
+            ContextAction::OpenUrl { url } => {
+                println!("[Viewer] Opening link: {}", url);
+                #[cfg(target_os = "macos")]
+                let _ = std::process::Command::new("open").arg(&url).spawn();
+                #[cfg(target_os = "linux")]
+                let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+                #[cfg(target_os = "windows")]
+                let _ = std::process::Command::new("cmd").args(["/C", "start", "", &url]).spawn();
+            }
+            ContextAction::SetFocus { target } => {
+                self.set_focused_node(target);
+            }
+        }
+    }
+
     fn dispatch_event_with_bubble(&mut self, mut event: Event, bubble_path: &[NodeId]) {
         event.bubble_path = bubble_path.to_vec();
 
+        let mut actions = Vec::new();
         if let Some(compiled) = &mut self.compiled {
             if let Ok(changed_vars) = compiled.dispatch_event(&mut event) {
                 if !changed_vars.is_empty() {
@@ -374,6 +706,7 @@ impl ViewerApp {
                     }
                 }
             }
+            actions = compiled.take_actions();
         }
 
         if let Some(handler) = &mut self.event_handler {
@@ -385,6 +718,10 @@ impl ViewerApp {
                 }
             }
         }
+
+        for action in actions {
+            self.execute_action(action);
+        }
     }
 
     /// Attaches the source AST `Document` to enable dynamic layout re-evaluation on window resize.
@@ -394,8 +731,12 @@ impl ViewerApp {
     }
 
     /// Attaches an active `CompiledDocument` to power reactive state mutations and event dispatching.
-    pub fn with_compiled(mut self, compiled: CompiledDocument) -> Self {
+    pub fn with_compiled(mut self, mut compiled: CompiledDocument) -> Self {
+        if compiled.instances.is_empty() {
+            let _ = compiled.attach_registry(&self.component_registry);
+        }
         self.layout = compiled.layout().clone();
+        self.focused_node = compiled.focused_node;
         self.compiled = Some(compiled);
         self
     }
@@ -403,6 +744,9 @@ impl ViewerApp {
     /// Attaches a `ComponentRegistry` for companion component lifecycle and dispatching.
     pub fn with_registry(mut self, registry: ComponentRegistry) -> Self {
         self.component_registry = registry;
+        if let Some(compiled) = &mut self.compiled {
+            let _ = compiled.attach_registry(&self.component_registry);
+        }
         self
     }
 
@@ -1272,6 +1616,28 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                 return; // Intercepted: DO NOT dispatch to page elements
                             }
 
+                            // Focus management on mouse click:
+                            let focus_target = hit.as_ref().and_then(|h| {
+                                // If clicked element is inside a Link or Button component, focus that component
+                                if let Some(&comp_id) = h.bubble_path.iter().find(|&&id| {
+                                    self.layout.get_node(id).is_some_and(|n| n.name == "Link" || n.name == "Button")
+                                }) {
+                                    return Some(comp_id);
+                                }
+                                h.bubble_path.iter().copied().find(|&id| {
+                                    self.layout.get_node(id).map_or(false, |n| {
+                                        if let Some(v) = n.properties.get("tabindex").and_then(|t| t.as_f64()) {
+                                            return v >= 0.0;
+                                        }
+                                        n.name == "Link"
+                                            || n.name == "Button"
+                                            || n.properties.contains_key("url")
+                                            || n.event_handlers.contains_key("on_click")
+                                    })
+                                })
+                            });
+                            self.set_focused_node(focus_target);
+
                             // Normal page interaction: inspect cursor is inactive
                             if let Some(ref hit_res) = hit {
                                 self.pressed_node = Some((hit_res.target, btn));
@@ -1308,33 +1674,6 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                             hit_res.target,
                                         );
                                         self.dispatch_event_with_bubble(click_event, &hit_res.bubble_path);
-
-                                        if btn == MouseButton::Left {
-                                            for &nid in &hit_res.bubble_path {
-                                                let maybe_url = self.layout.get_node(nid).and_then(|node| {
-                                                    node.properties.get("url").and_then(|v| v.as_str()).map(|s| s.to_string())
-                                                });
-                                                if let Some(url) = maybe_url {
-                                                    if url.starts_with('#') {
-                                                        if !self.scroll_to_anchor(Some(nid), &url) {
-                                                            eprintln!("[Viewer] In-page anchor not found: {}", url);
-                                                        }
-                                                        break;
-                                                    } else if self.scroll_to_anchor(Some(nid), &url) {
-                                                        break;
-                                                    } else {
-                                                        println!("[Viewer] Opening link: {}", url);
-                                                        #[cfg(target_os = "macos")]
-                                                        let _ = std::process::Command::new("open").arg(&url).spawn();
-                                                        #[cfg(target_os = "linux")]
-                                                        let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
-                                                        #[cfg(target_os = "windows")]
-                                                        let _ = std::process::Command::new("cmd").args(["/C", "start", "", &url]).spawn();
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        }
                                     }
                                 }
                             }
@@ -1444,6 +1783,89 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     },
                 ..
             } => match logical_key {
+                Key::Named(NamedKey::Tab) => {
+                    if self.modifiers.shift {
+                        self.focus_previous();
+                    } else {
+                        self.focus_next();
+                    }
+                }
+                Key::Named(NamedKey::Enter) | Key::Named(NamedKey::Space) => {
+                    if self.focused_node.is_some() {
+                        self.activate_focused_node();
+                    }
+                }
+                Key::Named(NamedKey::ArrowDown) => {
+                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+                    let win_h = if let Some(w) = &self.window {
+                        w.inner_size().height as f64 / scale
+                    } else {
+                        self.config.height as f64
+                    };
+                    let max_scroll = self.max_scroll_y(win_h);
+                    self.scroll_y = (self.scroll_y + 40.0).clamp(0.0, max_scroll);
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                }
+                Key::Named(NamedKey::ArrowUp) => {
+                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+                    let win_h = if let Some(w) = &self.window {
+                        w.inner_size().height as f64 / scale
+                    } else {
+                        self.config.height as f64
+                    };
+                    let max_scroll = self.max_scroll_y(win_h);
+                    self.scroll_y = (self.scroll_y - 40.0).clamp(0.0, max_scroll);
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                }
+                Key::Named(NamedKey::PageDown) => {
+                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+                    let win_h = if let Some(w) = &self.window {
+                        w.inner_size().height as f64 / scale
+                    } else {
+                        self.config.height as f64
+                    };
+                    let max_scroll = self.max_scroll_y(win_h);
+                    self.scroll_y = (self.scroll_y + win_h * 0.8).clamp(0.0, max_scroll);
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                }
+                Key::Named(NamedKey::PageUp) => {
+                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+                    let win_h = if let Some(w) = &self.window {
+                        w.inner_size().height as f64 / scale
+                    } else {
+                        self.config.height as f64
+                    };
+                    let max_scroll = self.max_scroll_y(win_h);
+                    self.scroll_y = (self.scroll_y - win_h * 0.8).clamp(0.0, max_scroll);
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                }
+                Key::Named(NamedKey::Home) => {
+                    self.scroll_y = 0.0;
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                }
+                Key::Named(NamedKey::End) => {
+                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+                    let win_h = if let Some(w) = &self.window {
+                        w.inner_size().height as f64 / scale
+                    } else {
+                        self.config.height as f64
+                    };
+                    let max_scroll = self.max_scroll_y(win_h);
+                    self.scroll_y = max_scroll;
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                }
                 Key::Character(c) if c.eq_ignore_ascii_case("q") => {
                     event_loop.exit();
                 }
