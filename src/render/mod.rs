@@ -13,5 +13,5 @@ pub use scene::{
 };
 pub use viewer::{
     run_viewer, run_viewer_with_document, run_viewer_with_file,
-    run_viewer_with_file_and_registry, ViewerApp, ViewerConfig, ViewerUserEvent,
+    run_viewer_with_file_and_registry, PendingScroll, ViewerApp, ViewerConfig, ViewerUserEvent,
 };

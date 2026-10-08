@@ -126,6 +126,23 @@ pub enum ViewerUserEvent {
     FileModified,
 }
 
+/// Coalesced pending scroll delta accumulated across high-frequency mouse wheel / trackpad events.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct PendingScroll {
+    pub delta_x: f64,
+    pub delta_y: f64,
+}
+
+impl PendingScroll {
+    pub fn new(delta_x: f64, delta_y: f64) -> Self {
+        Self { delta_x, delta_y }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.delta_x.abs() < 1e-6 && self.delta_y.abs() < 1e-6
+    }
+}
+
 /// Interactive window viewer application using Winit and Vello.
 pub struct ViewerApp {
     config: ViewerConfig,
@@ -162,6 +179,7 @@ pub struct ViewerApp {
     is_dragging_scrollbar: bool,
     scrollbar_drag_start_y: f64,
     scrollbar_start_scroll_y: f64,
+    pending_scroll: Option<PendingScroll>,
 
     // Focus & target highlighting state
     focused_node: Option<NodeId>,
@@ -216,6 +234,7 @@ impl ViewerApp {
             is_dragging_scrollbar: false,
             scrollbar_drag_start_y: 0.0,
             scrollbar_start_scroll_y: 0.0,
+            pending_scroll: None,
             focused_node: None,
             target_node: None,
         }
@@ -259,6 +278,7 @@ impl ViewerApp {
             is_dragging_scrollbar: false,
             scrollbar_drag_start_y: 0.0,
             scrollbar_start_scroll_y: 0.0,
+            pending_scroll: None,
             focused_node,
             target_node: None,
         }
@@ -331,6 +351,7 @@ impl ViewerApp {
 
     /// Sets the vertical scroll offset directly.
     pub fn set_scroll_y(&mut self, y: f64) {
+        self.pending_scroll = None;
         self.scroll_y = y.max(0.0);
         if let Some(w) = &self.window {
             w.request_redraw();
@@ -344,6 +365,7 @@ impl ViewerApp {
 
     /// Sets the horizontal scroll offset directly.
     pub fn set_scroll_x(&mut self, x: f64) {
+        self.pending_scroll = None;
         self.scroll_x = x.max(0.0);
         if let Some(w) = &self.window {
             w.request_redraw();
@@ -357,10 +379,127 @@ impl ViewerApp {
 
     /// Sets the scroll offset directly.
     pub fn set_scroll_offset(&mut self, x: f64, y: f64) {
+        self.pending_scroll = None;
         self.scroll_x = x.max(0.0);
         self.scroll_y = y.max(0.0);
         if let Some(w) = &self.window {
             w.request_redraw();
+        }
+    }
+
+    /// Returns the accumulated pending scroll deltas awaiting dispatch, if any.
+    pub fn pending_scroll(&self) -> Option<PendingScroll> {
+        self.pending_scroll
+    }
+
+    /// Returns the current cursor position in logical window coordinates, if any.
+    pub fn cursor_pos(&self) -> Option<Point> {
+        self.cursor_pos
+    }
+
+    /// Sets or clears the current cursor position in logical window coordinates.
+    pub fn set_cursor_pos(&mut self, pos: Option<Point>) {
+        self.cursor_pos = pos;
+    }
+
+    /// Queues a scroll delta for event coalescing.
+    ///
+    /// Accumulates raw mouse wheel / trackpad deltas during a frame turn without
+    /// triggering DAG re-evaluation, then schedules a redraw. The accumulated
+    /// delta will be dispatched once before rendering in [`flush_pending_scroll`](Self::flush_pending_scroll).
+    pub fn queue_scroll(&mut self, delta_x: f64, delta_y: f64) {
+        let pending = self.pending_scroll.get_or_insert_with(PendingScroll::default);
+        pending.delta_x += delta_x;
+        pending.delta_y += delta_y;
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Flushes any pending accumulated scroll delta, dispatching it to the hit component
+    /// or outer window layout. Returns `true` if a scroll event was flushed.
+    pub fn flush_pending_scroll(&mut self) -> bool {
+        if let Some(pending) = self.pending_scroll.take() {
+            if !pending.is_empty() {
+                self.dispatch_scroll(pending.delta_x, pending.delta_y);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Dispatches a scroll delta to either the inspector panel, the targeted component
+    /// under the cursor (e.g. ScrollView), or the window document.
+    pub fn dispatch_scroll(&mut self, delta_x: f64, delta_y: f64) {
+        let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+        let (win_w, win_h) = if let Some(w) = &self.window {
+            let size = w.inner_size();
+            (size.width as f64 / scale, size.height as f64 / scale)
+        } else {
+            (self.config.width as f64, self.config.height as f64)
+        };
+
+        if let Some(point) = self.cursor_pos {
+            let panel_x = win_w - self.panel_component.width;
+
+            if self.inspect_mode && point.x >= panel_x {
+                let divider_y = self.panel_component.divider_y(win_h);
+                if point.y < divider_y {
+                    let tree_items = crate::inspector::build_tree_items_from_layout(
+                        self.layout(),
+                        &self.inspector_state,
+                    );
+                    let max_scroll = self.panel_component.max_scroll(tree_items.len(), win_h);
+                    self.inspector_state.scroll_by(-delta_y, max_scroll);
+                } else {
+                    let max_detail_scroll = self.panel_component.max_detail_scroll_with_state(
+                        self.selected_node,
+                        self.layout(),
+                        Some(&self.inspector_state),
+                        win_h,
+                    );
+                    self.inspector_state.scroll_detail_by(-delta_y, max_detail_scroll);
+                }
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+                return;
+            }
+
+            let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
+            let mut handled = false;
+            if let Some(ref hit_res) = self.layout().hit_test(doc_point) {
+                let scroll_event = Event::new(
+                    EventKind::Scroll { delta_x, delta_y },
+                    doc_point,
+                    hit_res.local_point,
+                    self.modifiers,
+                    hit_res.target,
+                );
+                handled = self.dispatch_event_with_bubble(scroll_event, &hit_res.bubble_path);
+            }
+
+            // Window document scrolling occurs only if not handled by an inner container:
+            if !handled {
+                let max_scroll = self.max_scroll_y(win_h);
+                let old_scroll = self.scroll_y;
+                self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
+                if (self.scroll_y - old_scroll).abs() > 0.001 {
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                }
+            }
+        } else {
+            // No cursor position known; fall back to scrolling window document
+            let max_scroll = self.max_scroll_y(win_h);
+            let old_scroll = self.scroll_y;
+            self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
+            if (self.scroll_y - old_scroll).abs() > 0.001 {
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+            }
         }
     }
 
@@ -393,6 +532,7 @@ impl ViewerApp {
 
     /// Scrolls vertically to a target Y position, clamping to valid scroll range.
     pub fn scroll_to_y(&mut self, target_y: f64) {
+        self.pending_scroll = None;
         let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
         let win_h = if let Some(w) = &self.window {
             let size = w.inner_size();
@@ -886,6 +1026,7 @@ impl ViewerApp {
 
     /// Reloads the document from disk and re-renders if parsing and layout evaluation succeed.
     pub fn reload_document(&mut self) {
+        self.pending_scroll = None;
         let path = match &self.watch_path {
             Some(p) => p.clone(),
             None => return,
@@ -976,6 +1117,7 @@ impl ViewerApp {
 
     /// Synchronously renders a frame to the current swapchain texture and presents it.
     pub fn render_frame(&mut self) {
+        self.flush_pending_scroll();
         let (surface, renderer, window) = match (
             &mut self.surface,
             &mut self.renderer,
@@ -1310,6 +1452,8 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        self.flush_pending_scroll();
+
         // Keep requesting redraw on startup until window un-occludes and renders initial frame
         if self.frame_count == 0 {
             if let Some(window) = &self.window {
@@ -1335,6 +1479,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
             }
             WindowEvent::Resized(size) => {
                 if size.width > 0 && size.height > 0 {
+                    self.flush_pending_scroll();
                     if let Some(surface) = &mut self.surface {
                         self.render_cx
                             .resize_surface(surface, size.width, size.height);
@@ -1353,6 +1498,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 }
             }
             WindowEvent::ScaleFactorChanged { .. } => {
+                self.flush_pending_scroll();
                 if let Some(window) = &self.window {
                     configure_metal_layer(window);
                     let size = window.inner_size();
@@ -1375,6 +1521,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 self.render_frame();
             }
             WindowEvent::CursorMoved { position, .. } => {
+                self.flush_pending_scroll();
                 let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
                 let point = Point::new(position.x / scale, position.y / scale);
                 self.cursor_pos = Some(point);
@@ -1542,6 +1689,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
+                self.flush_pending_scroll();
                 let btn = match button {
                     winit::event::MouseButton::Left => MouseButton::Left,
                     winit::event::MouseButton::Right => MouseButton::Right,
@@ -1770,67 +1918,10 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     winit::event::MouseScrollDelta::LineDelta(x, y) => (x as f64 * 20.0, y as f64 * 20.0),
                     winit::event::MouseScrollDelta::PixelDelta(pos) => (pos.x, pos.y),
                 };
-                if let Some(point) = self.cursor_pos {
-                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
-                    let (win_w, win_h) = if let Some(w) = &self.window {
-                        let size = w.inner_size();
-                        (size.width as f64 / scale, size.height as f64 / scale)
-                    } else {
-                        (self.config.width as f64, self.config.height as f64)
-                    };
-                    let panel_x = win_w - self.panel_component.width;
-
-                    if self.inspect_mode && point.x >= panel_x {
-                        let divider_y = self.panel_component.divider_y(win_h);
-                        if point.y < divider_y {
-                            let tree_items = crate::inspector::build_tree_items_from_layout(
-                                self.layout(),
-                                &self.inspector_state,
-                            );
-                            let max_scroll = self.panel_component.max_scroll(tree_items.len(), win_h);
-                            self.inspector_state.scroll_by(-delta_y, max_scroll);
-                        } else {
-                            let max_detail_scroll = self.panel_component.max_detail_scroll_with_state(
-                                self.selected_node,
-                                self.layout(),
-                                Some(&self.inspector_state),
-                                win_h,
-                            );
-                            self.inspector_state.scroll_detail_by(-delta_y, max_detail_scroll);
-                        }
-                        if let Some(w) = &self.window {
-                            w.request_redraw();
-                        }
-                        return;
-                    }
-
-                    let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
-                    let mut handled = false;
-                    if let Some(ref hit_res) = self.layout().hit_test(doc_point) {
-                        let scroll_event = Event::new(
-                            EventKind::Scroll { delta_x, delta_y },
-                            doc_point,
-                            hit_res.local_point,
-                            self.modifiers,
-                            hit_res.target,
-                        );
-                        handled = self.dispatch_event_with_bubble(scroll_event, &hit_res.bubble_path);
-                    }
-
-                    // Window document scrolling occurs only if not handled by an inner container:
-                    if !handled {
-                        let max_scroll = self.max_scroll_y(win_h);
-                        let old_scroll = self.scroll_y;
-                        self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
-                        if (self.scroll_y - old_scroll).abs() > 0.001 {
-                            if let Some(w) = &self.window {
-                                w.request_redraw();
-                            }
-                        }
-                    }
-                }
+                self.queue_scroll(delta_x, delta_y);
             }
             WindowEvent::CursorLeft { .. } => {
+                self.flush_pending_scroll();
                 self.is_dragging_scrollbar = false;
                 if let Some(old_id) = self.hovered_node.take() {
                     let pt = self.cursor_pos.unwrap_or_default();
@@ -1868,7 +1959,9 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         ..
                     },
                 ..
-            } => match logical_key {
+            } => {
+                self.flush_pending_scroll();
+                match logical_key {
                 Key::Named(NamedKey::Tab) => {
                     if self.modifiers.shift {
                         self.focus_previous();
@@ -2005,7 +2098,8 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
                 }
                 _ => {}
-            },
+            }
+            }
             _ => {}
         }
     }

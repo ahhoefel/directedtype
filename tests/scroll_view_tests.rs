@@ -394,3 +394,127 @@ fn test_end_to_end_link_scrolls_scroll_view() {
     assert_eq!((sx, sy), (0.0, 120.0));
     assert_eq!(updated_anchor.rect.y - sy, 0.0, "Anchor visual position on GPU is at y = 0.0");
 }
+
+#[test]
+fn test_scroll_event_coalescing_queue_and_flush() {
+    use directedtype::render::{PendingScroll, ViewerApp, ViewerConfig};
+
+    let source = r#"
+        \use "components/ScrollView.dt";
+
+        \ScrollView(width: 400, height: 200, padding: 0) {
+            \Rect(width: 400, height: 100, color: #ff0000)
+            \Rect(width: 400, height: 100, color: #00ff00)
+            \Rect(width: 400, height: 100, color: #0000ff)
+            \Rect(width: 400, height: 100, color: #ffff00)
+        }
+    "#;
+    let ast = parse_document(source).expect("parse ok");
+    let compiled = CompiledDocument::compile_with_registry(
+        &ast,
+        400.0,
+        200.0,
+        Path::new("."),
+        &FsResolver,
+        &ComponentRegistry::standard(),
+    )
+    .expect("compile ok");
+
+    let mut viewer = ViewerApp::new_with_compiled(compiled, ViewerConfig::default());
+    let sv_id = viewer.layout().nodes.iter().find(|n| n.name == "ScrollView").unwrap().id;
+
+    // Position cursor inside ScrollView
+    viewer.set_cursor_pos(Some(Point::new(100.0, 100.0)));
+    assert_eq!(viewer.pending_scroll(), None);
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Number(0.0)));
+
+    // Queue 3 high-frequency trackpad scroll ticks (delta_y = -10, -15, -25)
+    viewer.queue_scroll(0.0, -10.0);
+    assert_eq!(viewer.pending_scroll(), Some(PendingScroll::new(0.0, -10.0)));
+    // State must remain un-mutated until flush (no DAG re-evaluation yet!)
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Number(0.0)));
+
+    viewer.queue_scroll(0.0, -15.0);
+    viewer.queue_scroll(0.0, -25.0);
+    assert_eq!(viewer.pending_scroll(), Some(PendingScroll::new(0.0, -50.0)));
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Number(0.0)));
+
+    // Flush the coalesced scroll
+    let flushed = viewer.flush_pending_scroll();
+    assert!(flushed);
+    assert_eq!(viewer.pending_scroll(), None);
+
+    // ScrollView state is now updated in a single pass to 50.0
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Number(50.0)));
+
+    // Second flush is a no-op
+    assert!(!viewer.flush_pending_scroll());
+}
+
+#[test]
+fn test_scroll_event_coalescing_2d() {
+    use directedtype::render::{PendingScroll, ViewerApp, ViewerConfig};
+
+    let source = r#"
+        \use "components/ScrollView.dt";
+
+        \ScrollView(width: 200, height: 200, padding: 0) {
+            \Rect(width: 500, height: 500, color: #ff0000)
+        }
+    "#;
+    let ast = parse_document(source).expect("parse ok");
+    let compiled = CompiledDocument::compile_with_registry(
+        &ast,
+        400.0,
+        400.0,
+        Path::new("."),
+        &FsResolver,
+        &ComponentRegistry::standard(),
+    )
+    .expect("compile ok");
+
+    let mut viewer = ViewerApp::new_with_compiled(compiled, ViewerConfig::default());
+    let sv_id = viewer.layout().nodes.iter().find(|n| n.name == "ScrollView").unwrap().id;
+
+    viewer.set_cursor_pos(Some(Point::new(50.0, 50.0)));
+    viewer.queue_scroll(-12.0, -8.0);
+    viewer.queue_scroll(-18.0, -22.0);
+
+    assert_eq!(viewer.pending_scroll(), Some(PendingScroll::new(-30.0, -30.0)));
+
+    assert!(viewer.flush_pending_scroll());
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_x"), Some(&Value::Number(30.0)));
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Number(30.0)));
+}
+
+#[test]
+fn test_scroll_event_coalescing_window_fallback() {
+    use directedtype::render::{PendingScroll, ViewerApp, ViewerConfig};
+
+    let source = r#"
+        \Rect(x: 0, y: 0, width: 400, height: 1200, color: #334455)
+    "#;
+    let ast = parse_document(source).expect("parse ok");
+    let compiled = CompiledDocument::compile_with_registry(
+        &ast,
+        400.0,
+        600.0,
+        Path::new("."),
+        &FsResolver,
+        &ComponentRegistry::standard(),
+    )
+    .expect("compile ok");
+
+    let mut viewer = ViewerApp::new_with_compiled(compiled, ViewerConfig::default());
+    assert_eq!(viewer.scroll_y(), 0.0);
+
+    // Queue scroll ticks when cursor position is unset or outside inner container
+    viewer.queue_scroll(0.0, -40.0);
+    viewer.queue_scroll(0.0, -60.0);
+    assert_eq!(viewer.pending_scroll(), Some(PendingScroll::new(0.0, -100.0)));
+    assert_eq!(viewer.scroll_y(), 0.0);
+
+    assert!(viewer.flush_pending_scroll());
+    assert_eq!(viewer.scroll_y(), 100.0);
+    assert_eq!(viewer.pending_scroll(), None);
+}

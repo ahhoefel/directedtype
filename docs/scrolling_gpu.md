@@ -114,6 +114,13 @@ Tracing a single scroll event through the engine reveals why performance degrade
   ```
 - Reduces CPU formatting and Vello command submission from $O(N_{\text{total}})$ to $O(N_{\text{visible}})$.
 
-### Strategy D: Event Coalescing and Zero-Copy State Dispatch [PARTIALLY IMPLEMENTED]
-- **Zero-Copy Layout Borrowing:** **Completed.** Removed all `self.layout = compiled.layout().clone()` invocations across the viewer and tests using Rust disjoint field borrowing (`current_layout`).
-- **Event Coalescing:** Coalesce high-frequency `WindowEvent::MouseWheel` events during a frame turn, executing DAG evaluation once per VSync.
+### Strategy D: Event Coalescing and Zero-Copy State Dispatch [IMPLEMENTED]
+- **Status:** **Completed.**
+- **Zero-Copy Layout Borrowing:** Removed all `self.layout = compiled.layout().clone()` invocations across the viewer, scene construction, and test suites using Rust disjoint field borrowing (`current_layout(&self.compiled, &self.static_layout)`), eliminating redundant clone allocations on every single cursor move, click, and scroll tick.
+- **Event Coalescing:**
+  1. **Pending Scroll Accumulation (`PendingScroll`):** In `src/render/viewer.rs`, `ViewerApp` maintains `pending_scroll: Option<PendingScroll>` tracking accumulated `(delta_x, delta_y)` offsets.
+  2. **Deferred Dispatch (`queue_scroll`):** High-frequency `WindowEvent::MouseWheel` events (emitted at 120Hz+ by macOS precision trackpads) are accumulated linearly without triggering hit-testing or DAG evaluations during input pumping.Redraw is scheduled via `window.request_redraw()`.
+  3. **Synchronous Turn Flushing (`flush_pending_scroll`):** Before rendering a frame in `WindowEvent::RedrawRequested`, `about_to_wait`, or `render_frame()`, any pending scroll is flushed and dispatched as a single aggregated `EventKind::Scroll { delta_x, delta_y }`.
+  4. **Causal Ordering Safety:** `flush_pending_scroll()` is also invoked prior to handling spatial input events (`CursorMoved`, `MouseInput`, `KeyboardInput`, `Resized`), guaranteeing that hover transitions, link clicks, and focus movements always hit-test against the up-to-date scrolled layout.
+  5. **Result:** Completely eliminates CPU main-thread queue saturation on fast trackpad flicks while preserving 100% smooth momentum, sub-pixel precision, and 2D diagonal scrolling.
+
