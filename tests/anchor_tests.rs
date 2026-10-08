@@ -168,7 +168,7 @@ fn test_anchor_scope_first_class_port_and_append_method() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        \Component TableOfContents(target_scope: Node) {
+        \Component TableOfContents(target_scope: Node, env font: Font) {
             \Link(url: target_scope.append("setup"), link_style: link_default) {
                 Setup Link
             }
@@ -876,7 +876,7 @@ fn test_link_component_custom_on_click_override() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        \Component CustomPage {
+        \Component CustomPage(env font: Font) {
             state custom_clicked: Boolean = false;
 
             \Link(url: "#ignored", link_style: link_default, on_click: self.handle_custom_click) {

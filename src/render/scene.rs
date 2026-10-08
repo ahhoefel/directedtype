@@ -329,11 +329,22 @@ pub fn build_scene(
             continue;
         }
 
-        // Inline children of a Text node are rendered as styled spans by the parent Text node
-        if let Some(parent_id) = node.parent {
-            if layout.get_node(parent_id).map(|p| p.name.as_str()) == Some("Text") {
-                continue;
+        // Inline descendants of a Text node are rendered as styled spans by the parent Text node
+        let mut is_inline_descendant = false;
+        let mut curr_parent = node.parent;
+        while let Some(pid) = curr_parent {
+            if let Some(pnode) = layout.get_node(pid) {
+                if pnode.name == "Text" {
+                    is_inline_descendant = true;
+                    break;
+                }
+                curr_parent = pnode.parent;
+            } else {
+                break;
             }
+        }
+        if is_inline_descendant {
+            continue;
         }
 
         let target_chain = get_clip_chain(node.clip, layout);
@@ -547,6 +558,13 @@ pub fn build_scene(
         }
 
         // Render text
+        let is_text_primitive = node.name == "Text"
+            || (node.children.is_empty()
+                && (node.properties.contains_key("text") || node.properties.contains_key("content")));
+        if !is_text_primitive {
+            continue;
+        }
+
         let dynamic_text = node
             .properties
             .get("text")
@@ -694,7 +712,9 @@ pub fn build_scene(
                     builder.push_default(StyleProperty::FontWeight(FontWeight::new(font_weight)));
                 }
                 if let Some(family) = font_family {
-                    builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
+                    if !family.is_empty() {
+                        builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
+                    }
                 }
 
                 // Draw any span background highlights (e.g. focused_bg on links) in local coordinates

@@ -594,6 +594,7 @@ fn test_render_link_focus_highlight() {
 \use "components/VStack.dt"
 \use "components/LinkStyle.dt"
 \use "components/Link.dt"
+\use "theme/default.dt"
 
 let red_link_style = \LinkStyle(
     color: #2563eb,
@@ -668,6 +669,7 @@ fn test_render_link_hover_highlight() {
 \use "components/VStack.dt"
 \use "components/LinkStyle.dt"
 \use "components/Link.dt"
+\use "theme/default.dt"
 
 let blue_hover_link_style = \LinkStyle(
     color: #2563eb,

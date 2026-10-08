@@ -2302,6 +2302,43 @@ fn expand_primitive_element(
                 }),
             );
         }
+    } else if let Some(font_target) = ports.get("font").cloned() {
+        if matches!(font_target, Expr::Literal(Literal::String(_, _))) {
+            if !ports.contains_key("family") && !ports.contains_key("font_family") {
+                ports.insert("family".to_string(), font_target);
+            }
+        } else {
+            if !ports.contains_key("size") && !ports.contains_key("font_size") {
+                ports.insert(
+                    "size".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(font_target.clone()),
+                        member: Ident::new("size", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            }
+            if !ports.contains_key("weight") && !ports.contains_key("font_weight") {
+                ports.insert(
+                    "weight".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(font_target.clone()),
+                        member: Ident::new("weight", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            }
+            if !ports.contains_key("family") && !ports.contains_key("font_family") {
+                ports.insert(
+                    "family".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(font_target.clone()),
+                        member: Ident::new("family", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            }
+        }
     }
 
     if elem.name.as_str() == "Text" {
