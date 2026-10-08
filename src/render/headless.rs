@@ -10,7 +10,7 @@ use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene}
 
 use crate::compiler::layout::ResolvedLayout;
 use crate::render::error::RenderError;
-use crate::render::scene::{build_scene, SceneOptions};
+use crate::render::scene::{build_scene, SceneOptions, TextSceneCache};
 
 pub struct HeadlessRenderer {
     device: Arc<wgpu::Device>,
@@ -18,6 +18,7 @@ pub struct HeadlessRenderer {
     renderer: Renderer,
     font_cx: FontContext,
     layout_cx: LayoutContext<()>,
+    text_cache: TextSceneCache,
 }
 
 impl HeadlessRenderer {
@@ -56,6 +57,7 @@ impl HeadlessRenderer {
             renderer,
             font_cx: FontContext::new(),
             layout_cx: LayoutContext::new(),
+            text_cache: TextSceneCache::new(),
         })
     }
 
@@ -184,7 +186,7 @@ impl HeadlessRenderer {
         height: u32,
         options: &SceneOptions,
     ) -> Result<RgbaImage, RenderError> {
-        let scene = build_scene(layout, &mut self.font_cx, &mut self.layout_cx, options);
+        let scene = build_scene(layout, &mut self.font_cx, &mut self.layout_cx, &mut self.text_cache, options);
         self.render_scene(&scene, width, height)
     }
 

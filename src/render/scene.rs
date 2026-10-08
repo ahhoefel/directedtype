@@ -1,3 +1,6 @@
+use std::collections::{HashMap, HashSet};
+use std::ops::Range;
+
 use parley::layout::{AlignmentOptions, PositionedLayoutItem};
 use parley::style::{FontFamily, FontWeight, StyleProperty};
 use parley::{Alignment, FontContext, LayoutContext};
@@ -9,6 +12,77 @@ use crate::compiler::expanded::NodeId;
 use crate::compiler::layout::ResolvedLayout;
 use crate::compiler::value::Value;
 use crate::render::color::{color_to_rgba8, parse_color};
+
+/// Captures styling parameters for an inline rich text span to detect visual changes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpanRenderKey {
+    pub range: Range<usize>,
+    pub color: Option<String>,
+    pub underline: bool,
+    pub bg_color: Option<String>,
+}
+
+/// The set of input properties that determine a text node's local glyph layout and visual presentation.
+/// Crucially excludes `node.rect.x` and `node.rect.y`, allowing 100% cache hits during scrolling and translation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextRenderKey {
+    pub text: String,
+    pub width: f64,
+    pub font_size: f32,
+    pub font_weight: f32,
+    pub font_family: Option<String>,
+    pub color: [u8; 4],
+    pub align: Option<String>,
+    pub spans: Vec<SpanRenderKey>,
+}
+
+/// A cached local `vello::Scene` rendered at origin `(0.0, 0.0)` for a single text node.
+pub struct CachedTextScene {
+    pub key: TextRenderKey,
+    pub scene: Scene,
+}
+
+/// 1-element cache per text node (`NodeId` -> previous call inputs and pre-recorded local `vello::Scene`).
+///
+/// When only `y` changes during scrolling, the cache hits, completely bypassing
+/// Parley text shaping, OpenType font layout, bidi analysis, and line-breaking passes.
+#[derive(Default)]
+pub struct TextSceneCache {
+    pub entries: HashMap<NodeId, CachedTextScene>,
+}
+
+impl TextSceneCache {
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+        }
+    }
+
+    pub fn get(&self, id: &NodeId) -> Option<&CachedTextScene> {
+        self.entries.get(id)
+    }
+
+    pub fn insert(&mut self, id: NodeId, entry: CachedTextScene) {
+        self.entries.insert(id, entry);
+    }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Prunes entries for nodes that no longer exist in the active layout.
+    pub fn prune(&mut self, active_nodes: &HashSet<NodeId>) {
+        self.entries.retain(|id, _| active_nodes.contains(id));
+    }
+}
 
 /// Options for building a Vello scene from a ResolvedLayout.
 #[derive(Debug, Clone)]
@@ -54,11 +128,12 @@ fn get_clip_chain(
     chain
 }
 
-/// Builds a `vello::Scene` from a `ResolvedLayout`.
+/// Builds a `vello::Scene` from a `ResolvedLayout` using an active `TextSceneCache`.
 pub fn build_scene(
     layout: &ResolvedLayout,
     font_cx: &mut FontContext,
     _layout_cx: &mut LayoutContext<()>,
+    text_cache: &mut TextSceneCache,
     options: &SceneOptions,
 ) -> Scene {
     let mut scene = Scene::new();
@@ -291,6 +366,64 @@ pub fn build_scene(
                     })
                     .unwrap_or(Color::BLACK);
 
+                let align_str = node
+                    .properties
+                    .get("align")
+                    .or_else(|| node.properties.get("text_align"))
+                    .and_then(|v| v.as_str());
+
+                // Build span render keys to detect hover/style changes
+                let mut span_keys = Vec::with_capacity(node.text_spans.len());
+                for span in &node.text_spans {
+                    let mut color_str = span.style.color.clone();
+                    let mut underline = span.style.underline;
+                    let mut bg_str = None;
+
+                    if let Some(child_id) = span.node_id {
+                        if let Some(child_node) = layout.get_node(child_id) {
+                            if let Some(bg) = child_node.properties.get("current_bg").and_then(|v| v.as_str()) {
+                                bg_str = Some(bg.to_string());
+                            }
+                            if let Some(c) = child_node.properties.get("current_color").and_then(|v| v.as_str()) {
+                                color_str = Some(c.to_string());
+                            }
+                            if let Some(u) = child_node.properties.get("current_underline").and_then(|v| v.as_bool()) {
+                                underline = u;
+                            }
+                        }
+                    }
+
+                    span_keys.push(SpanRenderKey {
+                        range: span.range.clone(),
+                        color: color_str,
+                        underline,
+                        bg_color: bg_str,
+                    });
+                }
+
+                let current_key = TextRenderKey {
+                    text: text.to_string(),
+                    width: node.rect.width,
+                    font_size,
+                    font_weight,
+                    font_family: font_family.map(|s| s.to_string()),
+                    color: color_to_rgba8(&text_color),
+                    align: align_str.map(|s| s.to_string()),
+                    spans: span_keys,
+                };
+
+                // Check 1-element cache:
+                if let Some(cached) = text_cache.get(&node.id) {
+                    if cached.key == current_key {
+                        // CACHE HIT: 100% of the time during scrolling!
+                        scene.append(&cached.scene, Some(Affine::translate((node.rect.x, node.rect.y))));
+                        continue;
+                    }
+                }
+
+                // CACHE MISS: Build local scene at origin (0.0, 0.0)
+                let mut local_scene = Scene::new();
+
                 let mut builder = text_layout_cx.ranged_builder(font_cx, text, 1.0, true);
                 builder.push_default(StyleProperty::FontSize(font_size));
                 builder.push_default(StyleProperty::Brush(color_to_rgba8(&text_color)));
@@ -301,7 +434,7 @@ pub fn build_scene(
                     builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
                 }
 
-                // Draw any span background highlights (e.g. focused_bg on links)
+                // Draw any span background highlights (e.g. focused_bg on links) in local coordinates
                 for span in &node.text_spans {
                     if let Some(child_id) = span.node_id {
                         if let Some(child_node) = layout.get_node(child_id) {
@@ -309,14 +442,16 @@ pub fn build_scene(
                                 let bg_color = parse_color(bg_str);
                                 if bg_color.components[3] > 0.0 {
                                     for frag in &child_node.fragments {
+                                        let local_x = frag.x - node.rect.x;
+                                        let local_y = frag.y - node.rect.y;
                                         let pad_rect = Rect::new(
-                                            frag.x - 2.0,
-                                            frag.y - 1.0,
-                                            frag.x + frag.width + 2.0,
-                                            frag.y + frag.height + 1.0,
+                                            local_x - 2.0,
+                                            local_y - 1.0,
+                                            local_x + frag.width + 2.0,
+                                            local_y + frag.height + 1.0,
                                         );
                                         let rounded = RoundedRect::from_rect(pad_rect, 4.0);
-                                        scene.fill(
+                                        local_scene.fill(
                                             Fill::NonZero,
                                             Affine::IDENTITY,
                                             Brush::Solid(bg_color),
@@ -355,16 +490,10 @@ pub fn build_scene(
                     }
                 }
 
-                let mut layout = builder.build(text);
+                let mut layout_text = builder.build(text);
                 if node.rect.width > 0.0 {
-                    layout.break_all_lines(Some(node.rect.width as f32));
+                    layout_text.break_all_lines(Some(node.rect.width as f32));
                 }
-
-                let align_str = node
-                    .properties
-                    .get("align")
-                    .or_else(|| node.properties.get("text_align"))
-                    .and_then(|v| v.as_str());
 
                 let alignment = match align_str {
                     Some("center") | Some("Center") => Alignment::Center,
@@ -372,10 +501,10 @@ pub fn build_scene(
                     Some("justify") | Some("Justify") => Alignment::Justify,
                     _ => Alignment::Start,
                 };
-                layout.align(alignment, AlignmentOptions::default());
+                layout_text.align(alignment, AlignmentOptions::default());
 
-                // Render lines and glyphs
-                for line in layout.lines() {
+                // Render lines and glyphs into local_scene
+                for line in layout_text.lines() {
                     for item in line.items() {
                         if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
                             let run = glyph_run.run();
@@ -388,10 +517,10 @@ pub fn build_scene(
                                 x: g.x,
                                 y: g.y,
                             });
-                            scene
+                            local_scene
                                 .draw_glyphs(font)
                                 .font_size(run.font_size())
-                                .transform(Affine::translate((node.rect.x, node.rect.y)))
+                                .transform(Affine::IDENTITY)
                                 .brush(Brush::Solid(run_color))
                                 .draw(Fill::NonZero, glyphs);
 
@@ -413,12 +542,12 @@ pub fn build_scene(
 
                                 if min_gx < max_gx {
                                     let underline_rect = vello::kurbo::Rect::new(
-                                        node.rect.x + min_gx as f64,
-                                        node.rect.y + gy as f64 + 2.0,
-                                        node.rect.x + max_gx as f64,
-                                        node.rect.y + gy as f64 + 3.2,
+                                        min_gx as f64,
+                                        gy as f64 + 2.0,
+                                        max_gx as f64,
+                                        gy as f64 + 3.2,
                                     );
-                                    scene.fill(
+                                    local_scene.fill(
                                         Fill::NonZero,
                                         Affine::IDENTITY,
                                         Brush::Solid(run_color),
@@ -430,6 +559,15 @@ pub fn build_scene(
                         }
                     }
                 }
+
+                // Append local scene to main scene translated to node's position:
+                scene.append(&local_scene, Some(Affine::translate((node.rect.x, node.rect.y))));
+
+                // Save in 1-element cache:
+                text_cache.insert(node.id, CachedTextScene {
+                    key: current_key,
+                    scene: local_scene,
+                });
             }
         }
     }
@@ -437,6 +575,12 @@ pub fn build_scene(
     while !active_clip_stack.is_empty() {
         scene.pop_layer();
         active_clip_stack.pop();
+    }
+
+    // Periodically prune dead nodes from cache if it has grown noticeably larger than active nodes
+    if text_cache.len() > layout.nodes.len() + 64 {
+        let active_ids: HashSet<NodeId> = layout.nodes.iter().map(|n| n.id).collect();
+        text_cache.prune(&active_ids);
     }
 
     let scale = if options.scale_factor > 0.0 {
@@ -456,3 +600,81 @@ pub fn build_scene(
         scene
     }
 }
+
+/// Convenience helper to build a `vello::Scene` without providing an external cache.
+pub fn build_scene_without_cache(
+    layout: &ResolvedLayout,
+    font_cx: &mut FontContext,
+    layout_cx: &mut LayoutContext<()>,
+    options: &SceneOptions,
+) -> Scene {
+    let mut cache = TextSceneCache::new();
+    build_scene(layout, font_cx, layout_cx, &mut cache, options)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compiler::layout::{Rect, ResolvedNode};
+    use crate::span::Span;
+
+    #[test]
+    fn test_text_scene_cache_hit_on_scroll() {
+        let mut font_cx = FontContext::new();
+        let mut layout_cx = LayoutContext::new();
+        let mut text_cache = TextSceneCache::new();
+        let options = SceneOptions::default();
+
+        let node = ResolvedNode {
+            id: NodeId(1),
+            name: "Text".to_string(),
+            key: None,
+            parent: None,
+            children: Vec::new(),
+            rect: Rect::new(10.0, 50.0, 200.0, 30.0),
+            z: 0.0,
+            clip: None,
+            text_content: Some("Hello World".to_string()),
+            text_spans: Vec::new(),
+            fragments: Vec::new(),
+            anchor_name: None,
+            scope_id: None,
+            properties: HashMap::new(),
+            state_vars: HashMap::new(),
+            event_handlers: HashMap::new(),
+            formulas: HashMap::new(),
+            span: Span::default(),
+            handle: None,
+            font: None,
+            var_name: None,
+        };
+
+        let mut layout = ResolvedLayout {
+            roots: vec![NodeId(1)],
+            nodes: vec![node.clone()],
+            values: HashMap::new(),
+            scope_tree: Default::default(),
+        };
+
+        // Frame 1: Initial render (cache miss)
+        let _scene1 = build_scene(&layout, &mut font_cx, &mut layout_cx, &mut text_cache, &options);
+        assert_eq!(text_cache.len(), 1);
+        let key_before = text_cache.get(&NodeId(1)).unwrap().key.clone();
+
+        // Frame 2: Simulating vertical scroll (rect.y changes from 50.0 to 180.0)
+        layout.nodes[0].rect.y = 180.0;
+        let _scene2 = build_scene(&layout, &mut font_cx, &mut layout_cx, &mut text_cache, &options);
+        assert_eq!(text_cache.len(), 1);
+        let key_after = text_cache.get(&NodeId(1)).unwrap().key.clone();
+
+        // The key must match identically despite y moving, confirming a 100% cache hit!
+        assert_eq!(key_before, key_after);
+
+        // Frame 3: Mutating text content invalidates and updates cache
+        layout.nodes[0].text_content = Some("Updated Text".to_string());
+        let _scene3 = build_scene(&layout, &mut font_cx, &mut layout_cx, &mut text_cache, &options);
+        assert_eq!(text_cache.len(), 1);
+        assert_eq!(text_cache.get(&NodeId(1)).unwrap().key.text, "Updated Text");
+    }
+}
+

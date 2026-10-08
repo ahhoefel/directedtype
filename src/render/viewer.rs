@@ -24,7 +24,7 @@ use crate::compiler::module::FsResolver;
 use crate::compiler::CompiledDocument;
 use crate::interaction::{Event, EventKind, Modifiers, MouseButton, Point};
 use crate::parser::parse_document;
-use crate::render::scene::{build_scene, SceneOptions};
+use crate::render::scene::{build_scene, SceneOptions, TextSceneCache};
 
 #[cfg(target_os = "macos")]
 fn configure_metal_layer(window: &Window) {
@@ -141,6 +141,7 @@ pub struct ViewerApp {
     renderer: Option<Renderer>,
     font_cx: FontContext,
     layout_cx: LayoutContext<()>,
+    text_cache: TextSceneCache,
     frame_count: u64,
 
     // Interaction state
@@ -197,6 +198,7 @@ impl ViewerApp {
             renderer: None,
             font_cx: FontContext::new(),
             layout_cx: LayoutContext::new(),
+            text_cache: TextSceneCache::new(),
             frame_count: 0,
             cursor_pos: None,
             hovered_node: None,
@@ -238,6 +240,7 @@ impl ViewerApp {
             renderer: None,
             font_cx: FontContext::new(),
             layout_cx: LayoutContext::new(),
+            text_cache: TextSceneCache::new(),
             frame_count: 0,
             cursor_pos: None,
             hovered_node: None,
@@ -935,6 +938,7 @@ impl ViewerApp {
                     );
                     self.doc = Some(new_doc);
                     *compiled = new_compiled;
+                    self.text_cache.clear();
                     self.render_frame();
                     if let Some(window) = &self.window {
                         window.request_redraw();
@@ -954,6 +958,7 @@ impl ViewerApp {
                     );
                     self.doc = Some(new_doc);
                     self.static_layout = new_layout;
+                    self.text_cache.clear();
                     self.render_frame();
                     if let Some(window) = &self.window {
                         window.request_redraw();
@@ -1028,6 +1033,7 @@ impl ViewerApp {
             layout,
             &mut self.font_cx,
             &mut self.layout_cx,
+            &mut self.text_cache,
             &scene_opts,
         );
 

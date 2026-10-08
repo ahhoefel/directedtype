@@ -91,10 +91,16 @@ Modern UI engines (Chromium, WebKit) achieve 120 FPS scrolling by keeping scroll
 - **DAG Isolation**: Children inside `\ScrollView` maintain static local coordinates `(x, y)` in the DAG. Scrolling only mutates the GPU transform `Affine::translate(0.0, -scroll_y)` and the dynamic scrollbar thumb.
 - **Hit-testing**: Spatial queries map cursor coordinates into the local container space by adding `(0.0, scroll_y)`.
 
-### Strategy B: Text Layout Caching & Memoization (Immediate High-Impact CPU Win)
-- Text line breaking is by far the most CPU-intensive step in `build_scene`.
-- Cache the computed text layout (glyph runs, advances, and line heights). During scrolling, when only `y` changes, re-use the cached glyph runs and simply offset their draw transform by the new position.
-- Can be implemented with a lightweight 1-item cache (previous call inputs/results per node or text instance).
+### Strategy B: Text Layout Caching & Memoization (Option 3: 1-Element `vello::Scene` Cache) [IMPLEMENTED]
+- **Status:** **Completed.**
+- **Design:** Implemented with `TextSceneCache` in `src/render/scene.rs`, maintaining a 1-element cache per text `NodeId`.
+- **Inputs compared (`TextRenderKey`):** `text`, `width` (wrap boundary), `font_size`, `font_weight`, `font_family`, `color`, `align`, `spans` (rich text / link hover colors).
+- **Position Invariance:** `node.rect.x` and `node.rect.y` are excluded from the cache key.
+- **Cache Hit:** During scrolling, text inputs are 100% identical. The CPU skips Parley font shaping, OpenType analysis, line breaking (`break_all_lines`), and alignment entirely. It executes a single fast GPU scene command:
+  ```rust
+  scene.append(&cached.scene, Some(Affine::translate((node.rect.x, node.rect.y))));
+  ```
+- **Cache Miss:** First frame or when text/width/hover style changes. Renders into a local `vello::Scene` at `(0, 0)` and records the new entry.
 
 ### Strategy C: Viewport Frustum Culling
 - In `build_scene`, test each node against the container's clip bounds:
@@ -105,6 +111,6 @@ Modern UI engines (Chromium, WebKit) achieve 120 FPS scrolling by keeping scroll
   ```
 - Reduces CPU formatting and Vello command submission from $O(N_{\text{total}})$ to $O(N_{\text{visible}})$.
 
-### Strategy D: Event Coalescing and Zero-Copy State Dispatch
-- Coalesce high-frequency `WindowEvent::MouseWheel` events during a frame turn, executing DAG evaluation once per VSync.
-- Replace `self.layout = compiled.layout().clone()` with borrowed or shared references (`Arc<ResolvedLayout>`).
+### Strategy D: Event Coalescing and Zero-Copy State Dispatch [PARTIALLY IMPLEMENTED]
+- **Zero-Copy Layout Borrowing:** **Completed.** Removed all `self.layout = compiled.layout().clone()` invocations across the viewer and tests using Rust disjoint field borrowing (`current_layout`).
+- **Event Coalescing:** Coalesce high-frequency `WindowEvent::MouseWheel` events during a frame turn, executing DAG evaluation once per VSync.
