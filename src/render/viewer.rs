@@ -1765,6 +1765,23 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                             w.request_redraw();
                                         }
                                     }
+                                    crate::inspector::PanelHitResult::SelectProperty(node_id, prop_key) => {
+                                        if !node_id.is_window() && self.inspector_state.selected_id != Some(node_id) {
+                                            self.selected_node = Some(node_id);
+                                            self.inspector_state.set_selected_id(Some(node_id));
+                                            self.inspector_state.expand_ancestors(node_id, layout);
+                                        }
+                                        self.inspector_state.select_property(node_id, &prop_key);
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                    }
+                                    crate::inspector::PanelHitResult::BackToComponentDetails => {
+                                        self.inspector_state.clear_selected_property();
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                    }
                                     crate::inspector::PanelHitResult::None => {}
                                 }
                             }

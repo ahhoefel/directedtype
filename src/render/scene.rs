@@ -927,6 +927,7 @@ mod tests {
             nodes: vec![node.clone()],
             values: HashMap::new(),
             scope_tree: Default::default(),
+            graph: None,
         };
 
         // Frame 1: Initial render (cache miss)
@@ -1053,6 +1054,7 @@ mod tests {
             nodes: vec![box_node, clip_node, child_node],
             values,
             scope_tree: Default::default(),
+            graph: None,
         };
 
         // Frame 1: Cache Miss

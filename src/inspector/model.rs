@@ -1,5 +1,6 @@
 use crate::ast::{ComponentKey, Expr};
 use crate::compiler::expanded::NodeId;
+use crate::compiler::graph::VarId;
 use crate::compiler::layout::{Rect, ResolvedLayout};
 use crate::compiler::value::Value;
 use crate::dom::{Dom, NodeHandle};
@@ -188,4 +189,351 @@ pub struct PortEquationEntry {
     pub name: String,
     pub authored_equation: String,
     pub evaluated_value: Option<String>,
+}
+
+/// Classification of the origin of a property or port value in the DAG.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortOriginKind {
+    /// Explicit literal constant authored directly on the element in markup (e.g. `100.0`, `#cbd5e1`).
+    Literal,
+    /// Inferred or layout default value (e.g. synthesized default width 100, default height 24, font size 16).
+    InferredDefault,
+    /// Algebraic expression or formula computed from upstream dependencies (e.g. `parent.width - 44`).
+    Expression,
+    /// Reactive component internal state variable (e.g. `state focused: Boolean = false`).
+    StateVariable,
+    /// Dynamic engine function call (e.g. `text_width(...)`).
+    DynamicFunction,
+}
+
+/// A node dependency in the DAG trace.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DagTraceDependency {
+    pub node_id: NodeId,
+    pub port_name: String,
+    pub node_label: String,
+    pub value_str: String,
+    pub equation_str: String,
+    pub is_literal: bool,
+}
+
+/// Comprehensive DAG trace information for a specific property/port on a node.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DagPropertyTrace {
+    pub target_id: NodeId,
+    pub target_label: String,
+    pub port_name: String,
+    pub canonical_var: String,
+    pub evaluated_value_str: String,
+    pub value_type: String,
+    pub equation_str: String,
+    pub origin_kind: PortOriginKind,
+    pub origin_description: String,
+    pub is_authored: bool,
+    pub is_state: bool,
+    pub upstream_dependencies: Vec<DagTraceDependency>,
+    pub downstream_dependents: Vec<DagTraceDependency>,
+    pub upstream_chain: Vec<DagTraceDependency>,
+}
+
+/// Formats an AST expression into a human-friendly equation string replacing canonical node IDs
+/// with readable component labels (e.g. `__node_5.width` -> `\VStack#5.width` or `reader_pane.width`).
+pub fn format_dag_expr(expr: &Expr, layout: &ResolvedLayout) -> String {
+    match expr {
+        Expr::Literal(lit) => format!("{lit}"),
+        Expr::Ident(id) => {
+            if id.as_str() == "__window" || id.as_str() == "window" {
+                "window".to_string()
+            } else if let Some(nid) = NodeId::from_canonical_name(id.as_str()) {
+                layout.node_display_label(nid)
+            } else {
+                id.to_string()
+            }
+        }
+        Expr::MemberAccess(m) => {
+            let target_str = format_dag_expr(&m.target, layout);
+            format!("{}.{}", target_str, m.member)
+        }
+        Expr::Binary(b) => {
+            format!(
+                "{} {} {}",
+                format_dag_expr(&b.left, layout),
+                b.op,
+                format_dag_expr(&b.right, layout)
+            )
+        }
+        Expr::Unary(u) => {
+            format!("{}{}", u.op, format_dag_expr(&u.operand, layout))
+        }
+        Expr::Call(c) => {
+            let args_str = c
+                .args
+                .iter()
+                .map(|a| format_dag_expr(a, layout))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}({})", c.callee, args_str)
+        }
+        Expr::MethodCall(m) => {
+            let args_str = m
+                .args
+                .iter()
+                .map(|a| format_dag_expr(a, layout))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}.{}({})", format_dag_expr(&m.target, layout), m.method, args_str)
+        }
+        Expr::Ternary(t) => {
+            format!(
+                "{} ? {} : {}",
+                format_dag_expr(&t.condition, layout),
+                format_dag_expr(&t.then_expr, layout),
+                format_dag_expr(&t.else_expr, layout)
+            )
+        }
+        Expr::Paren(inner, _) => {
+            format!("({})", format_dag_expr(inner, layout))
+        }
+        Expr::Node(node) => {
+            format!("\\{}(...)", node.name)
+        }
+    }
+}
+
+/// Constructs a full DAG trace for a specific property/port on `target_id`.
+pub fn build_property_dag_trace(
+    layout: &ResolvedLayout,
+    target_id: NodeId,
+    port: &str,
+) -> Option<DagPropertyTrace> {
+    let (target_label, target_node_opt) = if target_id.is_window() {
+        ("window".to_string(), None)
+    } else {
+        let node = layout.get_node(target_id)?;
+        (layout.node_display_label(target_id), Some(node))
+    };
+
+    let var_id = VarId::new(target_id, port);
+    let canonical_var = var_id.to_string();
+
+    let val_opt = layout.get_value(target_id, port).or_else(|| {
+        layout.values.get(&var_id)
+    });
+
+    let evaluated_value_str = if let Some(v) = val_opt {
+        match v {
+            Value::Node(ref_id) => format!("Reference -> {}", layout.node_display_label(*ref_id)),
+            _ => format!("{v}"),
+        }
+    } else if let Some(n) = target_node_opt {
+        match port {
+            "x" => format!("{:.1}", n.rect.x),
+            "y" => format!("{:.1}", n.rect.y),
+            "width" => format!("{:.1}", n.rect.width),
+            "height" => format!("{:.1}", n.rect.height),
+            "z" => format!("{:.0}", n.z),
+            "clip" => n.clip.map(|c| layout.node_display_label(c)).unwrap_or_else(|| "none".to_string()),
+            _ => "-".to_string(),
+        }
+    } else {
+        "-".to_string()
+    };
+
+    let value_type = if let Some(v) = val_opt {
+        match v {
+            Value::Number(_) => "Number".to_string(),
+            Value::String(_) => "String".to_string(),
+            Value::Bool(_) => "Boolean".to_string(),
+            Value::Color(_) => "Color".to_string(),
+            Value::Node(_) => "Node Reference".to_string(),
+            Value::Enum { enum_name, .. } => format!("Enum ({enum_name})"),
+        }
+    } else {
+        match port {
+            "x" | "y" | "width" | "height" | "z" => "Number".to_string(),
+            "clip" => "Node Reference".to_string(),
+            _ => "Unknown".to_string(),
+        }
+    };
+
+    let is_state = target_node_opt.is_some_and(|n| n.state_vars.contains_key(port));
+    let is_authored = target_node_opt.is_some_and(|n| n.formulas.contains_key(port));
+
+    let equation_str = if let Some(graph) = &layout.graph {
+        if let Some(vnode) = graph.get_variable(&var_id) {
+            format_dag_expr(&vnode.equation, layout)
+        } else if let Some(n) = target_node_opt {
+            n.formulas.get(port).cloned().unwrap_or_else(|| evaluated_value_str.clone())
+        } else {
+            evaluated_value_str.clone()
+        }
+    } else if let Some(n) = target_node_opt {
+        n.formulas.get(port).cloned().unwrap_or_else(|| evaluated_value_str.clone())
+    } else {
+        evaluated_value_str.clone()
+    };
+
+    let mut upstream_dependencies = Vec::new();
+    let mut downstream_dependents = Vec::new();
+    let mut upstream_chain = Vec::new();
+
+    if let Some(graph) = &layout.graph {
+        if let Some(deps) = graph.upstream.get(&var_id) {
+            for dep in deps {
+                let dep_label = layout.node_display_label(dep.node);
+                let dep_val = layout.get_value(dep.node, &dep.port)
+                    .or_else(|| layout.values.get(dep))
+                    .map(|v| format!("{v}"))
+                    .unwrap_or_else(|| "-".to_string());
+                let dep_eq = if let Some(vnode) = graph.get_variable(dep) {
+                    format_dag_expr(&vnode.equation, layout)
+                } else {
+                    String::new()
+                };
+                let is_lit = graph.upstream.get(dep).map_or(true, |u| u.is_empty());
+                upstream_dependencies.push(DagTraceDependency {
+                    node_id: dep.node,
+                    port_name: dep.port.clone(),
+                    node_label: dep_label,
+                    value_str: dep_val,
+                    equation_str: dep_eq,
+                    is_literal: is_lit,
+                });
+            }
+        }
+
+        if let Some(deps) = graph.downstream.get(&var_id) {
+            for dep in deps {
+                let dep_label = layout.node_display_label(dep.node);
+                let dep_val = layout.get_value(dep.node, &dep.port)
+                    .or_else(|| layout.values.get(dep))
+                    .map(|v| format!("{v}"))
+                    .unwrap_or_else(|| "-".to_string());
+                let dep_eq = if let Some(vnode) = graph.get_variable(dep) {
+                    format_dag_expr(&vnode.equation, layout)
+                } else {
+                    String::new()
+                };
+                downstream_dependents.push(DagTraceDependency {
+                    node_id: dep.node,
+                    port_name: dep.port.clone(),
+                    node_label: dep_label,
+                    value_str: dep_val,
+                    equation_str: dep_eq,
+                    is_literal: false,
+                });
+            }
+        }
+
+        // Multi-hop upstream origin chain (breadth-first traversal up to 8 nodes)
+        let mut visited = std::collections::HashSet::new();
+        visited.insert(var_id.clone());
+        let mut queue = std::collections::VecDeque::new();
+        if let Some(direct) = graph.upstream.get(&var_id) {
+            for d in direct {
+                if visited.insert(d.clone()) {
+                    queue.push_back(d.clone());
+                }
+            }
+        }
+        while let Some(curr_dep) = queue.pop_front() {
+            if upstream_chain.len() >= 12 {
+                break;
+            }
+            let label = layout.node_display_label(curr_dep.node);
+            let val = layout.get_value(curr_dep.node, &curr_dep.port)
+                .or_else(|| layout.values.get(&curr_dep))
+                .map(|v| format!("{v}"))
+                .unwrap_or_else(|| "-".to_string());
+            let eq = if let Some(vnode) = graph.get_variable(&curr_dep) {
+                format_dag_expr(&vnode.equation, layout)
+            } else {
+                String::new()
+            };
+            let is_lit = graph.upstream.get(&curr_dep).map_or(true, |u| u.is_empty());
+            upstream_chain.push(DagTraceDependency {
+                node_id: curr_dep.node,
+                port_name: curr_dep.port.clone(),
+                node_label: label,
+                value_str: val,
+                equation_str: eq,
+                is_literal: is_lit,
+            });
+
+            if let Some(next_ups) = graph.upstream.get(&curr_dep) {
+                for next in next_ups {
+                    if visited.insert(next.clone()) {
+                        queue.push_back(next.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    let (origin_kind, origin_description) = if is_state {
+        (
+            PortOriginKind::StateVariable,
+            "Internal reactive component state variable declared in component definition.".to_string(),
+        )
+    } else if !upstream_dependencies.is_empty() {
+        if equation_str.starts_with("text_width(") || equation_str.starts_with("text_height(") {
+            (
+                PortOriginKind::DynamicFunction,
+                "Computed dynamically by Parley typography engine based on upstream text content and font metrics.".to_string(),
+            )
+        } else {
+            (
+                PortOriginKind::Expression,
+                format!("Computed reactively from {} upstream variable dependency(ies) in the layout DAG.", upstream_dependencies.len()),
+            )
+        }
+    } else if is_authored {
+        (
+            PortOriginKind::Literal,
+            "Explicit literal constant authored directly on this element in DTML markup.".to_string(),
+        )
+    } else if port == "width" || port == "height" {
+        (
+            PortOriginKind::InferredDefault,
+            format!(
+                "Inferred layout default ({evaluated_value_str}px). No explicit dimension was authored or inherited, so the layout compiler assigned a fallback constraint."
+            ),
+        )
+    } else if port == "size" || port == "font_size" {
+        (
+            PortOriginKind::InferredDefault,
+            format!(
+                "Inferred default font size ({evaluated_value_str}px). Element does not inherit a custom font size, using DirectedType standard typography scale."
+            ),
+        )
+    } else if port == "x" || port == "y" || port == "z" {
+        (
+            PortOriginKind::InferredDefault,
+            format!(
+                "Default spatial coordinate ({evaluated_value_str}). Value was defaulted to origin by the layout graph."
+            ),
+        )
+    } else {
+        (
+            PortOriginKind::Literal,
+            "Default constant value defined in component signature.".to_string(),
+        )
+    };
+
+    Some(DagPropertyTrace {
+        target_id,
+        target_label,
+        port_name: port.to_string(),
+        canonical_var,
+        evaluated_value_str,
+        value_type,
+        equation_str,
+        origin_kind,
+        origin_description,
+        is_authored,
+        is_state,
+        upstream_dependencies,
+        downstream_dependents,
+        upstream_chain,
+    })
 }

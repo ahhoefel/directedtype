@@ -9,7 +9,10 @@ pub use components::{
     standard_inspector_components, INSPECT_BADGE_DTML, INSPECT_CLIP_GUIDE_DTML,
     INSPECT_HIGHLIGHT_DTML, INSPECT_OVERLAY_DTML,
 };
-pub use model::{BoxModelValues, InspectTargetInfo, PortEquationEntry};
+pub use model::{
+    build_property_dag_trace, format_dag_expr, BoxModelValues, DagPropertyTrace,
+    DagTraceDependency, InspectTargetInfo, PortEquationEntry, PortOriginKind,
+};
 pub use overlay::{InspectOverlayComponent, InspectOverlayStyle};
 pub use panel::{InspectPanelComponent, PanelHitResult};
 pub use state::{InspectorState, InspectorTab};

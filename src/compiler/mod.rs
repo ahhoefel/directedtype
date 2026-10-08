@@ -129,7 +129,8 @@ pub fn evaluate_document_with_window(
 ) -> Result<ResolvedLayout, CompileError> {
     let (expanded, graph, schedule) = compile_and_sort_with_window(doc, window_width, window_height)?;
     let values = evaluate_graph(&graph, &schedule)?;
-    let layout = resolve_layout(&expanded, values);
+    let mut layout = resolve_layout(&expanded, values);
+    layout.graph = Some(graph);
     Ok(layout)
 }
 
@@ -145,7 +146,8 @@ pub fn evaluate_document_with_resolver<R: FileResolver>(
     let graph = build_variable_graph_with_window(&expanded, window_width, window_height)?;
     let schedule = sort_graph(&graph)?;
     let values = evaluate_graph(&graph, &schedule)?;
-    let layout = resolve_layout(&expanded, values);
+    let mut layout = resolve_layout(&expanded, values);
+    layout.graph = Some(graph);
     Ok(layout)
 }
 

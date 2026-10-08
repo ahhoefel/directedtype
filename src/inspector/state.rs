@@ -53,6 +53,9 @@ pub struct InspectorState {
     /// Set of expanded reference properties in the component details bottom panel.
     /// Keyed by (referring_node_id, property_key).
     pub expanded_property_refs: HashSet<(NodeId, String)>,
+
+    /// Currently selected property / port for DAG inspection: `Some((NodeId, PortName))`.
+    pub selected_property: Option<(NodeId, String)>,
 }
 
 impl InspectorState {
@@ -94,6 +97,7 @@ impl InspectorState {
     pub fn set_selected_id(&mut self, id: Option<NodeId>) -> bool {
         if self.selected_id != id {
             self.selected_id = id;
+            self.selected_property = None;
             true
         } else {
             false
@@ -166,6 +170,7 @@ impl InspectorState {
         self.hovered_node = None;
         self.selected_id = None;
         self.hovered_id = None;
+        self.selected_property = None;
     }
 
     /// Returns the node that should currently be visually highlighted on screen:
@@ -191,5 +196,17 @@ impl InspectorState {
         } else {
             self.expanded_property_refs.insert(key);
         }
+    }
+
+    /// Selects a specific property / port for detailed DAG trace inspection.
+    pub fn select_property(&mut self, node_id: NodeId, prop: &str) {
+        self.selected_property = Some((node_id, prop.to_string()));
+        self.detail_scroll_offset = 0.0;
+    }
+
+    /// Clears the selected property and returns to the general component details view.
+    pub fn clear_selected_property(&mut self) {
+        self.selected_property = None;
+        self.detail_scroll_offset = 0.0;
     }
 }

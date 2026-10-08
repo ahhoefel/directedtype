@@ -82,7 +82,8 @@ impl CompiledDocument {
         let schedule = sort_graph(&graph)?;
         let state_overrides = HashMap::new();
         let values = evaluate_graph_with_state(&graph, &schedule, &state_overrides)?;
-        let layout = resolve_layout(&expanded, values);
+        let mut layout = resolve_layout(&expanded, values);
+        layout.graph = Some(graph.clone());
 
         Ok(Self {
             expanded,

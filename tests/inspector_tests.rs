@@ -1034,5 +1034,199 @@ fn test_inspector_panel_render_state_variables_and_structured_keys() {
     assert_eq!(img.height(), 600);
 }
 
+#[test]
+fn test_dag_property_trace_building() {
+    let source = r#"
+\Component Container(x = 0, y = 0, width = 400) {
+    \Rect("box"; x: x, y: y, width: width - 60, height: 80, color: #3b82f6)
+}
+\Container("container"; x: 0, y: 0, width: 400)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+
+    let box_node = layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect found");
+    let container_node = layout.nodes.iter().find(|n| n.name == "Container").expect("Container found");
+
+    // Trace 'width' on box node (computed expression: width - 60 = 340.0)
+    let box_trace = directedtype::inspector::build_property_dag_trace(&layout, box_node.id, "width")
+        .expect("box width trace ok");
+
+    assert_eq!(box_trace.port_name, "width");
+    assert_eq!(box_trace.evaluated_value_str, "340");
+    assert_eq!(box_trace.value_type, "Number");
+    assert_eq!(box_trace.origin_kind, directedtype::inspector::PortOriginKind::Expression);
+    assert_eq!(box_trace.upstream_dependencies.len(), 1);
+    assert_eq!(box_trace.upstream_dependencies[0].node_id, container_node.id);
+    assert_eq!(box_trace.upstream_dependencies[0].port_name, "width");
+    assert_eq!(box_trace.upstream_dependencies[0].value_str, "400");
+
+    // Trace 'width' on container node (authored literal: 400)
+    let container_trace = directedtype::inspector::build_property_dag_trace(&layout, container_node.id, "width")
+        .expect("container width trace ok");
+
+    assert_eq!(container_trace.port_name, "width");
+    assert_eq!(container_trace.evaluated_value_str, "400");
+    assert_eq!(container_trace.origin_kind, directedtype::inspector::PortOriginKind::Literal);
+    assert!(container_trace.upstream_dependencies.is_empty());
+    // Box width depends downstream on container width
+    assert!(container_trace.downstream_dependents.iter().any(|d| d.node_id == box_node.id && d.port_name == "width"));
+}
+
+#[test]
+fn test_dag_property_trace_inferred_default() {
+    let source = r#"
+\Component Container {
+    \Children
+}
+\Component Item(h: Number: 40) {
+    \Rect(x: 0, y: 0, width: 100, height: h, color: #ff0000)
+}
+\Container {
+    \Item("child_item"; h: 40)
+}
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+    let item_node = layout.nodes.iter().find(|n| n.name == "Item").expect("Item found");
+
+    // Width was not explicitly authored on the child Item instance, so it gets the inferred default fallback (100)
+    let trace = directedtype::inspector::build_property_dag_trace(&layout, item_node.id, "width")
+        .expect("trace ok");
+
+    assert_eq!(trace.port_name, "width");
+    assert_eq!(trace.evaluated_value_str, "100");
+    assert_eq!(trace.origin_kind, directedtype::inspector::PortOriginKind::InferredDefault);
+    assert!(trace.upstream_dependencies.is_empty());
+    assert!(trace.origin_description.contains("Inferred layout default"));
+}
+
+#[test]
+fn test_inspector_state_property_selection() {
+    let mut state = directedtype::inspector::InspectorState::new();
+    let node_a = directedtype::compiler::expanded::NodeId(1);
+    let node_b = directedtype::compiler::expanded::NodeId(2);
+
+    state.selected_id = Some(node_a);
+    state.detail_scroll_offset = 50.0;
+
+    state.select_property(node_a, "width");
+    assert_eq!(state.selected_property, Some((node_a, "width".to_string())));
+    assert_eq!(state.detail_scroll_offset, 0.0);
+
+    state.clear_selected_property();
+    assert_eq!(state.selected_property, None);
+
+    state.select_property(node_a, "height");
+    // Changing selected_id clears property selection
+    state.set_selected_id(Some(node_b));
+    assert_eq!(state.selected_property, None);
+}
+
+#[test]
+fn test_panel_hit_testing_property_details_and_back() {
+    let source = r#"
+\Component Container(x = 0, y = 0, width = 400) {
+    \Rect("box"; x: x, y: y, width: width - 60, height: 80, color: #3b82f6)
+}
+\Container("container"; x: 0, y: 0, width: 400)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+    let box_node = layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect found");
+    let container_node = layout.nodes.iter().find(|n| n.name == "Container").expect("Container found");
+
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let mut state = directedtype::inspector::InspectorState::new();
+    state.selected_id = Some(box_node.id);
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    let divider_y = panel.divider_y(600.0);
+    let detail_y = divider_y + panel.divider_height;
+
+    // 1. Click in component details on center box model pill to select 'width'
+    let box_pill_y = detail_y + 10.0 + 14.0 + 35.0; // center of box pill
+    let res = panel.handle_click(
+        panel.width / 2.0 - 20.0,
+        box_pill_y,
+        0.0,
+        600.0,
+        &tree_items,
+        &state,
+        Some(&layout),
+    );
+    assert_eq!(res, directedtype::inspector::PanelHitResult::SelectProperty(box_node.id, "width".to_string()));
+
+    // 2. Set state to property details view
+    state.select_property(box_node.id, "width");
+
+    // 3. Click [← Back to Component] button
+    let back_btn_y = detail_y + 10.0 + 10.0;
+    let back_res = panel.handle_click(
+        40.0,
+        back_btn_y,
+        0.0,
+        600.0,
+        &tree_items,
+        &state,
+        Some(&layout),
+    );
+    assert_eq!(back_res, directedtype::inspector::PanelHitResult::BackToComponentDetails);
+
+    // 4. Click upstream dependency row (container width)
+    let upstream_row_y = detail_y + 10.0 + 30.0 + 96.0 + 16.0 + 18.0 + 10.0;
+    let dep_res = panel.handle_click(
+        50.0,
+        upstream_row_y,
+        0.0,
+        600.0,
+        &tree_items,
+        &state,
+        Some(&layout),
+    );
+    assert_eq!(dep_res, directedtype::inspector::PanelHitResult::SelectProperty(container_node.id, "width".to_string()));
+}
+
+#[test]
+fn test_render_property_details_headless() {
+    let source = r#"
+\Component Container(x = 0, y = 0, width = 400) {
+    \Rect(x: x, y: y, width: width - 50, height: 40, color: #10b981)
+}
+\Container(x: 0, y: 0, width: 400)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+    let rect_node = layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect found");
+
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let mut state = directedtype::inspector::InspectorState::new();
+    state.selected_id = Some(rect_node.id);
+    state.select_property(rect_node.id, "width");
+
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    let mut scene = vello::Scene::new();
+    let mut font_cx = parley::FontContext::new();
+    let mut layout_cx = parley::LayoutContext::new();
+
+    panel.render_to_scene(
+        &mut scene,
+        0.0,
+        600.0,
+        &tree_items,
+        &state,
+        &layout,
+        &mut font_cx,
+        &mut layout_cx,
+    );
+
+    let mut renderer = directedtype::render::HeadlessRenderer::new().expect("init renderer");
+    let img = renderer.render_scene(&scene, 380, 600).expect("render scene ok");
+    assert_eq!(img.width(), 380);
+    assert_eq!(img.height(), 600);
+}
+
+
 
 

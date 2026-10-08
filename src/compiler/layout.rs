@@ -1,7 +1,7 @@
 use crate::ast::{ComponentKey, Expr, Literal};
 use crate::compiler::eval::eval_expr;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
-use crate::compiler::graph::VarId;
+use crate::compiler::graph::{VarId, VariableGraph};
 pub use crate::compiler::text::{CursorKind, SpanStyle, TextSpan};
 use crate::compiler::scope::{ScopeId, ScopeTree};
 use crate::compiler::value::Value;
@@ -171,6 +171,7 @@ pub struct ResolvedLayout {
     pub nodes: Vec<ResolvedNode>,
     pub values: HashMap<VarId, Value>,
     pub scope_tree: ScopeTree,
+    pub graph: Option<VariableGraph>,
 }
 
 impl ResolvedLayout {
@@ -249,6 +250,25 @@ impl ResolvedLayout {
                 })
             })
         })
+    }
+
+    /// Returns a human-friendly display label for a node (e.g. "reader_pane", "\Link#12", or "window").
+    pub fn node_display_label(&self, id: NodeId) -> String {
+        if id.is_window() {
+            "window".to_string()
+        } else if let Some(node) = self.get_node(id) {
+            if let Some(var) = &node.var_name {
+                var.clone()
+            } else if let Some(key) = &node.key {
+                format!("\\{}#{}", node.name, key.format_key())
+            } else if let Some(Value::String(id_val)) = node.properties.get("id") {
+                format!("\\{}#{}", node.name, id_val)
+            } else {
+                format!("\\{}#{}", node.name, id.0)
+            }
+        } else {
+            id.canonical_name()
+        }
     }
 
     /// Returns the cumulative scroll offset `(scroll_x, scroll_y)` for a clip chain.
@@ -691,11 +711,13 @@ pub fn resolve_layout(
         });
     }
 
+    let graph = crate::compiler::graph::build_variable_graph(doc).ok();
     let mut layout = ResolvedLayout {
         roots: doc.roots.clone(),
         nodes: resolved_nodes,
         values,
         scope_tree: doc.scope_tree.clone(),
+        graph,
     };
 
     project_inline_fragments(&mut layout);
