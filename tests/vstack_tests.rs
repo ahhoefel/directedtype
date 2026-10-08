@@ -216,7 +216,7 @@ fn test_vstack_default_zero_gap() {
 }
 
 #[test]
-fn test_vstack_default_origin_standalone() {
+fn test_vstack_standalone_without_width_rejected() {
     let input = r#"
     \use "components/VStack.dt"
 
@@ -228,7 +228,7 @@ fn test_vstack_default_origin_standalone() {
 
     let doc = parse(input).expect("parse ok");
     let registry = ComponentRegistry::standard();
-    let compiled = CompiledDocument::compile_with_registry(
+    let err = CompiledDocument::compile_with_registry(
         &doc,
         800.0,
         600.0,
@@ -236,14 +236,15 @@ fn test_vstack_default_origin_standalone() {
         &directedtype::compiler::FsResolver,
         &registry,
     )
-    .expect("compile ok");
+    .expect_err("Standalone VStack without width or shrink must fail compilation");
 
-    let vstack_node = compiled.layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack found");
-    // Origin defaults to parent.left (0) and parent.top (0) when top-level
-    assert_eq!(vstack_node.rect.x, 0.0);
-    assert_eq!(vstack_node.rect.y, 0.0);
-    // Height: 30 + 12 (gap) + 40 = 82
-    assert_eq!(vstack_node.rect.height, 82.0);
+    match err {
+        directedtype::compiler::CompileError::NoMatchingOverload(details) => {
+            assert_eq!(details.name, "VStack");
+            assert!(details.provided_ports.contains(&"gap".to_string()));
+        }
+        _ => panic!("Expected NoMatchingOverload for VStack, got {:?}", err),
+    }
 }
 
 #[test]

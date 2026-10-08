@@ -37,9 +37,12 @@
         border_width: current_border_width
     )
 
+    let inner_width = width - (2 * style.padding_x);
+
     \Children {
         x: parent.left + style.padding_x,
-        y: prev ? prev.bottom + gap : parent.top + style.padding_y
+        y: prev ? prev.bottom + gap : parent.top + style.padding_y,
+        width: inner_width
     }
 }
 
@@ -79,8 +82,11 @@
         border_width: current_border_width
     )
 
+    let inner_width = resolved_width - (2 * style.padding_x);
+
     \Children {
         x: parent.left + style.padding_x,
-        y: prev ? prev.bottom + gap : parent.top + style.padding_y
+        y: prev ? prev.bottom + gap : parent.top + style.padding_y,
+        width: inner_width
     }
 }

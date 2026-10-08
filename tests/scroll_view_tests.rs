@@ -69,10 +69,11 @@ fn test_ctx_window_scroll_to() {
 #[test]
 fn test_link_default_view_is_window() {
     let source = r##"
+        \use "components/VStack.dt";
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        \VStack(gap: 20) {
+        \VStack(width: 800, gap: 20) {
             \Link(url: "#target_header", link_style: link_default) {
                 Jump to Target
             }

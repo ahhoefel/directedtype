@@ -10,7 +10,7 @@ fn test_block_anchor_geometry_passthrough_in_vstack() {
     let source = r##"
         \use "components/VStack.dt";
 
-        \VStack(gap: 16) {
+        \VStack(width: 800, gap: 16) {
             \Anchor("first") {
                 \Rect(width: 200, height: 50, color: "#112233")
             }
@@ -63,7 +63,7 @@ fn test_block_anchor_geometry_passthrough_in_vstack() {
 #[test]
 fn test_inline_anchor_bookmark_in_text() {
     let source = r##"
-        \Text {
+        \Text(size: 16) {
             Hello \Anchor("bookmark") World
         }
     "##;
@@ -233,7 +233,7 @@ fn test_viewer_window_scrolling_to_anchors() {
     let source = r##"
         \use "components/VStack.dt";
 
-        \VStack(gap: 50) {
+        \VStack(width: 800, gap: 50) {
             \Anchor("top") {
                 \Rect(width: 400, height: 100, color: "#111111")
             }
@@ -297,7 +297,7 @@ fn test_headless_render_with_scroll_offset() {
     let source = r##"
         \use "components/VStack.dt";
 
-        \VStack {
+        \VStack(width: 200) {
             \Rect(width: 200, height: 100, color: "#ff0000")
             \Rect(width: 200, height: 100, color: "#0000ff")
         }
@@ -352,7 +352,7 @@ fn test_scrolled_coordinate_hit_testing() {
     let source = r##"
         \use "components/VStack.dt";
 
-        \VStack {
+        \VStack(width: 800) {
             \Rect(width: 300, height: 500, color: "#111111")
             \Anchor("target") {
                 \Rect(width: 300, height: 200, color: "#222222")
@@ -498,7 +498,7 @@ fn test_keyboard_focus_traversal_reading_order() {
 
         env link_style = link_default;
 
-        \VStack(gap: 20) {
+        \VStack(width: 800, gap: 20) {
             \Link(url: "#sec1") { Link 1 }
             \HStack(gap: 10) {
                 \Link(url: "#sec2") { Link 2 }
@@ -565,7 +565,7 @@ fn test_keyboard_focus_scrolls_into_view() {
 
         env link_style = link_default;
 
-        \VStack(gap: 40) {
+        \VStack(width: 800, gap: 40) {
             \Link(url: "#top") { Top Link }
             \Rect(width: 300, height: 1200, color: "#111111")
             \Link(url: "#bottom") { Bottom Link }
@@ -611,7 +611,7 @@ fn test_keyboard_activation_triggers_anchor_navigation() {
 
         env link_style = link_default;
 
-        \VStack(gap: 30) {
+        \VStack(width: 800, gap: 30) {
             \Link(url: "#deep") { Jump to Deep Anchor }
             \Rect(width: 300, height: 1000, color: "#222222")
             \Anchor("deep") {
@@ -777,7 +777,7 @@ fn test_link_component_click_handler_and_action_queue() {
 
         env link_style = link_default;
 
-        \VStack(gap: 20) {
+        \VStack(width: 800, gap: 20) {
             \Link(url: "#dest") { Go to Destination }
             \Link(url: "#nonexistent") { Broken Link }
             \Link(url: "https://example.com") { External Web }
@@ -1107,7 +1107,7 @@ fn test_link_component_focus_and_blur_transitions() {
             focused_bg: #fef3c7
         );
 
-        \VStack {
+        \VStack(width: 400) {
             \Link(url: "https://example.com", link_style: custom_style) {
                 Visit Example
             }

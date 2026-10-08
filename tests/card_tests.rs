@@ -155,3 +155,35 @@ fn test_card_rejects_external_height_specification() {
         _ => panic!("Expected ImmutableAliasPort for height, got {:?}", err),
     }
 }
+
+#[test]
+fn test_card_pushes_width_down_to_nested_vstack() {
+    let input = r#"
+    \use "components/Card.dt"
+    \use "components/VStack.dt"
+    \use "theme/default.dt"
+
+    \Card(style: card_dark, x: 20, y: 30, width: 300) {
+        \VStack(gap: 12) {
+            \Rect(x: 40, y: 50, width: 100, height: 40, color: #3b82f6)
+            \Rect(x: 40, y: 102, width: 120, height: 40, color: #10b981)
+        }
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let vstack = compiled.layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack found");
+    // Card width (300) - 2 * padding (20) = 260
+    assert_eq!(vstack.rect.width, 260.0);
+}
