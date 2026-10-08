@@ -250,8 +250,8 @@ fn test_viewer_window_scrolling_to_anchors() {
 
     let ast = parse_document(source).expect("Failed to parse document");
     let compiled = CompiledDocument::compile(&ast).expect("Compilation failed");
-    let mut viewer = ViewerApp::new(
-        compiled.layout().clone(),
+    let mut viewer = ViewerApp::new_with_compiled(
+        compiled,
         ViewerConfig {
             width: 800,
             height: 600,
@@ -363,8 +363,8 @@ fn test_scrolled_coordinate_hit_testing() {
 
     let ast = parse_document(source).expect("Failed to parse document");
     let compiled = CompiledDocument::compile(&ast).expect("Compilation failed");
-    let mut viewer = ViewerApp::new(
-        compiled.layout().clone(),
+    let mut viewer = ViewerApp::new_with_compiled(
+        compiled,
         ViewerConfig {
             width: 800,
             height: 600,
@@ -510,8 +510,7 @@ fn test_keyboard_focus_traversal_reading_order() {
 
     let ast = parse_document(source).expect("Failed to parse document");
     let compiled = CompiledDocument::compile(&ast).expect("Compilation failed");
-    let mut viewer = ViewerApp::new(compiled.layout().clone(), ViewerConfig::default())
-        .with_compiled(compiled);
+    let mut viewer = ViewerApp::new_with_compiled(compiled, ViewerConfig::default());
 
     let focusable = viewer.focusable_nodes();
     assert_eq!(focusable.len(), 4);
@@ -575,15 +574,14 @@ fn test_keyboard_focus_scrolls_into_view() {
 
     let ast = parse_document(source).expect("Failed to parse document");
     let compiled = CompiledDocument::compile(&ast).expect("Compilation failed");
-    let mut viewer = ViewerApp::new(
-        compiled.layout().clone(),
+    let mut viewer = ViewerApp::new_with_compiled(
+        compiled,
         ViewerConfig {
             width: 800,
             height: 600,
             ..Default::default()
         },
-    )
-    .with_compiled(compiled);
+    );
 
     assert_eq!(viewer.scroll_y(), 0.0);
 
@@ -624,15 +622,14 @@ fn test_keyboard_activation_triggers_anchor_navigation() {
 
     let ast = parse_document(source).expect("Failed to parse document");
     let compiled = CompiledDocument::compile(&ast).expect("Compilation failed");
-    let mut viewer = ViewerApp::new(
-        compiled.layout().clone(),
+    let mut viewer = ViewerApp::new_with_compiled(
+        compiled,
         ViewerConfig {
             width: 800,
             height: 600,
             ..Default::default()
         },
-    )
-    .with_compiled(compiled);
+    );
 
     // Tab to jump link
     viewer.focus_next();
@@ -973,8 +970,8 @@ fn test_link_demo_focus_and_blur_target_highlight_transitions() {
     )
     .expect("compile link_demo.dt ok");
 
-    let mut viewer = ViewerApp::new(
-        compiled.layout().clone(),
+    let mut viewer = ViewerApp::new_with_compiled(
+        compiled,
         ViewerConfig {
             width: 800,
             height: 600,
@@ -982,8 +979,7 @@ fn test_link_demo_focus_and_blur_target_highlight_transitions() {
         },
     )
     .with_document(doc.clone())
-    .with_registry(ComponentRegistry::standard())
-    .with_compiled(compiled);
+    .with_registry(ComponentRegistry::standard());
 
     // Identify anchors
     let a1_id = viewer
@@ -1341,8 +1337,8 @@ fn test_link_demo_keyboard_tabbing_and_link_focus_order() {
     )
     .expect("compile link_demo.dt ok");
 
-    let mut viewer = ViewerApp::new(
-        compiled.layout().clone(),
+    let mut viewer = ViewerApp::new_with_compiled(
+        compiled,
         ViewerConfig {
             width: 800,
             height: 600,
@@ -1350,8 +1346,7 @@ fn test_link_demo_keyboard_tabbing_and_link_focus_order() {
         },
     )
     .with_document(doc)
-    .with_registry(ComponentRegistry::standard())
-    .with_compiled(compiled);
+    .with_registry(ComponentRegistry::standard());
 
     let focusable = viewer.focusable_nodes();
     assert!(!focusable.is_empty(), "Must have focusable links");

@@ -134,7 +134,7 @@ pub struct ViewerApp {
     doc: Option<Document>,
     compiled: Option<CompiledDocument>,
     component_registry: ComponentRegistry,
-    layout: ResolvedLayout,
+    static_layout: ResolvedLayout,
     render_cx: RenderContext,
     surface: Option<RenderSurface<'static>>,
     window: Option<Arc<Window>>,
@@ -169,6 +169,18 @@ pub struct ViewerApp {
 /// Type alias for event callbacks dispatched by `ViewerApp`.
 pub type EventHandler = Box<dyn FnMut(&mut Event, &ResolvedLayout)>;
 
+#[inline]
+fn current_layout<'a>(
+    compiled: &'a Option<CompiledDocument>,
+    static_layout: &'a ResolvedLayout,
+) -> &'a ResolvedLayout {
+    if let Some(c) = compiled {
+        c.layout()
+    } else {
+        static_layout
+    }
+}
+
 impl ViewerApp {
     pub fn new(layout: ResolvedLayout, config: ViewerConfig) -> Self {
         Self {
@@ -178,7 +190,7 @@ impl ViewerApp {
             doc: None,
             compiled: None,
             component_registry: ComponentRegistry::standard(),
-            layout,
+            static_layout: layout,
             render_cx: RenderContext::new(),
             surface: None,
             window: None,
@@ -201,6 +213,47 @@ impl ViewerApp {
             scrollbar_drag_start_y: 0.0,
             scrollbar_start_scroll_y: 0.0,
             focused_node: None,
+            target_node: None,
+        }
+    }
+
+    /// Creates an interactive window viewer powered by an active `CompiledDocument`.
+    pub fn new_with_compiled(mut compiled: CompiledDocument, config: ViewerConfig) -> Self {
+        let registry = ComponentRegistry::standard();
+        if compiled.instances.is_empty() {
+            let _ = compiled.attach_registry(&registry);
+        }
+        let focused_node = compiled.focused_node;
+        Self {
+            config,
+            watch_path: None,
+            _watcher: None,
+            doc: None,
+            compiled: Some(compiled),
+            component_registry: registry,
+            static_layout: ResolvedLayout::default(),
+            render_cx: RenderContext::new(),
+            surface: None,
+            window: None,
+            renderer: None,
+            font_cx: FontContext::new(),
+            layout_cx: LayoutContext::new(),
+            frame_count: 0,
+            cursor_pos: None,
+            hovered_node: None,
+            pressed_node: None,
+            modifiers: Modifiers::default(),
+            inspect_mode: false,
+            selected_node: None,
+            event_handler: None,
+            inspector_state: crate::inspector::InspectorState::new(),
+            panel_component: crate::inspector::InspectPanelComponent::default(),
+            scroll_x: 0.0,
+            scroll_y: 0.0,
+            is_dragging_scrollbar: false,
+            scrollbar_drag_start_y: 0.0,
+            scrollbar_start_scroll_y: 0.0,
+            focused_node,
             target_node: None,
         }
     }
@@ -308,7 +361,7 @@ impl ViewerApp {
     /// Computes the total content width across all unclipped layout nodes.
     pub fn content_width(&self) -> f64 {
         let mut max_x: f64 = 0.0;
-        for node in &self.layout.nodes {
+        for node in &self.layout().nodes {
             if node.clip.is_none() {
                 max_x = max_x.max(node.rect.x + node.rect.width);
             }
@@ -319,7 +372,7 @@ impl ViewerApp {
     /// Computes the total content height across all unclipped layout nodes.
     pub fn content_height(&self) -> f64 {
         let mut max_y: f64 = 0.0;
-        for node in &self.layout.nodes {
+        for node in &self.layout().nodes {
             if node.clip.is_none() {
                 max_y = max_y.max(node.rect.y + node.rect.height);
             }
@@ -350,23 +403,23 @@ impl ViewerApp {
 
     /// Scrolls to bring a specific node into view at the top of the viewport.
     pub fn scroll_to_node(&mut self, node_id: NodeId) -> bool {
-        if let Some(node) = self.layout.get_node(node_id) {
-            let target_y = if !node.fragments.is_empty() {
+        let target_y = if let Some(node) = self.layout().get_node(node_id) {
+            if !node.fragments.is_empty() {
                 node.fragments[0].y
             } else {
                 node.rect.y
-            };
-            self.scroll_to_y(target_y);
-            true
+            }
         } else {
-            false
-        }
+            return false;
+        };
+        self.scroll_to_y(target_y);
+        true
     }
 
     /// Resolves an anchor link (e.g. `"#section"` or `"#/scope/target"`) and scrolls the window to it.
     pub fn scroll_to_anchor(&mut self, source_node: Option<NodeId>, url: &str) -> bool {
         let from_node = source_node.unwrap_or(NodeId(0));
-        if let Some((target_id, _scope_id)) = self.layout.resolve_anchor(from_node, url) {
+        if let Some((target_id, _scope_id)) = self.layout().resolve_anchor(from_node, url) {
             self.target_node = Some(target_id);
             self.set_focused_node(Some(target_id));
             self.scroll_to_node(target_id)
@@ -414,7 +467,7 @@ impl ViewerApp {
                 self.modifiers,
                 old_id,
             );
-            let bubble = self.layout.bubble_path_for_node(old_id);
+            let bubble = self.layout().bubble_path_for_node(old_id);
             self.dispatch_event_with_bubble(blur_event, &bubble);
         }
 
@@ -426,7 +479,7 @@ impl ViewerApp {
                 self.modifiers,
                 new_id,
             );
-            let bubble = self.layout.bubble_path_for_node(new_id);
+            let bubble = self.layout().bubble_path_for_node(new_id);
             self.dispatch_event_with_bubble(focus_event, &bubble);
         }
 
@@ -438,7 +491,8 @@ impl ViewerApp {
     /// Returns all focusable nodes in reading order (top-to-bottom, left-to-right).
     pub fn focusable_nodes(&self) -> Vec<NodeId> {
         let mut focusable = Vec::new();
-        for node in &self.layout.nodes {
+        let layout = self.layout();
+        for node in &layout.nodes {
             if node.id.is_window() {
                 continue;
             }
@@ -456,7 +510,7 @@ impl ViewerApp {
                 let mut curr = node.parent;
                 let mut is_inside = false;
                 while let Some(pid) = curr {
-                    if let Some(p) = self.layout.get_node(pid) {
+                    if let Some(p) = layout.get_node(pid) {
                         if p.name == "Link" || p.name == "Button" {
                             is_inside = true;
                             break;
@@ -510,7 +564,7 @@ impl ViewerApp {
                 } else {
                     // curr is not in focusable list (e.g. an in-page navigation Anchor target or container).
                     // Advance to the first focusable node whose reading position is after curr:
-                    let curr_node = self.layout.get_node(curr);
+                    let curr_node = self.layout().get_node(curr);
                     let (curr_y, curr_x) = if let Some(n) = curr_node {
                         let y = if !n.fragments.is_empty() { n.fragments[0].y } else { n.rect.y };
                         let x = if !n.fragments.is_empty() { n.fragments[0].x } else { n.rect.x };
@@ -520,7 +574,7 @@ impl ViewerApp {
                     };
 
                     let pos_after = focusable.iter().position(|&id| {
-                        if let Some(n) = self.layout.get_node(id) {
+                        if let Some(n) = self.layout().get_node(id) {
                             let y = if !n.fragments.is_empty() { n.fragments[0].y } else { n.rect.y };
                             let x = if !n.fragments.is_empty() { n.fragments[0].x } else { n.rect.x };
                             y > curr_y || ((y - curr_y).abs() < 1.0 && x > curr_x)
@@ -558,7 +612,7 @@ impl ViewerApp {
                 } else {
                     // curr is not in focusable list (e.g. an in-page navigation Anchor target).
                     // Move to the last focusable node whose reading position is before curr:
-                    let curr_node = self.layout.get_node(curr);
+                    let curr_node = self.layout().get_node(curr);
                     let (curr_y, curr_x) = if let Some(n) = curr_node {
                         let y = if !n.fragments.is_empty() { n.fragments[0].y } else { n.rect.y };
                         let x = if !n.fragments.is_empty() { n.fragments[0].x } else { n.rect.x };
@@ -568,7 +622,7 @@ impl ViewerApp {
                     };
 
                     let pos_before = focusable.iter().rposition(|&id| {
-                        if let Some(n) = self.layout.get_node(id) {
+                        if let Some(n) = self.layout().get_node(id) {
                             let y = if !n.fragments.is_empty() { n.fragments[0].y } else { n.rect.y };
                             let x = if !n.fragments.is_empty() { n.fragments[0].x } else { n.rect.x };
                             y < curr_y || ((y - curr_y).abs() < 1.0 && x < curr_x)
@@ -590,7 +644,7 @@ impl ViewerApp {
 
     /// Ensures that the given node is visible within the viewport, scrolling vertically if necessary.
     pub fn scroll_into_view(&mut self, node_id: NodeId) -> bool {
-        let node = match self.layout.get_node(node_id) {
+        let node = match self.layout().get_node(node_id) {
             Some(n) => n,
             None => return false,
         };
@@ -645,8 +699,8 @@ impl ViewerApp {
             None => return false,
         };
 
-        let bubble_path = self.layout.bubble_path_for_node(target_id);
-        let node = match self.layout.get_node(target_id) {
+        let bubble_path = self.layout().bubble_path_for_node(target_id);
+        let node = match self.layout().get_node(target_id) {
             Some(n) => n,
             None => return false,
         };
@@ -678,7 +732,6 @@ impl ViewerApp {
                     if let Some(compiled) = &mut self.compiled {
                         if let Ok(changed) = compiled.scroll_container_to_node(pane_id, target) {
                             if !changed.is_empty() {
-                                self.layout = compiled.layout().clone();
                                 if let Some(window) = &self.window {
                                     window.request_redraw();
                                 }
@@ -717,7 +770,6 @@ impl ViewerApp {
             if let Ok(changed_vars) = compiled.dispatch_event(&mut event) {
                 if !changed_vars.is_empty() {
                     handled = true;
-                    self.layout = compiled.layout().clone();
                     if let Some(window) = &self.window {
                         window.request_redraw();
                     }
@@ -727,10 +779,11 @@ impl ViewerApp {
         }
 
         if let Some(handler) = &mut self.event_handler {
+            let layout = current_layout(&self.compiled, &self.static_layout);
             for &ancestor_id in bubble_path {
                 event.current_target = ancestor_id;
                 event.propagation_continued = false;
-                handler(&mut event, &self.layout);
+                handler(&mut event, layout);
                 handled = true;
                 if !event.propagation_continued {
                     break;
@@ -756,7 +809,6 @@ impl ViewerApp {
         if compiled.instances.is_empty() {
             let _ = compiled.attach_registry(&self.component_registry);
         }
-        self.layout = compiled.layout().clone();
         self.focused_node = compiled.focused_node;
         self.compiled = Some(compiled);
         self
@@ -782,8 +834,9 @@ impl ViewerApp {
     }
 
     /// Returns a reference to the current resolved layout.
+    #[inline]
     pub fn layout(&self) -> &ResolvedLayout {
-        &self.layout
+        current_layout(&self.compiled, &self.static_layout)
     }
 
     /// Returns a reference to the current AST document, if available.
@@ -817,11 +870,10 @@ impl ViewerApp {
                     for (var_id, val) in &compiled.state_overrides {
                         let _ = new_compiled.set_state(var_id.node, &var_id.port, val.clone());
                     }
-                    self.layout = new_compiled.layout().clone();
                     *compiled = new_compiled;
                 }
             } else if let Ok(new_layout) = evaluate_document_with_window(doc, logical_w, logical_h) {
-                self.layout = new_layout;
+                self.static_layout = new_layout;
             }
         }
     }
@@ -882,7 +934,6 @@ impl ViewerApp {
                         new_compiled.layout().nodes.len()
                     );
                     self.doc = Some(new_doc);
-                    self.layout = new_compiled.layout().clone();
                     *compiled = new_compiled;
                     self.render_frame();
                     if let Some(window) = &self.window {
@@ -902,7 +953,7 @@ impl ViewerApp {
                         new_layout.nodes.len()
                     );
                     self.doc = Some(new_doc);
-                    self.layout = new_layout;
+                    self.static_layout = new_layout;
                     self.render_frame();
                     if let Some(window) = &self.window {
                         window.request_redraw();
@@ -971,8 +1022,10 @@ impl ViewerApp {
         scene_opts.scale_factor = window.scale_factor();
         scene_opts.scroll_offset = (self.scroll_x, self.scroll_y);
 
+        let layout = current_layout(&self.compiled, &self.static_layout);
+
         let mut scene = build_scene(
-            &self.layout,
+            layout,
             &mut self.font_cx,
             &mut self.layout_cx,
             &scene_opts,
@@ -1008,7 +1061,7 @@ impl ViewerApp {
             // Render selected node (if distinct from hovered)
             if let Some(selected_id) = self.selected_node {
                 if self.inspector_state.hovered_id != Some(selected_id) {
-                    if let Some(info) = crate::inspector::InspectTargetInfo::from_layout(&self.layout, selected_id) {
+                    if let Some(info) = crate::inspector::InspectTargetInfo::from_layout(layout, selected_id) {
                         overlay.render_to_scene(
                             &mut overlay_scene,
                             overlay_transform,
@@ -1025,7 +1078,7 @@ impl ViewerApp {
 
             // Render hovered node
             if let Some(hovered_id) = self.inspector_state.hovered_id {
-                if let Some(info) = crate::inspector::InspectTargetInfo::from_layout(&self.layout, hovered_id) {
+                if let Some(info) = crate::inspector::InspectTargetInfo::from_layout(layout, hovered_id) {
                     let is_selected = self.selected_node == Some(hovered_id);
                     overlay.render_to_scene(
                         &mut overlay_scene,
@@ -1042,7 +1095,7 @@ impl ViewerApp {
 
             // Build and render docked DOM inspector side panel
             let tree_items = crate::inspector::build_tree_items_from_layout(
-                &self.layout,
+                layout,
                 &self.inspector_state,
             );
             let mut panel_scene = Scene::new();
@@ -1052,7 +1105,7 @@ impl ViewerApp {
                 win_h,
                 &tree_items,
                 &self.inspector_state,
-                &self.layout,
+                layout,
                 &mut self.font_cx,
                 &mut self.layout_cx,
             );
@@ -1068,8 +1121,7 @@ impl ViewerApp {
         }
 
         // Render subtle scrollbar thumb if document height exceeds viewport
-        let content_h = self
-            .layout
+        let content_h = layout
             .nodes
             .iter()
             .filter(|n| n.clip.is_none())
@@ -1359,7 +1411,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         }
 
                         let tree_items = crate::inspector::build_tree_items_from_layout(
-                            &self.layout,
+                            self.layout(),
                             &self.inspector_state,
                         );
                         let panel_hovered = self.panel_component.handle_mouse_move(
@@ -1391,7 +1443,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                 self.modifiers,
                                 old_id,
                             );
-                            let bubble = self.layout.bubble_path_for_node(old_id);
+                            let bubble = self.layout().bubble_path_for_node(old_id);
                             self.dispatch_event_with_bubble(leave_event, &bubble);
                         }
                         return;
@@ -1405,7 +1457,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                 // Cursor is over the canvas
                 let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
-                let hit = self.layout.hit_test(doc_point);
+                let hit = self.layout().hit_test(doc_point);
                 let new_hovered = hit.as_ref().map(|h| h.target);
 
                 if new_hovered != self.hovered_node {
@@ -1417,7 +1469,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                             self.modifiers,
                             old_id,
                         );
-                        let bubble = self.layout.bubble_path_for_node(old_id);
+                        let bubble = self.layout().bubble_path_for_node(old_id);
                         self.dispatch_event_with_bubble(leave_event, &bubble);
                     }
 
@@ -1450,7 +1502,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 if let Some(w) = &self.window {
                     let is_pointer = hit.as_ref().map_or(false, |h| {
                         h.bubble_path.iter().any(|&nid| {
-                            self.layout.get_node(nid).map_or(false, |node| {
+                            self.layout().get_node(nid).map_or(false, |node| {
                                 node.properties.contains_key("url")
                                     || node.properties.get("cursor").and_then(|v| v.as_str()) == Some("Pointer")
                                     || node.properties.get("cursor").and_then(|v| v.as_str()) == Some("pointer")
@@ -1502,8 +1554,9 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         let panel_x = win_w - self.panel_component.width;
                         if point.x >= panel_x {
                             if state == ElementState::Pressed {
+                                let layout = current_layout(&self.compiled, &self.static_layout);
                                 let tree_items = crate::inspector::build_tree_items_from_layout(
-                                    &self.layout,
+                                    layout,
                                     &self.inspector_state,
                                 );
                                 let action = self.panel_component.handle_click(
@@ -1513,7 +1566,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                     win_h,
                                     &tree_items,
                                     &self.inspector_state,
-                                    Some(&self.layout),
+                                    Some(layout),
                                 );
 
                                 match action {
@@ -1532,7 +1585,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                     crate::inspector::PanelHitResult::SelectNode(node_id) => {
                                         self.selected_node = Some(node_id);
                                         self.inspector_state.set_selected_id(Some(node_id));
-                                        self.inspector_state.expand_ancestors(node_id, &self.layout);
+                                        self.inspector_state.expand_ancestors(node_id, layout);
                                         if let Some(w) = &self.window {
                                             w.request_redraw();
                                         }
@@ -1583,21 +1636,22 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                     // Mouse input is over canvas area
                     let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
-                    let hit = self.layout.hit_test(doc_point);
+                    let hit = self.layout().hit_test(doc_point);
                     match state {
                         ElementState::Pressed => {
                             if self.inspect_mode && self.inspector_state.inspect_cursor_active {
                                 // Inspect picker tool is ACTIVE: intercept click to select component!
                                 if let Some(ref hit_res) = hit {
+                                    let layout = current_layout(&self.compiled, &self.static_layout);
                                     self.selected_node = Some(hit_res.target);
                                     self.inspector_state.set_selected_id(Some(hit_res.target));
-                                    self.inspector_state.expand_ancestors(hit_res.target, &self.layout);
+                                    self.inspector_state.expand_ancestors(hit_res.target, layout);
 
                                     // Turn off inspect cursor after picking (standard DevTools behavior)
                                     self.inspector_state.inspect_cursor_active = false;
                                     self.inspector_state.set_hovered_id(None);
 
-                                    if let Some(node) = self.layout.get_node(hit_res.target) {
+                                    if let Some(node) = layout.get_node(hit_res.target) {
                                         println!(
                                             "[Inspector] Selected element: {} (id: {:?}) bounds: [x: {:.1}, y: {:.1}, w: {:.1}, h: {:.1}] z: {}",
                                             node.name,
@@ -1618,7 +1672,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                             .bubble_path
                                             .iter()
                                             .filter_map(|id| {
-                                                self.layout.get_node(*id).map(|n| format!("{} ({:?})", n.name, n.id))
+                                                self.layout().get_node(*id).map(|n| format!("{} ({:?})", n.name, n.id))
                                             })
                                             .collect();
                                         println!("    Hierarchy: {}", path.join(" -> "));
@@ -1640,12 +1694,12 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                             let focus_target = hit.as_ref().and_then(|h| {
                                 // If clicked element is inside a Link or Button component, focus that component
                                 if let Some(&comp_id) = h.bubble_path.iter().find(|&&id| {
-                                    self.layout.get_node(id).is_some_and(|n| n.name == "Link" || n.name == "Button")
+                                    self.layout().get_node(id).is_some_and(|n| n.name == "Link" || n.name == "Button")
                                 }) {
                                     return Some(comp_id);
                                 }
                                 h.bubble_path.iter().copied().find(|&id| {
-                                    self.layout.get_node(id).map_or(false, |n| {
+                                    self.layout().get_node(id).map_or(false, |n| {
                                         if let Some(v) = n.properties.get("tabindex").and_then(|t| t.as_f64()) {
                                             return v >= 0.0;
                                         }
@@ -1720,7 +1774,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         let divider_y = self.panel_component.divider_y(win_h);
                         if point.y < divider_y {
                             let tree_items = crate::inspector::build_tree_items_from_layout(
-                                &self.layout,
+                                self.layout(),
                                 &self.inspector_state,
                             );
                             let max_scroll = self.panel_component.max_scroll(tree_items.len(), win_h);
@@ -1728,7 +1782,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         } else {
                             let max_detail_scroll = self.panel_component.max_detail_scroll_with_state(
                                 self.selected_node,
-                                &self.layout,
+                                self.layout(),
                                 Some(&self.inspector_state),
                                 win_h,
                             );
@@ -1742,7 +1796,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                     let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
                     let mut handled = false;
-                    if let Some(ref hit_res) = self.layout.hit_test(doc_point) {
+                    if let Some(ref hit_res) = self.layout().hit_test(doc_point) {
                         let scroll_event = Event::new(
                             EventKind::Scroll { delta_x, delta_y },
                             doc_point,
@@ -1778,7 +1832,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         self.modifiers,
                         old_id,
                     );
-                    let bubble = self.layout.bubble_path_for_node(old_id);
+                    let bubble = self.layout().bubble_path_for_node(old_id);
                     self.dispatch_event_with_bubble(leave_event, &bubble);
                 }
                 self.inspector_state.set_hovered_id(None);
@@ -1904,7 +1958,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
                 }
                 Key::Character(c) if c.eq_ignore_ascii_case("d") => {
-                    self.layout.print_dom();
+                    self.layout().print_dom();
                 }
                 Key::Character(c) if c.eq_ignore_ascii_case("i") => {
                     self.inspect_mode = !self.inspect_mode;
@@ -1984,11 +2038,9 @@ pub fn run_viewer_with_file_and_registry(
         &resolver,
         &registry,
     )?;
-    let initial_layout = compiled.layout().clone();
-    let mut app = ViewerApp::new(initial_layout, config)
+    let mut app = ViewerApp::new_with_compiled(compiled, config)
         .with_document(doc)
         .with_watch_path(file_path.clone())
-        .with_compiled(compiled)
         .with_registry(registry);
     run_viewer_app(&mut app, Some(&file_path))
 }

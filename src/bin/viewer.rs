@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &registry,
     )
     .map_err(|e| format!("Layout evaluation error in '{}': {e}", file_path.display()))?;
-    let layout = compiled.layout().clone();
+    let layout = compiled.layout();
 
     println!(
         "Successfully resolved {} layout nodes across topological schedule.",

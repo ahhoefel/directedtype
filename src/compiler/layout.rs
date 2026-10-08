@@ -165,7 +165,7 @@ impl ResolvedNode {
 }
 
 /// The final computed layout produced by the DirectedType graph compiler.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ResolvedLayout {
     pub roots: Vec<NodeId>,
     pub nodes: Vec<ResolvedNode>,
