@@ -248,7 +248,7 @@ fn test_expand_shaded_box_intrinsic_children_width() {
 #[test]
 fn test_text_wrapping_default_height() {
     let input = r#"
-    \Text(width: 200) { This is a long sentence for text wrapping test. }
+    \Text(width: 200, size: 16) { This is a long sentence for text wrapping test. }
     "#;
 
     let doc = parse(input).expect("Failed to parse Text");
@@ -595,7 +595,7 @@ fn test_responsive_flow_clamped_formula() {
     }
 
     \Flow {
-        \Text { Responsive DirectedType }
+        \Text(size: 16) { Responsive DirectedType }
     }
     "#;
 
@@ -2563,6 +2563,8 @@ fn test_state_reserved_parent_and_duplicate_error() {
 #[test]
 fn test_raw_text_passed_directly_to_component_children() {
     let input = r#"
+    env font = \Font(size: 16);
+
     \Component Card(padding_x: Number: 24, padding_y: Number: 18) {
         \Rect(x: 10, y: 10, width: 300, height: 100, color: #1e293b)
         \Children {
@@ -2895,7 +2897,7 @@ fn test_overload_card_in_hstack_no_cycle() {
 #[test]
 fn test_text_with_inline_link_spans() {
     let input = r#"
-    \Text(width: 400) {
+    \Text(width: 400, size: 16) {
         Visit \Link(url: "https://www.google.com"){Google} today
     }
     "#;
@@ -2940,7 +2942,7 @@ fn test_text_with_inline_link_spans() {
 #[test]
 fn test_text_with_custom_styled_link_span() {
     let input = r#"
-    \Text {
+    \Text(size: 16) {
         Check \Link(url: "https://github.com", color: #2563eb, underline: false){GitHub}
     }
     "#;
@@ -2961,7 +2963,7 @@ fn test_text_with_custom_styled_link_span() {
 
 #[test]
 fn test_plain_text_has_default_span() {
-    let input = r#"\Text { Plain text here }"#;
+    let input = r#"\Text(size: 16) { Plain text here }"#;
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate");
 
@@ -3043,6 +3045,52 @@ fn test_multiline_wrapped_link_fragments_projection() {
     // Bounding union contains both fragments
     assert_eq!(link_node.rect, directedtype::compiler::Rect::bounding_union(&link_node.fragments).unwrap());
     assert!(link_node.rect.height >= frag1.height + frag2.height);
+}
+
+#[test]
+fn test_missing_size_on_text_yields_compile_error() {
+    let input = r#"\Text { Hello missing size }"#;
+    let doc = parse(input).expect("parse ok");
+    let err = compile_to_graph(&doc).unwrap_err();
+    match err {
+        directedtype::compiler::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "Text");
+            assert_eq!(port, "size");
+        }
+        other => panic!("Expected MissingPort on Text size, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_missing_size_on_font_yields_compile_error() {
+    let input = r#"let f = \Font(weight: 500);"#;
+    let doc = parse(input).expect("parse ok");
+    let err = compile_to_graph(&doc).unwrap_err();
+    match err {
+        directedtype::compiler::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "Font");
+            assert_eq!(port, "size");
+        }
+        other => panic!("Expected MissingPort on Font size, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_missing_dimensions_on_child_rect_yields_compile_error() {
+    let input = r#"
+    \Rect(x: 0, y: 0, width: 400, height: 300, color: #ffffff) {
+        \Rect(x: 0, y: 0, color: #ff0000)
+    }
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = compile_to_graph(&doc).unwrap_err();
+    match err {
+        directedtype::compiler::CompileError::MissingPort { node, port, .. } => {
+            assert_eq!(node, "Rect");
+            assert!(port == "width" || port == "height");
+        }
+        other => panic!("Expected MissingPort on Rect width/height, got: {:?}", other),
+    }
 }
 
 

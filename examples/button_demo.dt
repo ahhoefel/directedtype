@@ -90,7 +90,7 @@
 
     // Section 4: Direct Text in Card (Auto-Wrapping Height)
     \Card("card_direct_text"; style: card_dark) {
-        \Text(color: #f8fafc) {
+        \Text(size: 14, color: #f8fafc) {
             Direct text passed straight to Card with auto-wrapping height!
         }
     }

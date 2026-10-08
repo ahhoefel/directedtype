@@ -282,6 +282,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         ambient_authored_ports: None,
                         enums: &enums,
                         active_scope_id: ScopeId::ROOT,
+                        consumer_children: None,
                     };
                     let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
                     expanded_doc.get_node_mut(root_id).unwrap().var_name = Some(env_binding.name.as_str().to_string());
@@ -339,6 +340,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                     ambient_authored_ports: None,
                     enums: &enums,
                     active_scope_id: ScopeId::ROOT,
+                    consumer_children: None,
                 };
                 let root_id = expand_element(node, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
                 expanded_doc.roots.push(root_id);
@@ -358,6 +360,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         ambient_authored_ports: None,
                         enums: &enums,
                         active_scope_id: ScopeId::ROOT,
+                        consumer_children: None,
                     };
                     let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
                     expanded_doc.get_node_mut(root_id).unwrap().var_name = Some(let_binding.name.as_str().to_string());
@@ -403,6 +406,7 @@ struct ElementContext<'a> {
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
     pub enums: &'a HashMap<String, EnumDef>,
     pub active_scope_id: ScopeId,
+    pub consumer_children: Option<&'a [ContentItem]>,
 }
 
 /// Statically selects the unique matching component overload for an invocation.
@@ -563,6 +567,10 @@ fn expand_element(
         // Validate that caller does not attempt to override immutable spatial alias ports or declared aliases
         for port in &elem.ports {
             let name = port.name.as_str();
+            let is_purely_ambient = ctx.ambient_authored_ports.is_some_and(|a| a.contains_key(name));
+            if is_purely_ambient {
+                continue;
+            }
             let is_accepted_param = overloads.iter().any(|o| o.param_names().contains(name));
             if !is_accepted_param
                 && (matches!(name, "left" | "top" | "right" | "bottom")
@@ -729,6 +737,10 @@ fn expand_component_instance(
     // Validate that caller does not attempt to override immutable alias ports or set private state
     for port in &instance.ports {
         let name = port.name.as_str();
+        let is_purely_ambient = ctx.ambient_authored_ports.is_some_and(|a| a.contains_key(name));
+        if is_purely_ambient {
+            continue;
+        }
         if declared_aliases.contains_key(name) || matches!(name, "left" | "top" | "right" | "bottom") {
             return Err(CompileError::ImmutableAliasPort {
                 node: comp_def.name.as_str().to_string(),
@@ -770,6 +782,7 @@ fn expand_component_instance(
                     ambient_authored_ports: None,
                     enums: ctx.enums,
                     active_scope_id: ctx.active_scope_id,
+                    consumer_children: None,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
                 Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span))
@@ -840,6 +853,10 @@ fn expand_component_instance(
 
     // Any remaining explicit ports not defined in signature (e.g. ad-hoc ports)
     for (name, expr) in explicit_ports {
+        let is_purely_ambient = ctx.ambient_authored_ports.is_some_and(|a| a.contains_key(&name));
+        if is_purely_ambient && !matches!(name.as_str(), "x" | "y" | "z" | "clip") {
+            continue;
+        }
         if !comp_scope_ports.contains(&name) {
             comp_scope_ports.push(name.clone());
         }
@@ -897,6 +914,7 @@ fn expand_component_instance(
     }
 
     // 2. Expand consumer children passed to this component instance
+    let consumer_content_items = instance.content.as_ref().map(|s| s.items.as_slice());
     let mut consumer_child_nodes = Vec::new();
     if let Some(slot) = &instance.content {
         for item in &slot.items {
@@ -1129,6 +1147,7 @@ fn expand_component_instance(
                         ambient_authored_ports: None,
                         enums: ctx.enums,
                         active_scope_id: ctx.active_scope_id,
+                        consumer_children: consumer_content_items,
                     };
                     let node_id = expand_element(
                         elem,
@@ -1194,6 +1213,7 @@ fn expand_component_instance(
                                 ambient_authored_ports: None,
                                 enums: ctx.enums,
                                 active_scope_id: ctx.active_scope_id,
+                                consumer_children: consumer_content_items,
                             };
                             let node_id = expand_element(
                                 elem,
@@ -1259,6 +1279,7 @@ fn expand_component_instance(
                     ambient_authored_ports: None,
                     enums: ctx.enums,
                     active_scope_id: ctx.active_scope_id,
+                    consumer_children: consumer_content_items,
                 };
                 let body_id = expand_element(
                     body_node,
@@ -1357,6 +1378,7 @@ fn expand_component_instance(
                         ambient_authored_ports: Some(&authored_ambient_ports),
                         enums: ctx.enums,
                         active_scope_id: ctx.active_scope_id,
+                        consumer_children: None,
                     };
                     let child_id = expand_element(
                         &wired_elem,
@@ -1561,6 +1583,10 @@ fn expand_primitive_element(
 ) -> Result<(), CompileError> {
     // Validate that caller does not attempt to override immutable spatial alias ports
     for port in &elem.ports {
+        let is_purely_ambient = ctx.ambient_authored_ports.is_some_and(|a| a.contains_key(port.name.as_str()));
+        if is_purely_ambient {
+            continue;
+        }
         if matches!(port.name.as_str(), "left" | "top" | "right" | "bottom") {
             return Err(CompileError::ImmutableAliasPort {
                 node: elem.name.as_str().to_string(),
@@ -1656,6 +1682,7 @@ fn expand_primitive_element(
                         ambient_authored_ports: None,
                         enums: ctx.enums,
                         active_scope_id: active_scope_for_children,
+                        consumer_children: None,
                     };
 
                     let is_wrapper = elem.name.as_str() == "Anchor" || elem.name.as_str() == "AnchorScope";
@@ -1773,7 +1800,73 @@ fn expand_primitive_element(
                         });
                     }
                 }
-                ContentItem::Children(_) => {}
+                ContentItem::Children(_) => {
+                    if let Some(consumer_items) = ctx.consumer_children {
+                        for c_item in consumer_items {
+                            match c_item {
+                                ContentItem::Text(chunk) => {
+                                    if elem.name.as_str() == "Text" {
+                                        let start = full_text.len();
+                                        full_text.push_str(&chunk.text);
+                                        let end = full_text.len();
+                                        text_spans.push(TextSpan::new(start..end));
+                                    }
+                                }
+                                ContentItem::Node(child_elem) => {
+                                    let child_ctx = ElementContext {
+                                        parent_id: Some(node_id),
+                                        prev_sibling_id: last_child_id,
+                                        parent_ports: ctx.parent_ports,
+                                        lexical_scope: ctx.lexical_scope,
+                                        env_scope: ctx.env_scope,
+                                        enclosing_component_id: ctx.enclosing_component_id,
+                                        is_let: false,
+                                        ambient_authored_ports: None,
+                                        enums: ctx.enums,
+                                        active_scope_id: active_scope_for_children,
+                                        consumer_children: None,
+                                    };
+                                    let child_id = expand_element(
+                                        child_elem,
+                                        &child_ctx,
+                                        registry,
+                                        doc,
+                                        node_fonts,
+                                    )?;
+                                    child_ids.push(child_id);
+                                    last_child_id = Some(child_id);
+                                    if elem.name.as_str() == "Text" {
+                                        let child_text = doc.nodes[child_id.0]
+                                            .text_content
+                                            .clone()
+                                            .unwrap_or_default();
+                                        let start = full_text.len();
+                                        full_text.push_str(&child_text);
+                                        let end = full_text.len();
+                                        let is_link = child_elem.name.as_str() == "Link"
+                                            || child_elem.ports.iter().any(|p| p.name.as_str() == "url");
+                                        let mut style = SpanStyle::default();
+                                        if is_link {
+                                            style.url = child_elem.ports.iter().find(|p| p.name.as_str() == "url").and_then(|p| match &p.expr {
+                                                Expr::Literal(Literal::String(s, _)) => Some(s.clone()),
+                                                _ => None,
+                                            });
+                                            style.color = Some("#1a73e8".to_string());
+                                            style.underline = true;
+                                            style.cursor = Some(CursorKind::Pointer);
+                                        }
+                                        text_spans.push(TextSpan {
+                                            range: start..end,
+                                            node_id: Some(child_id),
+                                            style,
+                                        });
+                                    }
+                                }
+                                ContentItem::Children(_) => {}
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1806,6 +1899,7 @@ fn expand_primitive_element(
                     ambient_authored_ports: None,
                     enums: ctx.enums,
                     active_scope_id: ctx.active_scope_id,
+                    consumer_children: None,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
                 child_ids.push(child_id);
@@ -1952,12 +2046,13 @@ fn expand_primitive_element(
     }
 
     if elem.name.as_str() == "Font" {
-        // Default size to 16.0 if not specified
+        // Size is a required field on Font
         if !ports.contains_key("size") {
-            ports.insert(
-                "size".to_string(),
-                Expr::Literal(Literal::Number(16.0, elem.span)),
-            );
+            return Err(CompileError::MissingPort {
+                node: "Font".to_string(),
+                port: "size".to_string(),
+                span: elem.span,
+            });
         }
         // Default weight to 400.0 if not specified
         if !ports.contains_key("weight") {
@@ -2092,6 +2187,36 @@ fn expand_primitive_element(
             "clip".to_string(),
             Expr::Ident(Ident::new(node_id.canonical_name(), elem.span)),
         );
+        if let Some(box_expr) = ports.get("box").cloned() {
+            ports.entry("x".to_string()).or_insert_with(|| {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(box_expr.clone()),
+                    member: Ident::new("x", elem.span),
+                    span: elem.span,
+                })
+            });
+            ports.entry("y".to_string()).or_insert_with(|| {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(box_expr.clone()),
+                    member: Ident::new("y", elem.span),
+                    span: elem.span,
+                })
+            });
+            ports.entry("width".to_string()).or_insert_with(|| {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(box_expr.clone()),
+                    member: Ident::new("width", elem.span),
+                    span: elem.span,
+                })
+            });
+            ports.entry("height".to_string()).or_insert_with(|| {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(box_expr.clone()),
+                    member: Ident::new("height", elem.span),
+                    span: elem.span,
+                })
+            });
+        }
     } else if !ports.contains_key("clip") {
         let default_clip = if let Some(EnvEntry::Bound(clip_expr)) = ctx.env_scope.get("clip") {
             clip_expr.clone()
@@ -2179,6 +2304,33 @@ fn expand_primitive_element(
         }
     }
 
+    if elem.name.as_str() == "Text" {
+        if !ports.contains_key("size") && !ports.contains_key("font_size") {
+            // Check if this is an inline text span inside a parent Text node
+            if let Some(parent) = ctx.parent_id {
+                if doc.get_node(parent).is_some_and(|n| n.name == "Text") {
+                    let parent_ident = Expr::Ident(Ident::new(parent.canonical_name(), elem.span));
+                    ports.insert(
+                        "size".to_string(),
+                        Expr::MemberAccess(MemberAccessExpr {
+                            target: Box::new(parent_ident),
+                            member: Ident::new("size", elem.span),
+                            span: elem.span,
+                        }),
+                    );
+                }
+            }
+        }
+
+        if !ports.contains_key("size") && !ports.contains_key("font_size") {
+            return Err(CompileError::MissingPort {
+                node: "Text".to_string(),
+                port: "size".to_string(),
+                span: elem.span,
+            });
+        }
+    }
+
     let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
     let size_expr = if ports.contains_key("size") {
         Expr::MemberAccess(MemberAccessExpr {
@@ -2193,7 +2345,7 @@ fn expand_primitive_element(
             span: elem.span,
         })
     } else {
-        Expr::Literal(Literal::Number(16.0, elem.span))
+        Expr::Literal(Literal::Number(0.0, elem.span))
     };
 
     let weight_expr = if ports.contains_key("weight") {
@@ -2361,9 +2513,16 @@ fn expand_primitive_element(
         ports.entry("z".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
     }
 
-    // Height defaults
+    let is_inline_span = ctx.parent_id.is_some_and(|p| doc.get_node(p).is_some_and(|n| n.name == "Text"));
+
+    if is_inline_span {
+        ports.entry("x".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+        ports.entry("y".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+    }
+
+    // Height defaults / resolution
     if !is_anchor_like && !ports.contains_key("height") {
-        if (elem.name.as_str() == "Text" || ports.contains_key("width")) && has_text {
+        if (elem.name.as_str() == "Text" || has_text || ports.contains_key("width")) && has_text {
             // Text wrapping with Parley: height depends on width, size, weight, font
             let width_expr = Expr::MemberAccess(MemberAccessExpr {
                 target: Box::new(self_ident.clone()),
@@ -2392,17 +2551,23 @@ fn expand_primitive_element(
                     span: elem.span,
                 }),
             );
-        } else {
+        } else if is_inline_span {
             ports.insert(
                 "height".to_string(),
-                Expr::Literal(Literal::Number(24.0, elem.span)),
+                Expr::Literal(Literal::Number(0.0, elem.span)),
             );
+        } else if elem.name.as_str() != "Font" && elem.name.as_str() != "Clip" {
+            return Err(CompileError::MissingPort {
+                node: elem.name.as_str().to_string(),
+                port: "height".to_string(),
+                span: elem.span,
+            });
         }
     }
 
-    // Width defaults
+    // Width defaults / resolution
     if !is_anchor_like && !ports.contains_key("width") {
-        if elem.name.as_str() == "Text" && has_text {
+        if (elem.name.as_str() == "Text" || has_text) && has_text {
             let width_call = Expr::Call(CallExpr {
                 callee: Ident::new("text_width", elem.span),
                 args: vec![
@@ -2414,16 +2579,17 @@ fn expand_primitive_element(
                 span: elem.span,
             });
             ports.insert("width".to_string(), width_call);
-        } else {
-            let default_w = if let Some(tc) = &text_content {
-                (tc.len() as f64 * 8.0).max(100.0)
-            } else {
-                100.0
-            };
+        } else if is_inline_span {
             ports.insert(
                 "width".to_string(),
-                Expr::Literal(Literal::Number(default_w, elem.span)),
+                Expr::Literal(Literal::Number(0.0, elem.span)),
             );
+        } else if elem.name.as_str() != "Font" && elem.name.as_str() != "Clip" {
+            return Err(CompileError::MissingPort {
+                node: elem.name.as_str().to_string(),
+                port: "width".to_string(),
+                span: elem.span,
+            });
         }
     }
 

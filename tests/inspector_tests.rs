@@ -303,7 +303,7 @@ fn test_build_tree_items_from_layout_and_ancestor_expansion() {
     let source = r#"
         \Component Card(id: String: "c1") {
             \Rect(id: id, x: 0, y: 0, width: 200, height: 100, color: #38bdf8) {
-                \Text { "Card Title" }
+                \Text(size: 14) { "Card Title" }
             }
         }
         \Card(id: "main_card")
@@ -346,7 +346,7 @@ fn test_build_tree_items_from_layout_and_ancestor_expansion() {
 fn test_inspect_panel_component_rendering_and_hit_testing() {
     let source = r#"
         \Rect(id: "hero_box", x: 0, y: 0, width: 400, height: 200, color: #0284c7) {
-            \Text { "Hero Headline" }
+            \Text(size: 24) { "Hero Headline" }
         }
     "#;
     let doc = directedtype::parse(source).expect("Must parse");
@@ -509,7 +509,7 @@ fn test_inspector_bottom_panel_dimensions_and_formulas() {
     let source = r#"
         \Component Card(id: String: "card1") {
             \Rect(id: id, x: 20 + 5, y: 10 * 2, width: min(400, 300), height: 180, color: #6366f1) {
-                \Text { "Card Content" }
+                \Text(size: 14) { "Card Content" }
             }
         }
         \Card(id: "my_card")
@@ -617,7 +617,7 @@ fn test_ambient_children_authored_formulas_preserved() {
         }
 
         \Flow(margin: 40) {
-            \Text { "Environmental Scope Showcase" }
+            \Text(size: 16) { "Environmental Scope Showcase" }
         }
     "#;
     let doc = directedtype::parse(source).expect("Source must parse");
@@ -1077,9 +1077,13 @@ fn test_dag_property_trace_building() {
 fn test_dag_property_trace_inferred_default() {
     let source = r#"
 \Component Container {
+    alias width = 400;
+    alias height = 300;
     \Children
 }
 \Component Item(h: Number: 40) {
+    alias width = 100;
+    alias height = h;
     \Rect(x: 0, y: 0, width: 100, height: h, color: #ff0000)
 }
 \Container {
@@ -1090,15 +1094,15 @@ fn test_dag_property_trace_inferred_default() {
     let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
     let item_node = layout.nodes.iter().find(|n| n.name == "Item").expect("Item found");
 
-    // Width was not explicitly authored on the child Item instance, so it gets the inferred default fallback (100)
-    let trace = directedtype::inspector::build_property_dag_trace(&layout, item_node.id, "width")
+    // Coordinate 'x' was not explicitly authored on the child Item instance, so it gets the default spatial coordinate (0)
+    let trace = directedtype::inspector::build_property_dag_trace(&layout, item_node.id, "x")
         .expect("trace ok");
 
-    assert_eq!(trace.port_name, "width");
-    assert_eq!(trace.evaluated_value_str, "100");
+    assert_eq!(trace.port_name, "x");
+    assert_eq!(trace.evaluated_value_str, "0");
     assert_eq!(trace.origin_kind, directedtype::inspector::PortOriginKind::InferredDefault);
     assert!(trace.upstream_dependencies.is_empty());
-    assert!(trace.origin_description.contains("Inferred layout default"));
+    assert!(trace.origin_description.contains("Default spatial coordinate"));
 }
 
 #[test]

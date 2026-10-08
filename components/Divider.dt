@@ -10,6 +10,7 @@
 ) {
     let resolved_width = parent.width;
 
+    alias width = resolved_width;
     alias right = x + resolved_width;
     alias bottom = y + thickness;
     alias height = thickness;

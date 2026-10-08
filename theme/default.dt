@@ -5,6 +5,9 @@
 \use "components/ButtonStyle.dt"
 \use "components/LinkStyle.dt"
 
+// Standard Ambient Typography
+env font = \Font(size: 16);
+
 // 1. Standard Cards
 let card_dark = \CardStyle(
     bg: #1e293b,

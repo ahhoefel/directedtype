@@ -23,6 +23,7 @@ fn test_dom_create_and_append() {
         vec![
             ("x".to_string(), Expr::lit(15.0)),
             ("y".to_string(), Expr::lit(25.0)),
+            ("size".to_string(), Expr::lit(16.0)),
             ("color".to_string(), Expr::color("#ffffff")),
         ],
     );
@@ -217,6 +218,7 @@ fn test_dom_ports_and_text_mutation() {
         vec![
             ("x".to_string(), Expr::lit(0.0)),
             ("y".to_string(), Expr::lit(0.0)),
+            ("size".to_string(), Expr::lit(16.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );

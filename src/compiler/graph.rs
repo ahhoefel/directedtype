@@ -230,10 +230,10 @@ pub fn build_variable_graph_with_window(
                 .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
             ports
                 .entry("width".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(100.0, node.span)));
+                .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
             ports
                 .entry("height".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(24.0, node.span)));
+                .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
         }
 
         // Default spatial alias ports if not already defined

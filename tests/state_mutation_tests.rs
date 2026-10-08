@@ -301,6 +301,10 @@ fn test_dom_set_state_microsecond_incremental_update() {
 #[test]
 fn test_dom_set_state_by_key() {
     let input = r#"
+    \Component Flow {
+        \Children
+    }
+
     \Component Button(label: String: "OK") {
         state pressed: false;
         \Rect(x: 0, y: 0, width: pressed ? 120 : 100, height: 40, color: #222222)
