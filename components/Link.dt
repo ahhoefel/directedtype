@@ -7,6 +7,9 @@
     url: String,
     env link_style: LinkStyle,
     view = window,
+    size: Number: 14,
+    x: Number: parent.left,
+    y: Number: parent.top,
     cursor: String: "Pointer",
     on_click = self.click,
     on_focus = self.focus,
@@ -25,7 +28,10 @@
     alias current_underline = active_underline;
     alias current_bg = active_bg;
 
-    \Text(
+    let link_text = \Text(
+        x: x,
+        y: y,
+        size: size,
         color: active_color,
         underline: active_underline,
         on_click: on_click,
@@ -34,6 +40,11 @@
         on_pointer_enter: on_pointer_enter,
         on_pointer_leave: on_pointer_leave
     ) {
-        \children
-    }
+        \Children
+    };
+
+    alias width = link_text.width;
+    alias height = link_text.height;
+    alias right = x + link_text.width;
+    alias bottom = y + link_text.height;
 }

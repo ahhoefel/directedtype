@@ -349,6 +349,8 @@ impl CompiledDocument {
                 event.target = hit.target;
                 event.local_point = hit.local_point;
                 event.bubble_path = hit.bubble_path;
+            } else if self.layout.get_node(event.target).is_some() {
+                event.bubble_path = self.layout.bubble_path_for_node(event.target);
             } else {
                 return Ok(HashSet::new());
             }
