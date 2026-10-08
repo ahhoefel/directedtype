@@ -746,4 +746,96 @@ let blue_hover_link_style = \LinkStyle(
     save_golden_or_preview(&img, "link_hover_highlight.png");
 }
 
+#[test]
+fn test_render_scroll_view_demo_example() {
+    let source = std::fs::read_to_string("examples/scroll_view_demo.dt").expect("read scroll_view_demo.dt");
+    let doc = directedtype::parse(&source).expect("parse scroll_view_demo.dt");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let mut compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        960.0,
+        640.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile scroll_view_demo.dt ok");
+
+    // 1. Render initial unscrolled state
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let options = SceneOptions {
+        background: Some(Color::from_rgba8(241, 245, 249, 255)),
+        ..Default::default()
+    };
+    let initial_img = renderer
+        .render_layout(&compiled.layout, 960, 640, &options)
+        .expect("render initial layout ok");
+    save_golden_or_preview(&initial_img, "scroll_view_demo_initial.png");
+
+    let reader_pane_id = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "ScrollView")
+        .expect("reader_pane ScrollView found")
+        .id;
+
+    let targeted_anchor_id = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.anchor_name.as_deref() == Some("targeted-links"))
+        .expect("targeted-links anchor found")
+        .id;
+
+    // Simulate clicking the link for #targeted-links
+    let link_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Link" && n.properties.get("url").and_then(|v| v.as_str()) == Some("#targeted-links"))
+        .expect("Link for #targeted-links found");
+    let link_id = link_node.id;
+    let link_point = directedtype::interaction::Point::new(link_node.rect.x + 5.0, link_node.rect.y + 5.0);
+
+    let mut click = Event::new(
+        directedtype::interaction::EventKind::Click {
+            button: directedtype::interaction::MouseButton::Left,
+        },
+        link_point,
+        directedtype::interaction::Point::default(),
+        directedtype::interaction::Modifiers::default(),
+        link_id,
+    )
+    .with_bubble_path(vec![link_id]);
+
+    compiled.dispatch_event(&mut click).expect("dispatch click ok");
+    let actions = compiled.take_actions();
+    assert_eq!(
+        actions,
+        vec![directedtype::component::ContextAction::ScrollToNode {
+            target: targeted_anchor_id,
+            container: Some(reader_pane_id),
+        }],
+        "Clicking #targeted-links link must emit ScrollToNode targeting reader_pane"
+    );
+
+    // 2. Execute the action to scroll the reader pane
+    let action = actions.into_iter().next().unwrap();
+    let changed = compiled.execute_action(action).expect("execute action ok");
+    assert!(!changed.is_empty());
+
+    let scroll_y = compiled.get_state(reader_pane_id, "scroll_y").and_then(|v| v.as_f64()).unwrap();
+    assert!(scroll_y > 0.0, "Reader pane scroll_y must have moved downwards");
+
+    // Render scrolled state
+    let scrolled_img = renderer
+        .render_layout(&compiled.layout, 960, 640, &options)
+        .expect("render scrolled layout ok");
+
+    assert_eq!(scrolled_img.width(), 960);
+    assert_eq!(scrolled_img.height(), 640);
+    save_golden_or_preview(&scrolled_img, "scroll_view_demo_scrolled.png");
+}
+
 

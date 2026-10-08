@@ -19,7 +19,7 @@
     state focused: Boolean = false;
 
     alias right = x + width;
-    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
+    alias bottom = max(children.bottom) > y ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
     alias height = bottom - y;
 
     let current_bg = focused ? focused_bg : style.bg;
@@ -61,7 +61,7 @@
 
     alias right = x + resolved_width;
     alias width = resolved_width;
-    alias bottom = max(children.bottom) > 0 ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
+    alias bottom = max(children.bottom) > y ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
     alias height = bottom - y;
 
     let current_bg = focused ? focused_bg : style.bg;

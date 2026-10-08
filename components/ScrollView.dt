@@ -1,0 +1,82 @@
+// DirectedType Standard Component Library: ScrollView
+// Container component providing hardware-accelerated clipped scrolling,
+// interactive mousewheel/trackpad scrolling, and targeted anchor navigation.
+
+\Component ScrollView(
+    width: Number,
+    height: Number,
+    x: Number = parent.left,
+    y: Number = parent.top,
+    padding: Number = 0,
+    radius: Number = 0,
+    bg: Color = #00000000,
+    border_color: Color = #00000000,
+    border_width: Number = 0,
+    scrollbar_color: Color = #64748b80,
+    scrollbar_width: Number = 6,
+    on_scroll = self.on_scroll
+) {
+    state scroll_y: Number = 0;
+    state scroll_x: Number = 0;
+
+    alias left = x;
+    alias top = y;
+    alias right = x + width;
+    alias bottom = y + height;
+
+    // 1. Background frame & event capture surface
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg,
+        radius: radius,
+        border_width: border_width,
+        border_color: border_color,
+        on_scroll: on_scroll
+    )
+
+    // 2. Hardware clip node defining the rectangular or rounded boundary
+    let clip = \Clip(
+        up: self.clip,
+        box: \Box(
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            radius: radius
+        )
+    );
+
+    let content_top = y + padding - scroll_y;
+    let content_left = x + padding - scroll_x;
+
+    // 3. Children inherit the clip context and are offset by scroll position
+    \Children {
+        clip: clip,
+        x: prev ? prev.left : content_left,
+        y: prev ? prev.bottom : content_top
+    }
+
+    // 4. Dynamic scrollbar
+    let content_bottom = max(children.bottom) + scroll_y + padding;
+    let content_height = max(height, content_bottom - y);
+    let max_scroll_y = max(1, content_height - height);
+    let has_overflow = content_height > (height + 1);
+    let track_inset = 4;
+    let track_height = max(1, height - (2 * track_inset));
+    let thumb_height = max(24, min(track_height, track_height * (height / content_height)));
+    let scroll_ratio = min(1, max(0, scroll_y / max_scroll_y));
+    let thumb_y = y + track_inset + scroll_ratio * (track_height - thumb_height);
+
+    \Rect(
+        clip: self.clip,
+        x: x + width - scrollbar_width - track_inset,
+        y: thumb_y,
+        width: scrollbar_width,
+        height: thumb_height,
+        color: has_overflow ? scrollbar_color : #00000000,
+        radius: scrollbar_width / 2
+    )
+}

@@ -435,14 +435,68 @@ impl CompiledDocument {
         std::mem::take(&mut self.actions)
     }
 
+    /// Scrolls a container (such as a ScrollView) to bring a descendant target node into view.
+    pub fn scroll_container_to_node(
+        &mut self,
+        container: NodeId,
+        target: NodeId,
+    ) -> Result<HashSet<VarId>, CompileError> {
+        let container_node = match self.layout.get_node(container) {
+            Some(n) => n.clone(),
+            None => return Ok(HashSet::new()),
+        };
+        let target_node = match self.layout.get_node(target) {
+            Some(n) => n.clone(),
+            None => return Ok(HashSet::new()),
+        };
+
+        let current_scroll_y = self
+            .get_state(container, "scroll_y")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+
+        let target_top = if !target_node.fragments.is_empty() {
+            target_node.fragments[0].y
+        } else {
+            target_node.rect.y
+        };
+
+        let unscrolled_target_y = target_top + current_scroll_y;
+        let relative_y = (unscrolled_target_y - container_node.rect.y).max(0.0);
+
+        let clip_node = self.layout.nodes.iter().find(|n| n.parent == Some(container) && n.name == "Clip");
+        let max_scroll_y = if let Some(clip) = clip_node {
+            let mut max_bottom = container_node.rect.y;
+            for n in &self.layout.nodes {
+                if n.clip == Some(clip.id) {
+                    max_bottom = max_bottom.max(n.rect.y + n.rect.height);
+                }
+            }
+            let padding = container_node.properties.get("padding").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let content_h = (max_bottom + current_scroll_y + padding - container_node.rect.y).max(0.0);
+            (content_h - container_node.rect.height).max(0.0)
+        } else {
+            f64::INFINITY
+        };
+
+        let target_scroll_y = relative_y.min(max_scroll_y);
+        self.set_state(container, "scroll_y", Value::Number(target_scroll_y))
+    }
+
     /// Executes a context action on the compiled document (e.g. updating focus on scroll_to actions).
     pub fn execute_action(
         &mut self,
         action: crate::component::ContextAction,
     ) -> Result<HashSet<VarId>, crate::component::DispatchError> {
         match action {
-            crate::component::ContextAction::ScrollToNode { target, .. } => {
-                self.set_focused_node(Some(target))
+            crate::component::ContextAction::ScrollToNode { target, container } => {
+                let mut changed = self.set_focused_node(Some(target))?;
+                if let Some(pane_id) = container {
+                    if let Ok(pane_changed) = self.scroll_container_to_node(pane_id, target) {
+                        changed.extend(pane_changed);
+                    }
+                }
+                Ok(changed)
             }
             crate::component::ContextAction::SetFocus { target } => {
                 self.set_focused_node(target)

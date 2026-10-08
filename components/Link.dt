@@ -6,6 +6,7 @@
 \Component Link(
     url: String,
     env link_style: LinkStyle,
+    view = window,
     cursor: String: "Pointer",
     on_click = self.click,
     on_focus = self.focus,

@@ -1,0 +1,257 @@
+// DirectedType Example: ScrollView & Targeted Pane Navigation
+// Demonstrates hardware-clipped scroll viewports, interactive mousewheel scrolling,
+// dynamic scrollbar tracking, and targeted navigation via \Link(url: "...", view: pane).
+
+\use "components/Padding.dt"
+\use "components/VStack.dt"
+\use "components/HStack.dt"
+\use "components/Card.dt"
+\use "components/CardStyle.dt"
+\use "components/Button.dt"
+\use "components/Divider.dt"
+\use "components/Spacer.dt"
+\use "components/LinkStyle.dt"
+\use "components/Link.dt"
+\use "components/ScrollView.dt"
+\use "theme/default.dt"
+
+env link_style = link_default;
+
+let sidebar_card_style = \CardStyle(
+    bg: #f8fafc,
+    border_color: #cbd5e1,
+    border_width: 1,
+    radius: 12,
+    padding_x: 20,
+    padding_y: 20
+);
+
+let section_card_style = \CardStyle(
+    bg: #f8fafc,
+    border_color: #e2e8f0,
+    border_width: 1,
+    radius: 10,
+    padding_x: 22,
+    padding_y: 18
+);
+
+let callout_card_style = \CardStyle(
+    bg: #eff6ff,
+    border_color: #bfdbfe,
+    border_width: 1,
+    radius: 10,
+    padding_x: 18,
+    padding_y: 16
+);
+
+let terminal_link_style = \LinkStyle(
+    color: #38bdf8,
+    underline: false,
+    bg: #00000000,
+    hover_color: #7dd3fc,
+    hover_underline: true,
+    hover_bg: #0369a140,
+    focused_color: #bae6fd,
+    focused_underline: true,
+    focused_bg: #0284c780
+);
+
+// Header section
+\VStack(
+    x: 40,
+    y: 36,
+    width: min(window.width - 80, 880),
+    gap: 8
+) {
+    \Text(size: 30, weight: 700, color: #0f172a) {
+        ScrollView & Targeted Pane Navigation
+    }
+    \Text(size: 15, color: #64748b) {
+        Hardware-clipped viewport with reactive DAG offsets, dynamic scrollbar, and targeted anchor links.
+    }
+}
+
+let sidebar_width = 250;
+let pane_x = 40 + sidebar_width + 24;
+let pane_width = min(window.width - pane_x - 40, 600);
+let pane_height = 440;
+let content_y = 120;
+
+// Right Column: ScrollView Document Viewer
+let reader_pane = \ScrollView(
+    x: pane_x,
+    y: content_y,
+    width: max(pane_width, 420),
+    height: pane_height,
+    padding: 20,
+    radius: 12,
+    bg: #ffffff,
+    border_color: #cbd5e1,
+    border_width: 1,
+    scrollbar_color: #94a3b8b0,
+    scrollbar_width: 6
+) {
+    \VStack(
+        width: max(pane_width, 420) - 48,
+        gap: 20,
+        align: Align.Stretch
+    ) {
+        // Section 1: Overview
+        \Card(style: section_card_style, width: parent.width, gap: 10) {
+            \Anchor("overview") {
+                \Text(size: 13, weight: 700, color: #2563eb) {
+                    1. OVERVIEW & ARCHITECTURE
+                }
+            }
+            \Text(size: 15, width: parent.width - 44, color: #1e293b) {
+                The DirectedType ScrollView is a standard layout container that manages independent scroll_x and scroll_y offsets. Overflowing content is clipped to the container bounds while the dynamic scrollbar tracks the active viewport position.
+            }
+        }
+
+        // Section 2: Hardware GPU Clipping
+        \Card(style: section_card_style, width: parent.width, gap: 10) {
+            \Anchor("gpu-clipping") {
+                \Text(size: 13, weight: 700, color: #059669) {
+                    2. HARDWARE GPU CLIPPING
+                }
+            }
+            \Text(size: 15, width: parent.width - 44, color: #1e293b) {
+                All children inside a ScrollView automatically inherit a hardware clip layer (Clip with Box). In the Vello GPU rendering pipeline, geometry outside the rounded or rectangular container boundary is discarded in hardware shaders.
+            }
+        }
+
+        // Section 3: Reactive DAG State
+        \Card(style: section_card_style, width: parent.width, gap: 10) {
+            \Anchor("reactive-state") {
+                \Text(size: 13, weight: 700, color: #7c3aed) {
+                    3. REACTIVE DAG OFFSETS
+                }
+            }
+            \Text(size: 15, width: parent.width - 44, color: #1e293b) {
+                When a mousewheel or trackpad scroll event is received, the companion component mutates scroll_y. DirectedType single-pass topological DAG incrementally recalculates child positions without layout thrashing.
+            }
+        }
+
+        // Section 4: Targeted Navigation
+        \Card(style: section_card_style, width: parent.width, gap: 10) {
+            \Anchor("targeted-links") {
+                \Text(size: 13, weight: 700, color: #d97706) {
+                    4. TARGETED CONTAINER NAVIGATION
+                }
+            }
+            \Text(size: 15, width: parent.width - 44, color: #1e293b) {
+                By passing view: reader_pane to any Link component, clicking that link navigates within this specific pane rather than the global window. The engine computes the relative offset and scrolls directly to the anchor.
+            }
+        }
+
+        // Section 5: Architecture & Event Routing
+        \Card(style: section_card_style, width: parent.width, gap: 12) {
+            \Anchor("architecture") {
+                \Text(size: 13, weight: 700, color: #0f172a) {
+                    5. ARCHITECTURE & EVENT ROUTING
+                }
+            }
+            \Text(size: 15, width: parent.width - 44, color: #1e293b) {
+                Scroll events bubble up through the component hierarchy and are consumed by the innermost enclosing ScrollView. Wheel events over this pane update scroll_y without propagating to the outer window.
+            }
+
+            \Card(
+                style: callout_card_style,
+                width: parent.width - 44,
+                gap: 6
+            ) {
+                \Text(size: 12, color: #1e40af) {
+                    [0.001s] DirectedType runtime initialized
+                }
+                \Text(size: 12, color: #047857) {
+                    [0.004s] Vello GPU compute pipeline ready
+                }
+                \Text(size: 12, color: #b45309) {
+                    [0.008s] ScrollView hardware clip layer active
+                }
+                \Text(size: 12, color: #334155) {
+                    [0.012s] Topological DAG: 48 nodes evaluated
+                }
+                \Text(size: 12, color: #4338ca) {
+                    [0.019s] Dynamic scrollbar thumb tracking ready
+                }
+            }
+        }
+
+        // Section 6: Summary & Return
+        \Card(style: callout_card_style, width: parent.width, gap: 10) {
+            \Anchor("summary") {
+                \Text(size: 13, weight: 700, color: #1d4ed8) {
+                    6. SUMMARY & NAVIGATION
+                }
+            }
+            \Text(size: 15, width: parent.width - 36, color: #1e293b) {
+                Notice that scrolling inside this pane does not affect the outer window, and mousewheel events over this pane are consumed with priority.
+            }
+            \Link(url: "https://directedtype.org") {
+                DirectedType Documentation →
+            }
+        }
+    }
+};
+
+// Left Column: Table of Contents & Navigation Sidebar
+\VStack(
+    x: 40,
+    y: content_y,
+    width: sidebar_width,
+    gap: 16
+) {
+    \Card(style: sidebar_card_style, width: parent.width, gap: 12) {
+        \Text(size: 12, weight: 700, color: #475569) {
+            PANE SECTIONS
+        }
+        \VStack(gap: 8) {
+            \Text(size: 14, color: #1e293b) {
+                • \Link(url: "#overview", view: reader_pane) {
+                    1. Overview
+                }
+            }
+            \Text(size: 14, color: #1e293b) {
+                • \Link(url: "#gpu-clipping", view: reader_pane) {
+                    2. GPU Clipping
+                }
+            }
+            \Text(size: 14, color: #1e293b) {
+                • \Link(url: "#reactive-state", view: reader_pane) {
+                    3. Reactive DAG
+                }
+            }
+            \Text(size: 14, color: #1e293b) {
+                • \Link(url: "#targeted-links", view: reader_pane) {
+                    4. Targeted Links
+                }
+            }
+            \Text(size: 14, color: #1e293b) {
+                • \Link(url: "#architecture", view: reader_pane) {
+                    5. Event Routing
+                }
+            }
+            \Text(size: 14, color: #1e293b) {
+                • \Link(url: "#summary", view: reader_pane) {
+                    6. Summary
+                }
+            }
+        }
+    }
+
+    \Card(style: callout_card_style, width: parent.width, gap: 8) {
+        \Text(size: 12, weight: 700, color: #1d4ed8) {
+            INTERACTIVE CONTROLS
+        }
+        \Text(size: 13, width: parent.width - 36, color: #334155) {
+            • Click any section link above to jump the reader pane.
+        }
+        \Text(size: 13, width: parent.width - 36, color: #334155) {
+            • Hover over the pane and scroll with mouse wheel or trackpad.
+        }
+        \Text(size: 13, width: parent.width - 36, color: #334155) {
+            • The scrollbar tracks dynamically and stays within bounds.
+        }
+    }
+}

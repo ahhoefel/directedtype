@@ -43,7 +43,7 @@
     let is_right = align == Align.Right;
 
     alias right = x + width;
-    alias bottom = max(children.bottom) > 0 ? max(children.bottom) : y;
+    alias bottom = max(children.bottom) > y ? max(children.bottom) : y;
     alias height = bottom - y;
 
     \Children {
@@ -102,7 +102,7 @@
 
     alias right = max_child_width > 0 ? x + max_child_width : x;
     alias width = max_child_width > 0 ? max_child_width : 0;
-    alias bottom = max(children.bottom) > 0 ? max(children.bottom) : y;
+    alias bottom = max(children.bottom) > y ? max(children.bottom) : y;
     alias height = bottom - y;
 
     \Children {
@@ -131,7 +131,7 @@
 
     alias right = x + resolved_width;
     alias width = resolved_width;
-    alias bottom = max(children.bottom) > 0 ? max(children.bottom) : y;
+    alias bottom = max(children.bottom) > y ? max(children.bottom) : y;
     alias height = bottom - y;
 
     \Children {

@@ -23,14 +23,11 @@ impl Link {
     pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         if let Some(url) = ctx.get_port_string("url") {
             let url = url.to_string();
-            let pane_container = ctx.get_port("pane").and_then(|v| v.as_node());
-
-            if url.starts_with('#') {
-                if !ctx.scroll_to_anchor_in_container(&url, pane_container) {
-                    eprintln!("[Link] In-page anchor not found: {}", url);
-                }
-            } else if ctx.scroll_to_anchor_in_container(&url, pane_container) {
-                // Scrolled to relative/scoped anchor path without '#'
+            if let Some(target_id) = ctx.resolve_anchor(&url) {
+                let mut view = ctx.view_or_window("view");
+                view.scroll_to(target_id);
+            } else if url.starts_with('#') {
+                eprintln!("[Link] In-page anchor not found: {}", url);
             } else {
                 ctx.open_url(url);
             }

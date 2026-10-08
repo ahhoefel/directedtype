@@ -305,20 +305,24 @@ impl ViewerApp {
         }
     }
 
-    /// Computes the total content width across all layout nodes.
+    /// Computes the total content width across all unclipped layout nodes.
     pub fn content_width(&self) -> f64 {
         let mut max_x: f64 = 0.0;
         for node in &self.layout.nodes {
-            max_x = max_x.max(node.rect.x + node.rect.width);
+            if node.clip.is_none() {
+                max_x = max_x.max(node.rect.x + node.rect.width);
+            }
         }
         max_x
     }
 
-    /// Computes the total content height across all layout nodes.
+    /// Computes the total content height across all unclipped layout nodes.
     pub fn content_height(&self) -> f64 {
         let mut max_y: f64 = 0.0;
         for node in &self.layout.nodes {
-            max_y = max_y.max(node.rect.y + node.rect.height);
+            if node.clip.is_none() {
+                max_y = max_y.max(node.rect.y + node.rect.height);
+            }
         }
         max_y
     }
@@ -670,8 +674,19 @@ impl ViewerApp {
     pub fn execute_action(&mut self, action: ContextAction) {
         match action {
             ContextAction::ScrollToNode { target, container } => {
-                if let Some(_pane_id) = container {
-                    // Future phase: target a specific \ScrollPane component
+                if let Some(pane_id) = container {
+                    if let Some(compiled) = &mut self.compiled {
+                        if let Ok(changed) = compiled.scroll_container_to_node(pane_id, target) {
+                            if !changed.is_empty() {
+                                self.layout = compiled.layout().clone();
+                                if let Some(window) = &self.window {
+                                    window.request_redraw();
+                                }
+                            }
+                        }
+                    }
+                    self.target_node = Some(target);
+                    self.set_focused_node(Some(target));
                 } else {
                     self.target_node = Some(target);
                     self.set_focused_node(Some(target));
@@ -693,13 +708,15 @@ impl ViewerApp {
         }
     }
 
-    fn dispatch_event_with_bubble(&mut self, mut event: Event, bubble_path: &[NodeId]) {
+    fn dispatch_event_with_bubble(&mut self, mut event: Event, bubble_path: &[NodeId]) -> bool {
         event.bubble_path = bubble_path.to_vec();
 
         let mut actions = Vec::new();
+        let mut handled = false;
         if let Some(compiled) = &mut self.compiled {
             if let Ok(changed_vars) = compiled.dispatch_event(&mut event) {
                 if !changed_vars.is_empty() {
+                    handled = true;
                     self.layout = compiled.layout().clone();
                     if let Some(window) = &self.window {
                         window.request_redraw();
@@ -714,6 +731,7 @@ impl ViewerApp {
                 event.current_target = ancestor_id;
                 event.propagation_continued = false;
                 handler(&mut event, &self.layout);
+                handled = true;
                 if !event.propagation_continued {
                     break;
                 }
@@ -723,6 +741,8 @@ impl ViewerApp {
         for action in actions {
             self.execute_action(action);
         }
+
+        handled
     }
 
     /// Attaches the source AST `Document` to enable dynamic layout re-evaluation on window resize.
@@ -1052,6 +1072,7 @@ impl ViewerApp {
             .layout
             .nodes
             .iter()
+            .filter(|n| n.clip.is_none())
             .fold(0.0f64, |acc, n| acc.max(n.rect.y + n.rect.height));
         if content_h > win_h {
             let max_scroll = (content_h - win_h).max(1.0);
@@ -1719,17 +1740,8 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         return;
                     }
 
-                    // Window document scrolling:
-                    let max_scroll = self.max_scroll_y(win_h);
-                    let old_scroll = self.scroll_y;
-                    self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
-                    if (self.scroll_y - old_scroll).abs() > 0.001 {
-                        if let Some(w) = &self.window {
-                            w.request_redraw();
-                        }
-                    }
-
                     let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
+                    let mut handled = false;
                     if let Some(ref hit_res) = self.layout.hit_test(doc_point) {
                         let scroll_event = Event::new(
                             EventKind::Scroll { delta_x, delta_y },
@@ -1738,7 +1750,19 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                             self.modifiers,
                             hit_res.target,
                         );
-                        self.dispatch_event_with_bubble(scroll_event, &hit_res.bubble_path);
+                        handled = self.dispatch_event_with_bubble(scroll_event, &hit_res.bubble_path);
+                    }
+
+                    // Window document scrolling occurs only if not handled by an inner container:
+                    if !handled {
+                        let max_scroll = self.max_scroll_y(win_h);
+                        let old_scroll = self.scroll_y;
+                        self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
+                        if (self.scroll_y - old_scroll).abs() > 0.001 {
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
                     }
                 }
             }

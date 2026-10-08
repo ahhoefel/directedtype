@@ -1146,6 +1146,37 @@ fn expand_component_instance(
                     if elem.name.as_str() == "Font" {
                         node_fonts.insert(node_id, node_id);
                     }
+                } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
+                    let scope_ctx = ScopeContext {
+                        current_node: ctx.comp_node_id,
+                        parent_node: ctx.parent_id,
+                        prev_sibling: ctx.prev_sibling_id,
+                        child_ids: &instantiated_children_ids,
+                        parent_ports: ctx.parent_ports,
+                        current_ports: &comp_scope_ports,
+                        lexical_scope: &local_scope,
+                        env_scope: &internal_body_env_scope,
+                        node_fonts: &*node_fonts,
+                        enclosing_component: Some(ctx.comp_node_id),
+                        comp_ports: None,
+                        declared_state_names: None,
+                        enums: ctx.enums,
+                    };
+                    let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
+                    local_scope.insert(
+                        let_binding.name.as_str().to_string(),
+                        LexicalBinding::Expr(rewritten.clone()),
+                    );
+                    if !is_env_param_shadow {
+                        children_env_scope.insert(
+                            let_binding.name.as_str().to_string(),
+                            EnvEntry::Bound(rewritten.clone()),
+                        );
+                    }
+                    internal_body_env_scope.insert(
+                        let_binding.name.as_str().to_string(),
+                        EnvEntry::Bound(rewritten),
+                    );
                 }
             }
             ComponentBodyItem::Env(env_binding) => {
@@ -1159,7 +1190,7 @@ fn expand_component_instance(
                                 lexical_scope: &local_scope,
                                 env_scope: &internal_body_env_scope,
                                 enclosing_component_id: Some(ctx.comp_node_id),
-                                is_let: true,
+                                is_let: false,
                                 ambient_authored_ports: None,
                                 enums: ctx.enums,
                                 active_scope_id: ctx.active_scope_id,
@@ -1189,7 +1220,7 @@ fn expand_component_instance(
                                 current_node: ctx.comp_node_id,
                                 parent_node: ctx.parent_id,
                                 prev_sibling: ctx.prev_sibling_id,
-                                child_ids: &empty_children,
+                                child_ids: &instantiated_children_ids,
                                 parent_ports: ctx.parent_ports,
                                 current_ports: &comp_scope_ports,
                                 lexical_scope: &local_scope,

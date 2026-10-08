@@ -61,6 +61,41 @@ pub enum ContextAction {
     },
 }
 
+/// A strongly typed handle to a scrollable viewport (either the outer window or a specific `ScrollView`).
+pub struct ViewHandle<'b> {
+    pub target: NodeId,
+    actions: &'b mut Vec<ContextAction>,
+}
+
+impl<'b> ViewHandle<'b> {
+    pub fn new(target: NodeId, actions: &'b mut Vec<ContextAction>) -> Self {
+        Self { target, actions }
+    }
+
+    /// Whether this handle represents the main window viewport.
+    pub fn is_window(&self) -> bool {
+        self.target.is_window()
+    }
+
+    /// The target `NodeId` for this view (either `NodeId::WINDOW` or a `ScrollView` node).
+    pub fn target(&self) -> NodeId {
+        self.target
+    }
+
+    /// Scrolls to bring `target_node` into view within this view/pane.
+    pub fn scroll_to(&mut self, target_node: NodeId) {
+        let container = if self.is_window() {
+            None
+        } else {
+            Some(self.target)
+        };
+        self.actions.push(ContextAction::ScrollToNode {
+            target: target_node,
+            container,
+        });
+    }
+}
+
 /// Execution context passed to component lifecycle and event methods.
 ///
 /// Gives components access to read their input ports, query children by structured key,
@@ -162,12 +197,53 @@ impl<'a> Context<'a> {
         std::mem::take(&mut self.mutations)
     }
 
+    /// Returns a typed handle to the window viewport.
+    pub fn window(&mut self) -> ViewHandle<'_> {
+        ViewHandle::new(NodeId::WINDOW, &mut self.actions)
+    }
+
+    /// Reads an input port as a scrollable view handle (e.g. `view = window` or `view: my_scroll_view`).
+    /// Returns `None` if the port is not present or does not contain a Node reference.
+    pub fn get_view(&mut self, port_name: &str) -> Option<ViewHandle<'_>> {
+        let node_id = match self.get_port(port_name)? {
+            Value::Node(id) => *id,
+            _ => return None,
+        };
+        Some(ViewHandle::new(node_id, &mut self.actions))
+    }
+
+    /// Returns the scrollable view passed to `port_name`, defaulting to `self.window()` if omitted or not a node.
+    pub fn view_or_window(&mut self, port_name: &str) -> ViewHandle<'_> {
+        if let Some(port_val) = self.get_port(port_name) {
+            if let Value::Node(id) = port_val {
+                return ViewHandle::new(*id, &mut self.actions);
+            }
+        }
+        self.window()
+    }
+
+    /// Resolves an anchor link (relative or absolute) from the current component's position
+    /// and returns the target NodeId if found.
+    pub fn resolve_anchor(&self, url: &str) -> Option<NodeId> {
+        self.layout.resolve_anchor(self.node_id, url).map(|(target, _)| target)
+    }
+
+    /// Reads a state variable's active value.
+    pub fn get_state(&self, name: &str) -> Option<&Value> {
+        self.layout.get_value(self.node_id, name)
+    }
+
+    /// Reads a state variable as a floating-point number.
+    pub fn get_state_number(&self, name: &str) -> Option<f64> {
+        self.get_state(name).and_then(|v| v.as_f64())
+    }
+
     /// Scrolls to bring `target` into view. Returns `true` if `target` exists in the layout, `false` otherwise.
     pub fn scroll_to_node(&mut self, target: NodeId) -> bool {
         self.scroll_to_node_in_container(target, None)
     }
 
-    /// Scrolls to bring `target` into view within an optional container (e.g. ScrollPane).
+    /// Scrolls to bring `target` into view within an optional container (e.g. ScrollView).
     pub fn scroll_to_node_in_container(&mut self, target: NodeId, container: Option<NodeId>) -> bool {
         if self.layout.get_node(target).is_some() {
             self.actions.push(ContextAction::ScrollToNode { target, container });
@@ -183,7 +259,7 @@ impl<'a> Context<'a> {
         self.scroll_to_anchor_in_container(url, None)
     }
 
-    /// Resolves an anchor link and queues a scroll action within a specific container (e.g. ScrollPane).
+    /// Resolves an anchor link and queues a scroll action within a specific container (e.g. ScrollView).
     pub fn scroll_to_anchor_in_container(&mut self, url: &str, container: Option<NodeId>) -> bool {
         if let Some((target_id, _scope_id)) = self.layout.resolve_anchor(self.node_id, url) {
             self.scroll_to_node_in_container(target_id, container)
@@ -290,6 +366,9 @@ impl ComponentRegistry {
         registry.register_companion("Card", "components/Card.rs", || {
             Box::new(std_components::Card::default())
         });
+        registry.register_companion("ScrollView", "components/ScrollView.rs", || {
+            Box::new(std_components::ScrollView::default())
+        });
         registry
     }
 }
@@ -345,14 +424,11 @@ pub mod std_components {
         pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
             if let Some(url) = ctx.get_port_string("url") {
                 let url = url.to_string();
-                let pane_container = ctx.get_port("pane").and_then(|v| v.as_node());
-
-                if url.starts_with('#') {
-                    if !ctx.scroll_to_anchor_in_container(&url, pane_container) {
-                        eprintln!("[Link] In-page anchor not found: {}", url);
-                    }
-                } else if ctx.scroll_to_anchor_in_container(&url, pane_container) {
-                    // Scrolled to relative/scoped anchor path without '#'
+                if let Some(target_id) = ctx.resolve_anchor(&url) {
+                    let mut view = ctx.view_or_window("view");
+                    view.scroll_to(target_id);
+                } else if url.starts_with('#') {
+                    eprintln!("[Link] In-page anchor not found: {}", url);
                 } else {
                     ctx.open_url(url);
                 }
@@ -411,9 +487,69 @@ pub mod std_components {
             Ok(())
         }
     }
+
+    /// Standard scroll container ScrollView companion component.
+    #[derive(Default, Debug, Clone)]
+    pub struct ScrollView {
+        pub scroll_y: f64,
+        pub scroll_x: f64,
+    }
+
+    impl ScrollView {
+        pub fn new() -> Self {
+            Self::default()
+        }
+    }
+
+    #[component]
+    impl ScrollView {
+        pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
+            if let Some(sy) = ctx.get_state_number("scroll_y") {
+                self.scroll_y = sy;
+            }
+            if let Some(sx) = ctx.get_state_number("scroll_x") {
+                self.scroll_x = sx;
+            }
+        }
+
+        pub fn on_scroll(&mut self, event: &mut crate::interaction::Event, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+            if let crate::interaction::EventKind::Scroll { delta_x, delta_y } = event.kind {
+                let container = match ctx.layout().get_node(ctx.node_id()) {
+                    Some(n) => n,
+                    None => return Ok(()),
+                };
+                let viewport_h = container.rect.height;
+                let viewport_w = container.rect.width;
+
+                let clip_node = ctx.layout().nodes.iter().find(|n| n.parent == Some(ctx.node_id()) && n.name == "Clip");
+                let (max_scroll_y, max_scroll_x) = if let Some(clip) = clip_node {
+                    let mut max_bottom = container.rect.y;
+                    let mut max_right = container.rect.x;
+                    for n in &ctx.layout().nodes {
+                        if n.clip == Some(clip.id) {
+                            max_bottom = max_bottom.max(n.rect.y + n.rect.height);
+                            max_right = max_right.max(n.rect.x + n.rect.width);
+                        }
+                    }
+                    let padding = ctx.get_port_number("padding").unwrap_or(0.0);
+                    let content_h = (max_bottom + self.scroll_y + padding - container.rect.y).max(0.0);
+                    let content_w = (max_right + self.scroll_x + padding - container.rect.x).max(0.0);
+                    ((content_h - viewport_h).max(0.0), (content_w - viewport_w).max(0.0))
+                } else {
+                    (f64::INFINITY, f64::INFINITY)
+                };
+
+                self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll_y);
+                self.scroll_x = (self.scroll_x - delta_x).clamp(0.0, max_scroll_x);
+                ctx.set_state("scroll_y", self.scroll_y);
+                ctx.set_state("scroll_x", self.scroll_x);
+            }
+            Ok(())
+        }
+    }
 }
 
-pub use std_components::{Button, Card, Link};
+pub use std_components::{Button, Card, Link, ScrollView};
 
 
 /// Container managing live `Component` instances keyed by their `NodeId`.
