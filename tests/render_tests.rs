@@ -8,13 +8,83 @@ fn golden_dir() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/goldens")
 }
 
-fn save_golden_or_preview(img: &image::RgbaImage, name: &str) {
+fn assert_matches_golden(img: &image::RgbaImage, name: &str) {
     let out_dir = golden_dir();
     let _ = std::fs::create_dir_all(&out_dir);
     let golden_path = out_dir.join(name);
     if std::env::var("DIRECTEDTYPE_UPDATE_GOLDENS").is_ok() || !golden_path.exists() {
         let _ = img.save(&golden_path);
+        return;
     }
+
+    let golden_img = image::open(&golden_path)
+        .unwrap_or_else(|e| panic!("Failed to load golden image {}: {}", golden_path.display(), e))
+        .to_rgba8();
+
+    assert_eq!(
+        img.dimensions(),
+        golden_img.dimensions(),
+        "Golden image {} dimensions mismatch: actual {:?} vs golden {:?}",
+        name,
+        img.dimensions(),
+        golden_img.dimensions()
+    );
+
+    let (width, height) = img.dimensions();
+    let total_pixels = (width * height) as usize;
+    let mut mismatched = 0usize;
+    let mut max_diff: u8 = 0;
+
+    for (p_act, p_gold) in img.pixels().zip(golden_img.pixels()) {
+        let dr = (p_act[0] as i16 - p_gold[0] as i16).abs() as u8;
+        let dg = (p_act[1] as i16 - p_gold[1] as i16).abs() as u8;
+        let db = (p_act[2] as i16 - p_gold[2] as i16).abs() as u8;
+        let da = (p_act[3] as i16 - p_gold[3] as i16).abs() as u8;
+
+        let diff = dr.max(dg).max(db).max(da);
+        if diff > 2 {
+            mismatched += 1;
+            if diff > max_diff {
+                max_diff = diff;
+            }
+        }
+    }
+
+    let mismatch_pct = (mismatched as f64 / total_pixels as f64) * 100.0;
+    // Tolerate minor subpixel antialiasing edge variation across GPU rasterizers (<= 64 pixels or < 0.01%)
+    let is_acceptable_noise = mismatched <= 64 || mismatch_pct < 0.01;
+
+    if mismatched > 0 && !is_acceptable_noise {
+        let actual_path = out_dir.join(format!("{}.actual.png", name.trim_end_matches(".png")));
+        let _ = img.save(&actual_path);
+
+        let mut diff_img = image::RgbaImage::new(width, height);
+        for ((p_act, p_gold), p_out) in img.pixels().zip(golden_img.pixels()).zip(diff_img.pixels_mut()) {
+            let dr = (p_act[0] as i16 - p_gold[0] as i16).abs() as u8;
+            let dg = (p_act[1] as i16 - p_gold[1] as i16).abs() as u8;
+            let db = (p_act[2] as i16 - p_gold[2] as i16).abs() as u8;
+            let da = (p_act[3] as i16 - p_gold[3] as i16).abs() as u8;
+            let diff = dr.max(dg).max(db).max(da);
+            if diff > 2 {
+                *p_out = image::Rgba([255, 0, 0, 255]);
+            } else {
+                *p_out = image::Rgba([p_gold[0] / 3, p_gold[1] / 3, p_gold[2] / 3, 255]);
+            }
+        }
+        let diff_path = out_dir.join(format!("{}.diff.png", name.trim_end_matches(".png")));
+        let _ = diff_img.save(&diff_path);
+
+        panic!(
+            "Golden mismatch for {name}: {mismatched}/{total_pixels} pixels ({:.2}%) differ (max diff: {max_diff}).\nActual saved to: {}\nDiff saved to: {}\nRun with DIRECTEDTYPE_UPDATE_GOLDENS=1 to accept this change.",
+            (mismatched as f64 / total_pixels as f64) * 100.0,
+            actual_path.display(),
+            diff_path.display()
+        );
+    }
+}
+
+fn save_golden_or_preview(img: &image::RgbaImage, name: &str) {
+    assert_matches_golden(img, name);
 }
 
 #[test]
@@ -594,7 +664,8 @@ fn test_render_link_focus_highlight() {
 \use "components/VStack.dt"
 \use "components/LinkStyle.dt"
 \use "components/Link.dt"
-\use "theme/default.dt"
+
+env font = \Font(size: 16);
 
 let red_link_style = \LinkStyle(
     color: #2563eb,
