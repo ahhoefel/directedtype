@@ -1094,6 +1094,7 @@ fn test_link_component_focus_and_blur_transitions() {
         \use "components/LinkStyle.dt";
         \use "components/Link.dt";
         \use "components/VStack.dt";
+        env font = \Font(size: 14);
 
         let custom_style = \LinkStyle(
             color: #1a73e8,

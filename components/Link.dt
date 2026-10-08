@@ -6,8 +6,8 @@
 \Component Link(
     url: String,
     env link_style: LinkStyle,
+    env font: Font,
     view = window,
-    size: Number: 14,
     x: Number: parent.left,
     y: Number: parent.top,
     cursor: String: "Pointer",
@@ -31,7 +31,7 @@
     let link_text = \Text(
         x: x,
         y: y,
-        size: size,
+        font: font,
         color: active_color,
         underline: active_underline,
         on_click: on_click,
