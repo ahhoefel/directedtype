@@ -24,7 +24,7 @@ use crate::compiler::module::FsResolver;
 use crate::compiler::CompiledDocument;
 use crate::interaction::{Event, EventKind, Modifiers, MouseButton, Point};
 use crate::parser::parse_document;
-use crate::render::scene::{build_scene, SceneOptions, TextSceneCache};
+use crate::render::scene::{build_scene, ClipSceneCache, SceneOptions, TextSceneCache};
 
 #[cfg(target_os = "macos")]
 fn configure_metal_layer(window: &Window) {
@@ -142,6 +142,7 @@ pub struct ViewerApp {
     font_cx: FontContext,
     layout_cx: LayoutContext<()>,
     text_cache: TextSceneCache,
+    clip_cache: ClipSceneCache,
     frame_count: u64,
 
     // Interaction state
@@ -199,6 +200,7 @@ impl ViewerApp {
             font_cx: FontContext::new(),
             layout_cx: LayoutContext::new(),
             text_cache: TextSceneCache::new(),
+            clip_cache: ClipSceneCache::new(),
             frame_count: 0,
             cursor_pos: None,
             hovered_node: None,
@@ -241,6 +243,7 @@ impl ViewerApp {
             font_cx: FontContext::new(),
             layout_cx: LayoutContext::new(),
             text_cache: TextSceneCache::new(),
+            clip_cache: ClipSceneCache::new(),
             frame_count: 0,
             cursor_pos: None,
             hovered_node: None,
@@ -1034,6 +1037,7 @@ impl ViewerApp {
             &mut self.font_cx,
             &mut self.layout_cx,
             &mut self.text_cache,
+            &mut self.clip_cache,
             &scene_opts,
         );
 

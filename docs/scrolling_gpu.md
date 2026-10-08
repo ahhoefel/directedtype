@@ -79,17 +79,20 @@ Tracing a single scroll event through the engine reveals why performance degrade
 
 ## 3. Acceleration Roadmap
 
-### Strategy A: GPU Layer Translation / Sub-Scene Caching (The True GPU Solution)
-Modern UI engines (Chromium, WebKit) achieve 120 FPS scrolling by keeping scrollable content in a composited GPU layer that translates via hardware matrix transforms without touching layout:
-- **Vello Nested Scenes**: Vello allows scenes to be nested and transformed:
-  ```rust
-  // Child content scene recorded once at local (0, 0):
-  scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &viewport_box);
-  scene.append(&cached_content_scene, Some(Affine::translate((0.0, -scroll_y))));
-  scene.pop_layer();
-  ```
-- **DAG Isolation**: Children inside `\ScrollView` maintain static local coordinates `(x, y)` in the DAG. Scrolling only mutates the GPU transform `Affine::translate(0.0, -scroll_y)` and the dynamic scrollbar thumb.
-- **Hit-testing**: Spatial queries map cursor coordinates into the local container space by adding `(0.0, scroll_y)`.
+### Strategy A: GPU Layer Translation / Sub-Scene Caching (The True GPU Solution) [IMPLEMENTED]
+- **Status:** **Completed.**
+- **Architecture:**
+  1. **DAG Layout Isolation:** In `components/ScrollView.dt`, `\Children` positions `content_top = y + padding` and `content_left = x + padding` are decoupled from `scroll_y` and `scroll_x`. When scrolling, the DAG completely skips child position re-evaluations and downstream layout invalidations.
+  2. **Clip Layer Scroll Ports:** `\Clip` now accepts `scroll_x` and `scroll_y` ports, carrying active scroll translations in `ResolvedLayout`.
+  3. **Sub-Scene Recording & Caching (`ClipSceneCache`):** In `src/render/scene.rs`, children within a clip are rendered into a sub-scene at static layout coordinates. The sub-scene is cached in `ClipSceneCache`.
+  4. **Hardware GPU Translation:** During scene construction:
+     ```rust
+     parent_scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &clip_box);
+     parent_scene.append(&cached_clip.scene, Some(Affine::translate((-scroll_x, -scroll_y))));
+     parent_scene.pop_layer();
+     ```
+     On subsequent scroll events, `compute_clip_content_hash` confirms static child invariance (100% cache hit). The entire child sub-tree is skipped in $O(1)$ CPU time, and Vello applies the translation matrix directly in GPU rasterization shaders.
+  5. **Hit-Testing Coordinates:** In `src/compiler/layout.rs`, `ResolvedLayout::clip_scroll_offset` sums cumulative clip scroll translations, and `hit_test` offsets cursor coordinates `test_point = Point::new(point.x + sx, point.y + sy)` against static primitive rects and fragments, preserving sub-pixel hit detection.
 
 ### Strategy B: Text Layout Caching & Memoization (Option 3: 1-Element `vello::Scene` Cache) [IMPLEMENTED]
 - **Status:** **Completed.**

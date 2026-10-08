@@ -259,9 +259,16 @@ fn test_scroll_view_on_scroll_event() {
         "ScrollView scroll_y should be updated to 35.0"
     );
 
-    // Child rect should now have its rendered y shifted by -35.0
+    // Child rect retains static layout coordinates (DAG isolation), while clip provides GPU translation offset
     let child_rect = compiled.layout.nodes.iter().find(|n| n.parent == Some(scroll_view_id) && n.name == "Rect" && n.rect.width == 200.0).unwrap();
-    assert_eq!(child_rect.rect.y, -35.0);
+    assert_eq!(child_rect.rect.y, 0.0, "Child rect layout position must remain static in DAG");
+    let (sx, sy) = compiled.layout.clip_scroll_offset(child_rect.clip);
+    assert_eq!((sx, sy), (0.0, 35.0), "Clip must carry GPU scroll translation offset (0.0, 35.0)");
+    assert_eq!(child_rect.rect.y - sy, -35.0, "Visual position rendered on GPU is shifted by -35.0");
+
+    // Hit-testing inside the scrolled clip maps screen coords to static node coords
+    let hit = compiled.layout.hit_test(Point::new(50.0, 15.0)).expect("hit test ok");
+    assert_eq!(hit.target, child_rect.id, "Hit test must correctly target the scrolled child");
 }
 
 #[test]
@@ -308,9 +315,12 @@ fn test_scroll_view_scroll_container_to_node() {
         Some(&Value::Number(100.0))
     );
 
-    // Target anchor is now at the top of the ScrollView (y = 0.0)
+    // Target anchor layout position remains static, while clip scroll offset brings it visually to y = 0.0
     let updated_anchor = compiled.layout.get_node(anchor_id).unwrap();
-    assert_eq!(updated_anchor.rect.y, 0.0);
+    assert_eq!(updated_anchor.rect.y, 100.0, "Anchor layout position remains static");
+    let (sx, sy) = compiled.layout.clip_scroll_offset(updated_anchor.clip);
+    assert_eq!((sx, sy), (0.0, 100.0));
+    assert_eq!(updated_anchor.rect.y - sy, 0.0, "Anchor visual position on GPU is brought to top of ScrollView (y = 0.0)");
 }
 
 #[test]
@@ -373,11 +383,14 @@ fn test_end_to_end_link_scrolls_scroll_view() {
     let changed = compiled.execute_action(action).expect("execute ok");
     assert!(!changed.is_empty());
 
-    // 3. ScrollView state is updated to 120.0, bringing anchor to y = 0.0
+    // 3. ScrollView state is updated to 120.0, bringing anchor visually to y = 0.0
     assert_eq!(
         compiled.get_state(scroll_view_id, "scroll_y"),
         Some(&Value::Number(120.0))
     );
     let updated_anchor = compiled.layout.get_node(anchor_id).unwrap();
-    assert_eq!(updated_anchor.rect.y, 0.0);
+    assert_eq!(updated_anchor.rect.y, 120.0, "Anchor layout coordinate remains static");
+    let (sx, sy) = compiled.layout.clip_scroll_offset(updated_anchor.clip);
+    assert_eq!((sx, sy), (0.0, 120.0));
+    assert_eq!(updated_anchor.rect.y - sy, 0.0, "Anchor visual position on GPU is at y = 0.0");
 }

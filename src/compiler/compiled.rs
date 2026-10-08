@@ -450,18 +450,13 @@ impl CompiledDocument {
             None => return Ok(HashSet::new()),
         };
 
-        let current_scroll_y = self
-            .get_state(container, "scroll_y")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
-
         let target_top = if !target_node.fragments.is_empty() {
             target_node.fragments[0].y
         } else {
             target_node.rect.y
         };
 
-        let unscrolled_target_y = target_top + current_scroll_y;
+        let unscrolled_target_y = target_top;
         let relative_y = (unscrolled_target_y - container_node.rect.y).max(0.0);
 
         let clip_node = self.layout.nodes.iter().find(|n| n.parent == Some(container) && n.name == "Clip");
@@ -473,7 +468,7 @@ impl CompiledDocument {
                 }
             }
             let padding = container_node.properties.get("padding").and_then(|v| v.as_f64()).unwrap_or(0.0);
-            let content_h = (max_bottom + current_scroll_y + padding - container_node.rect.y).max(0.0);
+            let content_h = (max_bottom + padding - container_node.rect.y).max(0.0);
             (content_h - container_node.rect.height).max(0.0)
         } else {
             f64::INFINITY

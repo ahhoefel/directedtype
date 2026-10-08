@@ -84,6 +84,170 @@ impl TextSceneCache {
     }
 }
 
+/// A cached local `vello::Scene` for a clip layer recorded at static layout coordinates.
+pub struct CachedClipScene {
+    pub content_hash: u64,
+    pub scene: Scene,
+}
+
+/// Cache for clip sub-scenes (`NodeId` -> `CachedClipScene`).
+///
+/// When scrolling occurs, only `scroll_x` and `scroll_y` change. The children's static layout
+/// coordinates and styles remain 100% identical. The pre-recorded clip scene is reused directly,
+/// and transformed on the GPU via `Affine::translate((-scroll_x, -scroll_y))`.
+#[derive(Default)]
+pub struct ClipSceneCache {
+    pub entries: HashMap<NodeId, CachedClipScene>,
+}
+
+impl ClipSceneCache {
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+        }
+    }
+
+    pub fn get(&self, id: &NodeId) -> Option<&CachedClipScene> {
+        self.entries.get(id)
+    }
+
+    pub fn insert(&mut self, id: NodeId, entry: CachedClipScene) {
+        self.entries.insert(id, entry);
+    }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Prunes entries for clip nodes that no longer exist in the active layout.
+    pub fn prune(&mut self, active_nodes: &HashSet<NodeId>) {
+        self.entries.retain(|id, _| active_nodes.contains(id));
+    }
+}
+
+/// Computes a fast hash of all content and styling parameters for primitives within a clip container.
+///
+/// Crucially excludes the clip's own `scroll_x` and `scroll_y`, allowing 100% cache hits
+/// during hardware layer translation.
+pub fn compute_clip_content_hash(clip_id: NodeId, layout: &ResolvedLayout) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    // Include the clip's box bounds
+    if let Some(box_id) = layout.get_value(clip_id, "box").and_then(|v| v.as_node()) {
+        if let Some(box_node) = layout.get_node(box_id) {
+            box_node.rect.x.to_bits().hash(&mut hasher);
+            box_node.rect.y.to_bits().hash(&mut hasher);
+            box_node.rect.width.to_bits().hash(&mut hasher);
+            box_node.rect.height.to_bits().hash(&mut hasher);
+        }
+    }
+
+    // Hash all primitives belonging to this clip
+    for node in &layout.nodes {
+        if node.clip == Some(clip_id) {
+            node.id.hash(&mut hasher);
+            node.rect.x.to_bits().hash(&mut hasher);
+            node.rect.y.to_bits().hash(&mut hasher);
+            node.rect.width.to_bits().hash(&mut hasher);
+            node.rect.height.to_bits().hash(&mut hasher);
+            node.z.to_bits().hash(&mut hasher);
+            node.text_content.hash(&mut hasher);
+            for (k, v) in &node.properties {
+                k.hash(&mut hasher);
+                match v {
+                    Value::Number(n) => n.to_bits().hash(&mut hasher),
+                    Value::String(s) => s.hash(&mut hasher),
+                    Value::Bool(b) => b.hash(&mut hasher),
+                    Value::Color(c) => c.hash(&mut hasher),
+                    _ => {}
+                }
+            }
+        } else if node.name == "Clip" && layout.get_value(node.id, "up").and_then(|v| v.as_node()) == Some(clip_id) {
+            // Nested clip: hash its ID and its scroll state
+            node.id.hash(&mut hasher);
+            if let Some(sx) = layout.get_value(node.id, "scroll_x").and_then(|v| v.as_f64()) {
+                sx.to_bits().hash(&mut hasher);
+            }
+            if let Some(sy) = layout.get_value(node.id, "scroll_y").and_then(|v| v.as_f64()) {
+                sy.to_bits().hash(&mut hasher);
+            }
+        }
+    }
+    hasher.finish()
+}
+
+struct ActiveClipEntry {
+    clip_id: NodeId,
+    scene: Scene,
+    scroll_x: f64,
+    scroll_y: f64,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    radius: f64,
+    is_skipped: bool,
+    expected_nodes: usize,
+    rendered_nodes: usize,
+}
+
+fn pop_clip_entry(
+    clip_entry: ActiveClipEntry,
+    parent_scene: &mut Scene,
+    clip_cache: &mut ClipSceneCache,
+    layout: &ResolvedLayout,
+) {
+    if clip_entry.is_skipped {
+        return;
+    }
+
+    if clip_entry.rendered_nodes == clip_entry.expected_nodes {
+        let content_hash = compute_clip_content_hash(clip_entry.clip_id, layout);
+        clip_cache.insert(
+            clip_entry.clip_id,
+            CachedClipScene {
+                content_hash,
+                scene: clip_entry.scene.clone(),
+            },
+        );
+    }
+
+    if clip_entry.radius > 0.0 {
+        let rrect = RoundedRect::new(
+            clip_entry.x,
+            clip_entry.y,
+            clip_entry.x + clip_entry.width,
+            clip_entry.y + clip_entry.height,
+            clip_entry.radius,
+        );
+        parent_scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &rrect);
+    } else {
+        let rect = Rect::new(
+            clip_entry.x,
+            clip_entry.y,
+            clip_entry.x + clip_entry.width,
+            clip_entry.y + clip_entry.height,
+        );
+        parent_scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &rect);
+    }
+
+    parent_scene.append(
+        &clip_entry.scene,
+        Some(Affine::translate((-clip_entry.scroll_x, -clip_entry.scroll_y))),
+    );
+    parent_scene.pop_layer();
+}
+
 /// Options for building a Vello scene from a ResolvedLayout.
 #[derive(Debug, Clone)]
 pub struct SceneOptions {
@@ -128,15 +292,16 @@ fn get_clip_chain(
     chain
 }
 
-/// Builds a `vello::Scene` from a `ResolvedLayout` using an active `TextSceneCache`.
+/// Builds a `vello::Scene` from a `ResolvedLayout` using active `TextSceneCache` and `ClipSceneCache`.
 pub fn build_scene(
     layout: &ResolvedLayout,
     font_cx: &mut FontContext,
     _layout_cx: &mut LayoutContext<()>,
     text_cache: &mut TextSceneCache,
+    clip_cache: &mut ClipSceneCache,
     options: &SceneOptions,
 ) -> Scene {
-    let mut scene = Scene::new();
+    let mut root_scene = Scene::new();
     let mut text_layout_cx = LayoutContext::<[u8; 4]>::new();
 
     // 1. Draw canvas background if requested
@@ -151,12 +316,12 @@ pub fn build_scene(
             }
             if max_w > 0.0 && max_h > 0.0 {
                 let rect = Rect::new(0.0, 0.0, max_w, max_h);
-                scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(bg), None, &rect);
+                root_scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(bg), None, &rect);
             }
         }
     }
 
-    let mut active_clip_stack: Vec<NodeId> = Vec::new();
+    let mut clip_stack: Vec<ActiveClipEntry> = Vec::new();
 
     // 2. Iterate in topological painter's order
     for node in layout.render_order() {
@@ -172,19 +337,25 @@ pub fn build_scene(
         }
 
         let target_chain = get_clip_chain(node.clip, layout);
-        let common_len = active_clip_stack
+        let common_len = clip_stack
             .iter()
+            .map(|e| e.clip_id)
             .zip(&target_chain)
-            .take_while(|(a, b)| a == b)
+            .take_while(|(a, b)| a == *b)
             .count();
 
-        while active_clip_stack.len() > common_len {
-            scene.pop_layer();
-            active_clip_stack.pop();
+        while clip_stack.len() > common_len {
+            let clip_entry = clip_stack.pop().unwrap();
+            let parent_scene = if let Some(parent) = clip_stack.last_mut() {
+                &mut parent.scene
+            } else {
+                &mut root_scene
+            };
+            pop_clip_entry(clip_entry, parent_scene, clip_cache, layout);
         }
 
         for &clip_node_id in &target_chain[common_len..] {
-            if let Some(box_node_id) = layout.get_value(clip_node_id, "box").and_then(|v| v.as_node()) {
+            let (x, y, width, height, radius) = if let Some(box_node_id) = layout.get_value(clip_node_id, "box").and_then(|v| v.as_node()) {
                 let get_box_val = |port: &str| -> f64 {
                     layout
                         .get_value(box_node_id, port)
@@ -200,22 +371,114 @@ pub fn build_scene(
                     .or_else(|| layout.get_value(box_node_id, "corner_radius"))
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0);
+                (x, y, w, h, radius)
+            } else {
+                (0.0, 0.0, 0.0, 0.0, 0.0)
+            };
 
-                let x0 = x;
-                let y0 = y;
-                let x1 = x0 + w;
-                let y1 = y0 + h;
+            let scroll_x = layout
+                .get_value(clip_node_id, "scroll_x")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let scroll_y = layout
+                .get_value(clip_node_id, "scroll_y")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
 
-                if radius > 0.0 {
-                    let rrect = RoundedRect::new(x0, y0, x1, y1, radius);
-                    scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &rrect);
-                } else {
-                    let rect = Rect::new(x0, y0, x1, y1);
-                    scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &rect);
+            let expected_nodes = layout.nodes.iter().filter(|n| n.clip == Some(clip_node_id)).count();
+
+            // If the parent clip is already skipped, this child clip is also skipped
+            let parent_skipped = clip_stack.last().map_or(false, |e| e.is_skipped);
+            if parent_skipped {
+                clip_stack.push(ActiveClipEntry {
+                    clip_id: clip_node_id,
+                    scene: Scene::new(),
+                    scroll_x,
+                    scroll_y,
+                    x,
+                    y,
+                    width,
+                    height,
+                    radius,
+                    is_skipped: true,
+                    expected_nodes,
+                    rendered_nodes: 0,
+                });
+                continue;
+            }
+
+            let content_hash = compute_clip_content_hash(clip_node_id, layout);
+            if let Some(cached) = clip_cache.get(&clip_node_id) {
+                if cached.content_hash == content_hash {
+                    // Cache Hit: Immediately append the cached clip scene transformed by GPU translate!
+                    let parent_scene = if let Some(parent) = clip_stack.last_mut() {
+                        &mut parent.scene
+                    } else {
+                        &mut root_scene
+                    };
+
+                    if radius > 0.0 {
+                        let rrect = RoundedRect::new(x, y, x + width, y + height, radius);
+                        parent_scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &rrect);
+                    } else {
+                        let rect = Rect::new(x, y, x + width, y + height);
+                        parent_scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &rect);
+                    }
+                    parent_scene.append(&cached.scene, Some(Affine::translate((-scroll_x, -scroll_y))));
+                    parent_scene.pop_layer();
+
+                    clip_stack.push(ActiveClipEntry {
+                        clip_id: clip_node_id,
+                        scene: Scene::new(),
+                        scroll_x,
+                        scroll_y,
+                        x,
+                        y,
+                        width,
+                        height,
+                        radius,
+                        is_skipped: true,
+                        expected_nodes,
+                        rendered_nodes: 0,
+                    });
+                    continue;
                 }
             }
-            active_clip_stack.push(clip_node_id);
+
+            // Cache Miss:
+            clip_stack.push(ActiveClipEntry {
+                clip_id: clip_node_id,
+                scene: Scene::new(),
+                scroll_x,
+                scroll_y,
+                x,
+                y,
+                width,
+                height,
+                radius,
+                is_skipped: false,
+                expected_nodes,
+                rendered_nodes: 0,
+            });
         }
+
+        // If any clip in the active stack is skipped, skip rendering this node
+        if clip_stack.iter().any(|e| e.is_skipped) {
+            continue;
+        }
+
+        // Count this node towards the active clip
+        if let Some(entry) = clip_stack.last_mut() {
+            if node.clip == Some(entry.clip_id) {
+                entry.rendered_nodes += 1;
+            }
+        }
+
+        let active_scene = if let Some(current) = clip_stack.last_mut() {
+            &mut current.scene
+        } else {
+            &mut root_scene
+        };
 
         let is_rect = node.name == "Rect";
 
@@ -246,10 +509,10 @@ pub fn build_scene(
             if color.components[3] > 0.0 {
                 if radius > 0.0 {
                     let rrect = RoundedRect::new(x0, y0, x1, y1, radius);
-                    scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(color), None, &rrect);
+                    active_scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(color), None, &rrect);
                 } else {
                     let rect = Rect::new(x0, y0, x1, y1);
-                    scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(color), None, &rect);
+                    active_scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(color), None, &rect);
                 }
             }
 
@@ -275,10 +538,10 @@ pub fn build_scene(
                 let stroke = Stroke::new(stroke_width);
                 if radius > 0.0 {
                     let rrect = RoundedRect::new(x0, y0, x1, y1, radius);
-                    scene.stroke(&stroke, Affine::IDENTITY, Brush::Solid(stroke_color), None, &rrect);
+                    active_scene.stroke(&stroke, Affine::IDENTITY, Brush::Solid(stroke_color), None, &rrect);
                 } else {
                     let rect = Rect::new(x0, y0, x1, y1);
-                    scene.stroke(&stroke, Affine::IDENTITY, Brush::Solid(stroke_color), None, &rect);
+                    active_scene.stroke(&stroke, Affine::IDENTITY, Brush::Solid(stroke_color), None, &rect);
                 }
             }
         }
@@ -416,7 +679,7 @@ pub fn build_scene(
                 if let Some(cached) = text_cache.get(&node.id) {
                     if cached.key == current_key {
                         // CACHE HIT: 100% of the time during scrolling!
-                        scene.append(&cached.scene, Some(Affine::translate((node.rect.x, node.rect.y))));
+                        active_scene.append(&cached.scene, Some(Affine::translate((node.rect.x, node.rect.y))));
                         continue;
                     }
                 }
@@ -560,8 +823,8 @@ pub fn build_scene(
                     }
                 }
 
-                // Append local scene to main scene translated to node's position:
-                scene.append(&local_scene, Some(Affine::translate((node.rect.x, node.rect.y))));
+                // Append local scene to active scene translated to node's position:
+                active_scene.append(&local_scene, Some(Affine::translate((node.rect.x, node.rect.y))));
 
                 // Save in 1-element cache:
                 text_cache.insert(node.id, CachedTextScene {
@@ -572,15 +835,23 @@ pub fn build_scene(
         }
     }
 
-    while !active_clip_stack.is_empty() {
-        scene.pop_layer();
-        active_clip_stack.pop();
+    while let Some(clip_entry) = clip_stack.pop() {
+        let parent_scene = if let Some(parent) = clip_stack.last_mut() {
+            &mut parent.scene
+        } else {
+            &mut root_scene
+        };
+        pop_clip_entry(clip_entry, parent_scene, clip_cache, layout);
     }
 
-    // Periodically prune dead nodes from cache if it has grown noticeably larger than active nodes
+    // Periodically prune dead nodes from caches if they have grown noticeably larger than active nodes
     if text_cache.len() > layout.nodes.len() + 64 {
         let active_ids: HashSet<NodeId> = layout.nodes.iter().map(|n| n.id).collect();
         text_cache.prune(&active_ids);
+    }
+    if clip_cache.len() > layout.nodes.len() + 16 {
+        let active_ids: HashSet<NodeId> = layout.nodes.iter().map(|n| n.id).collect();
+        clip_cache.prune(&active_ids);
     }
 
     let scale = if options.scale_factor > 0.0 {
@@ -594,10 +865,10 @@ pub fn build_scene(
     if has_scale || has_scroll {
         let transform = Affine::scale(scale) * Affine::translate((-options.scroll_offset.0, -options.scroll_offset.1));
         let mut transformed_scene = Scene::new();
-        transformed_scene.append(&scene, Some(transform));
+        transformed_scene.append(&root_scene, Some(transform));
         transformed_scene
     } else {
-        scene
+        root_scene
     }
 }
 
@@ -608,8 +879,9 @@ pub fn build_scene_without_cache(
     layout_cx: &mut LayoutContext<()>,
     options: &SceneOptions,
 ) -> Scene {
-    let mut cache = TextSceneCache::new();
-    build_scene(layout, font_cx, layout_cx, &mut cache, options)
+    let mut text_cache = TextSceneCache::new();
+    let mut clip_cache = ClipSceneCache::new();
+    build_scene(layout, font_cx, layout_cx, &mut text_cache, &mut clip_cache, options)
 }
 
 #[cfg(test)]
@@ -623,6 +895,7 @@ mod tests {
         let mut font_cx = FontContext::new();
         let mut layout_cx = LayoutContext::new();
         let mut text_cache = TextSceneCache::new();
+        let mut clip_cache = ClipSceneCache::new();
         let options = SceneOptions::default();
 
         let node = ResolvedNode {
@@ -657,13 +930,13 @@ mod tests {
         };
 
         // Frame 1: Initial render (cache miss)
-        let _scene1 = build_scene(&layout, &mut font_cx, &mut layout_cx, &mut text_cache, &options);
+        let _scene1 = build_scene(&layout, &mut font_cx, &mut layout_cx, &mut text_cache, &mut clip_cache, &options);
         assert_eq!(text_cache.len(), 1);
         let key_before = text_cache.get(&NodeId(1)).unwrap().key.clone();
 
         // Frame 2: Simulating vertical scroll (rect.y changes from 50.0 to 180.0)
         layout.nodes[0].rect.y = 180.0;
-        let _scene2 = build_scene(&layout, &mut font_cx, &mut layout_cx, &mut text_cache, &options);
+        let _scene2 = build_scene(&layout, &mut font_cx, &mut layout_cx, &mut text_cache, &mut clip_cache, &options);
         assert_eq!(text_cache.len(), 1);
         let key_after = text_cache.get(&NodeId(1)).unwrap().key.clone();
 
@@ -672,9 +945,134 @@ mod tests {
 
         // Frame 3: Mutating text content invalidates and updates cache
         layout.nodes[0].text_content = Some("Updated Text".to_string());
-        let _scene3 = build_scene(&layout, &mut font_cx, &mut layout_cx, &mut text_cache, &options);
+        let _scene3 = build_scene(&layout, &mut font_cx, &mut layout_cx, &mut text_cache, &mut clip_cache, &options);
         assert_eq!(text_cache.len(), 1);
         assert_eq!(text_cache.get(&NodeId(1)).unwrap().key.text, "Updated Text");
+    }
+
+    #[test]
+    fn test_clip_scene_cache_hit_on_scroll() {
+        let mut font_cx = FontContext::new();
+        let mut layout_cx = LayoutContext::new();
+        let mut text_cache = TextSceneCache::new();
+        let mut clip_cache = ClipSceneCache::new();
+        let options = SceneOptions::default();
+
+        let box_node = ResolvedNode {
+            id: NodeId(10),
+            name: "Box".to_string(),
+            key: None,
+            parent: None,
+            children: Vec::new(),
+            rect: Rect::new(0.0, 0.0, 300.0, 200.0),
+            z: 0.0,
+            clip: None,
+            text_content: None,
+            text_spans: Vec::new(),
+            fragments: Vec::new(),
+            anchor_name: None,
+            scope_id: None,
+            properties: HashMap::from([
+                ("x".to_string(), Value::Number(0.0)),
+                ("y".to_string(), Value::Number(0.0)),
+                ("width".to_string(), Value::Number(300.0)),
+                ("height".to_string(), Value::Number(200.0)),
+            ]),
+            state_vars: HashMap::new(),
+            event_handlers: HashMap::new(),
+            formulas: HashMap::new(),
+            span: Span::default(),
+            handle: None,
+            font: None,
+            var_name: None,
+        };
+
+        let clip_node = ResolvedNode {
+            id: NodeId(2),
+            name: "Clip".to_string(),
+            key: None,
+            parent: None,
+            children: vec![NodeId(3)],
+            rect: Rect::new(0.0, 0.0, 300.0, 200.0),
+            z: 0.0,
+            clip: None,
+            text_content: None,
+            text_spans: Vec::new(),
+            fragments: Vec::new(),
+            anchor_name: None,
+            scope_id: None,
+            properties: HashMap::from([
+                ("box".to_string(), Value::Node(NodeId(10))),
+                ("scroll_y".to_string(), Value::Number(0.0)),
+            ]),
+            state_vars: HashMap::new(),
+            event_handlers: HashMap::new(),
+            formulas: HashMap::new(),
+            span: Span::default(),
+            handle: None,
+            font: None,
+            var_name: None,
+        };
+
+        let child_node = ResolvedNode {
+            id: NodeId(3),
+            name: "Rect".to_string(),
+            key: None,
+            parent: Some(NodeId(2)),
+            children: Vec::new(),
+            rect: Rect::new(10.0, 20.0, 100.0, 50.0),
+            z: 0.0,
+            clip: Some(NodeId(2)),
+            text_content: None,
+            text_spans: Vec::new(),
+            fragments: Vec::new(),
+            anchor_name: None,
+            scope_id: None,
+            properties: HashMap::from([
+                ("color".to_string(), Value::Color("#3b82f6".to_string())),
+            ]),
+            state_vars: HashMap::new(),
+            event_handlers: HashMap::new(),
+            formulas: HashMap::new(),
+            span: Span::default(),
+            handle: None,
+            font: None,
+            var_name: None,
+        };
+
+        let mut values = HashMap::new();
+        values.insert(crate::compiler::graph::VarId::new(NodeId(2), "box"), Value::Node(NodeId(10)));
+        values.insert(crate::compiler::graph::VarId::new(NodeId(2), "scroll_y"), Value::Number(0.0));
+        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "x"), Value::Number(0.0));
+        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "y"), Value::Number(0.0));
+        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "width"), Value::Number(300.0));
+        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "height"), Value::Number(200.0));
+
+        let mut layout = ResolvedLayout {
+            roots: vec![NodeId(2)],
+            nodes: vec![box_node, clip_node, child_node],
+            values,
+            scope_tree: Default::default(),
+        };
+
+        // Frame 1: Cache Miss
+        let _scene1 = build_scene(&layout, &mut font_cx, &mut layout_cx, &mut text_cache, &mut clip_cache, &options);
+        assert_eq!(clip_cache.len(), 1);
+        let hash_before = clip_cache.get(&NodeId(2)).unwrap().content_hash;
+
+        // Frame 2: Simulating vertical scroll - scroll_y changes on clip node and in values
+        layout.values.insert(crate::compiler::graph::VarId::new(NodeId(2), "scroll_y"), Value::Number(50.0));
+        layout.nodes[1].properties.insert("scroll_y".to_string(), Value::Number(50.0));
+
+        // Child node static coordinates remain completely unchanged!
+        assert_eq!(layout.nodes[2].rect.y, 20.0);
+
+        let _scene2 = build_scene(&layout, &mut font_cx, &mut layout_cx, &mut text_cache, &mut clip_cache, &options);
+        assert_eq!(clip_cache.len(), 1);
+        let hash_after = clip_cache.get(&NodeId(2)).unwrap().content_hash;
+
+        // Content hash must be 100% identical!
+        assert_eq!(hash_before, hash_after, "Clip content hash must be identical when scrolling");
     }
 }
 

@@ -244,9 +244,41 @@ impl ResolvedLayout {
     pub fn get_value(&self, node_id: NodeId, port: &str) -> Option<&Value> {
         self.values.get(&VarId::new(node_id, port)).or_else(|| {
             self.get_node(node_id).and_then(|n| {
-                n.font.and_then(|fid| self.values.get(&VarId::new(fid, port)))
+                n.properties.get(port).or_else(|| {
+                    n.font.and_then(|fid| self.values.get(&VarId::new(fid, port)))
+                })
             })
         })
+    }
+
+    /// Returns the cumulative scroll offset `(scroll_x, scroll_y)` for a clip chain.
+    pub fn clip_scroll_offset(&self, clip_id: Option<NodeId>) -> (f64, f64) {
+        let mut total_x = 0.0;
+        let mut total_y = 0.0;
+        let mut curr = clip_id;
+        let mut visited = std::collections::HashSet::new();
+        let mut depth = 0;
+
+        while let Some(id) = curr {
+            if id.is_window() || depth >= 64 || !visited.insert(id) {
+                break;
+            }
+            depth += 1;
+
+            if let Some(sx) = self.get_value(id, "scroll_x").and_then(|v| v.as_f64()) {
+                total_x += sx;
+            }
+            if let Some(sy) = self.get_value(id, "scroll_y").and_then(|v| v.as_f64()) {
+                total_y += sy;
+            }
+
+            curr = self
+                .get_value(id, "up")
+                .and_then(|v| v.as_node())
+                .filter(|up_id| !up_id.is_window());
+        }
+
+        (total_x, total_y)
     }
 
     /// Validates whether a point is within all active clip boundaries for a given clip ID.
@@ -315,6 +347,10 @@ impl ResolvedLayout {
                 continue;
             }
 
+            // Map screen coordinate to static node space by adding active clip scroll offset
+            let (sx, sy) = self.clip_scroll_offset(node.clip);
+            let test_point = Point::new(point.x + sx, point.y + sy);
+
             // Check primitive geometry
             let radius = node
                 .properties
@@ -325,19 +361,19 @@ impl ResolvedLayout {
 
             if !node.fragments.is_empty() {
                 let hits_fragment = node.fragments.iter().any(|frag| {
-                    point.x >= frag.x && point.x <= frag.x + frag.width
-                        && point.y >= frag.y && point.y <= frag.y + frag.height
+                    test_point.x >= frag.x && test_point.x <= frag.x + frag.width
+                        && test_point.y >= frag.y && test_point.y <= frag.y + frag.height
                 });
                 if !hits_fragment {
                     continue;
                 }
-            } else if !rounded_rect_contains(&node.rect, radius, point) {
+            } else if !rounded_rect_contains(&node.rect, radius, test_point) {
                 continue;
             }
 
             let bubble_path = self.bubble_path_for_node(node.id);
 
-            let local_point = Point::new(point.x - node.rect.x, point.y - node.rect.y);
+            let local_point = Point::new(test_point.x - node.rect.x, test_point.y - node.rect.y);
 
             return Some(HitTestResult {
                 target: node.id,

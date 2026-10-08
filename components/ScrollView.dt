@@ -37,7 +37,7 @@
         on_scroll: on_scroll
     )
 
-    // 2. Hardware clip node defining the rectangular or rounded boundary
+    // 2. Hardware clip node defining the rectangular or rounded boundary and scroll translation
     let clip = \Clip(
         up: self.clip,
         box: \Box(
@@ -46,13 +46,15 @@
             width: width,
             height: height,
             radius: radius
-        )
+        ),
+        scroll_x: scroll_x,
+        scroll_y: scroll_y
     );
 
-    let content_top = y + padding - scroll_y;
-    let content_left = x + padding - scroll_x;
+    let content_top = y + padding;
+    let content_left = x + padding;
 
-    // 3. Children inherit the clip context and are offset by scroll position
+    // 3. Children inherit the clip context and are positioned statically (decoupled from scroll state)
     \Children {
         clip: clip,
         x: prev ? prev.left : content_left,
@@ -60,7 +62,7 @@
     }
 
     // 4. Dynamic scrollbar
-    let content_bottom = max(children.bottom) + scroll_y + padding;
+    let content_bottom = max(children.bottom) + padding;
     let content_height = max(height, content_bottom - y);
     let max_scroll_y = max(1, content_height - height);
     let has_overflow = content_height > (height + 1);

@@ -8,8 +8,8 @@ pub use color::parse_color;
 pub use error::RenderError;
 pub use headless::HeadlessRenderer;
 pub use scene::{
-    build_scene, build_scene_without_cache, CachedTextScene, SceneOptions, SpanRenderKey,
-    TextRenderKey, TextSceneCache,
+    build_scene, build_scene_without_cache, CachedClipScene, CachedTextScene, ClipSceneCache,
+    SceneOptions, SpanRenderKey, TextRenderKey, TextSceneCache,
 };
 pub use viewer::{
     run_viewer, run_viewer_with_document, run_viewer_with_file,
