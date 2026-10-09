@@ -316,3 +316,85 @@ fn test_vstack_fixed_height() {
     assert_eq!(vstack_node.rect.height, 250.0);
 }
 
+#[test]
+fn test_vstack_inside_center_shrink_wrap_no_cycle() {
+    let input = r#"
+    \use "components/Center.dt"
+    \use "components/VStack.dt"
+
+    \Center {
+        \VStack(shrink: true, gap: 10) {
+            \Rect(width: 200, height: 50, color: #ef4444)
+            \Rect(width: 150, height: 60, color: #22c55e)
+        }
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok: VStack inside Center must not produce cyclic dependency");
+
+    let vstack_node = compiled.layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack found");
+    // Height: 50 + 60 + max(0, 2 - 1) * 10 = 120
+    assert_eq!(vstack_node.rect.height, 120.0);
+    // Width: max(200, 150) = 200
+    assert_eq!(vstack_node.rect.width, 200.0);
+    // Centered in 800x600 window:
+    // x = (800 - 200) / 2 = 300
+    // y = (600 - 120) / 2 = 240
+    assert_eq!(vstack_node.rect.x, 300.0);
+    assert_eq!(vstack_node.rect.y, 240.0);
+
+    let rects: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    assert_eq!(rects[0].rect.x, 300.0);
+    assert_eq!(rects[0].rect.y, 240.0);
+    assert_eq!(rects[1].rect.x, 300.0);
+    assert_eq!(rects[1].rect.y, 300.0); // 240 + 50 + 10
+}
+
+#[test]
+fn test_vstack_inside_center_explicit_width_no_cycle() {
+    let input = r#"
+    \use "components/Center.dt"
+    \use "components/VStack.dt"
+
+    \Center {
+        \VStack(width: 400, gap: 20) {
+            \Rect(width: 100, height: 30, color: #ef4444)
+            \Rect(width: 120, height: 40, color: #22c55e)
+        }
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok: VStack with explicit width inside Center must not produce cyclic dependency");
+
+    let vstack_node = compiled.layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack found");
+    // Height: 30 + 40 + max(0, 2 - 1) * 20 = 90
+    assert_eq!(vstack_node.rect.height, 90.0);
+    assert_eq!(vstack_node.rect.width, 400.0);
+    // Centered in 800x600 window:
+    // x = (800 - 400) / 2 = 200
+    // y = (600 - 90) / 2 = 255
+    assert_eq!(vstack_node.rect.x, 200.0);
+    assert_eq!(vstack_node.rect.y, 255.0);
+}
+

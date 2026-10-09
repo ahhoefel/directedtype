@@ -41,8 +41,8 @@
     let is_center = align == Align.Center;
     let is_bottom = align == Align.Bottom;
 
-    alias right = max(children.right) > 0 ? max(children.right) : x;
-    alias width = right - x;
+    alias width = sum(children.width) + max(0, num_children - 1) * gap;
+    alias right = x + width;
     alias bottom = y + height;
 
     \Children {
@@ -68,9 +68,9 @@
     let is_bottom = align == Align.Bottom;
 
     alias max_child_height = max(children.height);
+    alias height = max_child_height > 0 ? max_child_height : 0;
     alias right = x + width;
-    alias bottom = max(children.bottom) > 0 ? max(children.bottom) : y;
-    alias height = bottom - y;
+    alias bottom = y + height;
 
     \Children {
         x: prev ? prev.right + gap : x,
@@ -93,10 +93,10 @@
     let is_bottom = align == Align.Bottom;
 
     alias max_child_height = max(children.height);
-    alias right = max(children.right) > 0 ? max(children.right) : x;
-    alias width = right - x;
-    alias bottom = max(children.bottom) > 0 ? max(children.bottom) : y;
-    alias height = bottom - y;
+    alias width = sum(children.width) + max(0, num_children - 1) * gap;
+    alias right = x + width;
+    alias height = max_child_height > 0 ? max_child_height : 0;
+    alias bottom = y + height;
 
     \Children {
         x: prev ? prev.right + gap : x,

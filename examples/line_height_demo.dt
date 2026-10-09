@@ -3,15 +3,14 @@
 \use "components/Center.dt"
 
 
-env font = \Font(family: "Arial", size: 120, weight: 700);
 \Component Box(x, y, width, height, env font) {
     
     // Background card (drawn first so it stays behind text and guides)
-    \Rect(x: parent.left, y: parent.top, width: parent.width, height: parent.height, color: #0f172a)
+    \Rect(x: self.left, y: self.top, width: self.width, height: self.height, color: #0f172a)
     // Centered text
     let t = \Text(
-        x: parent.left + (self.width - t.width) / 2,
-        y: parent.top + (self.height - t.height) / 2,
+        x: self.left + (self.width - t.width) / 2,
+        y: self.top + (self.height - t.height) / 2,
         color: #f8fafc
     ) {
         Typography
@@ -50,5 +49,10 @@ env font = \Font(family: "Arial", size: 120, weight: 700);
 }
 
 \Center{
-    \Box(width: 1000, height: 160)
+    \VStack(shrink: true, gap: 50) {
+        \Box(width: 1000, height: 160, font: \Font(family: "Arial", size: 120, weight: 700))
+        \Box(width: 1000, height: 160, font: \Font(family: "Times New Roman", size: 120, weight: 700))
+        \Box(width: 1000, height: 160, font: \Font(family: "Georgia", size: 120, weight: 700))
+        \Box(width: 1000, height: 160, font: \Font(family: "Courier New", size: 120, weight: 700))
+    }
 }

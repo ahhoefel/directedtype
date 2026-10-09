@@ -2774,6 +2774,9 @@ fn resolve_ident_or_member_to_literal<'a>(
         Expr::Literal(lit) => Some(lit.clone()),
         Expr::Paren(inner, _) => resolve_ident_or_member_to_literal(inner, ctx),
         Expr::Ident(id) => {
+            if id.as_str() == "num_children" {
+                return Some(Literal::Number(ctx.child_ids.len() as f64, id.span));
+            }
             if let Some(comp_ports) = ctx.comp_ports {
                 if let Some(port_expr) = comp_ports.get(id.as_str()) {
                     match port_expr {
@@ -2968,6 +2971,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     return Ok(Expr::Ident(Ident::new(prev.canonical_name(), id.span)));
                 }
             }
+            if id.as_str() == "num_children" {
+                return Ok(Expr::Literal(Literal::Number(ctx.child_ids.len() as f64, id.span)));
+            }
             Ok(expr.clone())
         }
 
@@ -3038,6 +3044,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
 
             // Enum variant access: EnumName.VariantName
             if let Some(target_name) = &target_ident_name {
+                if target_name == "children" && (m.member.as_str() == "len" || m.member.as_str() == "count") {
+                    return Ok(Expr::Literal(Literal::Number(ctx.child_ids.len() as f64, m.span)));
+                }
+                if (target_name == "self" || target_name == "parent") && m.member.as_str() == "num_children" {
+                    return Ok(Expr::Literal(Literal::Number(ctx.child_ids.len() as f64, m.span)));
+                }
                 if let Some(enum_def) = ctx.enums.get(target_name) {
                     let variant_name = m.member.as_str();
                     if enum_def.has_variant(variant_name) {
@@ -3137,10 +3149,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
 
         Expr::Call(call) => {
             let mut rewritten_args = Vec::new();
+            let mut had_children = false;
             for arg in &call.args {
                 if let Expr::MemberAccess(m) = arg {
                     if let Expr::Ident(target_id) = m.target.as_ref() {
                         if target_id.as_str() == "children" {
+                            had_children = true;
                             for &child_id in ctx.child_ids {
                                 let child_access = Expr::MemberAccess(MemberAccessExpr {
                                     target: Box::new(Expr::Ident(Ident::new(
@@ -3159,7 +3173,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 rewritten_args.push(rewrite_expr(arg, ctx)?);
             }
 
-            if rewritten_args.is_empty() && !ctx.child_ids.is_empty() {
+            if had_children && rewritten_args.is_empty() {
                 return Ok(Expr::Literal(Literal::Number(0.0, call.span)));
             }
 

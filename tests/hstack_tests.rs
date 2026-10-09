@@ -280,3 +280,41 @@ fn test_hstack_stretch_alignment() {
     assert_eq!(rects[1].rect.height, 120.0);
 }
 
+#[test]
+fn test_hstack_inside_center_no_cycle() {
+    let input = r#"
+    \use "components/Center.dt"
+    \use "components/HStack.dt"
+
+    \Center {
+        \HStack(gap: 15) {
+            \Rect(width: 100, height: 60, color: #ef4444)
+            \Rect(width: 80, height: 40, color: #22c55e)
+        }
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok: HStack inside Center must not produce cyclic dependency");
+
+    let hstack_node = compiled.layout.nodes.iter().find(|n| n.name == "HStack").expect("HStack found");
+    // Width: 100 + 80 + max(0, 2 - 1) * 15 = 195
+    assert_eq!(hstack_node.rect.width, 195.0);
+    // Height: max(60, 40) = 60
+    assert_eq!(hstack_node.rect.height, 60.0);
+    // Centered in 800x600 window:
+    // x = (800 - 195) / 2 = 302.5
+    // y = (600 - 60) / 2 = 270
+    assert_eq!(hstack_node.rect.x, 302.5);
+    assert_eq!(hstack_node.rect.y, 270.0);
+}
+

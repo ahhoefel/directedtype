@@ -911,4 +911,28 @@ fn test_render_scroll_view_demo_example() {
     save_golden_or_preview(&scrolled_img, "scroll_view_demo_scrolled.png");
 }
 
+#[test]
+fn test_line_height_demo_compiles_and_renders() {
+    let input = std::fs::read_to_string("examples/line_height_demo.dt").expect("read line_height_demo.dt");
+    let doc = directedtype::parse(&input).expect("parse ok");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        1200.0,
+        800.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("line_height_demo.dt must compile without cycle");
+
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let options = SceneOptions::default();
+    let img = renderer
+        .render_layout(&compiled.layout, 1200, 800, &options)
+        .expect("render layout ok");
+    assert_eq!(img.width(), 1200);
+    assert_eq!(img.height(), 800);
+}
+
 
