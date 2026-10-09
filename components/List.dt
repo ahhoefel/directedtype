@@ -1,0 +1,39 @@
+
+\use "components/Align.dt"
+
+\Enum BulletType {
+    Bullet,
+    Number,
+    Roman,
+}
+
+\Component List(x, y, width, inset, item_gap, gap, env font, bullet_type: BulletType: BulletType.Number) {
+    alias max_bullet_width = max(children.bullet_width);
+     \Children {
+        x: x + max(inset, parent.max_bullet_width),
+        y: prev ? prev.bottom + gap : y,
+        width: width - max(inset, parent.max_bullet_width),
+        index: prev ? prev.index + 1 : 1,
+        bullet_type: bullet_type,
+        font: font,
+        item_gap: item_gap
+    }
+    alias height = sum(children.height) + max(0, num_children-1) * gap;
+}
+
+\Component Item(x,y, width, index: Number, item_gap, bullet_type: BulletType, env font) {
+    let bullet = \Text(
+        x: x - bullet.width - item_gap,
+        y: y,
+        align: Align.Right,
+        font: font,
+        text: bullet_type == BulletType.Number ? ("" + index + ".") : "•");
+    \Children{
+        x: x,
+        y: y,
+        width: width,
+    }
+    alias bottom = max(children.bottom);
+    alias height = bottom - y;
+    alias bullet_width = bullet.width + item_gap;
+}
