@@ -933,6 +933,7 @@ fn test_line_height_demo_compiles_and_renders() {
         .expect("render layout ok");
     assert_eq!(img.width(), 1200);
     assert_eq!(img.height(), 800);
+    save_golden_or_preview(&img, "line_height_demo.png");
 }
 
 

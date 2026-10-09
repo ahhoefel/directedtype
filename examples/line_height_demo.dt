@@ -18,7 +18,7 @@
     // Text bounding box (cyan)
     \Rect(x: t.left, y: t.top, width: t.width, height: t.height, color: #00000000, border_color: #38bdf8, border_width: 1)
     // Baseline (red)
-    let baseline_y = t.top + t.font.ascent;
+    let baseline_y = t.bottom;
     let guide_outset = 25;
     let guide_x = t.left - guide_outset;
     let guide_width = t.width + (2 * guide_outset);

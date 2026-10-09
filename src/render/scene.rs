@@ -35,6 +35,7 @@ pub struct TextRenderKey {
     pub align: Option<String>,
     pub spans: Vec<SpanRenderKey>,
     pub start_at: Option<String>,
+    pub line_height: Option<u64>,
 }
 
 /// A cached local `vello::Scene` rendered at origin `(0.0, 0.0)` for a single text node.
@@ -690,6 +691,12 @@ pub fn build_scene(
                     .or_else(|| node.properties.get("starts_at"))
                     .and_then(|v| v.as_str());
 
+                let line_height_prop = node
+                    .properties
+                    .get("line_height")
+                    .and_then(|v| v.as_f64())
+                    .filter(|&h| h > 0.0);
+
                 let current_key = TextRenderKey {
                     text: text.to_string(),
                     width: node.rect.width,
@@ -700,6 +707,7 @@ pub fn build_scene(
                     align: align_str.map(|s| s.to_string()),
                     spans: span_keys,
                     start_at: start_at_prop.map(|s| s.to_string()),
+                    line_height: line_height_prop.map(|h| h.to_bits()),
                 };
 
                 // Check 1-element cache:
@@ -724,6 +732,9 @@ pub fn build_scene(
                     if !family.is_empty() {
                         builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
                     }
+                }
+                if let Some(lh) = line_height_prop {
+                    builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
                 }
 
                 // Draw any span background highlights (e.g. focused_bg on links) in local coordinates

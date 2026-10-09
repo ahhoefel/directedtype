@@ -103,7 +103,7 @@ let reader_pane = \ScrollView(
                     1. OVERVIEW & ARCHITECTURE
                 }
             }
-            \Text(size: 15, width: parent.width - 44, color: #1e293b) {
+            \Text(size: 15, line_height: 24, width: parent.width - 44, color: #1e293b) {
                 The DirectedType ScrollView is a standard layout container that manages independent scroll_x and scroll_y offsets. Overflowing content is clipped to the container bounds while the dynamic scrollbar tracks the active viewport position.
             }
         }
@@ -115,7 +115,7 @@ let reader_pane = \ScrollView(
                     2. HARDWARE GPU CLIPPING
                 }
             }
-            \Text(size: 15, width: parent.width - 44, color: #1e293b) {
+            \Text(size: 15, line_height: 24, width: parent.width - 44, color: #1e293b) {
                 All children inside a ScrollView automatically inherit a hardware clip layer (Clip with Box). In the Vello GPU rendering pipeline, geometry outside the rounded or rectangular container boundary is discarded in hardware shaders.
             }
         }
@@ -127,7 +127,7 @@ let reader_pane = \ScrollView(
                     3. REACTIVE DAG OFFSETS
                 }
             }
-            \Text(size: 15, width: parent.width - 44, color: #1e293b) {
+            \Text(size: 15, line_height: 24, width: parent.width - 44, color: #1e293b) {
                 When a mousewheel or trackpad scroll event is received, the companion component mutates scroll_y. DirectedType single-pass topological DAG incrementally recalculates child positions without layout thrashing.
             }
         }
@@ -139,7 +139,7 @@ let reader_pane = \ScrollView(
                     4. TARGETED CONTAINER NAVIGATION
                 }
             }
-            \Text(size: 15, width: parent.width - 44, color: #1e293b) {
+            \Text(size: 15, line_height: 24, width: parent.width - 44, color: #1e293b) {
                 By passing view: reader_pane to any Link component, clicking that link navigates within this specific pane rather than the global window. The engine computes the relative offset and scrolls directly to the anchor.
             }
         }
@@ -151,7 +151,7 @@ let reader_pane = \ScrollView(
                     5. ARCHITECTURE & EVENT ROUTING
                 }
             }
-            \Text(size: 15, width: parent.width - 44, color: #1e293b) {
+            \Text(size: 15, line_height: 24, width: parent.width - 44, color: #1e293b) {
                 Scroll events bubble up through the component hierarchy and are consumed by the innermost enclosing ScrollView. Wheel events over this pane update scroll_y without propagating to the outer window.
             }
 
@@ -160,19 +160,19 @@ let reader_pane = \ScrollView(
                 width: parent.width - 44,
                 gap: 6
             ) {
-                \Text(size: 12, color: #1e40af) {
+                \Text(size: 12, line_height: 18, color: #1e40af) {
                     [0.001s] DirectedType runtime initialized
                 }
-                \Text(size: 12, color: #047857) {
+                \Text(size: 12, line_height: 18, color: #047857) {
                     [0.004s] Vello GPU compute pipeline ready
                 }
-                \Text(size: 12, color: #b45309) {
+                \Text(size: 12, line_height: 18, color: #b45309) {
                     [0.008s] ScrollView hardware clip layer active
                 }
-                \Text(size: 12, color: #334155) {
+                \Text(size: 12, line_height: 18, color: #334155) {
                     [0.012s] Topological DAG: 48 nodes evaluated
                 }
-                \Text(size: 12, color: #4338ca) {
+                \Text(size: 12, line_height: 18, color: #4338ca) {
                     [0.019s] Dynamic scrollbar thumb tracking ready
                 }
             }
@@ -185,7 +185,7 @@ let reader_pane = \ScrollView(
                     6. SUMMARY & NAVIGATION
                 }
             }
-            \Text(size: 15, width: parent.width - 36, color: #1e293b) {
+            \Text(size: 15, line_height: 24, width: parent.width - 36, color: #1e293b) {
                 Notice that scrolling inside this pane does not affect the outer window, and mousewheel events over this pane are consumed with priority.
             }
             \Link(url: "https://directedtype.org") {
@@ -244,13 +244,13 @@ let reader_pane = \ScrollView(
         \Text(size: 12, weight: 700, color: #1d4ed8) {
             INTERACTIVE CONTROLS
         }
-        \Text(size: 13, width: parent.width - 36, color: #334155) {
+        \Text(size: 13, line_height: 20, width: parent.width - 36, color: #334155) {
             • Click any section link above to jump the reader pane.
         }
-        \Text(size: 13, width: parent.width - 36, color: #334155) {
+        \Text(size: 13, line_height: 20, width: parent.width - 36, color: #334155) {
             • Hover over the pane and scroll with mouse wheel or trackpad.
         }
-        \Text(size: 13, width: parent.width - 36, color: #334155) {
+        \Text(size: 13, line_height: 20, width: parent.width - 36, color: #334155) {
             • The scrollbar tracks dynamically and stays within bounds.
         }
     }

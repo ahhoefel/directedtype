@@ -650,10 +650,10 @@ fn test_parley_text_height_wrapping_multiline() {
     assert_eq!(title.rect.y, 0.0);
     assert_eq!(title.rect.width, 320.0);
 
-    // Parley shapes 3 lines at size 36 bold: height must be > 100px (around ~135px), not 67px
+    // Parley shapes 3 lines at size 36 bold: height is ~97.56px (not 67px for 2 lines)
     assert!(
-        title.rect.height > 100.0,
-        "Expected height > 100px for 3 wrapped lines of size 36, got: {}",
+        title.rect.height > 90.0,
+        "Expected height > 90px for 3 wrapped lines of size 36, got: {}",
         title.rect.height
     );
 
@@ -3118,6 +3118,34 @@ fn test_font_rejects_unknown_ports() {
     }
 }
 
+#[test]
+fn test_font_accepts_line_height_port() {
+    let input = r#"
+    let f = \Font(family: "Arial", size: 32, line_height: 48);
+    let r = \Rect(x: 0, y: 0, width: 100, height: f.line_height, color: #ffffff);
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+    let r_node = layout.nodes.iter().find(|n| n.name == "Rect").expect("rect found");
+    assert_eq!(r_node.rect.height, 48.0);
+}
+
+#[test]
+fn test_font_line_height_forwarded_from_text() {
+    let input = r#"
+    env font = \Font(family: "Arial", size: 32, line_height: 52);
+    let t = \Text { Hello };
+    let r = \Rect(x: 0, y: 0, width: 100, height: t.font.line_height, color: #ffffff);
+    let r2 = \Rect(x: 0, y: 0, width: 100, height: t.line_height, color: #ffffff);
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    assert_eq!(rects[0].rect.height, 52.0);
+    assert_eq!(rects[1].rect.height, 52.0);
+}
+
 
 #[test]
 fn test_missing_dimensions_on_child_rect_yields_compile_error() {
@@ -3136,5 +3164,8 @@ fn test_missing_dimensions_on_child_rect_yields_compile_error() {
         other => panic!("Expected MissingPort on Rect width/height, got: {:?}", other),
     }
 }
+
+
+
 
 

@@ -2054,7 +2054,7 @@ fn expand_primitive_element(
     }
 
     if elem.name.as_str() == "Font" {
-        const FONT_PUBLIC_PORTS: &[&str] = &["family", "size", "weight"];
+        const FONT_PUBLIC_PORTS: &[&str] = &["family", "size", "weight", "line_height"];
         for port in &elem.ports {
             let name = port.name.as_str();
             if !FONT_PUBLIC_PORTS.contains(&name) {
@@ -2064,6 +2064,7 @@ fn expand_primitive_element(
                     "size".to_string(),
                     "weight".to_string(),
                     "family".to_string(),
+                    "line_height".to_string(),
                 ]];
                 return Err(CompileError::NoMatchingOverload(Box::new(
                     NoMatchingOverloadDetails {
@@ -2430,6 +2431,22 @@ fn expand_primitive_element(
                 span: elem.span,
             });
         }
+
+        if !ports.contains_key("line_height") {
+            if let Some(&fid) = node_fonts.get(&node_id) {
+                if doc.get_node(fid).is_some_and(|fn_node| fn_node.authored_ports.contains_key("line_height")) {
+                    let font_ident = Expr::Ident(Ident::new(fid.canonical_name(), elem.span));
+                    ports.insert(
+                        "line_height".to_string(),
+                        Expr::MemberAccess(MemberAccessExpr {
+                            target: Box::new(font_ident),
+                            member: Ident::new("line_height", elem.span),
+                            span: elem.span,
+                        }),
+                    );
+                }
+            }
+        }
     }
 
     let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
@@ -2660,6 +2677,15 @@ fn expand_primitive_element(
             } else {
                 Expr::Literal(Literal::Enum("TextStart".to_string(), "Capital".to_string(), elem.span))
             };
+            let line_height_arg = if ports.contains_key("line_height") {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("line_height", elem.span),
+                    span: elem.span,
+                })
+            } else {
+                Expr::Literal(Literal::Number(0.0, elem.span))
+            };
             let height_call = Expr::Call(CallExpr {
                 callee: Ident::new("text_height", elem.span),
                 args: vec![
@@ -2670,6 +2696,7 @@ fn expand_primitive_element(
                     width_expr,
                     ends_at_expr,
                     start_at_expr,
+                    line_height_arg,
                 ],
                 span: elem.span,
             });

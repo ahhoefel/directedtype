@@ -310,8 +310,9 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let max_width = evaluated_args.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0);
                     let ends_at = evaluated_args.get(5).and_then(|v| v.as_str());
                     let start_at = evaluated_args.get(6).and_then(|v| v.as_str());
+                    let line_height = evaluated_args.get(7).and_then(|v| v.as_f64());
 
-                    let h = crate::compiler::text::measure_text_height(text, size, weight, family, max_width, ends_at, start_at);
+                    let h = crate::compiler::text::measure_text_height(text, size, weight, family, max_width, ends_at, start_at, line_height);
                     Ok(Value::Number(h))
                 }
                 "text_width" => {

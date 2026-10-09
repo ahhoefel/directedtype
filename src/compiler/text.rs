@@ -16,8 +16,9 @@ pub fn measure_text_height(
     max_width: f64,
     ends_at: Option<&str>,
     start_at: Option<&str>,
+    line_height: Option<f64>,
 ) -> f64 {
-    let (_, height) = measure_text_bounds(text, font_size, font_weight, font_family, Some(max_width), ends_at, start_at);
+    let (_, height) = measure_text_bounds(text, font_size, font_weight, font_family, Some(max_width), ends_at, start_at, line_height);
     height
 }
 
@@ -28,7 +29,7 @@ pub fn measure_text_width(
     font_weight: f64,
     font_family: Option<&str>,
 ) -> f64 {
-    let (width, _) = measure_text_bounds(text, font_size, font_weight, font_family, None, None, None);
+    let (width, _) = measure_text_bounds(text, font_size, font_weight, font_family, None, None, None, None);
     width
 }
 
@@ -58,6 +59,7 @@ pub fn measure_text_bounds(
     max_width: Option<f64>,
     ends_at: Option<&str>,
     start_at: Option<&str>,
+    line_height: Option<f64>,
 ) -> (f64, f64) {
     if text.is_empty() {
         return (0.0, 0.0);
@@ -81,6 +83,11 @@ pub fn measure_text_bounds(
                     builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
                 }
             }
+            if let Some(lh) = line_height {
+                if lh > 0.0 {
+                    builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
+                }
+            }
 
             let mut layout = builder.build(text);
             layout.break_all_lines(max_width.and_then(|w| if w > 0.0 { Some(w as f32) } else { None }));
@@ -96,7 +103,7 @@ pub fn measure_text_bounds(
             let last_line = layout.lines().last();
 
             let first_baseline = first_line
-                .map(|l| (l.metrics().block_min_coord + l.metrics().baseline) as f64)
+                .map(|l| l.metrics().baseline as f64)
                 .unwrap_or(0.0);
 
             let top_coord = match start_at {
@@ -116,7 +123,7 @@ pub fn measure_text_bounds(
                 Some(s) if s.eq_ignore_ascii_case("descender") => {
                     if let Some(last_line) = last_line {
                         let m = last_line.metrics();
-                        (m.block_min_coord + m.baseline + m.descent) as f64
+                        (m.baseline + m.descent) as f64
                     } else {
                         layout.height() as f64
                     }
@@ -127,7 +134,7 @@ pub fn measure_text_bounds(
                 Some(s) if s.eq_ignore_ascii_case("baseline") => {
                     if let Some(last_line) = last_line {
                         let m = last_line.metrics();
-                        (m.block_min_coord + m.baseline) as f64
+                        m.baseline as f64
                     } else {
                         layout.height() as f64
                     }
@@ -136,7 +143,7 @@ pub fn measure_text_bounds(
                     // Default to BASELINE when unspecified
                     if let Some(last_line) = last_line {
                         let m = last_line.metrics();
-                        (m.block_min_coord + m.baseline) as f64
+                        m.baseline as f64
                     } else {
                         layout.height() as f64
                     }
@@ -328,7 +335,7 @@ pub fn compute_span_fragments(
                 result.entry(child_id).or_insert_with(|| {
                     let char_offset = span.range.start;
                     let prefix_text = &text[0..char_offset.min(text.len())];
-                    let (px, py) = measure_text_bounds(prefix_text, font_size, font_weight, font_family, max_width, None, None);
+                    let (px, py) = measure_text_bounds(prefix_text, font_size, font_weight, font_family, max_width, None, None, None);
                     let frag_rect = Rect::new(origin_x + px, origin_y + py, 0.0, font_size);
                     vec![frag_rect]
                 });

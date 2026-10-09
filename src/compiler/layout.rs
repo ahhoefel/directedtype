@@ -496,6 +496,11 @@ impl ResolvedLayout {
                     ports.push(format!("family: \"{}\"", family));
                 }
             }
+            if let Some(lh) = node.properties.get("line_height").and_then(|v| v.as_f64()) {
+                if node.formulas.get("line_height").is_some_and(|f| !f.starts_with("font_line_height(")) {
+                    ports.push(format!("line_height: {}", format_num(lh)));
+                }
+            }
             return ports.join(", ");
         }
 
