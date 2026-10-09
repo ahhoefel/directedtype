@@ -574,7 +574,7 @@ impl ResolvedLayout {
         let standard_keys = [
             "x", "y", "width", "height", "z", "left", "top", "right", "bottom", "clip", "box", "up",
             "color", "bg_color", "radius", "border_width", "border_color",
-            "size", "weight", "text_height", "font", "family",
+            "size", "weight", "text_height", "font", "family", "baseline",
             "cap_height", "x_height", "descent", "ascent", "line_height",
         ];
         let mut extra_keys: Vec<&String> = node
@@ -831,19 +831,16 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             let font_size = n
                 .properties
                 .get("size")
-                .or_else(|| n.properties.get("font_size"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(16.0);
             let font_weight = n
                 .properties
                 .get("weight")
-                .or_else(|| n.properties.get("font_weight"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(400.0);
             let font_family = n
                 .properties
                 .get("family")
-                .or_else(|| n.properties.get("font_family"))
                 .and_then(|v| match v {
                     Value::String(s) => Some(s.clone()),
                     _ => None,
@@ -864,7 +861,6 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             let start_at = n
                 .properties
                 .get("start_at")
-                .or_else(|| n.properties.get("starts_at"))
                 .and_then(|v| v.as_str());
             let y_offset = crate::compiler::text::text_y_offset(font_size, font_weight, font_family.as_deref(), start_at);
             (

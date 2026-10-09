@@ -583,8 +583,7 @@ pub fn build_scene(
             if !text.is_empty() {
                 let font_size = node
                     .properties
-                    .get("font_size")
-                    .or_else(|| node.properties.get("size"))
+                    .get("size")
                     .and_then(|v| v.as_f64())
                     .or_else(|| {
                         node.font.and_then(|fid| {
@@ -592,7 +591,6 @@ pub fn build_scene(
                                 fn_node
                                     .properties
                                     .get("size")
-                                    .or_else(|| fn_node.properties.get("font_size"))
                                     .and_then(|v| v.as_f64())
                             })
                         })
@@ -601,8 +599,7 @@ pub fn build_scene(
 
                 let font_weight = node
                     .properties
-                    .get("font_weight")
-                    .or_else(|| node.properties.get("weight"))
+                    .get("weight")
                     .and_then(|v| v.as_f64())
                     .or_else(|| {
                         node.font.and_then(|fid| {
@@ -610,7 +607,6 @@ pub fn build_scene(
                                 fn_node
                                     .properties
                                     .get("weight")
-                                    .or_else(|| fn_node.properties.get("font_weight"))
                                     .and_then(|v| v.as_f64())
                             })
                         })
@@ -619,8 +615,7 @@ pub fn build_scene(
 
                 let font_family = node
                     .properties
-                    .get("font_family")
-                    .or_else(|| node.properties.get("family"))
+                    .get("family")
                     .and_then(|v| v.as_str())
                     .or_else(|| {
                         node.properties.get("font").and_then(|v| match v {
@@ -634,7 +629,6 @@ pub fn build_scene(
                                 fn_node
                                     .properties
                                     .get("family")
-                                    .or_else(|| fn_node.properties.get("font"))
                                     .and_then(|v| v.as_str())
                             })
                         })
@@ -688,7 +682,6 @@ pub fn build_scene(
                 let start_at_prop = node
                     .properties
                     .get("start_at")
-                    .or_else(|| node.properties.get("starts_at"))
                     .and_then(|v| v.as_str());
 
                 let line_height_prop = node
@@ -864,7 +857,24 @@ pub fn build_scene(
                 }
 
                 // Append local scene to active scene translated to node's position:
-                let y_offset = crate::compiler::text::text_y_offset(font_size as f64, font_weight as f64, font_family, start_at_prop);
+                let m = crate::compiler::text::measure_font_metrics(font_size as f64, font_weight as f64, font_family);
+                let first_baseline = layout_text
+                    .lines()
+                    .next()
+                    .map(|l| l.metrics().baseline as f64)
+                    .unwrap_or(m.baseline);
+                let extra_top_leading = if line_height_prop.is_some() {
+                    (first_baseline - m.baseline).max(0.0)
+                } else {
+                    0.0
+                };
+                let base_y_offset = match start_at_prop {
+                    Some(s) if s.eq_ignore_ascii_case("ascender") => 0.0,
+                    Some(s) if s.eq_ignore_ascii_case("capital") => -(m.ascent - m.cap_height),
+                    Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => extra_top_leading,
+                    _ => -(m.ascent - m.cap_height),
+                };
+                let y_offset = base_y_offset - extra_top_leading;
                 active_scene.append(&local_scene, Some(Affine::translate((node.rect.x, node.rect.y + y_offset))));
 
                 // Save in 1-element cache:

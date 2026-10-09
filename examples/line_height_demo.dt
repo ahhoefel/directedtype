@@ -11,14 +11,14 @@
     let t = \Text(
         x: self.left + (self.width - t.width) / 2,
         y: self.top + (self.height - t.height) / 2,
-        color: #f8fafc
+        color: #f8fafc,
     ) {
         Typography
     };
     // Text bounding box (cyan)
     \Rect(x: t.left, y: t.top, width: t.width, height: t.height, color: #00000000, border_color: #38bdf8, border_width: 1)
     // Baseline (red)
-    let baseline_y = t.bottom;
+    let baseline_y = t.font.baseline;
     let guide_outset = 25;
     let guide_x = t.left - guide_outset;
     let guide_width = t.width + (2 * guide_outset);
@@ -50,9 +50,9 @@
 
 \Center{
     \VStack(shrink: true, gap: 50) {
-        \Box(width: 1000, height: 160, font: \Font(family: "Arial", size: 120, weight: 700))
-        \Box(width: 1000, height: 160, font: \Font(family: "Times New Roman", size: 120, weight: 700))
-        \Box(width: 1000, height: 160, font: \Font(family: "Georgia", size: 120, weight: 700))
-        \Box(width: 1000, height: 160, font: \Font(family: "Courier New", size: 120, weight: 700))
+        \Box(width: 1000, height: 160, font: \Font(family: "Arial", size: 120, line_height: 180, weight: 700))
+        \Box(width: 1000, height: 160, font: \Font(family: "Times New Roman", size: 120, line_height: 180, weight: 700))
+        \Box(width: 1000, height: 160, font: \Font(family: "Georgia", size: 120, line_height: 180, weight: 700))
+        \Box(width: 1000, height: 160, font: \Font(family: "Courier New", size: 120, line_height: 180, weight: 700))
     }
 }

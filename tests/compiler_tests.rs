@@ -3165,6 +3165,30 @@ fn test_missing_dimensions_on_child_rect_yields_compile_error() {
     }
 }
 
+#[test]
+fn test_text_baseline_and_text_font_baseline() {
+    let input = r#"
+    env font = \Font(size: 32, family: "Arial");
+    let t = \Text(x: 10, y: 50, start_at: TextStart.Ascender, end_at: TextEnd.Descender) {
+        Typography
+    };
+    let guide_direct = \Rect(x: 0, y: t.baseline, width: 100, height: 1, color: #ff0000);
+    let guide_via_font = \Rect(x: 0, y: t.font.baseline, width: 100, height: 1, color: #00ff00);
+    let cap_y = \Rect(x: 0, y: t.font.baseline - t.font.cap_height, width: 100, height: 1, color: #0000ff);
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 3);
+    // Both t.baseline and t.font.baseline evaluate to the exact same y coordinate
+    assert_eq!(rects[0].rect.y, rects[1].rect.y);
+    assert!(rects[0].rect.y > 50.0);
+    // Cap height guide is above the baseline
+    assert!(rects[2].rect.y < rects[0].rect.y);
+    assert_eq!(rects[2].rect.y, rects[0].rect.y - (32.0 * 0.71));
+}
+
+
 
 
 

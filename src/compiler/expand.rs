@@ -2094,19 +2094,9 @@ fn expand_primitive_element(
         }
         // Default family to empty string if not specified
         if !ports.contains_key("family") {
-            if let Some(font_val) = ports.get("font").cloned() {
-                ports.insert("family".to_string(), font_val);
-            } else {
-                ports.insert(
-                    "family".to_string(),
-                    Expr::Literal(Literal::String(String::new(), elem.span)),
-                );
-            }
-        }
-        if !ports.contains_key("font") {
             ports.insert(
-                "font".to_string(),
-                ports.get("family").cloned().unwrap(),
+                "family".to_string(),
+                Expr::Literal(Literal::String(String::new(), elem.span)),
             );
         }
 
@@ -2303,7 +2293,7 @@ fn expand_primitive_element(
 
     if let Some(fid) = font_node_id {
         let font_ident = Expr::Ident(Ident::new(fid.canonical_name(), elem.span));
-        if !ports.contains_key("size") && !ports.contains_key("font_size") {
+        if !ports.contains_key("size") {
             ports.insert(
                 "size".to_string(),
                 Expr::MemberAccess(MemberAccessExpr {
@@ -2313,7 +2303,7 @@ fn expand_primitive_element(
                 }),
             );
         }
-        if !ports.contains_key("weight") && !ports.contains_key("font_weight") {
+        if !ports.contains_key("weight") {
             ports.insert(
                 "weight".to_string(),
                 Expr::MemberAccess(MemberAccessExpr {
@@ -2323,7 +2313,7 @@ fn expand_primitive_element(
                 }),
             );
         }
-        if !ports.contains_key("family") && !ports.contains_key("font_family") {
+        if !ports.contains_key("family") {
             ports.insert(
                 "family".to_string(),
                 Expr::MemberAccess(MemberAccessExpr {
@@ -2335,11 +2325,11 @@ fn expand_primitive_element(
         }
     } else if let Some(font_target) = ports.get("font").cloned() {
         if matches!(font_target, Expr::Literal(Literal::String(_, _))) {
-            if !ports.contains_key("family") && !ports.contains_key("font_family") {
+            if !ports.contains_key("family") {
                 ports.insert("family".to_string(), font_target);
             }
         } else {
-            if !ports.contains_key("size") && !ports.contains_key("font_size") {
+            if !ports.contains_key("size") {
                 ports.insert(
                     "size".to_string(),
                     Expr::MemberAccess(MemberAccessExpr {
@@ -2349,7 +2339,7 @@ fn expand_primitive_element(
                     }),
                 );
             }
-            if !ports.contains_key("weight") && !ports.contains_key("font_weight") {
+            if !ports.contains_key("weight") {
                 ports.insert(
                     "weight".to_string(),
                     Expr::MemberAccess(MemberAccessExpr {
@@ -2359,7 +2349,7 @@ fn expand_primitive_element(
                     }),
                 );
             }
-            if !ports.contains_key("family") && !ports.contains_key("font_family") {
+            if !ports.contains_key("family") {
                 ports.insert(
                     "family".to_string(),
                     Expr::MemberAccess(MemberAccessExpr {
@@ -2373,8 +2363,9 @@ fn expand_primitive_element(
     }
 
     if elem.name.as_str() == "Text" {
+        let end_val = ports.remove("end_at");
         if !ports.contains_key("ends_at") {
-            if let Some(expr) = ports.get("end_at").cloned() {
+            if let Some(expr) = end_val {
                 ports.insert("ends_at".to_string(), expr.clone());
                 authored_ports.insert("ends_at".to_string(), expr);
             } else {
@@ -2383,15 +2374,10 @@ fn expand_primitive_element(
                 authored_ports.insert("ends_at".to_string(), default_ends_at);
             }
         }
-        if !ports.contains_key("end_at") {
-            if let Some(expr) = ports.get("ends_at").cloned() {
-                ports.insert("end_at".to_string(), expr.clone());
-                authored_ports.insert("end_at".to_string(), expr);
-            }
-        }
 
+        let starts_val = ports.remove("starts_at");
         if !ports.contains_key("start_at") {
-            if let Some(expr) = ports.get("starts_at").cloned() {
+            if let Some(expr) = starts_val {
                 ports.insert("start_at".to_string(), expr.clone());
                 authored_ports.insert("start_at".to_string(), expr);
             } else {
@@ -2400,14 +2386,8 @@ fn expand_primitive_element(
                 authored_ports.insert("start_at".to_string(), default_start_at);
             }
         }
-        if !ports.contains_key("starts_at") {
-            if let Some(expr) = ports.get("start_at").cloned() {
-                ports.insert("starts_at".to_string(), expr.clone());
-                authored_ports.insert("starts_at".to_string(), expr);
-            }
-        }
 
-        if !ports.contains_key("size") && !ports.contains_key("font_size") {
+        if !ports.contains_key("size") {
             // Check if this is an inline text span inside a parent Text node
             if let Some(parent) = ctx.parent_id {
                 if doc.get_node(parent).is_some_and(|n| n.name == "Text") {
@@ -2424,7 +2404,7 @@ fn expand_primitive_element(
             }
         }
 
-        if !ports.contains_key("size") && !ports.contains_key("font_size") {
+        if !ports.contains_key("size") {
             return Err(CompileError::MissingPort {
                 node: "Text".to_string(),
                 port: "size".to_string(),
@@ -2456,12 +2436,6 @@ fn expand_primitive_element(
             member: Ident::new("size", elem.span),
             span: elem.span,
         })
-    } else if ports.contains_key("font_size") {
-        Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
-            member: Ident::new("font_size", elem.span),
-            span: elem.span,
-        })
     } else {
         Expr::Literal(Literal::Number(0.0, elem.span))
     };
@@ -2470,12 +2444,6 @@ fn expand_primitive_element(
         Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident.clone()),
             member: Ident::new("weight", elem.span),
-            span: elem.span,
-        })
-    } else if ports.contains_key("font_weight") {
-        Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
-            member: Ident::new("font_weight", elem.span),
             span: elem.span,
         })
     } else {
@@ -2488,12 +2456,6 @@ fn expand_primitive_element(
             member: Ident::new("family", elem.span),
             span: elem.span,
         })
-    } else if ports.contains_key("font_family") {
-        Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
-            member: Ident::new("font_family", elem.span),
-            span: elem.span,
-        })
     } else if ports.contains_key("font") {
         Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident.clone()),
@@ -2503,6 +2465,39 @@ fn expand_primitive_element(
     } else {
         Expr::Literal(Literal::String(String::new(), elem.span))
     };
+
+    let start_at_expr = if ports.contains_key("start_at") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("start_at", elem.span),
+            span: elem.span,
+        })
+    } else {
+        Expr::Literal(Literal::Enum("TextStart".to_string(), "Capital".to_string(), elem.span))
+    };
+
+    if elem.name.as_str() == "Text" {
+        let baseline_call = Expr::Binary(BinaryExpr {
+            op: BinaryOp::Add,
+            left: Box::new(Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(self_ident.clone()),
+                member: Ident::new("y", elem.span),
+                span: elem.span,
+            })),
+            right: Box::new(Expr::Call(CallExpr {
+                callee: Ident::new("text_baseline_offset", elem.span),
+                args: vec![
+                    size_expr.clone(),
+                    weight_expr.clone(),
+                    font_expr.clone(),
+                    start_at_expr.clone(),
+                ],
+                span: elem.span,
+            })),
+            span: elem.span,
+        });
+        ports.entry("baseline".to_string()).or_insert(baseline_call);
+    }
 
     let text_arg_expr = if ports.contains_key("text") {
         Expr::MemberAccess(MemberAccessExpr {
@@ -2653,29 +2648,8 @@ fn expand_primitive_element(
                     member: Ident::new("ends_at", elem.span),
                     span: elem.span,
                 })
-            } else if ports.contains_key("end_at") {
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
-                    member: Ident::new("end_at", elem.span),
-                    span: elem.span,
-                })
             } else {
                 Expr::Literal(Literal::Enum("TextEnd".to_string(), "Baseline".to_string(), elem.span))
-            };
-            let start_at_expr = if ports.contains_key("start_at") {
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
-                    member: Ident::new("start_at", elem.span),
-                    span: elem.span,
-                })
-            } else if ports.contains_key("starts_at") {
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
-                    member: Ident::new("starts_at", elem.span),
-                    span: elem.span,
-                })
-            } else {
-                Expr::Literal(Literal::Enum("TextStart".to_string(), "Capital".to_string(), elem.span))
             };
             let line_height_arg = if ports.contains_key("line_height") {
                 Expr::MemberAccess(MemberAccessExpr {
@@ -3122,6 +3096,23 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
         }
 
         Expr::MemberAccess(m) => {
+            if m.member.as_str() == "baseline" {
+                let mut inner_target = m.target.as_ref();
+                while let Expr::Paren(p, _) = inner_target {
+                    inner_target = p.as_ref();
+                }
+                if let Expr::MemberAccess(inner) = inner_target {
+                    if inner.member.as_str() == "font" {
+                        let text_target = rewrite_expr(&inner.target, ctx)?;
+                        return Ok(Expr::MemberAccess(MemberAccessExpr {
+                            target: Box::new(text_target),
+                            member: Ident::new("baseline", m.span),
+                            span: m.span,
+                        }));
+                    }
+                }
+            }
+
             let target_ident_name = match m.target.as_ref() {
                 Expr::Ident(id) => Some(id.as_str().to_string()),
                 _ => None,

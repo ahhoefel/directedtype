@@ -50,6 +50,22 @@ pub fn text_y_offset(
     -(m.ascent - m.cap_height)
 }
 
+/// Measures the vertical distance from a Text node's top edge (at `start_at`) down to the first baseline.
+pub fn text_baseline_offset(
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    start_at: Option<&str>,
+) -> f64 {
+    let m = measure_font_metrics(font_size, font_weight, font_family);
+    match start_at {
+        Some(s) if s.eq_ignore_ascii_case("ascender") => m.ascent,
+        Some(s) if s.eq_ignore_ascii_case("capital") => m.cap_height,
+        _ => m.cap_height,
+    }
+}
+
+
 /// Measures the layout boundaries `(width, height)` of the given text using Parley.
 pub fn measure_text_bounds(
     text: &str,
@@ -67,6 +83,7 @@ pub fn measure_text_bounds(
 
     let size = if font_size > 0.0 { font_size as f32 } else { 16.0 };
     let weight = if font_weight > 0.0 { font_weight as f32 } else { 400.0 };
+    let m = measure_font_metrics(font_size, font_weight, font_family);
 
     FONT_CONTEXT.with(|font_cx_cell| {
         LAYOUT_CONTEXT.with(|layout_cx_cell| {
@@ -98,24 +115,32 @@ pub fn measure_text_bounds(
                 layout.full_width() as f64
             };
 
-            let cap_height = size as f64 * 0.71;
             let first_line = layout.lines().next();
             let last_line = layout.lines().last();
 
             let first_baseline = first_line
                 .map(|l| l.metrics().baseline as f64)
-                .unwrap_or(0.0);
+                .unwrap_or(m.baseline);
+
+            let extra_top_leading = if line_height.is_some() {
+                (first_baseline - m.baseline).max(0.0)
+            } else {
+                0.0
+            };
 
             let top_coord = match start_at {
                 Some(s) if s.eq_ignore_ascii_case("ascender") => {
-                    0.0
+                    extra_top_leading
                 }
                 Some(s) if s.eq_ignore_ascii_case("capital") => {
-                    first_baseline - cap_height
+                    first_baseline - m.cap_height
+                }
+                Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => {
+                    0.0
                 }
                 _ => {
                     // Default to Capital when unspecified
-                    first_baseline - cap_height
+                    first_baseline - m.cap_height
                 }
             };
 
@@ -167,6 +192,7 @@ pub struct FontMetrics {
     pub ascent: f64,
     pub descent: f64,
     pub line_height: f64,
+    pub baseline: f64,
 }
 
 /// Measures typographic vertical landmarks for a font given size, weight, and family.
@@ -198,11 +224,11 @@ pub fn measure_font_metrics(
             let mut layout = builder.build(sample);
             layout.break_all_lines(None);
 
-            let (ascent, descent, leading) = if let Some(line) = layout.lines().next() {
+            let (ascent, descent, leading, baseline) = if let Some(line) = layout.lines().next() {
                 let m = line.metrics();
-                (m.ascent as f64, m.descent as f64, m.leading as f64)
+                (m.ascent as f64, m.descent as f64, m.leading as f64, m.baseline as f64)
             } else {
-                (size as f64 * 0.8, size as f64 * 0.25, 0.0)
+                (size as f64 * 0.8, size as f64 * 0.25, 0.0, size as f64 * 0.8)
             };
 
             let cap_height = size as f64 * 0.71;
@@ -217,6 +243,7 @@ pub fn measure_font_metrics(
                 ascent,
                 descent,
                 line_height,
+                baseline,
             }
         })
     })
