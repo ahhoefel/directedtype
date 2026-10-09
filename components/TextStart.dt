@@ -1,0 +1,6 @@
+// DirectedType Standard Component Library: TextStart
+// Typographic vertical start landmarks for Text components.
+\Enum TextStart {
+    Capital,
+    Ascender
+}

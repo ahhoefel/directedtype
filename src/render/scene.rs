@@ -34,12 +34,14 @@ pub struct TextRenderKey {
     pub color: [u8; 4],
     pub align: Option<String>,
     pub spans: Vec<SpanRenderKey>,
+    pub start_at: Option<String>,
 }
 
 /// A cached local `vello::Scene` rendered at origin `(0.0, 0.0)` for a single text node.
 pub struct CachedTextScene {
     pub key: TextRenderKey,
     pub scene: Scene,
+    pub y_offset: f64,
 }
 
 /// 1-element cache per text node (`NodeId` -> previous call inputs and pre-recorded local `vello::Scene`).
@@ -682,6 +684,12 @@ pub fn build_scene(
                     });
                 }
 
+                let start_at_prop = node
+                    .properties
+                    .get("start_at")
+                    .or_else(|| node.properties.get("starts_at"))
+                    .and_then(|v| v.as_str());
+
                 let current_key = TextRenderKey {
                     text: text.to_string(),
                     width: node.rect.width,
@@ -691,13 +699,14 @@ pub fn build_scene(
                     color: color_to_rgba8(&text_color),
                     align: align_str.map(|s| s.to_string()),
                     spans: span_keys,
+                    start_at: start_at_prop.map(|s| s.to_string()),
                 };
 
                 // Check 1-element cache:
                 if let Some(cached) = text_cache.get(&node.id) {
                     if cached.key == current_key {
                         // CACHE HIT: 100% of the time during scrolling!
-                        active_scene.append(&cached.scene, Some(Affine::translate((node.rect.x, node.rect.y))));
+                        active_scene.append(&cached.scene, Some(Affine::translate((node.rect.x, node.rect.y + cached.y_offset))));
                         continue;
                     }
                 }
@@ -844,12 +853,14 @@ pub fn build_scene(
                 }
 
                 // Append local scene to active scene translated to node's position:
-                active_scene.append(&local_scene, Some(Affine::translate((node.rect.x, node.rect.y))));
+                let y_offset = crate::compiler::text::text_y_offset(font_size as f64, font_weight as f64, font_family, start_at_prop);
+                active_scene.append(&local_scene, Some(Affine::translate((node.rect.x, node.rect.y + y_offset))));
 
                 // Save in 1-element cache:
                 text_cache.insert(node.id, CachedTextScene {
                     key: current_key,
                     scene: local_scene,
+                    y_offset,
                 });
             }
         }

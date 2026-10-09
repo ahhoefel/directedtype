@@ -90,6 +90,14 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         ],
         span: doc.span,
     });
+    enums.entry("TextStart".to_string()).or_insert_with(|| EnumDef {
+        name: Ident::new("TextStart", doc.span),
+        variants: vec![
+            Ident::new("Capital", doc.span),
+            Ident::new("Ascender", doc.span),
+        ],
+        span: doc.span,
+    });
 
     let mut global_scope = HashMap::new();
     let mut global_env_scope: HashMap<String, EnvEntry> = HashMap::new();
@@ -2365,9 +2373,37 @@ fn expand_primitive_element(
 
     if elem.name.as_str() == "Text" {
         if !ports.contains_key("ends_at") {
-            let default_ends_at = Expr::Literal(Literal::Enum("TextEnd".to_string(), "Baseline".to_string(), elem.span));
-            ports.insert("ends_at".to_string(), default_ends_at.clone());
-            authored_ports.insert("ends_at".to_string(), default_ends_at);
+            if let Some(expr) = ports.get("end_at").cloned() {
+                ports.insert("ends_at".to_string(), expr.clone());
+                authored_ports.insert("ends_at".to_string(), expr);
+            } else {
+                let default_ends_at = Expr::Literal(Literal::Enum("TextEnd".to_string(), "Baseline".to_string(), elem.span));
+                ports.insert("ends_at".to_string(), default_ends_at.clone());
+                authored_ports.insert("ends_at".to_string(), default_ends_at);
+            }
+        }
+        if !ports.contains_key("end_at") {
+            if let Some(expr) = ports.get("ends_at").cloned() {
+                ports.insert("end_at".to_string(), expr.clone());
+                authored_ports.insert("end_at".to_string(), expr);
+            }
+        }
+
+        if !ports.contains_key("start_at") {
+            if let Some(expr) = ports.get("starts_at").cloned() {
+                ports.insert("start_at".to_string(), expr.clone());
+                authored_ports.insert("start_at".to_string(), expr);
+            } else {
+                let default_start_at = Expr::Literal(Literal::Enum("TextStart".to_string(), "Capital".to_string(), elem.span));
+                ports.insert("start_at".to_string(), default_start_at.clone());
+                authored_ports.insert("start_at".to_string(), default_start_at);
+            }
+        }
+        if !ports.contains_key("starts_at") {
+            if let Some(expr) = ports.get("start_at").cloned() {
+                ports.insert("starts_at".to_string(), expr.clone());
+                authored_ports.insert("starts_at".to_string(), expr);
+            }
         }
 
         if !ports.contains_key("size") && !ports.contains_key("font_size") {
@@ -2600,8 +2636,29 @@ fn expand_primitive_element(
                     member: Ident::new("ends_at", elem.span),
                     span: elem.span,
                 })
+            } else if ports.contains_key("end_at") {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("end_at", elem.span),
+                    span: elem.span,
+                })
             } else {
                 Expr::Literal(Literal::Enum("TextEnd".to_string(), "Baseline".to_string(), elem.span))
+            };
+            let start_at_expr = if ports.contains_key("start_at") {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("start_at", elem.span),
+                    span: elem.span,
+                })
+            } else if ports.contains_key("starts_at") {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("starts_at", elem.span),
+                    span: elem.span,
+                })
+            } else {
+                Expr::Literal(Literal::Enum("TextStart".to_string(), "Capital".to_string(), elem.span))
             };
             let height_call = Expr::Call(CallExpr {
                 callee: Ident::new("text_height", elem.span),
@@ -2612,6 +2669,7 @@ fn expand_primitive_element(
                     font_expr.clone(),
                     width_expr,
                     ends_at_expr,
+                    start_at_expr,
                 ],
                 span: elem.span,
             });

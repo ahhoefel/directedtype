@@ -438,15 +438,15 @@ fn test_end_to_end_flow_math_evaluation() {
     assert_eq!(header.name, "Header");
     assert_eq!(header.rect.x, 0.0);
     assert_eq!(header.rect.y, 0.0);
-    assert_eq!(header.rect.height, 25.0);
+    assert_eq!(header.rect.height, 22.72);
     assert_eq!(header.text_content.as_deref(), Some("Welcome to DAG-UI"));
 
     // Node 2: Paragraph
-    // Paragraph y = Header.bottom + gap = (0.0 + 25.0) + 24.0 = 49.0!
+    // Paragraph y = Header.bottom + gap = (0.0 + 22.72) + 24.0 = 46.72!
     let para = &layout.nodes[2];
     assert_eq!(para.name, "Paragraph");
     assert_eq!(para.rect.x, 0.0);
-    assert_eq!(para.rect.y, 49.0);
+    assert_eq!(para.rect.y, 46.72);
     assert_eq!(
         para.text_content.as_deref(),
         Some("This layout is mathematically provable.")

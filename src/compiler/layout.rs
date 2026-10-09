@@ -856,6 +856,12 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                     Value::String(s) => Some(s.clone()),
                     _ => None,
                 });
+            let start_at = n
+                .properties
+                .get("start_at")
+                .or_else(|| n.properties.get("starts_at"))
+                .and_then(|v| v.as_str());
+            let y_offset = crate::compiler::text::text_y_offset(font_size, font_weight, font_family.as_deref(), start_at);
             (
                 n.id,
                 text,
@@ -866,7 +872,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 align,
                 n.text_spans.clone(),
                 n.rect.x,
-                n.rect.y,
+                n.rect.y + y_offset,
             )
         })
         .collect();

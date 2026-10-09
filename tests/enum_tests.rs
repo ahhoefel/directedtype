@@ -303,3 +303,119 @@ fn test_text_ends_at_via_component_use() {
     );
 }
 
+#[test]
+fn test_text_start_at_capital_and_ascender() {
+    use directedtype::compiler::compiled::CompiledDocument;
+    use directedtype::component::ComponentRegistry;
+
+    let input = r#"
+    \Text(size: 32, start_at: TextStart.Capital, ends_at: TextEnd.Baseline) {
+        Capital baseline text
+    }
+
+    \Text(size: 32, start_at: TextStart.Ascender, ends_at: TextEnd.Baseline) {
+        Ascender baseline text
+    }
+
+    \Text(size: 32) {
+        Default text
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let text_nodes: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Text").collect();
+    assert_eq!(text_nodes.len(), 3);
+
+    let t_capital = text_nodes[0];
+    let t_ascender = text_nodes[1];
+    let t_default = text_nodes[2];
+
+    assert_eq!(
+        t_capital.properties.get("start_at").map(|v| v.as_str().unwrap()),
+        Some("Capital")
+    );
+    assert_eq!(
+        t_ascender.properties.get("start_at").map(|v| v.as_str().unwrap()),
+        Some("Ascender")
+    );
+    assert_eq!(
+        t_default.properties.get("start_at").map(|v| v.as_str().unwrap()),
+        Some("Capital")
+    );
+
+    // Capital start height is shorter than Ascender start height
+    assert!(
+        t_capital.rect.height < t_ascender.rect.height,
+        "Capital height ({}) should be less than Ascender height ({})",
+        t_capital.rect.height,
+        t_ascender.rect.height
+    );
+
+    // Default start_at is Capital
+    assert_eq!(t_default.rect.height, t_capital.rect.height);
+}
+
+#[test]
+fn test_text_start_at_via_component_use() {
+    use directedtype::component::ComponentRegistry;
+    use directedtype::compiler::compiled::CompiledDocument;
+
+    let input = r#"
+    \use "components/TextStart.dt"
+
+    \Text(size: 24, start_at: TextStart.Capital) {
+        Capital start text
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let text_node = compiled.layout.nodes.iter().find(|n| n.name == "Text").expect("text node found");
+    assert_eq!(
+        text_node.properties.get("start_at").map(|v| v.as_str().unwrap()),
+        Some("Capital")
+    );
+}
+
+#[test]
+fn test_text_start_at_misspelled_acender_rejected() {
+    let input = r#"
+    \use "components/TextStart.dt"
+
+    \Text(size: 24, start_at: TextStart.Acender) {
+        Misspelled enum
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let err = compile_to_graph(&doc).expect_err("Misspelled variant Acender must be rejected");
+    match err {
+        directedtype::compiler::CompileError::UnknownEnumVariant { enum_name, variant, .. } => {
+            assert_eq!(enum_name, "TextStart");
+            assert_eq!(variant, "Acender");
+        }
+        other => panic!("Expected UnknownEnumVariant, got {:?}", other),
+    }
+}
+

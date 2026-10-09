@@ -15,8 +15,9 @@ pub fn measure_text_height(
     font_family: Option<&str>,
     max_width: f64,
     ends_at: Option<&str>,
+    start_at: Option<&str>,
 ) -> f64 {
-    let (_, height) = measure_text_bounds(text, font_size, font_weight, font_family, Some(max_width), ends_at);
+    let (_, height) = measure_text_bounds(text, font_size, font_weight, font_family, Some(max_width), ends_at, start_at);
     height
 }
 
@@ -27,8 +28,25 @@ pub fn measure_text_width(
     font_weight: f64,
     font_family: Option<&str>,
 ) -> f64 {
-    let (width, _) = measure_text_bounds(text, font_size, font_weight, font_family, None, None);
+    let (width, _) = measure_text_bounds(text, font_size, font_weight, font_family, None, None, None);
     width
+}
+
+/// Computes the vertical rendering offset for text glyphs when start_at is specified.
+pub fn text_y_offset(
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    start_at: Option<&str>,
+) -> f64 {
+    if let Some(s) = start_at {
+        if s.eq_ignore_ascii_case("ascender") {
+            return 0.0;
+        }
+    }
+    // Default to Capital
+    let m = measure_font_metrics(font_size, font_weight, font_family);
+    -(m.ascent - m.cap_height)
 }
 
 /// Measures the layout boundaries `(width, height)` of the given text using Parley.
@@ -39,6 +57,7 @@ pub fn measure_text_bounds(
     font_family: Option<&str>,
     max_width: Option<f64>,
     ends_at: Option<&str>,
+    start_at: Option<&str>,
 ) -> (f64, f64) {
     if text.is_empty() {
         return (0.0, 0.0);
@@ -72,9 +91,30 @@ pub fn measure_text_bounds(
                 layout.full_width() as f64
             };
 
-            let height = match ends_at {
+            let cap_height = size as f64 * 0.71;
+            let first_line = layout.lines().next();
+            let last_line = layout.lines().last();
+
+            let first_baseline = first_line
+                .map(|l| (l.metrics().block_min_coord + l.metrics().baseline) as f64)
+                .unwrap_or(0.0);
+
+            let top_coord = match start_at {
+                Some(s) if s.eq_ignore_ascii_case("ascender") => {
+                    0.0
+                }
+                Some(s) if s.eq_ignore_ascii_case("capital") => {
+                    first_baseline - cap_height
+                }
+                _ => {
+                    // Default to Capital when unspecified
+                    first_baseline - cap_height
+                }
+            };
+
+            let bottom_coord = match ends_at {
                 Some(s) if s.eq_ignore_ascii_case("descender") => {
-                    if let Some(last_line) = layout.lines().last() {
+                    if let Some(last_line) = last_line {
                         let m = last_line.metrics();
                         (m.block_min_coord + m.baseline + m.descent) as f64
                     } else {
@@ -85,7 +125,7 @@ pub fn measure_text_bounds(
                     layout.height() as f64
                 }
                 Some(s) if s.eq_ignore_ascii_case("baseline") => {
-                    if let Some(last_line) = layout.lines().last() {
+                    if let Some(last_line) = last_line {
                         let m = last_line.metrics();
                         (m.block_min_coord + m.baseline) as f64
                     } else {
@@ -94,7 +134,7 @@ pub fn measure_text_bounds(
                 }
                 _ => {
                     // Default to BASELINE when unspecified
-                    if let Some(last_line) = layout.lines().last() {
+                    if let Some(last_line) = last_line {
                         let m = last_line.metrics();
                         (m.block_min_coord + m.baseline) as f64
                     } else {
@@ -102,6 +142,8 @@ pub fn measure_text_bounds(
                     }
                 }
             };
+
+            let height = (bottom_coord - top_coord).max(0.0);
 
             (width, height)
         })
@@ -286,7 +328,7 @@ pub fn compute_span_fragments(
                 result.entry(child_id).or_insert_with(|| {
                     let char_offset = span.range.start;
                     let prefix_text = &text[0..char_offset.min(text.len())];
-                    let (px, py) = measure_text_bounds(prefix_text, font_size, font_weight, font_family, max_width, None);
+                    let (px, py) = measure_text_bounds(prefix_text, font_size, font_weight, font_family, max_width, None, None);
                     let frag_rect = Rect::new(origin_x + px, origin_y + py, 0.0, font_size);
                     vec![frag_rect]
                 });
