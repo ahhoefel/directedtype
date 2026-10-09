@@ -147,6 +147,12 @@ pub enum CompileError {
         second_span: Span,
     },
 
+    #[error("Font family '{family}' not found")]
+    FontFamilyNotFound {
+        family: String,
+        span: Span,
+    },
+
     #[error("{message}")]
     Custom {
         message: String,
@@ -196,6 +202,7 @@ impl CompileError {
             | CompileError::BlockedEnvVariable { span, .. }
             | CompileError::BareEnvUse { span, .. }
             | CompileError::DuplicateOverloadSignature { span, .. }
+            | CompileError::FontFamilyNotFound { span, .. }
             | CompileError::Custom { span, .. } => *span,
             CompileError::PotentiallyAmbiguousOverloads(details) => details.span,
             CompileError::NoMatchingOverload(details) => details.span,

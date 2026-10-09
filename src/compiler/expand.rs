@@ -2098,6 +2098,13 @@ fn expand_primitive_element(
                 "family".to_string(),
                 Expr::Literal(Literal::String(String::new(), elem.span)),
             );
+        } else if let Some(Expr::Literal(Literal::String(family, span))) = ports.get("family") {
+            if !family.is_empty() && !crate::compiler::text::font_family_exists(family) {
+                return Err(CompileError::FontFamilyNotFound {
+                    family: family.clone(),
+                    span: *span,
+                });
+            }
         }
 
         let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
@@ -2363,6 +2370,23 @@ fn expand_primitive_element(
     }
 
     if elem.name.as_str() == "Text" {
+        if let Some(Expr::Literal(Literal::String(family, span))) = ports.get("family") {
+            if !family.is_empty() && !crate::compiler::text::font_family_exists(family) {
+                return Err(CompileError::FontFamilyNotFound {
+                    family: family.clone(),
+                    span: *span,
+                });
+            }
+        }
+        if let Some(Expr::Literal(Literal::String(family, span))) = ports.get("font") {
+            if !family.is_empty() && !crate::compiler::text::font_family_exists(family) {
+                return Err(CompileError::FontFamilyNotFound {
+                    family: family.clone(),
+                    span: *span,
+                });
+            }
+        }
+
         let end_val = ports.remove("end_at");
         if !ports.contains_key("ends_at") {
             if let Some(expr) = end_val {

@@ -3188,6 +3188,82 @@ fn test_text_baseline_and_text_font_baseline() {
     assert_eq!(rects[2].rect.y, rects[0].rect.y - (32.0 * 0.71));
 }
 
+#[test]
+fn test_font_family_not_found_in_font_static() {
+    let input = r#"
+    \Font(family: "NonExistentFontXYZ", size: 16)
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = directedtype::evaluate_document(&doc).unwrap_err();
+    match err {
+        CompileError::FontFamilyNotFound { family, .. } => {
+            assert_eq!(family, "NonExistentFontXYZ");
+        }
+        other => panic!("Expected FontFamilyNotFound, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_font_family_not_found_in_text_family_static() {
+    let input = r#"
+    \Text(family: "NonExistentFontXYZ", size: 16) { Hello }
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = directedtype::evaluate_document(&doc).unwrap_err();
+    match err {
+        CompileError::FontFamilyNotFound { family, .. } => {
+            assert_eq!(family, "NonExistentFontXYZ");
+        }
+        other => panic!("Expected FontFamilyNotFound, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_font_family_not_found_in_text_font_static() {
+    let input = r#"
+    \Text(font: "NonExistentFontXYZ", size: 16) { Hello }
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = directedtype::evaluate_document(&doc).unwrap_err();
+    match err {
+        CompileError::FontFamilyNotFound { family, .. } => {
+            assert_eq!(family, "NonExistentFontXYZ");
+        }
+        other => panic!("Expected FontFamilyNotFound, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_font_family_not_found_dynamic() {
+    let input = r#"
+    let fam = "NonExistentFontXYZ";
+    \Font(family: fam, size: 16)
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = directedtype::evaluate_document(&doc).unwrap_err();
+    match err {
+        CompileError::FontFamilyNotFound { family, .. } => {
+            assert_eq!(family, "NonExistentFontXYZ");
+        }
+        other => panic!("Expected FontFamilyNotFound, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_font_family_generic_and_valid_fonts_succeed() {
+    let input = r#"
+    \Font(family: "sans-serif", size: 16)
+    \Font(family: "serif", size: 16)
+    \Font(family: "monospace", size: 16)
+    \Font(family: "Arial", size: 16)
+    \Font(size: 16)
+    \Text(font: "sans-serif", size: 16) { Test }
+    "#;
+    let doc = parse(input).expect("parse ok");
+    assert!(directedtype::evaluate_document(&doc).is_ok());
+}
+
+
 
 
 

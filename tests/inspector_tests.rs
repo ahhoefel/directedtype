@@ -772,7 +772,7 @@ fn test_property_bullet_vertical_centering() {
 #[test]
 fn test_let_bound_var_name_in_dom_tree() {
     let source = r#"
-        let heading_font = \Font(size: 24, weight: 700, family: "Inter")
+        let heading_font = \Font(size: 24, weight: 700, family: "Arial")
         \Text(font: heading_font, text: "Hello World")
     "#;
     let doc = directedtype::parse(source).expect("Parse ok");
@@ -791,7 +791,7 @@ fn test_let_bound_var_name_in_dom_tree() {
 #[test]
 fn test_expandable_reference_properties() {
     let source = r#"
-        let heading_font = \Font(size: 24, weight: 700, family: "Inter")
+        let heading_font = \Font(size: 24, weight: 700, family: "Arial")
         \Text(id: "my_text", font: heading_font, text: "Hello World")
     "#;
     let doc = directedtype::parse(source).expect("Parse ok");

@@ -249,6 +249,41 @@ pub fn measure_font_metrics(
     })
 }
 
+/// Standard W3C / CSS generic font families that resolve to system fallbacks.
+const GENERIC_FONT_FAMILIES: &[&str] = &[
+    "sans-serif",
+    "serif",
+    "monospace",
+    "cursive",
+    "fantasy",
+    "system-ui",
+    "ui-serif",
+    "ui-sans-serif",
+    "ui-monospace",
+    "ui-rounded",
+    "emoji",
+    "math",
+    "fangsong",
+];
+
+/// Checks whether a font family exists in the system font database or is a standard generic family.
+pub fn font_family_exists(family: &str) -> bool {
+    let trimmed = family.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    if GENERIC_FONT_FAMILIES
+        .iter()
+        .any(|g| g.eq_ignore_ascii_case(trimmed))
+    {
+        return true;
+    }
+    FONT_CONTEXT.with(|font_cx_cell| {
+        let mut font_cx = font_cx_cell.borrow_mut();
+        font_cx.collection.family_id(trimmed).is_some()
+    })
+}
+
 use crate::compiler::expanded::NodeId;
 use crate::compiler::layout::Rect;
 use std::collections::HashMap;

@@ -26,9 +26,33 @@ pub fn evaluate_graph_with_state(
 
     for var_id in schedule.iter() {
         if let Some(override_val) = state_overrides.get(var_id) {
+            if var_id.port == "family" {
+                if let Value::String(ref s) = override_val {
+                    if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
+                        let span = graph
+                            .get_variable(var_id)
+                            .map(|n| n.span)
+                            .unwrap_or_default();
+                        return Err(CompileError::FontFamilyNotFound {
+                            family: s.clone(),
+                            span,
+                        });
+                    }
+                }
+            }
             env.insert(var_id.clone(), override_val.clone());
         } else if let Some(node) = graph.get_variable(var_id) {
             let val = eval_expr(&node.equation, &env)?;
+            if var_id.port == "family" {
+                if let Value::String(ref s) = val {
+                    if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
+                        return Err(CompileError::FontFamilyNotFound {
+                            family: s.clone(),
+                            span: node.span,
+                        });
+                    }
+                }
+            }
             env.insert(var_id.clone(), val);
         }
     }
@@ -86,6 +110,21 @@ pub fn invalidate_and_reevaluate(
                 continue;
             };
 
+            if var_id.port == "family" {
+                if let Value::String(ref s) = new_val {
+                    if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
+                        let span = graph
+                            .get_variable(var_id)
+                            .map(|n| n.span)
+                            .unwrap_or_default();
+                        return Err(CompileError::FontFamilyNotFound {
+                            family: s.clone(),
+                            span,
+                        });
+                    }
+                }
+            }
+
             let prev_val = current_values.insert(var_id.clone(), new_val.clone());
             if prev_val.as_ref() != Some(&new_val) {
                 changed.insert(var_id.clone());
@@ -106,6 +145,18 @@ fn get_family_from_val<'a>(val: Option<&'a Value>, env: &'a HashMap<VarId, Value
         }
         _ => None,
     }
+}
+
+fn validate_font_family(family: Option<&str>, span: crate::span::Span) -> Result<(), CompileError> {
+    if let Some(f) = family {
+        if !f.is_empty() && !crate::compiler::text::font_family_exists(f) {
+            return Err(CompileError::FontFamilyNotFound {
+                family: f.to_string(),
+                span,
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Evaluates an algebraic expression in the given environment.
@@ -311,6 +362,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let ends_at = evaluated_args.get(5).and_then(|v| v.as_str());
                     let start_at = evaluated_args.get(6).and_then(|v| v.as_str());
                     let line_height = evaluated_args.get(7).and_then(|v| v.as_f64());
+                    validate_font_family(family, c.span)?;
 
                     let h = crate::compiler::text::measure_text_height(text, size, weight, family, max_width, ends_at, start_at, line_height);
                     Ok(Value::Number(h))
@@ -320,6 +372,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
                     let family = get_family_from_val(evaluated_args.get(2), env);
                     let start_at = evaluated_args.get(3).and_then(|v| v.as_str());
+                    validate_font_family(family, c.span)?;
 
                     let offset = crate::compiler::text::text_baseline_offset(size, weight, family, start_at);
                     Ok(Value::Number(offset))
@@ -329,6 +382,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let size = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(16.0);
                     let weight = evaluated_args.get(2).and_then(|v| v.as_f64()).unwrap_or(400.0);
                     let family = get_family_from_val(evaluated_args.get(3), env);
+                    validate_font_family(family, c.span)?;
 
                     let w = crate::compiler::text::measure_text_width(text, size, weight, family);
                     Ok(Value::Number(w))
@@ -337,6 +391,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
                     let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
                     let family = get_family_from_val(evaluated_args.get(2), env);
+                    validate_font_family(family, c.span)?;
 
                     let m = crate::compiler::text::measure_font_metrics(size, weight, family);
                     Ok(Value::Number(m.cap_height))
@@ -345,6 +400,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
                     let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
                     let family = get_family_from_val(evaluated_args.get(2), env);
+                    validate_font_family(family, c.span)?;
 
                     let m = crate::compiler::text::measure_font_metrics(size, weight, family);
                     Ok(Value::Number(m.x_height))
@@ -353,6 +409,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
                     let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
                     let family = get_family_from_val(evaluated_args.get(2), env);
+                    validate_font_family(family, c.span)?;
 
                     let m = crate::compiler::text::measure_font_metrics(size, weight, family);
                     Ok(Value::Number(m.descent))
@@ -361,6 +418,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
                     let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
                     let family = get_family_from_val(evaluated_args.get(2), env);
+                    validate_font_family(family, c.span)?;
 
                     let m = crate::compiler::text::measure_font_metrics(size, weight, family);
                     Ok(Value::Number(m.ascent))
@@ -369,6 +427,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
                     let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
                     let family = get_family_from_val(evaluated_args.get(2), env);
+                    validate_font_family(family, c.span)?;
 
                     let m = crate::compiler::text::measure_font_metrics(size, weight, family);
                     Ok(Value::Number(m.line_height))
