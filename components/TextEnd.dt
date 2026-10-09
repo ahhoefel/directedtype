@@ -1,0 +1,6 @@
+// DirectedType Standard Component Library: TextEnd
+// Typographic vertical termination landmarks for Text components.
+\Enum TextEnd {
+    Baseline,
+    Descender,
+}

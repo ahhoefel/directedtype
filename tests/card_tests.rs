@@ -31,14 +31,14 @@ fn test_card_with_direct_raw_text() {
     assert_eq!(text_node.text_content.as_deref(), Some("Hello Direct Text!"));
     assert_eq!(text_node.rect.x, 40.0); // 20 + 20
     assert_eq!(text_node.rect.y, 50.0); // 30 + 20
-    assert_eq!(text_node.rect.height, 16.0);
+    assert_eq!(text_node.rect.height, 12.0);
 
-    // Rect should wrap the text with padding_y on both sides: 20 + 16 + 20 = 56
+    // Rect should wrap the text with padding_y on both sides: 20 + 12 + 20 = 52
     let rect = compiled.layout.nodes.iter().find(|n| n.name == "Rect").expect("rect found");
     assert_eq!(rect.rect.x, 20.0);
     assert_eq!(rect.rect.y, 30.0);
     assert_eq!(rect.rect.width, 250.0);
-    assert_eq!(rect.rect.height, 56.0);
+    assert_eq!(rect.rect.height, 52.0);
 }
 
 #[test]
@@ -72,10 +72,10 @@ fn test_card_multi_child_vertical_flow_gap() {
     // Second line should start after first line's bottom + gap
     assert_eq!(text_nodes[1].rect.y, text_nodes[0].rect.y + text_nodes[0].rect.height + 10.0);
 
-    // Card should wrap both lines: 20 + 16 + 10 + 16 + 20 = 82
+    // Card should wrap both lines: 20 + 12 + 10 + 12 + 20 = 74
     let card_node = compiled.layout.nodes.iter().find(|n| n.name == "Card").expect("card found");
     let rect = compiled.layout.nodes.iter().find(|n| n.name == "Rect" && n.parent == Some(card_node.id)).expect("rect found");
-    assert_eq!(rect.rect.height, 82.0);
+    assert_eq!(rect.rect.height, 74.0);
 }
 
 #[test]

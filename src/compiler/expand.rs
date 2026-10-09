@@ -81,6 +81,16 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         }
     }
 
+    // Built-in standard enums
+    enums.entry("TextEnd".to_string()).or_insert_with(|| EnumDef {
+        name: Ident::new("TextEnd", doc.span),
+        variants: vec![
+            Ident::new("Baseline", doc.span),
+            Ident::new("Descender", doc.span),
+        ],
+        span: doc.span,
+    });
+
     let mut global_scope = HashMap::new();
     let mut global_env_scope: HashMap<String, EnvEntry> = HashMap::new();
     let mut node_fonts: HashMap<NodeId, NodeId> = HashMap::new();
@@ -349,6 +359,11 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
             Item::Let(let_binding) => match &let_binding.value {
                 Some(LetValue::Expr(_)) | None => {} // Already resolved in pre-pass
                 Some(LetValue::Node(elem)) => {
+                    let root_id = NodeId(expanded_doc.nodes.len());
+                    global_scope.insert(
+                        let_binding.name.as_str().to_string(),
+                        LexicalBinding::Node(root_id),
+                    );
                     let elem_ctx = ElementContext {
                         parent_id: Some(NodeId::WINDOW),
                         prev_sibling_id: last_root_id,
@@ -362,14 +377,11 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         active_scope_id: ScopeId::ROOT,
                         consumer_children: None,
                     };
-                    let root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
+                    let expanded_root_id = expand_element(elem, &elem_ctx, &registry, &mut expanded_doc, &mut node_fonts)?;
+                    debug_assert_eq!(root_id, expanded_root_id);
                     expanded_doc.get_node_mut(root_id).unwrap().var_name = Some(let_binding.name.as_str().to_string());
                     expanded_doc.roots.push(root_id);
                     last_root_id = Some(root_id);
-                    global_scope.insert(
-                        let_binding.name.as_str().to_string(),
-                        LexicalBinding::Node(root_id),
-                    );
                     if elem.name.as_str() == "Font" {
                         node_fonts.insert(root_id, root_id);
                     }
@@ -1136,6 +1148,11 @@ fn expand_component_instance(
                 }
 
                 if let Some(LetValue::Node(elem)) = &let_binding.value {
+                    let node_id = NodeId(doc.nodes.len());
+                    local_scope.insert(
+                        let_binding.name.as_str().to_string(),
+                        LexicalBinding::Node(node_id),
+                    );
                     let elem_ctx = ElementContext {
                         parent_id: Some(ctx.comp_node_id),
                         prev_sibling_id: None,
@@ -1149,19 +1166,16 @@ fn expand_component_instance(
                         active_scope_id: ctx.active_scope_id,
                         consumer_children: consumer_content_items,
                     };
-                    let node_id = expand_element(
+                    let expanded_node_id = expand_element(
                         elem,
                         &elem_ctx,
                         registry,
                         doc,
                         node_fonts,
                     )?;
+                    debug_assert_eq!(node_id, expanded_node_id);
                     doc.get_node_mut(node_id).unwrap().var_name = Some(let_binding.name.as_str().to_string());
                     all_children_ids.push(node_id);
-                    local_scope.insert(
-                        let_binding.name.as_str().to_string(),
-                        LexicalBinding::Node(node_id),
-                    );
                     if elem.name.as_str() == "Font" {
                         node_fonts.insert(node_id, node_id);
                     }
@@ -1917,25 +1931,9 @@ fn expand_primitive_element(
 
     // 2. Rewrite element ports
     let empty_ports: [String; 0] = [];
-    let current_node = if ctx.is_let {
-        ctx.enclosing_component_id.unwrap_or(node_id)
-    } else {
-        node_id
-    };
-    let parent_node = if ctx.is_let {
-        if let Some(comp_id) = ctx.enclosing_component_id {
-            doc.get_node(comp_id).and_then(|n| n.parent)
-        } else {
-            ctx.parent_id
-        }
-    } else {
-        ctx.parent_id
-    };
-    let current_ports = if ctx.is_let {
-        ctx.parent_ports
-    } else {
-        &empty_ports
-    };
+    let current_node = node_id;
+    let parent_node = ctx.parent_id;
+    let current_ports = &empty_ports;
 
     // First, determine if this element has a font node (explicitly or ambiently)
     let mut font_node_id = None;
@@ -2342,6 +2340,12 @@ fn expand_primitive_element(
     }
 
     if elem.name.as_str() == "Text" {
+        if !ports.contains_key("ends_at") {
+            let default_ends_at = Expr::Literal(Literal::Enum("TextEnd".to_string(), "Baseline".to_string(), elem.span));
+            ports.insert("ends_at".to_string(), default_ends_at.clone());
+            authored_ports.insert("ends_at".to_string(), default_ends_at);
+        }
+
         if !ports.contains_key("size") && !ports.contains_key("font_size") {
             // Check if this is an inline text span inside a parent Text node
             if let Some(parent) = ctx.parent_id {
@@ -2566,6 +2570,15 @@ fn expand_primitive_element(
                 member: Ident::new("width", elem.span),
                 span: elem.span,
             });
+            let ends_at_expr = if ports.contains_key("ends_at") {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("ends_at", elem.span),
+                    span: elem.span,
+                })
+            } else {
+                Expr::Literal(Literal::Enum("TextEnd".to_string(), "Baseline".to_string(), elem.span))
+            };
             let height_call = Expr::Call(CallExpr {
                 callee: Ident::new("text_height", elem.span),
                 args: vec![
@@ -2574,6 +2587,7 @@ fn expand_primitive_element(
                     weight_expr.clone(),
                     font_expr.clone(),
                     width_expr,
+                    ends_at_expr,
                 ],
                 span: elem.span,
             });

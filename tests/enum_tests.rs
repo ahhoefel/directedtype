@@ -218,3 +218,88 @@ fn test_enum_import_and_aliased_import() {
         other => panic!("Expected Literal 200, got {:?}", other),
     }
 }
+
+#[test]
+fn test_text_ends_at_baseline_and_descender() {
+    let input = r#"
+    \Text(size: 32, ends_at: TextEnd.Baseline) {
+        Typography & Baseline
+    }
+    \Text(size: 32, ends_at: TextEnd.Descender) {
+        Typography & Baseline
+    }
+    \Text(size: 32) {
+        Typography & Baseline
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
+
+    assert_eq!(layout.nodes.len(), 3);
+    let t_baseline = &layout.nodes[0];
+    let t_descender = &layout.nodes[1];
+    let t_default = &layout.nodes[2];
+
+    assert_eq!(t_baseline.name, "Text");
+    assert_eq!(t_descender.name, "Text");
+    assert_eq!(t_default.name, "Text");
+
+    // Check ends_at properties
+    assert_eq!(
+        t_baseline.properties.get("ends_at").map(|v| v.as_str().unwrap()),
+        Some("Baseline")
+    );
+    assert_eq!(
+        t_descender.properties.get("ends_at").map(|v| v.as_str().unwrap()),
+        Some("Descender")
+    );
+    assert_eq!(
+        t_default.properties.get("ends_at").map(|v| v.as_str().unwrap()),
+        Some("Baseline")
+    );
+
+    // Baseline height is strictly less than Descender height
+    assert!(
+        t_baseline.rect.height < t_descender.rect.height,
+        "Baseline height ({}) must be less than Descender height ({})",
+        t_baseline.rect.height,
+        t_descender.rect.height
+    );
+
+    // Default without ends_at equals Baseline height
+    assert_eq!(t_default.rect.height, t_baseline.rect.height);
+}
+
+#[test]
+fn test_text_ends_at_via_component_use() {
+    use directedtype::component::ComponentRegistry;
+    use directedtype::compiler::compiled::CompiledDocument;
+
+    let input = r#"
+    \use "components/TextEnd.dt"
+
+    \Text(size: 24, ends_at: TextEnd.Descender) {
+        Descender text
+    }
+    "#;
+
+    let doc = parse(input).expect("Failed to parse");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let text_node = compiled.layout.nodes.iter().find(|n| n.name == "Text").expect("text node found");
+    assert_eq!(
+        text_node.properties.get("ends_at").map(|v| v.as_str().unwrap()),
+        Some("Descender")
+    );
+}
+

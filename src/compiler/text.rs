@@ -14,8 +14,9 @@ pub fn measure_text_height(
     font_weight: f64,
     font_family: Option<&str>,
     max_width: f64,
+    ends_at: Option<&str>,
 ) -> f64 {
-    let (_, height) = measure_text_bounds(text, font_size, font_weight, font_family, Some(max_width));
+    let (_, height) = measure_text_bounds(text, font_size, font_weight, font_family, Some(max_width), ends_at);
     height
 }
 
@@ -26,7 +27,7 @@ pub fn measure_text_width(
     font_weight: f64,
     font_family: Option<&str>,
 ) -> f64 {
-    let (width, _) = measure_text_bounds(text, font_size, font_weight, font_family, None);
+    let (width, _) = measure_text_bounds(text, font_size, font_weight, font_family, None, None);
     width
 }
 
@@ -37,6 +38,7 @@ pub fn measure_text_bounds(
     font_weight: f64,
     font_family: Option<&str>,
     max_width: Option<f64>,
+    ends_at: Option<&str>,
 ) -> (f64, f64) {
     if text.is_empty() {
         return (0.0, 0.0);
@@ -70,7 +72,38 @@ pub fn measure_text_bounds(
                 layout.full_width() as f64
             };
 
-            (width, layout.height() as f64)
+            let height = match ends_at {
+                Some(s) if s.eq_ignore_ascii_case("descender") => {
+                    if let Some(last_line) = layout.lines().last() {
+                        let m = last_line.metrics();
+                        (m.block_min_coord + m.baseline + m.descent) as f64
+                    } else {
+                        layout.height() as f64
+                    }
+                }
+                Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => {
+                    layout.height() as f64
+                }
+                Some(s) if s.eq_ignore_ascii_case("baseline") => {
+                    if let Some(last_line) = layout.lines().last() {
+                        let m = last_line.metrics();
+                        (m.block_min_coord + m.baseline) as f64
+                    } else {
+                        layout.height() as f64
+                    }
+                }
+                _ => {
+                    // Default to BASELINE when unspecified
+                    if let Some(last_line) = layout.lines().last() {
+                        let m = last_line.metrics();
+                        (m.block_min_coord + m.baseline) as f64
+                    } else {
+                        layout.height() as f64
+                    }
+                }
+            };
+
+            (width, height)
         })
     })
 }
@@ -253,7 +286,7 @@ pub fn compute_span_fragments(
                 result.entry(child_id).or_insert_with(|| {
                     let char_offset = span.range.start;
                     let prefix_text = &text[0..char_offset.min(text.len())];
-                    let (px, py) = measure_text_bounds(prefix_text, font_size, font_weight, font_family, max_width);
+                    let (px, py) = measure_text_bounds(prefix_text, font_size, font_weight, font_family, max_width, None);
                     let frag_rect = Rect::new(origin_x + px, origin_y + py, 0.0, font_size);
                     vec![frag_rect]
                 });

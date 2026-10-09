@@ -1,0 +1,54 @@
+\use "components/Padding.dt"
+\use "components/VStack.dt"
+\use "components/Center.dt"
+
+env font = \Font(name: "Times New Roman", size: 32, weight: 700);
+\Component Box(x, y, width, height) {
+    let f = \Font(name: "Times New Roman", size: 120, weight: 700);
+    // Background card (drawn first so it stays behind text and guides)
+    \Rect(x: parent.left, y: parent.top, width: parent.width, height: parent.height, color: #0f172a)
+    // Centered text
+    let t = \Text(
+        x: parent.left + (self.width - t.width) / 2,
+        y: parent.top + (self.height - t.height) / 2,
+        font: f,
+        color: #f8fafc
+    ) {
+        Typography
+    };
+    // Text bounding box (cyan)
+    \Rect(x: t.left, y: t.top, width: t.width, height: t.height, color: #00000000, border_color: #38bdf8, border_width: 1)
+    // Baseline (red)
+    let baseline_y = t.top + t.font.ascent;
+    let guide_outset = 25;
+    let guide_x = t.left - guide_outset;
+    let guide_width = t.width + (2 * guide_outset);
+    let cap_height_y = baseline_y - t.font.cap_height;
+    let x_height_y = baseline_y - t.font.x_height;
+    let descender_y = baseline_y + t.font.descent;
+
+    \Rect(x: guide_x, y: baseline_y, width: guide_width, height: 1, color: #ef4444)
+    \Rect(x: guide_x, y: cap_height_y, width: guide_width, height: 1, color: #22c55e)
+    \Rect(x: guide_x, y: x_height_y, width: guide_width, height: 1, color: #f97316)
+    \Rect(x: guide_x, y: descender_y, width: guide_width, height: 1, color: #a855f7)
+
+    \Measurement(x: guide_x - 10, y1: t.top, y2: t.bottom)
+    \Measurement(x: guide_x + guide_width + 10, y1: t.y, y2: baseline_y)
+    \Measurement(x: guide_x + guide_width + 30, y1: cap_height_y, y2: descender_y)
+    \Measurement(x: guide_x + guide_width/2, y1: self.y, y2: t.y)
+    \Measurement(x: guide_x + guide_width/2, y1: t.bottom, y2: self.bottom)
+    \Measurement(x: self.right + 10, y1: self.top, y2: self.bottom, color: #000000)
+
+}
+
+\Component Measurement(x, y1, y2, arm: 5, color: #ffffff) {
+    env font = \Font(name: "Arial", size: 10);
+    \Rect(x: x, y: y1, width: 1, height: y2 - y1, color: #ef4444)
+    \Rect(x: x-arm, y: y1, width: 2*arm, height: 1, color: #ef4444)
+    \Rect(x: x-arm, y: y2, width: 2*arm, height: 1, color: #ef4444)
+    \Text(x: x + 2, y: (y1 + y2)/2, color: color, text: "" + (y2 - y1))
+}
+
+\Center{
+\Box(width: 1000, height: 160)
+}
