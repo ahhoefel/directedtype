@@ -2,16 +2,16 @@
 \use "components/VStack.dt"
 \use "components/Center.dt"
 
-env font = \Font(name: "Times New Roman", size: 32, weight: 700);
-\Component Box(x, y, width, height) {
-    let f = \Font(name: "Times New Roman", size: 120, weight: 700);
+
+env font = \Font(family: "Arial", size: 120, weight: 700);
+\Component Box(x, y, width, height, env font) {
+    
     // Background card (drawn first so it stays behind text and guides)
     \Rect(x: parent.left, y: parent.top, width: parent.width, height: parent.height, color: #0f172a)
     // Centered text
     let t = \Text(
         x: parent.left + (self.width - t.width) / 2,
         y: parent.top + (self.height - t.height) / 2,
-        font: f,
         color: #f8fafc
     ) {
         Typography
@@ -42,7 +42,7 @@ env font = \Font(name: "Times New Roman", size: 32, weight: 700);
 }
 
 \Component Measurement(x, y1, y2, arm: 5, color: #ffffff) {
-    env font = \Font(name: "Arial", size: 10);
+    env font = \Font(family: "Arial", size: 10);
     \Rect(x: x, y: y1, width: 1, height: y2 - y1, color: #ef4444)
     \Rect(x: x-arm, y: y1, width: 2*arm, height: 1, color: #ef4444)
     \Rect(x: x-arm, y: y2, width: 2*arm, height: 1, color: #ef4444)
@@ -50,5 +50,5 @@ env font = \Font(name: "Times New Roman", size: 32, weight: 700);
 }
 
 \Center{
-\Box(width: 1000, height: 160)
+    \Box(width: 1000, height: 160)
 }

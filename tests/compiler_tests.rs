@@ -3076,6 +3076,50 @@ fn test_missing_size_on_font_yields_compile_error() {
 }
 
 #[test]
+fn test_font_rejects_name_port_error() {
+    let input = r#"let f = \Font(name: "Times New Roman", size: 16);"#;
+    let doc = parse(input).expect("parse ok");
+    let err = compile_to_graph(&doc).expect_err("Expected compile error for name on Font");
+    match err {
+        directedtype::compiler::CompileError::NoMatchingOverload(details) => {
+            assert_eq!(details.name, "Font");
+            assert!(details.provided_ports.contains(&"name".to_string()));
+            assert!(details.available_signatures.iter().any(|sig| sig.contains(&"family".to_string())));
+        }
+        other => panic!("Expected NoMatchingOverload CompileError, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_env_font_rejects_name_port_error() {
+    let input = r#"env font = \Font(name: "Arial", size: 12);"#;
+    let doc = parse(input).expect("parse ok");
+    let err = compile_to_graph(&doc).expect_err("Expected compile error for name on env font");
+    match err {
+        directedtype::compiler::CompileError::NoMatchingOverload(details) => {
+            assert_eq!(details.name, "Font");
+            assert!(details.provided_ports.contains(&"name".to_string()));
+        }
+        other => panic!("Expected NoMatchingOverload CompileError, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_font_rejects_unknown_ports() {
+    let input = r#"let f = \Font(size: 16, color: #ff0000);"#;
+    let doc = parse(input).expect("parse ok");
+    let err = compile_to_graph(&doc).expect_err("Expected compile error for color on Font");
+    match err {
+        directedtype::compiler::CompileError::NoMatchingOverload(details) => {
+            assert_eq!(details.name, "Font");
+            assert!(details.provided_ports.contains(&"color".to_string()));
+        }
+        other => panic!("Expected NoMatchingOverload CompileError, got: {:?}", other),
+    }
+}
+
+
+#[test]
 fn test_missing_dimensions_on_child_rect_yields_compile_error() {
     let input = r#"
     \Rect(x: 0, y: 0, width: 400, height: 300, color: #ffffff) {

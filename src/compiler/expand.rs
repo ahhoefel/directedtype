@@ -1958,30 +1958,32 @@ fn expand_primitive_element(
                 font_node_id = Some(fid);
             }
         }
-    } else if let Some(EnvEntry::Bound(env_expr)) = ctx.env_scope.get("font") {
-        let temp_scope_ctx = ScopeContext {
-            current_node,
-            parent_node,
-            prev_sibling: ctx.prev_sibling_id,
-            child_ids: &child_ids,
-            parent_ports: ctx.parent_ports,
-            current_ports,
-            lexical_scope: ctx.lexical_scope,
-            env_scope: ctx.env_scope,
-            node_fonts: &*node_fonts,
-            enclosing_component: ctx.enclosing_component_id,
-            comp_ports: None,
-            declared_state_names: None,
-            enums: ctx.enums,
-        };
-        if let Ok(rewritten) = rewrite_expr(env_expr, &temp_scope_ctx) {
-            if let Expr::Ident(id) = &rewritten {
-                if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
-                    font_node_id = Some(fid);
-                    resolved_port_exprs.push(("font".to_string(), Expr::Ident(Ident::new(fid.canonical_name(), elem.span))));
+    } else if elem.name.as_str() != "Font" {
+        if let Some(EnvEntry::Bound(env_expr)) = ctx.env_scope.get("font") {
+            let temp_scope_ctx = ScopeContext {
+                current_node,
+                parent_node,
+                prev_sibling: ctx.prev_sibling_id,
+                child_ids: &child_ids,
+                parent_ports: ctx.parent_ports,
+                current_ports,
+                lexical_scope: ctx.lexical_scope,
+                env_scope: ctx.env_scope,
+                node_fonts: &*node_fonts,
+                enclosing_component: ctx.enclosing_component_id,
+                comp_ports: None,
+                declared_state_names: None,
+                enums: ctx.enums,
+            };
+            if let Ok(rewritten) = rewrite_expr(env_expr, &temp_scope_ctx) {
+                if let Expr::Ident(id) = &rewritten {
+                    if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                        font_node_id = Some(fid);
+                        resolved_port_exprs.push(("font".to_string(), Expr::Ident(Ident::new(fid.canonical_name(), elem.span))));
+                    }
+                } else if matches!(rewritten, Expr::Literal(Literal::String(_, _))) {
+                    resolved_port_exprs.push(("font".to_string(), rewritten));
                 }
-            } else if matches!(rewritten, Expr::Literal(Literal::String(_, _))) {
-                resolved_port_exprs.push(("font".to_string(), rewritten));
             }
         }
     }
@@ -2044,6 +2046,28 @@ fn expand_primitive_element(
     }
 
     if elem.name.as_str() == "Font" {
+        const FONT_PUBLIC_PORTS: &[&str] = &["family", "size", "weight"];
+        for port in &elem.ports {
+            let name = port.name.as_str();
+            if !FONT_PUBLIC_PORTS.contains(&name) {
+                let mut provided: Vec<String> = elem.ports.iter().map(|p| p.name.as_str().to_string()).collect();
+                provided.sort();
+                let available_signatures = vec![vec![
+                    "size".to_string(),
+                    "weight".to_string(),
+                    "family".to_string(),
+                ]];
+                return Err(CompileError::NoMatchingOverload(Box::new(
+                    NoMatchingOverloadDetails {
+                        name: "Font".to_string(),
+                        provided_ports: provided,
+                        available_signatures,
+                        span: port.name.span,
+                    },
+                )));
+            }
+        }
+
         // Size is a required field on Font
         if !ports.contains_key("size") {
             return Err(CompileError::MissingPort {
