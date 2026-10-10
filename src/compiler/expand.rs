@@ -26,6 +26,7 @@ pub enum EnvEntry {
 pub struct ScopeContext<'a> {
     pub current_node: NodeId,
     pub parent_node: Option<NodeId>,
+    pub parent_name: Option<&'a str>,
     pub prev_sibling: Option<NodeId>,
     pub child_ids: &'a [NodeId],
     pub parent_ports: &'a [String],
@@ -196,6 +197,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         let scope_ctx = ScopeContext {
                             current_node: NodeId::WINDOW,
                             parent_node: None,
+                            parent_name: None,
                             prev_sibling: None,
                             child_ids: &empty_children,
                             parent_ports: &empty_ports,
@@ -229,6 +231,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             let scope_ctx = ScopeContext {
                                 current_node: NodeId::WINDOW,
                                 parent_node: None,
+                                parent_name: None,
                                 prev_sibling: None,
                                 child_ids: &empty_children,
                                 parent_ports: &empty_ports,
@@ -264,6 +267,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
     let window_scope_ctx = ScopeContext {
         current_node: NodeId::WINDOW,
         parent_node: None,
+        parent_name: None,
         prev_sibling: None,
         child_ids: &empty_children,
         parent_ports: &empty_ports,
@@ -291,6 +295,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                 if let Some(Expr::Node(elem)) = &env_binding.value {
                     let elem_ctx = ElementContext {
                         parent_id: Some(NodeId::WINDOW),
+                        parent_name: Some("window"),
                         prev_sibling_id: last_root_id,
                         parent_ports: &window_scope_ports,
                         lexical_scope: &global_scope,
@@ -322,6 +327,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                     let scope_ctx = ScopeContext {
                         current_node: NodeId::WINDOW,
                         parent_node: None,
+                        parent_name: None,
                         prev_sibling: None,
                         child_ids: &empty_children,
                         parent_ports: &empty_ports,
@@ -349,6 +355,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
             Item::Node(node) => {
                 let elem_ctx = ElementContext {
                     parent_id: Some(NodeId::WINDOW),
+                    parent_name: Some("window"),
                     prev_sibling_id: last_root_id,
                     parent_ports: &window_scope_ports,
                     lexical_scope: &global_scope,
@@ -374,6 +381,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                     );
                     let elem_ctx = ElementContext {
                         parent_id: Some(NodeId::WINDOW),
+                        parent_name: Some("window"),
                         prev_sibling_id: last_root_id,
                         parent_ports: &window_scope_ports,
                         lexical_scope: &global_scope,
@@ -407,6 +415,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
 struct InstanceContext<'a> {
     pub comp_node_id: NodeId,
     pub parent_id: Option<NodeId>,
+    pub parent_name: Option<&'a str>,
     pub prev_sibling_id: Option<NodeId>,
     pub parent_ports: &'a [String],
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
@@ -417,6 +426,7 @@ struct InstanceContext<'a> {
 
 struct ElementContext<'a> {
     pub parent_id: Option<NodeId>,
+    pub parent_name: Option<&'a str>,
     pub prev_sibling_id: Option<NodeId>,
     pub parent_ports: &'a [String],
     pub lexical_scope: &'a HashMap<String, LexicalBinding>,
@@ -538,6 +548,10 @@ fn expand_element(
     expanded.parent = ctx.parent_id;
     expanded.prev_sibling = ctx.prev_sibling_id;
     expanded.scope_id = Some(ctx.active_scope_id);
+    expanded.enclosing_component = ctx.enclosing_component_id;
+    if let Some(ambients) = ctx.ambient_authored_ports {
+        expanded.ambient_ports = ambients.keys().cloned().collect();
+    }
     doc.scope_tree.node_to_scope.insert(node_id, ctx.active_scope_id);
 
     if let Some(key) = &elem.key {
@@ -547,6 +561,7 @@ fn expand_element(
         let key_scope_ctx = ScopeContext {
             current_node: node_id,
             parent_node: ctx.parent_id,
+            parent_name: ctx.parent_name,
             prev_sibling: ctx.prev_sibling_id,
             child_ids: &empty_children,
             parent_ports: ctx.parent_ports,
@@ -624,6 +639,7 @@ fn expand_element(
         let inst_ctx = InstanceContext {
             comp_node_id: node_id,
             parent_id: ctx.parent_id,
+            parent_name: ctx.parent_name,
             prev_sibling_id: ctx.prev_sibling_id,
             parent_ports: ctx.parent_ports,
             ambient_authored_ports: ctx.ambient_authored_ports,
@@ -754,7 +770,45 @@ fn expand_component_instance(
 
     let declared_state_names: HashSet<String> = declared_states.keys().cloned().collect();
 
-    // Validate that caller does not attempt to override immutable alias ports or set private state
+    let mut declared_lets: HashMap<String, LetBinding> = HashMap::new();
+    for item in &comp_def.body {
+        if let ComponentBodyItem::Let(l) = item {
+            if let Some(LetValue::Expr(_)) = &l.value {
+                let let_name = l.name.as_str().to_string();
+                if let_name == "parent" {
+                    return Err(CompileError::ReservedPort {
+                        node: comp_def.name.as_str().to_string(),
+                        port: "parent".to_string(),
+                        span: l.name.span,
+                    });
+                }
+                if declared_aliases.contains_key(&let_name) {
+                    return Err(CompileError::DuplicatePort {
+                        node: comp_def.name.as_str().to_string(),
+                        port: let_name,
+                        span: l.name.span,
+                    });
+                }
+                if declared_states.contains_key(&let_name) {
+                    return Err(CompileError::DuplicatePort {
+                        node: comp_def.name.as_str().to_string(),
+                        port: let_name,
+                        span: l.name.span,
+                    });
+                }
+                if declared_lets.contains_key(&let_name) {
+                    return Err(CompileError::DuplicatePort {
+                        node: comp_def.name.as_str().to_string(),
+                        port: let_name,
+                        span: l.name.span,
+                    });
+                }
+                declared_lets.insert(let_name, l.clone());
+            }
+        }
+    }
+
+    // Validate that caller does not attempt to override immutable alias ports or set private state / let
     for port in &instance.ports {
         let name = port.name.as_str();
         let is_purely_ambient = ctx.ambient_authored_ports.is_some_and(|a| a.contains_key(name));
@@ -775,12 +829,29 @@ fn expand_component_instance(
                 span: port.name.span,
             });
         }
+        if declared_lets.contains_key(name) && !comp_def.params.iter().any(|p| p.name.as_str() == name) {
+            return Err(CompileError::Custom {
+                message: format!(
+                    "Node '{}' has no public port '{}'",
+                    comp_def.name.as_str(),
+                    name
+                ),
+                span: port.name.span,
+            });
+        }
     }
 
     let mut comp_ports = HashMap::new();
     for (state_name, s) in &declared_states {
         let default_expr = default_expr_for_state(s);
         comp_ports.insert(state_name.clone(), default_expr);
+    }
+    for (let_name, l) in &declared_lets {
+        if !comp_def.params.iter().any(|p| p.name.as_str() == let_name) {
+            if let Some(LetValue::Expr(raw_expr)) = &l.value {
+                comp_ports.insert(let_name.clone(), raw_expr.clone());
+            }
+        }
     }
 
     // Map explicit arguments passed to the component (Tier 4)
@@ -793,6 +864,7 @@ fn expand_component_instance(
             Expr::Node(inline_elem) => {
                 let child_ctx = ElementContext {
                     parent_id: Some(ctx.comp_node_id),
+                    parent_name: ctx.parent_name,
                     prev_sibling_id: ctx.prev_sibling_id,
                     parent_ports: ctx.parent_ports,
                     lexical_scope,
@@ -811,6 +883,7 @@ fn expand_component_instance(
                 let caller_scope_ctx = ScopeContext {
                     current_node: ctx.comp_node_id,
                     parent_node: ctx.parent_id,
+                    parent_name: ctx.parent_name,
                     prev_sibling: ctx.prev_sibling_id,
                     child_ids: &empty_children,
                     parent_ports: ctx.parent_ports,
@@ -988,6 +1061,21 @@ fn expand_component_instance(
             })),
         );
     }
+    for (let_name, let_binding) in &declared_lets {
+        if !comp_def.params.iter().any(|p| p.name.as_str() == let_name) {
+            local_scope.insert(
+                let_name.clone(),
+                LexicalBinding::Expr(Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(Expr::Ident(Ident::new(
+                        ctx.comp_node_id.canonical_name(),
+                        let_binding.name.span,
+                    ))),
+                    member: let_binding.name.clone(),
+                    span: let_binding.name.span,
+                })),
+            );
+        }
+    }
 
     // Setup internal_body_env_scope (sealed black box for internal elements)
     let mut internal_body_env_scope: HashMap<String, EnvEntry> = HashMap::new();
@@ -1075,30 +1163,37 @@ fn expand_component_instance(
                     if let_binding.value.is_none() {
                         local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Uninitialized);
                     } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
-                        let scope_ctx = ScopeContext {
-                            current_node: ctx.comp_node_id,
-                            parent_node: ctx.parent_id,
-                            prev_sibling: ctx.prev_sibling_id,
-                            child_ids: &empty_children,
-                            parent_ports: ctx.parent_ports,
-                            current_ports: &comp_scope_ports,
-                            lexical_scope: &local_scope,
-                            env_scope: &internal_body_env_scope,
-                            node_fonts: &*node_fonts,
-                            enclosing_component: Some(ctx.comp_node_id),
-                            comp_ports: Some(&comp_ports),
-                            declared_state_names: Some(&declared_state_names),
-                            enums: ctx.enums,
-                        };
-                        let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
-                        if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
-                            if existing != &rewritten {
+                        let is_param_shadow = comp_def
+                            .params
+                            .iter()
+                            .any(|p| p.name.as_str() == let_binding.name.as_str());
+                        if is_param_shadow {
+                            let scope_ctx = ScopeContext {
+                                current_node: ctx.comp_node_id,
+                                parent_node: ctx.parent_id,
+                                parent_name: ctx.parent_name,
+                                prev_sibling: ctx.prev_sibling_id,
+                                child_ids: &empty_children,
+                                parent_ports: ctx.parent_ports,
+                                current_ports: &comp_scope_ports,
+                                lexical_scope: &local_scope,
+                                env_scope: &internal_body_env_scope,
+                                node_fonts: &*node_fonts,
+                                enclosing_component: Some(ctx.comp_node_id),
+                                comp_ports: Some(&comp_ports),
+                                declared_state_names: Some(&declared_state_names),
+                                enums: ctx.enums,
+                            };
+                            let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
+                            if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
+                                if existing != &rewritten {
+                                    local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                                    changed = true;
+                                }
+                            } else {
                                 local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
                                 changed = true;
                             }
-                        } else {
-                            local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
-                            changed = true;
                         }
                     }
                 }
@@ -1110,6 +1205,7 @@ fn expand_component_instance(
                             let scope_ctx = ScopeContext {
                                 current_node: ctx.comp_node_id,
                                 parent_node: ctx.parent_id,
+                                parent_name: ctx.parent_name,
                                 prev_sibling: ctx.prev_sibling_id,
                                 child_ids: &empty_children,
                                 parent_ports: ctx.parent_ports,
@@ -1163,6 +1259,7 @@ fn expand_component_instance(
                     );
                     let elem_ctx = ElementContext {
                         parent_id: Some(ctx.comp_node_id),
+                        parent_name: Some(comp_def.name.as_str()),
                         prev_sibling_id: None,
                         parent_ports: &comp_scope_ports,
                         lexical_scope: &local_scope,
@@ -1188,36 +1285,50 @@ fn expand_component_instance(
                         node_fonts.insert(node_id, node_id);
                     }
                 } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
-                    let scope_ctx = ScopeContext {
-                        current_node: ctx.comp_node_id,
-                        parent_node: ctx.parent_id,
-                        prev_sibling: ctx.prev_sibling_id,
-                        child_ids: &instantiated_children_ids,
-                        parent_ports: ctx.parent_ports,
-                        current_ports: &comp_scope_ports,
-                        lexical_scope: &local_scope,
-                        env_scope: &internal_body_env_scope,
-                        node_fonts: &*node_fonts,
-                        enclosing_component: Some(ctx.comp_node_id),
-                        comp_ports: None,
-                        declared_state_names: None,
-                        enums: ctx.enums,
-                    };
-                    let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
-                    local_scope.insert(
-                        let_binding.name.as_str().to_string(),
-                        LexicalBinding::Expr(rewritten.clone()),
-                    );
-                    if !is_env_param_shadow {
+                    let is_param_shadow = comp_def
+                        .params
+                        .iter()
+                        .any(|p| p.name.as_str() == let_binding.name.as_str());
+                    if is_param_shadow {
+                        let scope_ctx = ScopeContext {
+                            current_node: ctx.comp_node_id,
+                            parent_node: ctx.parent_id,
+                            parent_name: ctx.parent_name,
+                            prev_sibling: ctx.prev_sibling_id,
+                            child_ids: &instantiated_children_ids,
+                            parent_ports: ctx.parent_ports,
+                            current_ports: &comp_scope_ports,
+                            lexical_scope: &local_scope,
+                            env_scope: &internal_body_env_scope,
+                            node_fonts: &*node_fonts,
+                            enclosing_component: Some(ctx.comp_node_id),
+                            comp_ports: Some(&comp_ports),
+                            declared_state_names: Some(&declared_state_names),
+                            enums: ctx.enums,
+                        };
+                        let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
+                        local_scope.insert(
+                            let_binding.name.as_str().to_string(),
+                            LexicalBinding::Expr(rewritten),
+                        );
+                    } else if !is_env_param_shadow {
+                        let member_expr = Expr::MemberAccess(MemberAccessExpr {
+                            target: Box::new(Expr::Ident(Ident::new(
+                                ctx.comp_node_id.canonical_name(),
+                                let_binding.name.span,
+                            ))),
+                            member: let_binding.name.clone(),
+                            span: let_binding.name.span,
+                        });
                         children_env_scope.insert(
                             let_binding.name.as_str().to_string(),
-                            EnvEntry::Bound(rewritten.clone()),
+                            EnvEntry::Bound(member_expr.clone()),
+                        );
+                        internal_body_env_scope.insert(
+                            let_binding.name.as_str().to_string(),
+                            EnvEntry::Bound(member_expr),
                         );
                     }
-                    internal_body_env_scope.insert(
-                        let_binding.name.as_str().to_string(),
-                        EnvEntry::Bound(rewritten),
-                    );
                 }
             }
             ComponentBodyItem::Env(env_binding) => {
@@ -1226,6 +1337,7 @@ fn expand_component_instance(
                         Expr::Node(elem) => {
                             let elem_ctx = ElementContext {
                                 parent_id: Some(ctx.comp_node_id),
+                                parent_name: Some(comp_def.name.as_str()),
                                 prev_sibling_id: None,
                                 parent_ports: &comp_scope_ports,
                                 lexical_scope: &local_scope,
@@ -1261,6 +1373,7 @@ fn expand_component_instance(
                             let scope_ctx = ScopeContext {
                                 current_node: ctx.comp_node_id,
                                 parent_node: ctx.parent_id,
+                                parent_name: ctx.parent_name,
                                 prev_sibling: ctx.prev_sibling_id,
                                 child_ids: &instantiated_children_ids,
                                 parent_ports: ctx.parent_ports,
@@ -1292,6 +1405,7 @@ fn expand_component_instance(
             ComponentBodyItem::Node(body_node) => {
                 let elem_ctx = ElementContext {
                     parent_id: Some(ctx.comp_node_id),
+                    parent_name: Some(comp_def.name.as_str()),
                     prev_sibling_id: last_child_id,
                     parent_ports: &comp_scope_ports,
                     lexical_scope: &local_scope,
@@ -1332,12 +1446,19 @@ fn expand_component_instance(
                     let child_node_id = NodeId(doc.nodes.len());
                     let empty_children: [NodeId; 0] = [];
                     let empty_ports: [String; 0] = [];
+                    let mut ambient_scope_ports = comp_scope_ports.clone();
+                    for let_name in declared_lets.keys() {
+                        if !ambient_scope_ports.contains(let_name) {
+                            ambient_scope_ports.push(let_name.clone());
+                        }
+                    }
                     let ambient_scope_ctx = ScopeContext {
                         current_node: child_node_id,
                         parent_node: Some(ctx.comp_node_id),
+                        parent_name: Some(comp_def.name.as_str()),
                         prev_sibling: last_consumer_child_id,
                         child_ids: &empty_children,
-                        parent_ports: &comp_scope_ports,
+                        parent_ports: &ambient_scope_ports,
                         current_ports: &empty_ports,
                         lexical_scope: &local_scope,
                         env_scope: &children_env_scope,
@@ -1391,6 +1512,7 @@ fn expand_component_instance(
 
                     let elem_ctx = ElementContext {
                         parent_id: Some(ctx.comp_node_id),
+                        parent_name: Some(comp_def.name.as_str()),
                         prev_sibling_id: last_consumer_child_id,
                         parent_ports: &comp_scope_ports,
                         lexical_scope, // Pass caller's lexical scope to preserve encapsulation
@@ -1424,6 +1546,7 @@ fn expand_component_instance(
     let scope_ctx = ScopeContext {
         current_node: ctx.comp_node_id,
         parent_node: ctx.parent_id,
+        parent_name: ctx.parent_name,
         prev_sibling: ctx.prev_sibling_id,
         child_ids: &instantiated_children_ids,
         parent_ports: ctx.parent_ports,
@@ -1477,6 +1600,13 @@ fn expand_component_instance(
         let default_expr = default_expr_for_state(s);
         comp_authored_ports.insert(state_name.clone(), default_expr);
     }
+    for (let_name, l) in &declared_lets {
+        if !comp_def.params.iter().any(|p| p.name.as_str() == let_name) {
+            if let Some(LetValue::Expr(raw_expr)) = &l.value {
+                comp_authored_ports.insert(let_name.clone(), raw_expr.clone());
+            }
+        }
+    }
     for port in &instance.ports {
         if let Some(ambient_expr) = ctx.ambient_authored_ports.and_then(|m| m.get(port.name.as_str())) {
             comp_authored_ports.insert(port.name.as_str().to_string(), ambient_expr.clone());
@@ -1489,6 +1619,7 @@ fn expand_component_instance(
     let alias_scope_ctx = ScopeContext {
         current_node: ctx.comp_node_id,
         parent_node: ctx.parent_id,
+        parent_name: ctx.parent_name,
         prev_sibling: ctx.prev_sibling_id,
         child_ids: &instantiated_children_ids,
         parent_ports: ctx.parent_ports,
@@ -1578,6 +1709,11 @@ fn expand_component_instance(
     let node = doc.get_node_mut(ctx.comp_node_id).unwrap();
     node.children = all_children_ids;
     node.authored_ports = comp_authored_ports;
+    node.private_ports = declared_lets
+        .keys()
+        .filter(|k| !comp_def.params.iter().any(|p| p.name.as_str() == k.as_str()))
+        .cloned()
+        .collect();
     for (state_name, s) in &declared_states {
         let type_name = s.type_annotation.as_ref().map(|t| t.name.as_str().to_string());
         node.state_vars.insert(state_name.clone(), type_name);
@@ -1695,6 +1831,7 @@ fn expand_primitive_element(
                 ContentItem::Node(child_elem) => {
                     let child_ctx = ElementContext {
                         parent_id: Some(node_id),
+                        parent_name: Some(elem.name.as_str()),
                         prev_sibling_id: last_child_id,
                         parent_ports: ctx.parent_ports,
                         lexical_scope: ctx.lexical_scope,
@@ -1837,6 +1974,7 @@ fn expand_primitive_element(
                                 ContentItem::Node(child_elem) => {
                                     let child_ctx = ElementContext {
                                         parent_id: Some(node_id),
+                                        parent_name: Some(elem.name.as_str()),
                                         prev_sibling_id: last_child_id,
                                         parent_ports: ctx.parent_ports,
                                         lexical_scope: ctx.lexical_scope,
@@ -1910,8 +2048,14 @@ fn expand_primitive_element(
                 } else {
                     Some(node_id)
                 };
+                let parent_name = if ctx.is_let {
+                    ctx.parent_name
+                } else {
+                    Some(elem.name.as_str())
+                };
                 let child_ctx = ElementContext {
                     parent_id,
+                    parent_name,
                     prev_sibling_id: last_child_id,
                     parent_ports: ctx.parent_ports,
                     lexical_scope: ctx.lexical_scope,
@@ -1949,6 +2093,7 @@ fn expand_primitive_element(
         let temp_scope_ctx = ScopeContext {
             current_node,
             parent_node,
+            parent_name: ctx.parent_name,
             prev_sibling: ctx.prev_sibling_id,
             child_ids: &child_ids,
             parent_ports: ctx.parent_ports,
@@ -1971,6 +2116,7 @@ fn expand_primitive_element(
             let temp_scope_ctx = ScopeContext {
                 current_node,
                 parent_node,
+                parent_name: ctx.parent_name,
                 prev_sibling: ctx.prev_sibling_id,
                 child_ids: &child_ids,
                 parent_ports: ctx.parent_ports,
@@ -2007,6 +2153,7 @@ fn expand_primitive_element(
     let scope_ctx = ScopeContext {
         current_node,
         parent_node,
+        parent_name: ctx.parent_name,
         prev_sibling: ctx.prev_sibling_id,
         child_ids: &child_ids,
         parent_ports: ctx.parent_ports,
@@ -3194,6 +3341,13 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     Expr::Ident(Ident::new(node_id.canonical_name(), m.target.span()))
                 } else if target_name == "parent" {
                     if let Some(parent) = ctx.parent_node {
+                        if !ctx.parent_ports.is_empty() && !ctx.parent_ports.contains(&m.member.as_str().to_string()) {
+                            let parent_name = ctx.parent_name.unwrap_or("unknown");
+                            return Err(CompileError::Custom {
+                                message: format!("Node '{}' has no public port '{}'", parent_name, m.member),
+                                span: m.span,
+                            });
+                        }
                         Expr::Ident(Ident::new(parent.canonical_name(), m.target.span()))
                     } else {
                         rewrite_expr(&m.target, ctx)?

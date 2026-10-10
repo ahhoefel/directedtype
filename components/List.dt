@@ -8,11 +8,11 @@
 }
 
 \Component List(x, y, width, inset, item_gap, gap, env font, bullet_type: BulletType: BulletType.Number) {
-    alias max_bullet_width = max(children.bullet_width);
-     \Children {
-        x: x + max(inset, parent.max_bullet_width),
+    let max_bullet_width = max(children.bullet_width);
+    \Children {
+        x: x + max(inset, max_bullet_width),
         y: prev ? prev.bottom + gap : y,
-        width: width - max(inset, parent.max_bullet_width),
+        width: width - max(inset, max_bullet_width),
         index: prev ? prev.index + 1 : 1,
         bullet_type: bullet_type,
         font: font,

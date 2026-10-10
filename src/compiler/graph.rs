@@ -314,6 +314,24 @@ pub fn build_variable_graph_with_window(
                     span: graph.variables.get(var_id).map_or(Span::default(), |v| v.span),
                 });
             }
+            if let Some(target_node) = doc.get_node(dep.node) {
+                if target_node.private_ports.contains(&dep.port) {
+                    let source_node = doc.get_node(var_id.node);
+                    let is_internal = var_id.node == dep.node
+                        || source_node.and_then(|n| n.enclosing_component) == Some(dep.node);
+                    let is_ambient = source_node.map_or(false, |n| n.ambient_ports.contains(&var_id.port));
+
+                    if !is_internal && !is_ambient {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Node '{}' has no public port '{}'",
+                                target_node.name, dep.port
+                            ),
+                            span: graph.variables.get(var_id).map_or(Span::default(), |v| v.span),
+                        });
+                    }
+                }
+            }
         }
     }
 

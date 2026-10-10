@@ -3263,6 +3263,124 @@ fn test_font_family_generic_and_valid_fonts_succeed() {
     assert!(directedtype::evaluate_document(&doc).is_ok());
 }
 
+#[test]
+fn test_dag_backed_let_over_children_and_inspector_visibility() {
+    let input = r#"
+    \Component Container(x: Number = 0, y: Number = 0) {
+        let max_w = max(children.width);
+        let total_h = sum(children.height);
+        \Children {
+            x: x + max_w,
+            y: prev ? prev.bottom + 5 : y,
+        }
+        alias width = max_w * 2;
+        alias height = total_h;
+    }
+
+    \Container {
+        \Rect(width: 40, height: 10, color: #ff0000)
+        \Rect(width: 60, height: 20, color: #00ff00)
+    }
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+
+    let container = layout.nodes.iter().find(|n| n.name == "Container").expect("Container node");
+    // Verify let bindings exist in properties and have evaluated values
+    assert_eq!(
+        container.properties.get("max_w"),
+        Some(&directedtype::Value::Number(60.0)),
+        "max_w should evaluate to max(40, 60) = 60"
+    );
+    assert_eq!(
+        container.properties.get("total_h"),
+        Some(&directedtype::Value::Number(30.0)),
+        "total_h should evaluate to sum(10, 20) = 30"
+    );
+    // Verify formulas are preserved for inspector
+    assert_eq!(
+        container.formulas.get("max_w").map(|s| s.as_str()),
+        Some("max(children.width)")
+    );
+    assert_eq!(
+        container.formulas.get("total_h").map(|s| s.as_str()),
+        Some("sum(children.height)")
+    );
+
+    // Verify children received x = container.x + max_w = 0 + 60 = 60
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    assert_eq!(rects[0].rect.x, 60.0);
+    assert_eq!(rects[1].rect.x, 60.0);
+}
+
+#[test]
+fn test_dag_backed_let_rejects_external_access() {
+    let input = r#"
+    \Component Container(x: Number = 0, y: Number = 0) {
+        let max_w = max(children.width);
+        \Children {}
+    }
+
+    let my_container = \Container {
+        \Rect(x: 0, y: 0, width: 50, height: 50, color: #000)
+    };
+    \Rect(x: my_container.max_w, y: 0, width: 20, height: 20, color: #fff)
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = directedtype::evaluate_document(&doc).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Node 'Container' has no public port 'max_w'"),
+        "Expected error rejecting external access to private let port, got: {}",
+        msg
+    );
+}
+
+#[test]
+fn test_dag_backed_let_rejects_child_parent_dot_access() {
+    let input = r#"
+    \Component Container(x: Number = 0, y: Number = 0) {
+        let max_w = max(children.width);
+        \Children {}
+    }
+
+    \Container {
+        \Rect(x: parent.max_w, y: 0, width: 50, height: 50, color: #000)
+    }
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = directedtype::evaluate_document(&doc).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Node 'Container' has no public port 'max_w'"),
+        "Expected error rejecting consumer child parent.max_w, got: {}",
+        msg
+    );
+}
+
+#[test]
+fn test_dag_backed_let_rejects_caller_override() {
+    let input = r#"
+    \Component Container(x: Number = 0, y: Number = 0) {
+        let max_w = 42;
+        \Children {}
+    }
+
+    \Container(max_w: 100) {
+        \Rect(width: 10, height: 10, color: #000)
+    }
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let err = directedtype::evaluate_document(&doc).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Node 'Container' has no public port 'max_w'"),
+        "Expected error rejecting caller override of private let, got: {}",
+        msg
+    );
+}
+
 
 
 

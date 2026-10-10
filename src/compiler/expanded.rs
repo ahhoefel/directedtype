@@ -1,7 +1,7 @@
 use crate::ast::{ComponentKey, Expr};
 use crate::dom::NodeHandle;
 use crate::span::Span;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// A unique, zero-based index for an expanded node in the layout tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -49,6 +49,7 @@ pub struct ExpandedNode {
     pub children: Vec<NodeId>,
     pub ports: HashMap<String, Expr>,
     pub authored_ports: HashMap<String, Expr>,
+    pub private_ports: HashSet<String>,
     pub state_vars: HashMap<String, Option<String>>,
     pub event_handlers: HashMap<String, crate::component::EventHandlerBinding>,
     pub text_content: Option<String>,
@@ -59,6 +60,8 @@ pub struct ExpandedNode {
     pub handle: Option<NodeHandle>,
     pub font: Option<NodeId>,
     pub var_name: Option<String>,
+    pub enclosing_component: Option<NodeId>,
+    pub ambient_ports: HashSet<String>,
 }
 
 impl ExpandedNode {
@@ -72,6 +75,7 @@ impl ExpandedNode {
             children: Vec::new(),
             ports: HashMap::new(),
             authored_ports: HashMap::new(),
+            private_ports: HashSet::new(),
             state_vars: HashMap::new(),
             event_handlers: HashMap::new(),
             text_content: None,
@@ -82,6 +86,8 @@ impl ExpandedNode {
             handle: None,
             font: None,
             var_name: None,
+            enclosing_component: None,
+            ambient_ports: HashSet::new(),
         }
     }
 
