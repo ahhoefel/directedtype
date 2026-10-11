@@ -66,8 +66,8 @@ fn test_hit_test_painters_dominance_same_z() {
 #[test]
 fn test_hit_test_hardware_clip_culling() {
     let input = r#"
-    let clip_box = \Box(x: 0, y: 0, width: 100, height: 100)
-    let my_clip = \Clip(box: clip_box)
+    \let clip_box = \Box(x: 0, y: 0, width: 100, height: 100)
+    \let my_clip = \Clip(box: clip_box)
 
     \Rect(clip: my_clip, x: 50, y: 50, width: 200, height: 200, color: #ff0000)
     "#;

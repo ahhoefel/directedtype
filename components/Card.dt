@@ -16,15 +16,15 @@
     on_focus = self.focus,
     on_blur = self.blur
 ) {
-    state focused: Boolean = false;
+    \state focused: Boolean = false;
 
-    alias right = x + width;
-    alias bottom = max(children.bottom) > y ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
-    alias height = bottom - y;
+    \alias right = x + width;
+    \alias bottom = max(children.bottom) > y ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
+    \alias height = bottom - y;
 
-    let current_bg = focused ? focused_bg : style.bg;
-    let current_border_color = focused ? focused_border_color : style.border_color;
-    let current_border_width = focused ? focused_border_width : style.border_width;
+    \let current_bg = focused ? focused_bg : style.bg;
+    \let current_border_color = focused ? focused_border_color : style.border_color;
+    \let current_border_width = focused ? focused_border_width : style.border_width;
 
     \Rect(
         x: x,
@@ -37,7 +37,7 @@
         border_width: current_border_width
     )
 
-    let inner_width = width - (2 * style.padding_x);
+    \let inner_width = width - (2 * style.padding_x);
 
     \Children {
         x: parent.left + style.padding_x,
@@ -58,18 +58,18 @@
     on_focus = self.focus,
     on_blur = self.blur
 ) {
-    state focused: Boolean = false;
+    \state focused: Boolean = false;
 
-    let resolved_width = parent.width - (2 * x);
+    \let resolved_width = parent.width - (2 * x);
 
-    alias right = x + resolved_width;
-    alias width = resolved_width;
-    alias bottom = max(children.bottom) > y ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
-    alias height = bottom - y;
+    \alias right = x + resolved_width;
+    \alias width = resolved_width;
+    \alias bottom = max(children.bottom) > y ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
+    \alias height = bottom - y;
 
-    let current_bg = focused ? focused_bg : style.bg;
-    let current_border_color = focused ? focused_border_color : style.border_color;
-    let current_border_width = focused ? focused_border_width : style.border_width;
+    \let current_bg = focused ? focused_bg : style.bg;
+    \let current_border_color = focused ? focused_border_color : style.border_color;
+    \let current_border_width = focused ? focused_border_width : style.border_width;
 
     \Rect(
         x: x,
@@ -82,7 +82,7 @@
         border_width: current_border_width
     )
 
-    let inner_width = resolved_width - (2 * style.padding_x);
+    \let inner_width = resolved_width - (2 * style.padding_x);
 
     \Children {
         x: parent.left + style.padding_x,

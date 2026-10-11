@@ -9,8 +9,8 @@
     radius: Number,
     padding: Number
 ) {
-    alias padding_x = padding;
-    alias padding_y = padding;
+    \alias padding_x = padding;
+    \alias padding_y = padding;
 }
 
 // 2. Asymmetric Padding CardStyle
@@ -22,5 +22,5 @@
     padding_x: Number,
     padding_y: Number
 ) {
-    alias padding = padding_y;
+    \alias padding = padding_y;
 }

@@ -384,7 +384,7 @@ fn test_imported_component_with_state_and_structured_key() {
         "Counter.dt",
         r#"
         \Component Counter(multiplier: Number: 10) {
-            state count: 42;
+            \state count: 42;
             \Rect(x: 0, y: 0, width: count * multiplier, height: 30, color: #0F0)
         }
         "#,

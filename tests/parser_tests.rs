@@ -530,11 +530,11 @@ fn test_formatted_parse_error_location() {
 #[test]
 fn test_parse_let_bindings() {
     let input = r#"
-    let global_gap = 24;
+    \let global_gap = 24;
 
     \Component Card(padding: Number = 16) {
-      let inset: Number = padding * 2;
-      let mask = \Rect(width: 100, height: 50)
+      \let inset: Number = padding * 2;
+      \let mask = \Rect(width: 100, height: 50)
       \Rect(x: mask.right + inset)
     }
     "#;
@@ -665,14 +665,14 @@ fn test_component_literal_supports_mixed_text_and_nodes() {
 #[test]
 fn test_parse_env_declarations_and_uninitialized_tombstones() {
     let input = r#"
-    env theme = "dark";
-    let uninit_let;
-    env uninit_env;
+    \env theme = "dark";
+    \let uninit_let;
+    \env uninit_env;
 
     \Component Card(env padding: Number: 16, border: Number: 1) {
-        let private_state;
-        env local_env = #ffffff;
-        env hole_env;
+        \let private_state;
+        \env local_env = #ffffff;
+        \env hole_env;
 
         \Rect()
         \Children
@@ -755,7 +755,7 @@ fn test_parse_env_member_access() {
         }
     }
 
-    let is_dark = env.theme == "dark" ? true : false;
+    \let is_dark = env.theme == "dark" ? true : false;
     "#;
 
     let doc = parse(input).expect("Failed to parse env member access");
@@ -812,9 +812,9 @@ fn test_parse_env_member_access() {
 fn test_parse_alias_bindings() {
     let input = r#"
     \Component Card(width: 100, height: 50) {
-        alias right = x + width;
-        alias bottom: y + height;
-        alias center_x: Number = (x + right) / 2;
+        \alias right = x + width;
+        \alias bottom: y + height;
+        \alias center_x: Number = (x + right) / 2;
         \Rect(x: x, y: y, width: width, height: height)
     }
     "#;
@@ -1018,14 +1018,14 @@ fn test_parse_port_boolean_shorthand() {
 #[test]
 fn test_parse_state_bindings_in_component_and_toplevel() {
     let source = r#"
-    state global_count: Number = 42;
+    \state global_count: Number = 42;
 
     \Component Counter(initial: Number: 0) {
-        state count: Number: initial;
-        state is_open: Boolean;
-        state label: String = "Active";
-        state user_name;
-        state bio = "Loading " + initial;
+        \state count: Number: initial;
+        \state is_open: Boolean;
+        \state label: String = "Active";
+        \state user_name;
+        \state bio = "Loading " + initial;
 
         \Rect(width: 100, height: 40)
     }
@@ -1164,7 +1164,7 @@ fn test_parse_use_mixed_with_components_and_nodes() {
     \use "./Button.dt" as ActionButton;
 
     \Component App {
-        state active: Boolean: true;
+        \state active: Boolean: true;
         \ActionButton { "Click" }
     }
 
@@ -1311,6 +1311,75 @@ fn test_inline_elements_interleaved_with_text() {
             }
         }
         _ => panic!("Expected Text node"),
+    }
+}
+
+#[test]
+fn test_bare_keywords_rejected_in_component_body() {
+    let cases = [
+        ("\\Component Foo { let x = 10; }", "let"),
+        ("\\Component Foo { alias y = 10; }", "alias"),
+        ("\\Component Foo { state z = 10; }", "state"),
+        ("\\Component Foo { env e = 10; }", "env"),
+    ];
+
+    for (src, kw) in cases {
+        let err = parse(src).expect_err(&format!("Expected bare '{kw}' to be rejected in component body"));
+        let err_str = err.to_string();
+        assert!(
+            err_str.contains("Expected") || err_str.contains("expected"),
+            "Error for bare '{kw}' should mention expected token, got: {err_str}"
+        );
+    }
+}
+
+#[test]
+fn test_bare_keywords_rejected_at_document_root() {
+    let cases = [
+        ("let x = 10;", "let"),
+        ("state z = 10;", "state"),
+        ("env e = 10;", "env"),
+    ];
+
+    for (src, kw) in cases {
+        let err = parse(src).expect_err(&format!("Expected bare '{kw}' to be rejected at document root"));
+        let err_str = err.to_string();
+        assert!(
+            err_str.contains("Expected") || err_str.contains("expected"),
+            "Error for bare '{kw}' should mention expected token, got: {err_str}"
+        );
+    }
+}
+
+#[test]
+fn test_backslash_keywords_accepted() {
+    let src = r#"
+    \let doc_val = 100;
+    \env doc_theme = "light";
+    \state doc_state = 1;
+
+    \Component MyComp(\env param_env: String, normal_param: Number) {
+        \let local_val = 200;
+        \state local_state = 2;
+        \env local_env = "dark";
+        \alias local_alias = local_val + 50;
+
+        \Rect(width: local_alias)
+    }
+    "#;
+
+    let doc = parse(src).expect("Document with backslash keywords should parse successfully");
+    assert_eq!(doc.items.len(), 4);
+    match &doc.items[3] {
+        Item::Component(comp) => {
+            assert_eq!(comp.body.len(), 5);
+            assert!(matches!(comp.body[0], ComponentBodyItem::Let(_)));
+            assert!(matches!(comp.body[1], ComponentBodyItem::State(_)));
+            assert!(matches!(comp.body[2], ComponentBodyItem::Env(_)));
+            assert!(matches!(comp.body[3], ComponentBodyItem::Alias(_)));
+            assert!(matches!(comp.body[4], ComponentBodyItem::Node(_)));
+        }
+        _ => panic!("Expected component"),
     }
 }
 

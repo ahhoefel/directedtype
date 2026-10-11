@@ -8,7 +8,7 @@
 \use "components/Spacer.dt"
 \use "theme/default.dt"
 
-let demo_card_style = \CardStyle(
+\let demo_card_style = \CardStyle(
     bg: #0f172a,
     border_color: #3b82f6,
     border_width: 2,

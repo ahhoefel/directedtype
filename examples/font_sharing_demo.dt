@@ -6,7 +6,7 @@
 \use "components/Card.dt"
 \use "components/CardStyle.dt"
 
-let font_card_style_1 = \CardStyle(
+\let font_card_style_1 = \CardStyle(
     bg: #f8fafc,
     border_color: #e2e8f0,
     border_width: 1,
@@ -15,7 +15,7 @@ let font_card_style_1 = \CardStyle(
     padding_y: 20
 );
 
-let font_card_style_2 = \CardStyle(
+\let font_card_style_2 = \CardStyle(
     bg: #f1f5f9,
     border_color: #e2e8f0,
     border_width: 1,
@@ -25,12 +25,12 @@ let font_card_style_2 = \CardStyle(
 );
 
 // 1. Reusable font resource definitions
-let heading_font = \Font(size: 28, weight: 700);
-let subhead_font = \Font(size: 18, weight: 600);
-let badge_font = \Font(size: 13, weight: 600);
-let body_font = \Font(size: 15, weight: 400);
+\let heading_font = \Font(size: 28, weight: 700);
+\let subhead_font = \Font(size: 18, weight: 600);
+\let badge_font = \Font(size: 13, weight: 600);
+\let body_font = \Font(size: 15, weight: 400);
 
-let badge_pad = 8;
+\let badge_pad = 8;
 
 \VStack(
     x: 40,

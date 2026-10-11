@@ -825,7 +825,7 @@ fn test_precedence_3_tier_hierarchy() {
 fn test_lexical_scope_expression_let() {
     let input = r#"
     \Component Card(padding: Number: 16) {
-      let inset = padding * 2
+      \let inset = padding * 2
       \Rect(x: 0, y: 0, width: 400 - inset, height: 50, color: #000)
     }
 
@@ -844,7 +844,7 @@ fn test_lexical_scope_expression_let() {
 fn test_lexical_scope_node_let() {
     let input = r#"
     \Component DualBox {
-      let primary = \Rect(x: 10, y: 15, width: 100, height: 40, color: #000)
+      \let primary = \Rect(x: 10, y: 15, width: 100, height: 40, color: #000)
       \Rect(x: primary.right + 20, y: primary.top, width: 80, height: 40, color: #000)
     }
 
@@ -871,7 +871,7 @@ fn test_lexical_scope_node_let() {
 fn test_lexical_scope_shadowing() {
     let input = r#"
     \Component ShadowBox(x: Number: 10) {
-      let x = self.x + 40
+      \let x = self.x + 40
       \Rect(x: x, y: parent.x, width: 100, height: 40, color: #000)
     }
 
@@ -892,7 +892,7 @@ fn test_lexical_scope_shadowing() {
 fn test_lexical_scope_in_children_directive() {
     let input = r#"
     \Component FlowWithMargin {
-      let margin = 35
+      \let margin = 35
       \Children {
         x: parent.left + margin,
         y: 0
@@ -915,7 +915,7 @@ fn test_lexical_scope_in_children_directive() {
 #[test]
 fn test_top_level_let_binding() {
     let input = r#"
-    let global_pad = 45;
+    \let global_pad = 45;
 
     \Rect(x: global_pad, y: global_pad, width: 100, height: 100, color: #000)
     "#;
@@ -931,7 +931,7 @@ fn test_top_level_let_binding() {
 #[test]
 fn test_top_level_node_let_binding() {
     let input = r#"
-    let sidebar = \Rect(x: 10, y: 10, width: 200, height: 500, color: #000)
+    \let sidebar = \Rect(x: 10, y: 10, width: 200, height: 500, color: #000)
     \Rect(x: sidebar.right + 20, y: sidebar.top, width: 600, height: 500, color: #000)
     "#;
 
@@ -952,7 +952,7 @@ fn test_top_level_node_let_binding() {
 fn test_visibility_child_cannot_access_parent_private_local_via_parent_dot() {
     let input = r#"
     \Component CustomCard {
-      let card_padding = 16
+      \let card_padding = 16
       \Children {}
     }
 
@@ -976,7 +976,7 @@ fn test_visibility_child_cannot_access_parent_private_local_via_parent_dot() {
 fn test_visibility_child_cannot_access_parent_private_local_via_bare_ident() {
     let input = r#"
     \Component CustomCard {
-      let card_padding = 16
+      \let card_padding = 16
       \Children {}
     }
 
@@ -1000,7 +1000,7 @@ fn test_visibility_child_cannot_access_parent_private_local_via_bare_ident() {
 fn test_visibility_parent_explicit_push_via_children_directive() {
     let input = r#"
     \Component CustomCard {
-      let card_padding = 16
+      \let card_padding = 16
       \Children {
         x: parent.left + card_padding,
         y: 0
@@ -1024,14 +1024,14 @@ fn test_visibility_parent_explicit_push_via_children_directive() {
 fn test_visibility_child_retains_caller_lexical_scope() {
     let input = r#"
     \Component CustomCard {
-      let internal_padding = 10
+      \let internal_padding = 10
       \Children {
         x: parent.left + internal_padding,
         y: 0
       }
     }
 
-    let caller_width = 180;
+    \let caller_width = 180;
 
     \CustomCard {
       \Rect(width: caller_width, height: 50, color: #000)
@@ -1052,14 +1052,14 @@ fn test_visibility_child_retains_caller_lexical_scope() {
 fn test_visibility_parent_private_local_does_not_shadow_caller_local() {
     let input = r#"
     \Component CustomCard {
-      let my_size = 999
+      \let my_size = 999
       \Children {
         x: parent.left,
         y: 0
       }
     }
 
-    let my_size = 42;
+    \let my_size = 42;
 
     \CustomCard {
       \Rect(width: my_size, height: 50, color: #000)
@@ -1078,7 +1078,7 @@ fn test_visibility_parent_private_local_does_not_shadow_caller_local() {
 fn test_visibility_child_explicit_parent_port_bypasses_internal_shadow() {
     let input = r#"
     \Component CustomCard(clip_offset: Number = 5) {
-      let clip_offset = 100 // internal shadow
+      \let clip_offset = 100 // internal shadow
       \Children {
         x: parent.left,
         y: 0
@@ -1105,7 +1105,7 @@ fn test_component_let_order_independence_element_before_let() {
     \Component Card {
       // Element declared BEFORE the let definition it references
       \Rect(x: 0, y: 0, width: card_width, height: 40, color: #000)
-      let card_width = 320
+      \let card_width = 320
     }
 
     \Card()
@@ -1123,8 +1123,8 @@ fn test_component_let_order_independence_chained_out_of_order() {
     let input = r#"
     \Component ChainedCard {
       // 'a' references 'b' declared below it
-      let a = b + 15
-      let b = 100
+      \let a = b + 15
+      \let b = 100
       \Rect(x: 0, y: 0, width: a, height: 50, color: #000)
     }
 
@@ -1143,9 +1143,9 @@ fn test_component_let_order_independence_chained_out_of_order() {
 fn test_component_literals_preserve_declaration_order_with_interspersed_lets() {
     let input = r#"
     \Component LayeredCard {
-      let bg_pad = 10
+      \let bg_pad = 10
       \Rect(x: 0, y: 0, width: 400, height: 100, z: 0, color: #000) // First node: Background (index 1)
-      let inner_pad = bg_pad * 2
+      \let inner_pad = bg_pad * 2
       \Rect(x: 0, y: 0, width: 200, height: 100, z: 0, color: #000) // Second node: Foreground (index 2)
     }
 
@@ -1229,7 +1229,7 @@ fn test_forbidden_parent_port_on_children_directive() {
 #[test]
 fn test_clip_missing_box_port_error() {
     let input = r#"
-    let clip = \Clip()
+    \let clip = \Clip()
     \Rect(clip: clip)
     "#;
 
@@ -1247,8 +1247,8 @@ fn test_clip_missing_box_port_error() {
 #[test]
 fn test_box_and_clip_non_drawing_primitives() {
     let input = r#"
-    let viewport = \Box(x: 10, y: 10, width: 200, height: 100)
-    let clip = \Clip(box: viewport)
+    \let viewport = \Box(x: 10, y: 10, width: 200, height: 100)
+    \let clip = \Clip(box: viewport)
     \Rect(clip: clip, x: 0, y: 0, width: 50, height: 50, color: #000)
     "#;
 
@@ -1268,7 +1268,7 @@ fn test_box_and_clip_non_drawing_primitives() {
 fn test_clip_with_box_inline_expansion() {
     let input = r##"
     \Component ScrollView {
-        let clip = \Clip(up: self.clip, box: \Box(x: self.left + 5, y: self.top + 5, width: self.width - 10, height: self.height - 10))
+        \let clip = \Clip(up: self.clip, box: \Box(x: self.left + 5, y: self.top + 5, width: self.width - 10, height: self.height - 10))
         \Rect(clip: clip, x: 0, y: 0, width: 300, height: 300, color: #ff0000)
     }
 
@@ -1299,7 +1299,7 @@ fn test_clip_with_box_inline_expansion() {
 fn test_clip_unclip_with_window_clip() {
     let input = r##"
     \Component Modal {
-        let clip = \Clip(box: \Box(width: 100, height: 100))
+        \let clip = \Clip(box: \Box(width: 100, height: 100))
         \Rect(clip: clip, x: 0, y: 0, width: 100, height: 100, color: #aaaaaa)
         \Rect(clip: window.clip, x: 100, y: 0, width: 100, height: 100, color: #ffffff)
     }
@@ -1325,8 +1325,8 @@ fn test_clip_unclip_with_window_clip() {
 fn test_clip_stepping_up_chain() {
     let input = r##"
     \Component MultiLevel {
-        let outer_clip = \Clip(box: \Box(width: 300, height: 300))
-        let inner_clip = \Clip(up: outer_clip, box: \Box(width: 150, height: 150))
+        \let outer_clip = \Clip(box: \Box(width: 300, height: 300))
+        \let inner_clip = \Clip(up: outer_clip, box: \Box(width: 150, height: 150))
         \Rect(clip: inner_clip, x: 0, y: 0, width: 50, height: 50, color: #111111)
         \Rect(clip: inner_clip.up, x: 50, y: 0, width: 50, height: 50, color: #222222) // stepped up to outer_clip!
     }
@@ -1356,7 +1356,7 @@ fn test_clip_stepping_up_chain() {
 fn test_children_directive_ambient_clip() {
     let input = r##"
     \Component ScrollContainer {
-        let clip = \Clip(box: \Box(width: 150, height: 150))
+        \let clip = \Clip(box: \Box(width: 150, height: 150))
         \Children {
             clip: clip,
             x: 0,
@@ -1419,15 +1419,15 @@ fn test_dom_tree_formatting() {
 #[test]
 fn test_parse_env_syntax_and_tombstones() {
     let input = r#"
-    env global_theme: String = "dark";
-    let uninit_local;
-    env uninit_env;
+    \env global_theme: String = "dark";
+    \let uninit_local;
+    \env uninit_env;
 
     \Component Box(width: Number, env theme: String, color: Color: #ffffff) {
-        let private_gap;
-        let shadow_val = 10;
-        env local_env = #ff0000;
-        env hole_env;
+        \let private_gap;
+        \let shadow_val = 10;
+        \env local_env = #ff0000;
+        \env hole_env;
 
         \Rect(color: self.color)
         \Children
@@ -1496,7 +1496,7 @@ fn test_parse_env_syntax_and_tombstones() {
 fn test_env_auto_propagation_bypassing_middleman() {
     let input = r#"
     \Component Theme(color: Color) {
-        env color = self.color
+        \env color = self.color
         \Children
     }
 
@@ -1534,7 +1534,7 @@ fn test_env_auto_propagation_bypassing_middleman() {
 fn test_env_component_encapsulation_sealed_black_box() {
     let input = r#"
     \Component Theme(color: Color) {
-        env color = self.color
+        \env color = self.color
         \Children
     }
 
@@ -1560,7 +1560,7 @@ fn test_env_component_encapsulation_sealed_black_box() {
 fn test_env_4_tier_precedence_order() {
     let input = r#"
     \Component Theme(color: Color) {
-        env color = self.color
+        \env color = self.color
         \Children
     }
 
@@ -1621,7 +1621,7 @@ fn test_env_4_tier_precedence_order() {
 fn test_env_interceptor() {
     let input = r#"
     \Component Surface(env color: Color) {
-        env color = #abcdef
+        \env color = #abcdef
         \Children
     }
 
@@ -1644,7 +1644,7 @@ fn test_env_interceptor() {
 fn test_env_translator_provider() {
     let input = r#"
     \Component ThemeProvider(theme: String) {
-        env color = (self.theme == "dark") ? #000000 : #ffffff
+        \env color = (self.theme == "dark") ? #000000 : #ffffff
         \Children
     }
 
@@ -1668,7 +1668,7 @@ fn test_env_shield_swallower() {
     let input = r#"
     \Component AlertBadge(env color: Color) {
         \Rect(x: 0, y: 0, width: 100, height: 100, color: self.color)
-        let color = #000000;
+        \let color = #000000;
         \Children
     }
 
@@ -1691,7 +1691,7 @@ fn test_env_shield_swallower() {
 fn test_let_tombstone_firewall() {
     let input = r#"
     \Component Shield(env color: Color) {
-        let color;
+        \let color;
         \Children
     }
 
@@ -1714,12 +1714,12 @@ fn test_let_tombstone_firewall() {
 fn test_env_tombstone_hole() {
     let input = r#"
     \Component Theme(color: Color) {
-        env color = self.color
+        \env color = self.color
         \Children
     }
 
     \Component Hole() {
-        env color;
+        \env color;
         \Children
     }
 
@@ -1744,7 +1744,7 @@ fn test_env_tombstone_hole() {
 fn test_uninitialized_variable_use_error() {
     let input = r#"
     \Component Bad() {
-        let color;
+        \let color;
         \Rect(x: 0, y: 0, width: 100, height: 100, color: color)
     }
 
@@ -1765,7 +1765,7 @@ fn test_uninitialized_variable_use_error() {
 fn test_env_clip_universal_base_trait() {
     let input = r#"
     \Component ScrollView() {
-        env clip = \Clip(box: \Box(width: 200, height: 200))
+        \env clip = \Clip(box: \Box(width: 200, height: 200))
         \Children
     }
 
@@ -1983,7 +1983,7 @@ fn test_env_blocked_by_shield_firewall_error() {
     }
 
     \Component Shield(env color: Color) {
-        let color;
+        \let color;
         \Children
     }
 
@@ -2054,7 +2054,7 @@ fn test_env_component_internal_body_hermeticity_error() {
 #[test]
 fn test_bare_env_expression_error() {
     let input = r#"
-    let x = env;
+    \let x = env;
     "#;
     let doc = parse(input).expect("Parse error");
     let err = directedtype::evaluate_document(&doc).expect_err("Should fail on bare env");
@@ -2067,11 +2067,11 @@ fn test_bare_env_expression_error() {
 #[test]
 fn test_font_primitive_metrics_and_sharing() {
     let input = r#"
-    let f = \Font(size: 20, weight: 700);
-    let t1 = \Text(font: f) { First };
-    let t2 = \Text(font: f) { Second };
-    let r1 = \Rect(x: 0, y: 0, width: 100, height: t1.font.cap_height + 10, color: #000000);
-    let r2 = \Rect(x: 0, y: 50, width: 100, height: t2.cap_height + 10, color: #000000);
+    \let f = \Font(size: 20, weight: 700);
+    \let t1 = \Text(font: f) { First };
+    \let t2 = \Text(font: f) { Second };
+    \let r1 = \Rect(x: 0, y: 0, width: 100, height: t1.font.cap_height + 10, color: #000000);
+    \let r2 = \Rect(x: 0, y: 50, width: 100, height: t2.cap_height + 10, color: #000000);
     "#;
     let doc = parse(input).expect("Failed to parse");
     let (expanded, _graph) = compile_to_graph(&doc).expect("Failed to compile to graph");
@@ -2107,10 +2107,10 @@ fn test_font_primitive_metrics_and_sharing() {
 #[test]
 fn test_text_ambient_font_inheritance() {
     let input = r#"
-    let my_font = \Font(size: 24, weight: 600);
-    env font = my_font;
-    let label = \Text { Ambient text };
-    let box = \Rect(x: 0, y: 0, width: 200, height: label.font.cap_height + 16, color: #111111);
+    \let my_font = \Font(size: 24, weight: 600);
+    \env font = my_font;
+    \let label = \Text { Ambient text };
+    \let box = \Rect(x: 0, y: 0, width: 200, height: label.font.cap_height + 16, color: #111111);
     "#;
     let doc = parse(input).expect("Failed to parse");
     let (expanded, _graph) = compile_to_graph(&doc).expect("Failed to compile to graph");
@@ -2136,7 +2136,7 @@ fn test_text_ambient_font_inheritance() {
 #[test]
 fn test_font_backward_compatible_string_family() {
     let input = r#"
-    let t = \Text(font: "Menlo", size: 18) { Code };
+    \let t = \Text(font: "Menlo", size: 18) { Code };
     "#;
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate layout");
@@ -2153,9 +2153,9 @@ fn test_font_backward_compatible_string_family() {
 #[test]
 fn test_font_metrics_algebraic_calculations() {
     let input = r#"
-    let f = \Font(size: 20);
-    let t = \Text(font: f) { Metrics Test };
-    let r = \Rect(x: 0, y: 0, width: f.line_height, height: t.font.ascent + t.font.descent, color: #ffffff);
+    \let f = \Font(size: 20);
+    \let t = \Text(font: f) { Metrics Test };
+    \let r = \Rect(x: 0, y: 0, width: f.line_height, height: t.font.ascent + t.font.descent, color: #ffffff);
     "#;
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation");
@@ -2178,8 +2178,8 @@ fn test_font_metrics_algebraic_calculations() {
 fn test_component_custom_alias_declaration_and_evaluation() {
     let input = r#"
     \Component Card(x: 10, y: 20, width: 100, height: 50) {
-        alias right = x + width;
-        alias bottom = y + height;
+        \alias right = x + width;
+        \alias bottom = y + height;
         \Rect(x: x, y: y, width: width, height: height, color: #ff0000)
     }
 
@@ -2227,7 +2227,7 @@ fn test_component_custom_alias_declaration_and_evaluation() {
 fn test_component_immutable_alias_error() {
     let input = r#"
     \Component Card(width: 100, height: 50) {
-        alias right = x + width;
+        \alias right = x + width;
         \Rect(x: x, y: y, width: width, height: height, color: #ff0000)
     }
 
@@ -2266,12 +2266,12 @@ fn test_primitive_immutable_alias_error() {
 fn test_alias_interdependency_and_downstream_dependency() {
     let input = r#"
     \Component Card(x: 10, width: 100) {
-        alias right = x + width;
-        alias center_x = (x + right) / 2;
+        \alias right = x + width;
+        \alias center_x = (x + right) / 2;
         \Rect(x: x, y: 0, width: width, height: 50, color: #00ff00)
     }
 
-    let c = \Card(x: 20, width: 80);
+    \let c = \Card(x: 20, width: 80);
     \Rect(x: c.center_x, y: 100, width: 50, height: 50, color: #0000ff)
     "#;
 
@@ -2294,7 +2294,7 @@ fn test_duplicate_alias_error() {
     // Alias shadows parameter
     let input1 = r#"
     \Component Card(width: 100) {
-        alias width = 200;
+        \alias width = 200;
         \Rect(x: 0, y: 0, width: width, height: 50, color: #ff0000)
     }
     \Card
@@ -2309,8 +2309,8 @@ fn test_duplicate_alias_error() {
     // Duplicate alias declarations
     let input2 = r#"
     \Component Card(w: 100) {
-        alias right = w;
-        alias right = w + 10;
+        \alias right = w;
+        \alias right = w + 10;
         \Rect(x: 0, y: 0, width: w, height: 50, color: #ff0000)
     }
     \Card
@@ -2327,7 +2327,7 @@ fn test_duplicate_alias_error() {
 fn test_reserved_parent_alias_error() {
     let input = r#"
     \Component Card() {
-        alias parent = 10;
+        \alias parent = 10;
         \Rect(x: 0, y: 0, width: 10, height: 10, color: #ff0000)
     }
     \Card
@@ -2389,7 +2389,7 @@ fn test_component_key_purity_rejects_spatial_port_error() {
 fn test_component_key_purity_rejects_lexical_let_formula_error() {
     let input = r#"
     \Component Grid {
-        let cell_width = 50;
+        \let cell_width = 50;
         \Rect(cell_width; x: 0, y: 0, width: 50, height: 50, color: #ffffff)
     }
     \Grid
@@ -2409,7 +2409,7 @@ fn test_component_key_purity_rejects_lexical_let_formula_error() {
 fn test_component_private_state_port_rejected() {
     let input = r#"
     \Component Counter {
-        state count: Number: 0;
+        \state count: Number: 0;
         \Rect(x: 0, y: 0, width: 100, height: 40, color: #000000)
     }
     \Counter(count: 10)
@@ -2429,8 +2429,8 @@ fn test_component_private_state_port_rejected() {
 fn test_component_state_evaluates_initial_defaults_in_layout_dag() {
     let input = r#"
     \Component Counter {
-        state count: Number: 5;
-        state is_active: Boolean: true;
+        \state count: Number: 5;
+        \state is_active: Boolean: true;
         \Rect(
             x: 0,
             y: 0,
@@ -2473,7 +2473,7 @@ fn test_component_state_evaluates_initial_defaults_in_layout_dag() {
 #[test]
 fn test_top_level_state_evaluates_in_window() {
     let input = r#"
-    state global_margin: Number: 30;
+    \state global_margin: Number: 30;
     \Rect(x: global_margin, y: global_margin, width: 200, height: 100, color: #ff0000)
     "#;
     let doc = parse(input).expect("parse ok");
@@ -2494,7 +2494,7 @@ fn test_top_level_state_evaluates_in_window() {
 fn test_structured_key_lookup_and_evaluation() {
     let input = r#"
     \Component TableView {
-        state selected_row: Number: 1;
+        \state selected_row: Number: 1;
         \Rect("header"; x: 0, y: 0, width: 100, height: 30, color: #ffffff)
         \Rect(0, 0; x: 0, y: 30, width: 50, height: 30, color: #ffffff)
         \Rect(selected_row, 0; x: 0, y: 60, width: 50, height: 30, color: #ffffff)
@@ -2532,7 +2532,7 @@ fn test_structured_key_lookup_and_evaluation() {
 fn test_state_reserved_parent_and_duplicate_error() {
     let input_reserved = r#"
     \Component TestComp {
-        state parent: Number: 0;
+        \state parent: Number: 0;
         \Rect(x: 0, y: 0, width: 10, height: 10, color: #ff0000)
     }
     \TestComp
@@ -2546,8 +2546,8 @@ fn test_state_reserved_parent_and_duplicate_error() {
 
     let input_dup = r#"
     \Component TestComp {
-        state count: Number: 0;
-        state count: Number: 1;
+        \state count: Number: 0;
+        \state count: Number: 1;
         \Rect(x: 0, y: 0, width: 10, height: 10, color: #ff0000)
     }
     \TestComp
@@ -2563,7 +2563,7 @@ fn test_state_reserved_parent_and_duplicate_error() {
 #[test]
 fn test_raw_text_passed_directly_to_component_children() {
     let input = r#"
-    env font = \Font(size: 16);
+    \env font = \Font(size: 16);
 
     \Component Card(padding_x: Number: 24, padding_y: Number: 18) {
         \Rect(x: 10, y: 10, width: 300, height: 100, color: #1e293b)
@@ -2826,8 +2826,8 @@ fn test_overload_exact_selection_at_call_site() {
 #[test]
 fn test_overload_env_parameter_satisfaction() {
     let input = r#"
-    let theme_val = "dark";
-    env theme = theme_val;
+    \let theme_val = "dark";
+    \env theme = theme_val;
 
     \Component ThemedBox(env theme: String, width: Number) {
         \Rect(x: 0, y: 0, width: width, height: 40, color: #101010)
@@ -2858,8 +2858,8 @@ fn test_overload_env_parameter_satisfaction() {
 fn test_overload_card_in_hstack_no_cycle() {
     let input = r#"
     \Component HBox() {
-        alias width = max(children.right);
-        alias right = x + width;
+        \alias width = max(children.right);
+        \alias right = x + width;
         \Rect(x: 0, y: 0, width: width, height: 60, color: #000000)
         \Children {
             x: prev ? prev.right + 10 : parent.left
@@ -2867,13 +2867,13 @@ fn test_overload_card_in_hstack_no_cycle() {
     }
 
     \Component Card(width: Number) {
-        alias right = x + width;
+        \alias right = x + width;
         \Rect(x: x, y: y, width: width, height: 50, color: #111111)
     }
 
     \Component Card() {
-        let resolved_width = parent.width;
-        alias right = x + resolved_width;
+        \let resolved_width = parent.width;
+        \alias right = x + resolved_width;
         \Rect(x: x, y: y, width: resolved_width, height: 50, color: #222222)
     }
 
@@ -3063,7 +3063,7 @@ fn test_missing_size_on_text_yields_compile_error() {
 
 #[test]
 fn test_missing_size_on_font_yields_compile_error() {
-    let input = r#"let f = \Font(weight: 500);"#;
+    let input = r#"\let f = \Font(weight: 500);"#;
     let doc = parse(input).expect("parse ok");
     let err = compile_to_graph(&doc).unwrap_err();
     match err {
@@ -3077,7 +3077,7 @@ fn test_missing_size_on_font_yields_compile_error() {
 
 #[test]
 fn test_font_rejects_name_port_error() {
-    let input = r#"let f = \Font(name: "Times New Roman", size: 16);"#;
+    let input = r#"\let f = \Font(name: "Times New Roman", size: 16);"#;
     let doc = parse(input).expect("parse ok");
     let err = compile_to_graph(&doc).expect_err("Expected compile error for name on Font");
     match err {
@@ -3092,7 +3092,7 @@ fn test_font_rejects_name_port_error() {
 
 #[test]
 fn test_env_font_rejects_name_port_error() {
-    let input = r#"env font = \Font(name: "Arial", size: 12);"#;
+    let input = r#"\env font = \Font(name: "Arial", size: 12);"#;
     let doc = parse(input).expect("parse ok");
     let err = compile_to_graph(&doc).expect_err("Expected compile error for name on env font");
     match err {
@@ -3106,7 +3106,7 @@ fn test_env_font_rejects_name_port_error() {
 
 #[test]
 fn test_font_rejects_unknown_ports() {
-    let input = r#"let f = \Font(size: 16, color: #ff0000);"#;
+    let input = r#"\let f = \Font(size: 16, color: #ff0000);"#;
     let doc = parse(input).expect("parse ok");
     let err = compile_to_graph(&doc).expect_err("Expected compile error for color on Font");
     match err {
@@ -3121,8 +3121,8 @@ fn test_font_rejects_unknown_ports() {
 #[test]
 fn test_font_accepts_line_height_port() {
     let input = r#"
-    let f = \Font(family: "Arial", size: 32, line_height: 48);
-    let r = \Rect(x: 0, y: 0, width: 100, height: f.line_height, color: #ffffff);
+    \let f = \Font(family: "Arial", size: 32, line_height: 48);
+    \let r = \Rect(x: 0, y: 0, width: 100, height: f.line_height, color: #ffffff);
     "#;
     let doc = parse(input).expect("parse ok");
     let layout = directedtype::evaluate_document(&doc).expect("layout ok");
@@ -3133,10 +3133,10 @@ fn test_font_accepts_line_height_port() {
 #[test]
 fn test_font_line_height_forwarded_from_text() {
     let input = r#"
-    env font = \Font(family: "Arial", size: 32, line_height: 52);
-    let t = \Text { Hello };
-    let r = \Rect(x: 0, y: 0, width: 100, height: t.font.line_height, color: #ffffff);
-    let r2 = \Rect(x: 0, y: 0, width: 100, height: t.line_height, color: #ffffff);
+    \env font = \Font(family: "Arial", size: 32, line_height: 52);
+    \let t = \Text { Hello };
+    \let r = \Rect(x: 0, y: 0, width: 100, height: t.font.line_height, color: #ffffff);
+    \let r2 = \Rect(x: 0, y: 0, width: 100, height: t.line_height, color: #ffffff);
     "#;
     let doc = parse(input).expect("parse ok");
     let layout = directedtype::evaluate_document(&doc).expect("layout ok");
@@ -3168,13 +3168,13 @@ fn test_missing_dimensions_on_child_rect_yields_compile_error() {
 #[test]
 fn test_text_baseline_and_text_font_baseline() {
     let input = r#"
-    env font = \Font(size: 32, family: "Arial");
-    let t = \Text(x: 10, y: 50, start_at: TextStart.Ascender, end_at: TextEnd.Descender) {
+    \env font = \Font(size: 32, family: "Arial");
+    \let t = \Text(x: 10, y: 50, start_at: TextStart.Ascender, end_at: TextEnd.Descender) {
         Typography
     };
-    let guide_direct = \Rect(x: 0, y: t.baseline, width: 100, height: 1, color: #ff0000);
-    let guide_via_font = \Rect(x: 0, y: t.font.baseline, width: 100, height: 1, color: #00ff00);
-    let cap_y = \Rect(x: 0, y: t.font.baseline - t.font.cap_height, width: 100, height: 1, color: #0000ff);
+    \let guide_direct = \Rect(x: 0, y: t.baseline, width: 100, height: 1, color: #ff0000);
+    \let guide_via_font = \Rect(x: 0, y: t.font.baseline, width: 100, height: 1, color: #00ff00);
+    \let cap_y = \Rect(x: 0, y: t.font.baseline - t.font.cap_height, width: 100, height: 1, color: #0000ff);
     "#;
     let doc = parse(input).expect("parse ok");
     let layout = directedtype::evaluate_document(&doc).expect("layout ok");
@@ -3236,7 +3236,7 @@ fn test_font_family_not_found_in_text_font_static() {
 #[test]
 fn test_font_family_not_found_dynamic() {
     let input = r#"
-    let fam = "NonExistentFontXYZ";
+    \let fam = "NonExistentFontXYZ";
     \Font(family: fam, size: 16)
     "#;
     let doc = parse(input).expect("parse ok");
@@ -3267,14 +3267,14 @@ fn test_font_family_generic_and_valid_fonts_succeed() {
 fn test_dag_backed_let_over_children_and_inspector_visibility() {
     let input = r#"
     \Component Container(x: Number = 0, y: Number = 0) {
-        let max_w = max(children.width);
-        let total_h = sum(children.height);
+        \let max_w = max(children.width);
+        \let total_h = sum(children.height);
         \Children {
             x: x + max_w,
             y: prev ? prev.bottom + 5 : y,
         }
-        alias width = max_w * 2;
-        alias height = total_h;
+        \alias width = max_w * 2;
+        \alias height = total_h;
     }
 
     \Container {
@@ -3318,11 +3318,11 @@ fn test_dag_backed_let_over_children_and_inspector_visibility() {
 fn test_dag_backed_let_rejects_external_access() {
     let input = r#"
     \Component Container(x: Number = 0, y: Number = 0) {
-        let max_w = max(children.width);
+        \let max_w = max(children.width);
         \Children {}
     }
 
-    let my_container = \Container {
+    \let my_container = \Container {
         \Rect(x: 0, y: 0, width: 50, height: 50, color: #000)
     };
     \Rect(x: my_container.max_w, y: 0, width: 20, height: 20, color: #fff)
@@ -3341,7 +3341,7 @@ fn test_dag_backed_let_rejects_external_access() {
 fn test_dag_backed_let_rejects_child_parent_dot_access() {
     let input = r#"
     \Component Container(x: Number = 0, y: Number = 0) {
-        let max_w = max(children.width);
+        \let max_w = max(children.width);
         \Children {}
     }
 
@@ -3363,7 +3363,7 @@ fn test_dag_backed_let_rejects_child_parent_dot_access() {
 fn test_dag_backed_let_rejects_caller_override() {
     let input = r#"
     \Component Container(x: Number = 0, y: Number = 0) {
-        let max_w = 42;
+        \let max_w = 42;
         \Children {}
     }
 

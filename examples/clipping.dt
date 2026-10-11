@@ -22,7 +22,7 @@
     )
 
     // 2. Hardware clip node defining the rounded geometry
-    let clip = \Clip(
+    \let clip = \Clip(
         up: self.clip, 
         box: \Box(
             x: self.left, 

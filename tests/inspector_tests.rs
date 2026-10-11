@@ -772,7 +772,7 @@ fn test_property_bullet_vertical_centering() {
 #[test]
 fn test_let_bound_var_name_in_dom_tree() {
     let source = r#"
-        let heading_font = \Font(size: 24, weight: 700, family: "Arial")
+        \let heading_font = \Font(size: 24, weight: 700, family: "Arial")
         \Text(font: heading_font, text: "Hello World")
     "#;
     let doc = directedtype::parse(source).expect("Parse ok");
@@ -791,7 +791,7 @@ fn test_let_bound_var_name_in_dom_tree() {
 #[test]
 fn test_expandable_reference_properties() {
     let source = r#"
-        let heading_font = \Font(size: 24, weight: 700, family: "Arial")
+        \let heading_font = \Font(size: 24, weight: 700, family: "Arial")
         \Text(id: "my_text", font: heading_font, text: "Hello World")
     "#;
     let doc = directedtype::parse(source).expect("Parse ok");
@@ -942,8 +942,8 @@ fn test_dom_tree_item_structured_keys() {
 fn test_inspector_target_info_state_variables() {
     let source = r#"
 \Component Counter(initial: Number: 7) {
-    state count: Number: initial;
-    state is_active: Boolean: true;
+    \state count: Number: initial;
+    \state is_active: Boolean: true;
     \Rect(x: 0, y: 0, width: 200, height: 100, color: #ffffff)
 }
 
@@ -987,7 +987,7 @@ fn test_inspector_target_info_state_variables() {
 fn test_inspector_panel_render_state_variables_and_structured_keys() {
     let source = r#"
 \Component Switch {
-    state is_on: Boolean: false;
+    \state is_on: Boolean: false;
     \Rect(x: 0, y: 0, width: 100, height: 40, color: #112233)
 }
 
@@ -1077,13 +1077,13 @@ fn test_dag_property_trace_building() {
 fn test_dag_property_trace_inferred_default() {
     let source = r#"
 \Component Container {
-    alias width = 400;
-    alias height = 300;
+    \alias width = 400;
+    \alias height = 300;
     \Children
 }
 \Component Item(h: Number: 40) {
-    alias width = 100;
-    alias height = h;
+    \alias width = 100;
+    \alias height = h;
     \Rect(x: 0, y: 0, width: 100, height: h, color: #ff0000)
 }
 \Container {

@@ -6,10 +6,10 @@
 \use "components/LinkStyle.dt"
 
 // Standard Ambient Typography
-env font = \Font(size: 16);
+\env font = \Font(size: 16);
 
 // 1. Standard Cards
-let card_dark = \CardStyle(
+\let card_dark = \CardStyle(
     bg: #1e293b,
     border_color: #334155,
     border_width: 1,
@@ -17,7 +17,7 @@ let card_dark = \CardStyle(
     padding: 20
 );
 
-let card_light = \CardStyle(
+\let card_light = \CardStyle(
     bg: #f8fafc,
     border_color: #e2e8f0,
     border_width: 1,
@@ -26,7 +26,7 @@ let card_light = \CardStyle(
 );
 
 // 2. Standard Buttons
-let button_primary = \ButtonStyle(
+\let button_primary = \ButtonStyle(
     bg: #2563eb,
     text_color: #ffffff,
     border_color: #3b82f6,
@@ -40,7 +40,7 @@ let button_primary = \ButtonStyle(
     disabled_border_color: #33415540
 );
 
-let button_secondary = \ButtonStyle(
+\let button_secondary = \ButtonStyle(
     bg: #334155,
     text_color: #ffffff,
     border_color: #475569,
@@ -54,7 +54,7 @@ let button_secondary = \ButtonStyle(
     disabled_border_color: #33415540
 );
 
-let button_outline = \ButtonStyle(
+\let button_outline = \ButtonStyle(
     bg: #0f172a,
     text_color: #38bdf8,
     border_color: #38bdf8,
@@ -68,7 +68,7 @@ let button_outline = \ButtonStyle(
     disabled_border_color: #33415540
 );
 
-let button_danger = \ButtonStyle(
+\let button_danger = \ButtonStyle(
     bg: #dc2626,
     text_color: #ffffff,
     border_color: #ef4444,
@@ -82,7 +82,7 @@ let button_danger = \ButtonStyle(
     disabled_border_color: #33415540
 );
 
-let button_success = \ButtonStyle(
+\let button_success = \ButtonStyle(
     bg: #16a34a,
     text_color: #ffffff,
     border_color: #22c55e,
@@ -96,7 +96,7 @@ let button_success = \ButtonStyle(
     disabled_border_color: #33415540
 );
 
-let button_ghost = \ButtonStyle(
+\let button_ghost = \ButtonStyle(
     bg: #00000000,
     text_color: #94a3b8,
     border_color: #00000000,
@@ -111,7 +111,7 @@ let button_ghost = \ButtonStyle(
 );
 
 // 3. Standard Links
-let link_default = \LinkStyle(
+\let link_default = \LinkStyle(
     color: #2563eb,
     underline: true,
     bg: #00000000,
@@ -123,7 +123,7 @@ let link_default = \LinkStyle(
     focused_bg: #dbeafe
 );
 
-let link_subtle = \LinkStyle(
+\let link_subtle = \LinkStyle(
     color: #475569,
     underline: false,
     bg: #00000000,
@@ -135,7 +135,7 @@ let link_subtle = \LinkStyle(
     focused_bg: #e2e8f0
 );
 
-let link_danger = \LinkStyle(
+\let link_danger = \LinkStyle(
     color: #dc2626,
     underline: true,
     bg: #00000000,

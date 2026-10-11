@@ -13,14 +13,14 @@
     y: Number: parent.top,
     disabled: Boolean: false
 ) {
-    let is_disabled = disabled;
-    let bg_color = is_disabled ? style.disabled_bg : style.bg;
-    let text_color = is_disabled ? style.disabled_text : style.text_color;
-    let border_color = is_disabled ? style.disabled_border_color : style.border_color;
+    \let is_disabled = disabled;
+    \let bg_color = is_disabled ? style.disabled_bg : style.bg;
+    \let text_color = is_disabled ? style.disabled_text : style.text_color;
+    \let border_color = is_disabled ? style.disabled_border_color : style.border_color;
 
-    alias right = x + width;
-    alias bottom = y + style.height;
-    alias height = style.height;
+    \alias right = x + width;
+    \alias bottom = y + style.height;
+    \alias height = style.height;
 
     \Rect(
         x: x,
@@ -52,18 +52,18 @@
     y: Number: parent.top,
     disabled: Boolean: false
 ) {
-    let is_disabled = disabled;
-    let bg_color = is_disabled ? style.disabled_bg : style.bg;
-    let text_color = is_disabled ? style.disabled_text : style.text_color;
-    let border_color = is_disabled ? style.disabled_border_color : style.border_color;
+    \let is_disabled = disabled;
+    \let bg_color = is_disabled ? style.disabled_bg : style.bg;
+    \let text_color = is_disabled ? style.disabled_text : style.text_color;
+    \let border_color = is_disabled ? style.disabled_border_color : style.border_color;
 
-    let measured_label_w = text_width(label, style.size, style.weight);
-    let resolved_width = max(64, measured_label_w + 32);
+    \let measured_label_w = text_width(label, style.size, style.weight);
+    \let resolved_width = max(64, measured_label_w + 32);
 
-    alias right = x + resolved_width;
-    alias width = resolved_width;
-    alias bottom = y + style.height;
-    alias height = style.height;
+    \alias right = x + resolved_width;
+    \alias width = resolved_width;
+    \alias bottom = y + style.height;
+    \alias height = style.height;
 
     \Rect(
         x: x,
@@ -96,14 +96,14 @@
     y: Number: parent.top,
     disabled: Boolean: false
 ) {
-    let is_primary = variant == ButtonVariant.Primary;
-    let is_secondary = variant == ButtonVariant.Secondary;
-    let is_outline = variant == ButtonVariant.Outline;
-    let is_danger = variant == ButtonVariant.Danger;
-    let is_success = variant == ButtonVariant.Success;
-    let is_ghost = variant == ButtonVariant.Ghost;
+    \let is_primary = variant == ButtonVariant.Primary;
+    \let is_secondary = variant == ButtonVariant.Secondary;
+    \let is_outline = variant == ButtonVariant.Outline;
+    \let is_danger = variant == ButtonVariant.Danger;
+    \let is_success = variant == ButtonVariant.Success;
+    \let is_ghost = variant == ButtonVariant.Ghost;
 
-    let default_bg = is_primary ? #2563eb : (
+    \let default_bg = is_primary ? #2563eb : (
         is_secondary ? #334155 : (
             is_outline ? #0f172a : (
                 is_danger ? #dc2626 : (
@@ -113,9 +113,9 @@
         )
     );
 
-    let default_text = (is_outline ? #38bdf8 : (is_ghost ? #94a3b8 : #ffffff));
+    \let default_text = (is_outline ? #38bdf8 : (is_ghost ? #94a3b8 : #ffffff));
 
-    let default_border = is_primary ? #3b82f6 : (
+    \let default_border = is_primary ? #3b82f6 : (
         is_secondary ? #475569 : (
             is_outline ? #38bdf8 : (
                 is_danger ? #ef4444 : (
@@ -125,16 +125,16 @@
         )
     );
 
-    let default_border_w = is_outline ? 1.5 : (is_ghost ? 0 : 1);
+    \let default_border_w = is_outline ? 1.5 : (is_ghost ? 0 : 1);
 
-    let is_disabled = disabled;
-    let bg_color = is_disabled ? #33415580 : default_bg;
-    let text_color = is_disabled ? #64748b : default_text;
-    let border_color = is_disabled ? #33415540 : default_border;
+    \let is_disabled = disabled;
+    \let bg_color = is_disabled ? #33415580 : default_bg;
+    \let text_color = is_disabled ? #64748b : default_text;
+    \let border_color = is_disabled ? #33415540 : default_border;
 
-    alias right = x + width;
-    alias bottom = y + 38;
-    alias height = 38;
+    \alias right = x + width;
+    \alias bottom = y + 38;
+    \alias height = 38;
 
     \Rect(
         x: x,
@@ -166,14 +166,14 @@
     y: Number: parent.top,
     disabled: Boolean: false
 ) {
-    let is_primary = variant == ButtonVariant.Primary;
-    let is_secondary = variant == ButtonVariant.Secondary;
-    let is_outline = variant == ButtonVariant.Outline;
-    let is_danger = variant == ButtonVariant.Danger;
-    let is_success = variant == ButtonVariant.Success;
-    let is_ghost = variant == ButtonVariant.Ghost;
+    \let is_primary = variant == ButtonVariant.Primary;
+    \let is_secondary = variant == ButtonVariant.Secondary;
+    \let is_outline = variant == ButtonVariant.Outline;
+    \let is_danger = variant == ButtonVariant.Danger;
+    \let is_success = variant == ButtonVariant.Success;
+    \let is_ghost = variant == ButtonVariant.Ghost;
 
-    let default_bg = is_primary ? #2563eb : (
+    \let default_bg = is_primary ? #2563eb : (
         is_secondary ? #334155 : (
             is_outline ? #0f172a : (
                 is_danger ? #dc2626 : (
@@ -183,9 +183,9 @@
         )
     );
 
-    let default_text = (is_outline ? #38bdf8 : (is_ghost ? #94a3b8 : #ffffff));
+    \let default_text = (is_outline ? #38bdf8 : (is_ghost ? #94a3b8 : #ffffff));
 
-    let default_border = is_primary ? #3b82f6 : (
+    \let default_border = is_primary ? #3b82f6 : (
         is_secondary ? #475569 : (
             is_outline ? #38bdf8 : (
                 is_danger ? #ef4444 : (
@@ -195,20 +195,20 @@
         )
     );
 
-    let default_border_w = is_outline ? 1.5 : (is_ghost ? 0 : 1);
+    \let default_border_w = is_outline ? 1.5 : (is_ghost ? 0 : 1);
 
-    let is_disabled = disabled;
-    let bg_color = is_disabled ? #33415580 : default_bg;
-    let text_color = is_disabled ? #64748b : default_text;
-    let border_color = is_disabled ? #33415540 : default_border;
+    \let is_disabled = disabled;
+    \let bg_color = is_disabled ? #33415580 : default_bg;
+    \let text_color = is_disabled ? #64748b : default_text;
+    \let border_color = is_disabled ? #33415540 : default_border;
 
-    let measured_label_w = text_width(label, 14, 600);
-    let resolved_width = max(64, measured_label_w + 32);
+    \let measured_label_w = text_width(label, 14, 600);
+    \let resolved_width = max(64, measured_label_w + 32);
 
-    alias right = x + resolved_width;
-    alias width = resolved_width;
-    alias bottom = y + 38;
-    alias height = 38;
+    \alias right = x + resolved_width;
+    \alias width = resolved_width;
+    \alias bottom = y + 38;
+    \alias height = 38;
 
     \Rect(
         x: x,

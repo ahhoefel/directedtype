@@ -84,7 +84,7 @@ fn test_card_auto_height_wraps_children() {
     \use "components/Card.dt"
     \use "components/CardStyle.dt"
 
-    let custom_style = \CardStyle(
+    \let custom_style = \CardStyle(
         bg: #1e293b,
         border_color: #334155,
         border_width: 1,

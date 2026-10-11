@@ -9,20 +9,20 @@
 \use "theme/default.dt"
 
 \Component Counter(x: Number, y: Number, initial: Number: 0) {
-    state count: Number: initial;
+    \state count: Number: initial;
 
-    let is_max = count >= 10;
-    let is_zero = count <= 0;
-    let bar_width = (count * 26) + 12;
-    let count_label = "Count: " + count;
-    let status_label = is_max ? "MAX (10)" : (is_zero ? "MIN (0)" : "Active");
+    \let is_max = count >= 10;
+    \let is_zero = count <= 0;
+    \let bar_width = (count * 26) + 12;
+    \let count_label = "Count: " + count;
+    \let status_label = is_max ? "MAX (10)" : (is_zero ? "MIN (0)" : "Active");
 
-    alias width = 360;
-    alias height = 270;
-    alias right = x + 360;
-    alias bottom = y + 270;
+    \alias width = 360;
+    \alias height = 270;
+    \alias right = x + 360;
+    \alias bottom = y + 270;
 
-    let outer_card_style = \CardStyle(
+    \let outer_card_style = \CardStyle(
         bg: #1e293b,
         border_color: is_max ? #ef4444 : #334155,
         border_width: 2,
@@ -30,7 +30,7 @@
         padding: 24
     );
 
-    let inner_card_style = \CardStyle(
+    \let inner_card_style = \CardStyle(
         bg: #0f172a,
         border_color: is_max ? #7f1d1d : #1e293b,
         border_width: 1,
@@ -39,7 +39,7 @@
         padding_y: 16
     );
 
-    let counter_btn_decrement = \ButtonStyle(
+    \let counter_btn_decrement = \ButtonStyle(
         bg: #334155,
         text_color: #ffffff,
         border_color: #475569,
@@ -53,7 +53,7 @@
         disabled_border_color: #33415540
     );
 
-    let counter_btn_increment = \ButtonStyle(
+    \let counter_btn_increment = \ButtonStyle(
         bg: is_max ? #dc2626 : #2563eb,
         text_color: #ffffff,
         border_color: is_max ? #ef4444 : #3b82f6,
@@ -67,7 +67,7 @@
         disabled_border_color: #33415540
     );
 
-    let counter_btn_reset = \ButtonStyle(
+    \let counter_btn_reset = \ButtonStyle(
         bg: #334155,
         text_color: #ffffff,
         border_color: #475569,

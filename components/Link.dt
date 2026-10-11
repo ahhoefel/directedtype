@@ -5,8 +5,8 @@
 
 \Component Link(
     url: String,
-    env link_style: LinkStyle,
-    env font: Font,
+    \env link_style: LinkStyle,
+    \env font: Font,
     view = window,
     x: Number: parent.left,
     y: Number: parent.top,
@@ -17,18 +17,18 @@
     on_pointer_enter = self.pointer_enter,
     on_pointer_leave = self.pointer_leave
 ) {
-    state focused: Boolean = false;
-    state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state hovered: Boolean = false;
 
-    let active_color = focused ? link_style.focused_color : (hovered ? link_style.hover_color : link_style.color);
-    let active_underline = focused ? link_style.focused_underline : (hovered ? link_style.hover_underline : link_style.underline);
-    let active_bg = focused ? link_style.focused_bg : (hovered ? link_style.hover_bg : link_style.bg);
+    \let active_color = focused ? link_style.focused_color : (hovered ? link_style.hover_color : link_style.color);
+    \let active_underline = focused ? link_style.focused_underline : (hovered ? link_style.hover_underline : link_style.underline);
+    \let active_bg = focused ? link_style.focused_bg : (hovered ? link_style.hover_bg : link_style.bg);
 
-    alias current_color = active_color;
-    alias current_underline = active_underline;
-    alias current_bg = active_bg;
+    \alias current_color = active_color;
+    \alias current_underline = active_underline;
+    \alias current_bg = active_bg;
 
-    let link_text = \Text(
+    \let link_text = \Text(
         x: x,
         y: y,
         font: font,
@@ -43,8 +43,8 @@
         \Children
     };
 
-    alias width = link_text.width;
-    alias height = link_text.height;
-    alias right = x + link_text.width;
-    alias bottom = y + link_text.height;
+    \alias width = link_text.width;
+    \alias height = link_text.height;
+    \alias right = x + link_text.width;
+    \alias bottom = y + link_text.height;
 }

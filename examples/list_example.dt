@@ -1,8 +1,8 @@
 \use "components/List.dt"
 \use "components/VStack.dt"
 
-env font = \Font(family: "Arial", size: 16);
-let inset = 20;
+\env font = \Font(family: "Arial", size: 16);
+\let inset = 20;
 
 \VStack(shrink:true, x:10,y:10,gap: 10){
 \List(inset: inset,width:200,gap:10,item_gap:10, bullet_type: BulletType.Bullet) {

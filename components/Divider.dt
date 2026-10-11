@@ -8,12 +8,12 @@
     color: Color: #334155,
     thickness: Number: 1
 ) {
-    let resolved_width = parent.width;
+    \let resolved_width = parent.width;
 
-    alias width = resolved_width;
-    alias right = x + resolved_width;
-    alias bottom = y + thickness;
-    alias height = thickness;
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias bottom = y + thickness;
+    \alias height = thickness;
 
     \Rect(
         x: x,
@@ -32,9 +32,9 @@
     color: Color: #334155,
     thickness: Number: 1
 ) {
-    alias right = x + width;
-    alias bottom = y + thickness;
-    alias height = thickness;
+    \alias right = x + width;
+    \alias bottom = y + thickness;
+    \alias height = thickness;
 
     \Rect(
         x: x,

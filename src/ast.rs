@@ -143,7 +143,7 @@ impl ComponentBodyItem {
     }
 }
 
-/// Reactive state variable binding: `state name = expr;`, `state name: Type = expr;`, `state name: Type: expr;`, or uninitialized `state name: Type;` / `state name;`
+/// Reactive state variable binding: `\state name = expr;`, `\state name: Type = expr;`, `\state name: Type: expr;`, or uninitialized `\state name: Type;` / `\state name;`
 #[derive(Debug, Clone, PartialEq)]
 pub struct StateBinding {
     pub name: Ident,
@@ -298,7 +298,7 @@ pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
     }
 }
 
-/// Public immutable alias port binding: `alias name = expr;` or `alias name: Type = expr;`
+/// Public immutable alias port binding: `\alias name = expr;` or `\alias name: Type = expr;`
 #[derive(Debug, Clone, PartialEq)]
 pub struct AliasBinding {
     pub name: Ident,
@@ -307,7 +307,7 @@ pub struct AliasBinding {
     pub span: Span,
 }
 
-/// Local variable or element binding: `let name = expr;`, `let name = \Node(...);`, or uninitialized `let name;`
+/// Local variable or element binding: `\let name = expr;`, `\let name = \Node(...);`, or uninitialized `\let name;`
 #[derive(Debug, Clone, PartialEq)]
 pub struct LetBinding {
     pub name: Ident,
@@ -331,7 +331,7 @@ impl LetValue {
     }
 }
 
-/// Environmental variable binding: `env name = expr;` or uninitialized `env name;`
+/// Environmental variable binding: `\env name = expr;` or uninitialized `\env name;`
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnvBinding {
     pub name: Ident,

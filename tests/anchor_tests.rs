@@ -174,7 +174,7 @@ fn test_anchor_scope_first_class_port_and_append_method() {
             }
         }
 
-        let main_scope = \AnchorScope("main") {
+        \let main_scope = \AnchorScope("main") {
             \Anchor("setup") {
                 \Rect(width: 200, height: 50, color: "#abcdef")
             }
@@ -423,7 +423,7 @@ impl Component for FocusTrackerComponent {
 fn test_focus_and_blur_event_dispatch_and_bubbling() {
     let source = r##"
         \Component FocusTracker {
-            state focused: false;
+            \state focused: false;
             \Rect(x: 0, y: 0, width: 120, height: 40, color: "#111111", on_focus: self.handle_focus, on_blur: self.handle_blur)
         }
         \FocusTracker
@@ -496,7 +496,7 @@ fn test_keyboard_focus_traversal_reading_order() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        env link_style = link_default;
+        \env link_style = link_default;
 
         \VStack(width: 800, gap: 20) {
             \Link(url: "#sec1") { Link 1 }
@@ -563,7 +563,7 @@ fn test_keyboard_focus_scrolls_into_view() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        env link_style = link_default;
+        \env link_style = link_default;
 
         \VStack(width: 800, gap: 40) {
             \Link(url: "#top") { Top Link }
@@ -609,7 +609,7 @@ fn test_keyboard_activation_triggers_anchor_navigation() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        env link_style = link_default;
+        \env link_style = link_default;
 
         \VStack(width: 800, gap: 30) {
             \Link(url: "#deep") { Jump to Deep Anchor }
@@ -660,8 +660,8 @@ fn test_designer_driven_focus_and_blur_target_styling() {
     // rather than the engine hardcoding arbitrary colors or overlays.
     let source = r##"
         \Component SectionTarget {
-            state focused: Boolean = false;
-            let bg_color = focused ? #3b82f6 : #ffffff;
+            \state focused: Boolean = false;
+            \let bg_color = focused ? #3b82f6 : #ffffff;
 
             \Anchor(name: "styled-target", on_focus: self.handle_focus, on_blur: self.handle_blur) {
                 \Rect(width: 200, height: 80, color: bg_color)
@@ -775,7 +775,7 @@ fn test_link_component_click_handler_and_action_queue() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        env link_style = link_default;
+        \env link_style = link_default;
 
         \VStack(width: 800, gap: 20) {
             \Link(url: "#dest") { Go to Destination }
@@ -877,7 +877,7 @@ fn test_link_component_custom_on_click_override() {
         \use "theme/default.dt";
 
         \Component CustomPage(env font: Font) {
-            state custom_clicked: Boolean = false;
+            \state custom_clicked: Boolean = false;
 
             \Link(url: "#ignored", link_style: link_default, on_click: self.handle_custom_click) {
                 Custom Action Link
@@ -1094,9 +1094,9 @@ fn test_link_component_focus_and_blur_transitions() {
         \use "components/LinkStyle.dt";
         \use "components/Link.dt";
         \use "components/VStack.dt";
-        env font = \Font(size: 14);
+        \env font = \Font(size: 14);
 
-        let custom_style = \LinkStyle(
+        \let custom_style = \LinkStyle(
             color: #1a73e8,
             underline: false,
             bg: #00000000,
@@ -1286,7 +1286,7 @@ fn test_link_styling_environmental_from_theme() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        env link_style = link_default;
+        \env link_style = link_default;
 
         \Link(url: "https://example.com") {
             Ambiently Styled Link

@@ -103,7 +103,7 @@ fn test_companion_file_discovery_via_resolver() {
 fn test_companion_component_on_mount_lifecycle() {
     let input = r#"
     \Component Counter(initial: Number: 0) {
-        state count: Number = 0;
+        \state count: Number = 0;
         \Rect(x: 0, y: 0, width: count * 10, height: 40, color: #3b82f6)
     }
 
@@ -133,7 +133,7 @@ fn test_companion_component_on_mount_lifecycle() {
 fn test_event_dispatch_self_increment_and_decrement() {
     let input = r#"
     \Component Counter {
-        state count: Number: 0;
+        \state count: Number: 0;
         \Rect(x: 10, y: 10, width: 100 + count * 20, height: 40, color: #10b981, on_click: self.increment)
     }
 
@@ -198,12 +198,12 @@ fn test_event_dispatch_self_increment_and_decrement() {
 fn test_sibling_actor_messaging_drawer_toggle() {
     let input = r#"
     \Component PageLayout {
-        let drawer = \Drawer(width: 300);
+        \let drawer = \Drawer(width: 300);
         \Rect(x: 0, y: 0, width: 80, height: 30, color: #2563eb, on_click: drawer.toggle)
     }
 
     \Component Drawer(width: Number: 200) {
-        state is_open: Boolean: false;
+        \state is_open: Boolean: false;
         \Rect(x: 100, y: 0, width: is_open ? width : 0, height: 200, color: #1e293b)
     }
 
@@ -329,7 +329,7 @@ fn test_structured_key_lookup_from_companion_context() {
 fn test_dom_integration_register_and_dispatch() {
     let input = r#"
     \Component Counter {
-        state count: Number: 0;
+        \state count: Number: 0;
         \Rect(x: 20, y: 20, width: 100 + count * 50, height: 30, color: #ff0000, on_click: self.increment)
     }
 

@@ -130,7 +130,7 @@ fn test_link_custom_view_is_scroll_view() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        let pane = \ScrollView(width: 400, height: 250) {
+        \let pane = \ScrollView(width: 400, height: 250) {
             \Anchor("inside_pane") {
                 \Rect(width: 100, height: 40, color: #10b981)
             }
@@ -331,7 +331,7 @@ fn test_end_to_end_link_scrolls_scroll_view() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        let my_scroll = \ScrollView(width: 300, height: 150) {
+        \let my_scroll = \ScrollView(width: 300, height: 150) {
             \Rect(width: 200, height: 120, color: #ef4444)
             \Anchor("deep_section") {
                 \Rect(width: 200, height: 100, color: #3b82f6)

@@ -22,21 +22,21 @@ pub fn parse_document(source: &str) -> Result<Document, ParseError> {
 
     while let Some((tok, span)) = cursor.peek_token()?.cloned() {
         match tok {
-            Token::Let => {
-                let let_binding = parse_let_binding(&mut cursor)?;
-                items.push(Item::Let(let_binding));
-            }
-            Token::Env => {
-                let env_binding = parse_env_binding(&mut cursor)?;
-                items.push(Item::Env(env_binding));
-            }
-            Token::State => {
-                let state_binding = parse_state_binding(&mut cursor)?;
-                items.push(Item::State(state_binding));
-            }
             Token::Backslash => {
                 let next_tok = cursor.peek_nth(1)?.cloned();
                 match next_tok {
+                    Some((Token::Let, _)) => {
+                        let let_binding = parse_let_binding(&mut cursor)?;
+                        items.push(Item::Let(let_binding));
+                    }
+                    Some((Token::Env, _)) => {
+                        let env_binding = parse_env_binding(&mut cursor)?;
+                        items.push(Item::Env(env_binding));
+                    }
+                    Some((Token::State, _)) => {
+                        let state_binding = parse_state_binding(&mut cursor)?;
+                        items.push(Item::State(state_binding));
+                    }
                     Some((Token::Component, _)) => {
                         let comp = parse_component_def(&mut cursor)?;
                         items.push(Item::Component(comp));
@@ -55,14 +55,14 @@ pub fn parse_document(source: &str) -> Result<Document, ParseError> {
                     }
                     Some((other, other_span)) => {
                         return Err(ParseError::UnexpectedToken {
-                            expected: "Component, Enum, use, or element name after '\\'".to_string(),
+                            expected: "Component, Enum, use, let, env, state, or element name after '\\'".to_string(),
                             found: other.to_string(),
                             span: other_span,
                         });
                     }
                     None => {
                         return Err(ParseError::UnexpectedEof {
-                            expected: "Component, Enum, use, or element name after '\\'".to_string(),
+                            expected: "Component, Enum, use, let, env, state, or element name after '\\'".to_string(),
                             span,
                         });
                     }
@@ -70,7 +70,7 @@ pub fn parse_document(source: &str) -> Result<Document, ParseError> {
             }
             other => {
                 return Err(ParseError::UnexpectedToken {
-                    expected: "top-level declaration starting with '\\', 'let', 'env', or 'state'".to_string(),
+                    expected: "top-level declaration starting with '\\'".to_string(),
                     found: other.to_string(),
                     span,
                 });

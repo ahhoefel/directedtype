@@ -8,9 +8,9 @@
     x: Number,
     y: Number
 ) {
-    alias right = x;
-    alias bottom = y + height;
-    alias width = 0;
+    \alias right = x;
+    \alias bottom = y + height;
+    \alias width = 0;
 }
 
 // 2. Horizontal Spacer: inserts horizontal whitespace in HStack
@@ -19,9 +19,9 @@
     x: Number,
     y: Number
 ) {
-    alias right = x + width;
-    alias bottom = y;
-    alias height = 0;
+    \alias right = x + width;
+    \alias bottom = y;
+    \alias height = 0;
 }
 
 // 3. 2D Box Spacer: inserts explicit 2D spatial separation
@@ -31,6 +31,6 @@
     x: Number,
     y: Number
 ) {
-    alias right = x + width;
-    alias bottom = y + height;
+    \alias right = x + width;
+    \alias bottom = y + height;
 }

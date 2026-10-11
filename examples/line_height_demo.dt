@@ -8,7 +8,7 @@
     // Background card (drawn first so it stays behind text and guides)
     \Rect(x: self.left, y: self.top, width: self.width, height: self.height, color: #0f172a)
     // Centered text
-    let t = \Text(
+    \let t = \Text(
         x: self.left + (self.width - t.width) / 2,
         y: self.top + (self.height - t.height) / 2,
         color: #f8fafc,
@@ -18,13 +18,13 @@
     // Text bounding box (cyan)
     \Rect(x: t.left, y: t.top, width: t.width, height: t.height, color: #00000000, border_color: #38bdf8, border_width: 1)
     // Baseline (red)
-    let baseline_y = t.font.baseline;
-    let guide_outset = 25;
-    let guide_x = t.left - guide_outset;
-    let guide_width = t.width + (2 * guide_outset);
-    let cap_height_y = baseline_y - t.font.cap_height;
-    let x_height_y = baseline_y - t.font.x_height;
-    let descender_y = baseline_y + t.font.descent;
+    \let baseline_y = t.font.baseline;
+    \let guide_outset = 25;
+    \let guide_x = t.left - guide_outset;
+    \let guide_width = t.width + (2 * guide_outset);
+    \let cap_height_y = baseline_y - t.font.cap_height;
+    \let x_height_y = baseline_y - t.font.x_height;
+    \let descender_y = baseline_y + t.font.descent;
 
     \Rect(x: guide_x, y: baseline_y, width: guide_width, height: 1, color: #ef4444)
     \Rect(x: guide_x, y: cap_height_y, width: guide_width, height: 1, color: #22c55e)
@@ -41,7 +41,7 @@
 }
 
 \Component Measurement(x, y1, y2, arm: 5, color: #ffffff) {
-    env font = \Font(family: "Arial", size: 10);
+    \env font = \Font(family: "Arial", size: 10);
     \Rect(x: x, y: y1, width: 1, height: y2 - y1, color: #ef4444)
     \Rect(x: x-arm, y: y1, width: 2*arm, height: 1, color: #ef4444)
     \Rect(x: x-arm, y: y2, width: 2*arm, height: 1, color: #ef4444)

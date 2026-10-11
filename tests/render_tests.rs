@@ -255,7 +255,7 @@ fn test_viewer_hot_reload_document() {
 fn test_headless_render_clipping() {
     let source = r#"
 \Component ScrollPane {
-    let clip = \Clip(up: self.clip, box: \Box(x: 20, y: 20, width: 60, height: 60))
+    \let clip = \Clip(up: self.clip, box: \Box(x: 20, y: 20, width: 60, height: 60))
     \Rect(clip: clip, x: 20, y: 20, width: 200, height: 200, color: #ff0000)
 }
 
@@ -665,9 +665,9 @@ fn test_render_link_focus_highlight() {
 \use "components/LinkStyle.dt"
 \use "components/Link.dt"
 
-env font = \Font(size: 16);
+\env font = \Font(size: 16);
 
-let red_link_style = \LinkStyle(
+\let red_link_style = \LinkStyle(
     color: #2563eb,
     underline: true,
     bg: #00000000,
@@ -742,7 +742,7 @@ fn test_render_link_hover_highlight() {
 \use "components/Link.dt"
 \use "theme/default.dt"
 
-let blue_hover_link_style = \LinkStyle(
+\let blue_hover_link_style = \LinkStyle(
     color: #2563eb,
     underline: false,
     bg: #00000000,

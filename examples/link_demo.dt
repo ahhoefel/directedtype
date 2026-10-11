@@ -10,9 +10,9 @@
 \use "components/Link.dt"
 \use "theme/default.dt"
 
-env link_style = link_default;
+\env link_style = link_default;
 
-let link_card_style = \CardStyle(
+\let link_card_style = \CardStyle(
     bg: #f8fafc,
     border_color: #cbd5e1,
     border_width: 1,
@@ -21,7 +21,7 @@ let link_card_style = \CardStyle(
     padding_y: 20
 );
 
-let callout_card_style = \CardStyle(
+\let callout_card_style = \CardStyle(
     bg: #eff6ff,
     border_color: #93c5fd,
     border_width: 1,
@@ -31,7 +31,7 @@ let callout_card_style = \CardStyle(
 );
 
 // Custom Brand LinkStyles demonstrating LinkStyle component polymorphism
-let vello_link_style = \LinkStyle(
+\let vello_link_style = \LinkStyle(
     color: #7c3aed,
     underline: true,
     bg: #00000000,
@@ -43,7 +43,7 @@ let vello_link_style = \LinkStyle(
     focused_bg: #ede9fe
 );
 
-let parley_link_style = \LinkStyle(
+\let parley_link_style = \LinkStyle(
     color: #059669,
     underline: true,
     bg: #00000000,
@@ -55,7 +55,7 @@ let parley_link_style = \LinkStyle(
     focused_bg: #d1fae5
 );
 
-let crates_link_style = \LinkStyle(
+\let crates_link_style = \LinkStyle(
     color: #d97706,
     underline: false,
     bg: #00000000,
@@ -67,7 +67,7 @@ let crates_link_style = \LinkStyle(
     focused_bg: #fef3c7
 );
 
-let rust_link_style = \LinkStyle(
+\let rust_link_style = \LinkStyle(
     color: #ea580c,
     underline: true,
     bg: #00000000,
@@ -79,7 +79,7 @@ let rust_link_style = \LinkStyle(
     focused_bg: #ffedd5
 );
 
-let w3c_link_style = \LinkStyle(
+\let w3c_link_style = \LinkStyle(
     color: #0284c7,
     underline: true,
     bg: #00000000,

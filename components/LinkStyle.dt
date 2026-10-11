@@ -20,10 +20,10 @@
     underline: Boolean,
     bg: Color
 ) {
-    alias hover_color = color;
-    alias hover_underline = underline;
-    alias hover_bg = bg;
-    alias focused_color = color;
-    alias focused_underline = underline;
-    alias focused_bg = bg;
+    \alias hover_color = color;
+    \alias hover_underline = underline;
+    \alias hover_bg = bg;
+    \alias focused_color = color;
+    \alias focused_underline = underline;
+    \alias focused_bg = bg;
 }

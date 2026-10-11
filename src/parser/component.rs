@@ -13,7 +13,16 @@ use crate::token::Token;
 /// e.g. `bg_color: Color`, `gap: Number: 16`, `gap: Number = 16`, or `width: max(children.width) + 32`
 pub fn parse_param_def(cursor: &mut ParserCursor<'_>) -> Result<ParamDef, ParseError> {
     let mut is_env = false;
-    let env_span = if let Some((Token::Env, _)) = cursor.peek_token()? {
+    let env_span = if let Some((Token::Backslash, _)) = cursor.peek_token()? {
+        if cursor.peek_nth(1)?.is_some_and(|(t, _)| t == &Token::Env) {
+            let bs_span = cursor.consume_token(&Token::Backslash)?;
+            let span = cursor.consume_token(&Token::Env)?;
+            is_env = true;
+            Some(bs_span.merge(span))
+        } else {
+            None
+        }
+    } else if let Some((Token::Env, _)) = cursor.peek_token()? {
         let span = cursor.consume_token(&Token::Env)?;
         is_env = true;
         Some(span)
@@ -134,40 +143,61 @@ pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef
             break;
         }
 
-        if tok == &Token::Let {
-            let let_binding = parse_let_binding(cursor)?;
-            body.push(ComponentBodyItem::Let(let_binding));
-            continue;
+        if tok == &Token::Backslash {
+            let next_tok = cursor.peek_nth(1)?.cloned();
+            match next_tok {
+                Some((Token::Let, _)) => {
+                    let let_binding = parse_let_binding(cursor)?;
+                    body.push(ComponentBodyItem::Let(let_binding));
+                    continue;
+                }
+                Some((Token::Env, _)) => {
+                    let env_binding = parse_env_binding(cursor)?;
+                    body.push(ComponentBodyItem::Env(env_binding));
+                    continue;
+                }
+                Some((Token::Alias, _)) => {
+                    let alias_binding = parse_alias_binding(cursor)?;
+                    body.push(ComponentBodyItem::Alias(alias_binding));
+                    continue;
+                }
+                Some((Token::State, _)) => {
+                    let state_binding = parse_state_binding(cursor)?;
+                    body.push(ComponentBodyItem::State(state_binding));
+                    continue;
+                }
+                Some((Token::Children, _)) => {
+                    let directive = parse_children_directive(cursor)?;
+                    body.push(ComponentBodyItem::Children(directive));
+                    continue;
+                }
+                Some((Token::Ident(_), _)) => {
+                    let node = parse_element_node(cursor)?;
+                    body.push(ComponentBodyItem::Node(node));
+                    continue;
+                }
+                Some((other, other_span)) => {
+                    return Err(ParseError::UnexpectedToken {
+                        expected: "let, env, alias, state, Children, or element name after '\\'".to_string(),
+                        found: other.to_string(),
+                        span: other_span,
+                    });
+                }
+                None => {
+                    return Err(ParseError::UnexpectedEof {
+                        expected: "command or element name after '\\'".to_string(),
+                        span: Span::empty(cursor.pos()),
+                    });
+                }
+            }
         }
 
-        if tok == &Token::Env {
-            let env_binding = parse_env_binding(cursor)?;
-            body.push(ComponentBodyItem::Env(env_binding));
-            continue;
-        }
-
-        if tok == &Token::Alias {
-            let alias_binding = parse_alias_binding(cursor)?;
-            body.push(ComponentBodyItem::Alias(alias_binding));
-            continue;
-        }
-
-        if tok == &Token::State {
-            let state_binding = parse_state_binding(cursor)?;
-            body.push(ComponentBodyItem::State(state_binding));
-            continue;
-        }
-
-        let is_children = tok == &Token::Backslash
-            && cursor.peek_nth(1)?.is_some_and(|(t, _)| t == &Token::Children);
-
-        if is_children {
-            let directive = parse_children_directive(cursor)?;
-            body.push(ComponentBodyItem::Children(directive));
-        } else {
-            let node = parse_element_node(cursor)?;
-            body.push(ComponentBodyItem::Node(node));
-        }
+        let (tok_found, tok_span) = cursor.expect_token("command or element starting with '\\'")?;
+        return Err(ParseError::UnexpectedToken {
+            expected: "'\\' before command or element in component body".to_string(),
+            found: tok_found.to_string(),
+            span: tok_span,
+        });
     }
 
     let rbrace_span = cursor.consume_token(&Token::RBrace)?;
@@ -181,9 +211,11 @@ pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef
     })
 }
 
-/// Parses a local let binding: `let name = expr;`, `let name: Type = expr;`, `let name = \Node(...);`, or uninitialized `let name;`
+/// Parses a local let binding: `\let name = expr;`, `\let name: Type = expr;`, `\let name = \Node(...);`, or uninitialized `\let name;`
 pub fn parse_let_binding(cursor: &mut ParserCursor<'_>) -> Result<LetBinding, ParseError> {
+    let bs_span = cursor.consume_token(&Token::Backslash)?;
     let let_span = cursor.consume_token(&Token::Let)?;
+    let start_span = bs_span.merge(let_span);
     let name = parse_ident(cursor)?;
 
     let mut type_annotation = None;
@@ -220,12 +252,12 @@ pub fn parse_let_binding(cursor: &mut ParserCursor<'_>) -> Result<LetBinding, Pa
         };
         (Some(val), semi_span)
     } else {
-        // Uninitialized `let name;`
+        // Uninitialized `\let name;`
         let semi_span = cursor.consume_token(&Token::Semicolon)?;
         (None, semi_span)
     };
 
-    let span = let_span.merge(end_span);
+    let span = start_span.merge(end_span);
     Ok(LetBinding {
         name,
         type_annotation,
@@ -234,9 +266,11 @@ pub fn parse_let_binding(cursor: &mut ParserCursor<'_>) -> Result<LetBinding, Pa
     })
 }
 
-/// Parses an environmental variable binding: `env name = expr;`, `env name: Type = expr;`, or uninitialized `env name;`
+/// Parses an environmental variable binding: `\env name = expr;`, `\env name: Type = expr;`, or uninitialized `\env name;`
 pub fn parse_env_binding(cursor: &mut ParserCursor<'_>) -> Result<EnvBinding, ParseError> {
+    let bs_span = cursor.consume_token(&Token::Backslash)?;
     let env_span = cursor.consume_token(&Token::Env)?;
+    let start_span = bs_span.merge(env_span);
     let name = parse_ident(cursor)?;
 
     let mut type_annotation = None;
@@ -267,12 +301,12 @@ pub fn parse_env_binding(cursor: &mut ParserCursor<'_>) -> Result<EnvBinding, Pa
         };
         (Some(expr), semi_span)
     } else {
-        // Uninitialized `env name;`
+        // Uninitialized `\env name;`
         let semi_span = cursor.consume_token(&Token::Semicolon)?;
         (None, semi_span)
     };
 
-    let span = env_span.merge(end_span);
+    let span = start_span.merge(end_span);
     Ok(EnvBinding {
         name,
         type_annotation,
@@ -281,9 +315,11 @@ pub fn parse_env_binding(cursor: &mut ParserCursor<'_>) -> Result<EnvBinding, Pa
     })
 }
 
-/// Parses a public immutable alias binding: `alias name = expr;`, `alias name: Type = expr;`, or `alias name: expr;`
+/// Parses a public immutable alias binding: `\alias name = expr;`, `\alias name: Type = expr;`, or `\alias name: expr;`
 pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding, ParseError> {
+    let bs_span = cursor.consume_token(&Token::Backslash)?;
     let alias_span = cursor.consume_token(&Token::Alias)?;
+    let start_span = bs_span.merge(alias_span);
     let name = parse_ident(cursor)?;
 
     let mut type_annotation = None;
@@ -310,7 +346,7 @@ pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding
                 }
             }
             _ => {
-                // `alias name: expr` -> no type annotation, expr follows
+                // `\alias name: expr` -> no type annotation, expr follows
             }
         }
     } else if let Some((Token::Eq, _)) = cursor.peek_token()? {
@@ -332,7 +368,7 @@ pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding
         value.span()
     };
 
-    let span = alias_span.merge(semi_span);
+    let span = start_span.merge(semi_span);
     Ok(AliasBinding {
         name,
         type_annotation,
@@ -342,9 +378,11 @@ pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding
 }
 
 /// Parses a reactive state variable binding:
-/// `state name = expr;`, `state name: Type = expr;`, `state name: Type: expr;`, or uninitialized `state name: Type;` / `state name;`
+/// `\state name = expr;`, `\state name: Type = expr;`, `\state name: Type: expr;`, or uninitialized `\state name: Type;` / `\state name;`
 pub fn parse_state_binding(cursor: &mut ParserCursor<'_>) -> Result<StateBinding, ParseError> {
+    let bs_span = cursor.consume_token(&Token::Backslash)?;
     let state_span = cursor.consume_token(&Token::State)?;
+    let start_span = bs_span.merge(state_span);
     let name = parse_ident(cursor)?;
 
     let mut type_annotation = None;
@@ -357,7 +395,7 @@ pub fn parse_state_binding(cursor: &mut ParserCursor<'_>) -> Result<StateBinding
         let tok1 = cursor.peek_nth(1)?.cloned();
 
         match (tok0, tok1) {
-            // `state name: Type: expr` or `state name: Type = expr`
+            // `\state name: Type: expr` or `\state name: Type = expr`
             (Some((Token::Ident(type_name), span0)), Some((Token::Colon, _)))
             | (Some((Token::Ident(type_name), span0)), Some((Token::Eq, _)))
                 if type_name.chars().next().is_some_and(|c| c.is_uppercase()) =>
@@ -374,7 +412,7 @@ pub fn parse_state_binding(cursor: &mut ParserCursor<'_>) -> Result<StateBinding
                 }
                 default = Some(parse_expr(cursor)?);
             }
-            // `state name: Type;` (uninitialized with type)
+            // `\state name: Type;` (uninitialized with type)
             (Some((Token::Ident(type_name), span0)), Some((Token::Semicolon, _)))
                 if type_name.chars().next().is_some_and(|c| c.is_uppercase()) =>
             {
@@ -385,12 +423,12 @@ pub fn parse_state_binding(cursor: &mut ParserCursor<'_>) -> Result<StateBinding
                 });
             }
             _ => {
-                // `state name: expr` (no type annotation, expr follows)
+                // `\state name: expr` (no type annotation, expr follows)
                 default = Some(parse_expr(cursor)?);
             }
         }
     } else if let Some((Token::Eq, _)) = cursor.peek_token()? {
-        // `state name = expr`
+        // `\state name = expr`
         cursor.consume_token(&Token::Eq)?;
         default = Some(parse_expr(cursor)?);
     }
@@ -405,7 +443,7 @@ pub fn parse_state_binding(cursor: &mut ParserCursor<'_>) -> Result<StateBinding
         name.span
     };
 
-    let span = state_span.merge(semi_span);
+    let span = start_span.merge(semi_span);
     Ok(StateBinding {
         name,
         type_annotation,

@@ -16,13 +16,13 @@
     scrollbar_width: Number = 6,
     on_scroll = self.on_scroll
 ) {
-    state scroll_y: Number = 0;
-    state scroll_x: Number = 0;
+    \state scroll_y: Number = 0;
+    \state scroll_x: Number = 0;
 
-    alias left = x;
-    alias top = y;
-    alias right = x + width;
-    alias bottom = y + height;
+    \alias left = x;
+    \alias top = y;
+    \alias right = x + width;
+    \alias bottom = y + height;
 
     // 1. Background frame & event capture surface
     \Rect(
@@ -38,7 +38,7 @@
     )
 
     // 2. Hardware clip node defining the rectangular or rounded boundary and scroll translation
-    let clip = \Clip(
+    \let clip = \Clip(
         up: self.clip,
         box: \Box(
             x: x,
@@ -51,8 +51,8 @@
         scroll_y: scroll_y
     );
 
-    let content_top = y + padding;
-    let content_left = x + padding;
+    \let content_top = y + padding;
+    \let content_left = x + padding;
 
     // 3. Children inherit the clip context and are positioned statically (decoupled from scroll state)
     \Children {
@@ -62,15 +62,15 @@
     }
 
     // 4. Dynamic scrollbar
-    let content_bottom = max(children.bottom) + padding;
-    let content_height = max(height, content_bottom - y);
-    let max_scroll_y = max(1, content_height - height);
-    let has_overflow = content_height > (height + 1);
-    let track_inset = 4;
-    let track_height = max(1, height - (2 * track_inset));
-    let thumb_height = max(24, min(track_height, track_height * (height / content_height)));
-    let scroll_ratio = min(1, max(0, scroll_y / max_scroll_y));
-    let thumb_y = y + track_inset + scroll_ratio * (track_height - thumb_height);
+    \let content_bottom = max(children.bottom) + padding;
+    \let content_height = max(height, content_bottom - y);
+    \let max_scroll_y = max(1, content_height - height);
+    \let has_overflow = content_height > (height + 1);
+    \let track_inset = 4;
+    \let track_height = max(1, height - (2 * track_inset));
+    \let thumb_height = max(24, min(track_height, track_height * (height / content_height)));
+    \let scroll_ratio = min(1, max(0, scroll_y / max_scroll_y));
+    \let thumb_y = y + track_inset + scroll_ratio * (track_height - thumb_height);
 
     \Rect(
         clip: self.clip,
