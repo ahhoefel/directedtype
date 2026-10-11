@@ -335,3 +335,37 @@ fn test_nested_env_rejected_by_parser() {
         err_str
     );
 }
+
+#[test]
+fn test_shorthand_property_names_in_component_and_children() {
+    let input = r#"
+    \Component Wrapper(gap: Number, font_size: Number) {
+      \Children {
+        gap,
+        font_size
+      }
+    }
+
+    \Component Consumer(gap: Number, font_size: Number) {
+      \Rect(x: 0, y: 0, width: gap, height: font_size, color: #123)
+    }
+
+    \Component App() {
+      \let gap = 42;
+      \let font_size = 18;
+
+      \Wrapper(gap, font_size) {
+        \Consumer()
+      }
+    }
+
+    \App
+    "#;
+
+    let doc = parse(input).expect("Failed to parse document with shorthand properties");
+    let layout = evaluate_document(&doc).expect("Document evaluation should succeed");
+
+    let rect_node = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert_eq!(rect_node.rect.width, 42.0);
+    assert_eq!(rect_node.rect.height, 18.0);
+}

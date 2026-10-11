@@ -976,13 +976,13 @@ fn test_parse_structured_component_keys() {
 }
 
 #[test]
-fn test_parse_port_boolean_shorthand() {
+fn test_parse_port_shorthand_property_names() {
     let source = r#"
     \Cell(row, column; highlighted)
     \Dialog(modal, title: "Login")
     "#;
 
-    let doc = parse(source).expect("Failed to parse boolean shorthand ports");
+    let doc = parse(source).expect("Failed to parse shorthand property names");
     assert_eq!(doc.items.len(), 2);
 
     match &doc.items[0] {
@@ -992,8 +992,8 @@ fn test_parse_port_boolean_shorthand() {
             assert_eq!(node.ports.len(), 1);
             assert_eq!(node.ports[0].name.as_str(), "highlighted");
             match &node.ports[0].expr {
-                Expr::Literal(Literal::Bool(val, _)) => assert_eq!(*val, true),
-                _ => panic!("Expected Expr::Literal bool for highlighted flag"),
+                Expr::Ident(id) => assert_eq!(id.as_str(), "highlighted"),
+                _ => panic!("Expected Expr::Ident for highlighted shorthand"),
             }
         }
         _ => panic!("Expected Item::Node"),
@@ -1006,8 +1006,8 @@ fn test_parse_port_boolean_shorthand() {
             assert_eq!(node.ports.len(), 2);
             assert_eq!(node.ports[0].name.as_str(), "modal");
             match &node.ports[0].expr {
-                Expr::Literal(Literal::Bool(val, _)) => assert_eq!(*val, true),
-                _ => panic!("Expected Expr::Literal bool for modal flag"),
+                Expr::Ident(id) => assert_eq!(id.as_str(), "modal"),
+                _ => panic!("Expected Expr::Ident for modal shorthand"),
             }
             assert_eq!(node.ports[1].name.as_str(), "title");
         }

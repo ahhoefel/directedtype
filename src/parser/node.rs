@@ -10,7 +10,7 @@ use crate::parser::expr::{parse_expr, parse_ident};
 use crate::span::Span;
 use crate::token::Token;
 
-/// Parses a single port binding: `name: expr` or shorthand boolean flag `name` (meaning `name: true`)
+/// Parses a single port binding: `name: expr` or shorthand property name `name` (meaning `name: name`)
 pub fn parse_port_binding(cursor: &mut ParserCursor<'_>) -> Result<PortBinding, ParseError> {
     let name = parse_ident(cursor)?;
     if let Some((Token::Colon, _)) = cursor.peek_token()? {
@@ -20,7 +20,7 @@ pub fn parse_port_binding(cursor: &mut ParserCursor<'_>) -> Result<PortBinding, 
         Ok(PortBinding { name, expr, span })
     } else {
         let span = name.span;
-        let expr = crate::ast::Expr::bool(true);
+        let expr = crate::ast::Expr::Ident(name.clone());
         Ok(PortBinding { name, expr, span })
     }
 }
