@@ -8,13 +8,13 @@
     // Background card (drawn first so it stays behind text and guides)
     \Rect(x: self.left, y: self.top, width: self.width, height: self.height, color: #0f172a)
     // Centered text
-    \let t = \Text(
-        x: self.left + (self.width - t.width) / 2,
-        y: self.top + (self.height - t.height) / 2,
-        color: #f8fafc,
-    ) {
-        Typography
-    };
+    \Center {
+        \let t = \Text(
+            color: #f8fafc,
+        ) {
+            Typography
+        }
+    }
     // Text bounding box (cyan)
     \Rect(x: t.left, y: t.top, width: t.width, height: t.height, color: #00000000, border_color: #38bdf8, border_width: 1)
     // Baseline (red)
