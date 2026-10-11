@@ -5,27 +5,26 @@
 \let inset = 20;
 
 \VStack(shrink:true, x:10,y:10,gap: 10){
-\List(inset: inset,width:200,gap:10,item_gap:10, bullet_type: BulletType.Bullet) {
-    \Item{One}
-    \Item{Two}
-    \Item{Three}
-}
-\List(inset: inset,width:200,gap:10,item_gap:10) {
-    \Item{Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum.}
-    \Item{Two}
-    \Item{Three}
-}
-\List(inset: inset, width:200,gap:10,item_gap:10) {
-    \Item{Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum.}
-    \Item{Two}
-    \Item{Three}
-    \Item{Four}
-    \Item{Five}
-    \Item{Six}
-    \Item{Seven}
-    \Item{Eight}
-    \Item{Nine}
-    \Item{Ten}
-}
-
+    \List(inset: inset,width:200,gap:10,item_gap:10, bullet_type: BulletType.Bullet) {
+        \Item{One}
+        \Item{Two}
+        \Item{Three}
+    }
+    \List(inset: inset,width:200,gap:10,item_gap:10) {
+        \Item{Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum.}
+        \Item{Two}
+        \Item{Three}
+    }
+    \List(inset: inset, width:200,gap:10,item_gap:10) {
+        \Item{Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum.}
+        \Item{Two}
+        \Item{Three}
+        \Item{Four}
+        \Item{Five}
+        \Item{Six}
+        \Item{Seven}
+        \Item{Eight}
+        \Item{Nine}
+        \Item{Ten}
+    }
 }

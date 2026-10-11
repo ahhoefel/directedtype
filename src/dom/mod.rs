@@ -1019,7 +1019,10 @@ impl Dom {
                             child_elements.push(child_node);
                         }
                     }
-                    ContentItem::Children(_) | ContentItem::Alias(_) => {}
+                    ContentItem::Children(_)
+                    | ContentItem::Alias(_)
+                    | ContentItem::State(_)
+                    | ContentItem::Env(_) => {}
                 }
             }
             if !text_parts.is_empty() {

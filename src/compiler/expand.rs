@@ -437,18 +437,18 @@ struct InstanceContext<'a> {
     pub active_scope_id: ScopeId,
 }
 
-fn collect_nested_aliases<'a>(slot: &'a ContentSlot, out: &mut Vec<&'a AliasBinding>) {
-    for item in &slot.items {
+fn collect_nested_aliases<'a>(items: &'a [ContentItem], out: &mut Vec<&'a AliasBinding>) {
+    for item in items {
         match item {
             ContentItem::Alias(a) => out.push(a),
             ContentItem::Node(n) => {
                 if let Some(content) = &n.content {
-                    collect_nested_aliases(content, out);
+                    collect_nested_aliases(&content.items, out);
                 }
                 for port in &n.ports {
                     if let Expr::Node(elem) = &port.expr {
                         if let Some(content) = &elem.content {
-                            collect_nested_aliases(content, out);
+                            collect_nested_aliases(&content.items, out);
                         }
                     }
                 }
@@ -456,12 +456,12 @@ fn collect_nested_aliases<'a>(slot: &'a ContentSlot, out: &mut Vec<&'a AliasBind
             ContentItem::Let(l) => {
                 if let Some(LetValue::Node(n)) = &l.value {
                     if let Some(content) = &n.content {
-                        collect_nested_aliases(content, out);
+                        collect_nested_aliases(&content.items, out);
                     }
                     for port in &n.ports {
                         if let Expr::Node(elem) = &port.expr {
                             if let Some(content) = &elem.content {
-                                collect_nested_aliases(content, out);
+                                collect_nested_aliases(&content.items, out);
                             }
                         }
                     }
@@ -474,54 +474,23 @@ fn collect_nested_aliases<'a>(slot: &'a ContentSlot, out: &mut Vec<&'a AliasBind
 
 pub fn collect_all_component_aliases<'a>(comp_def: &'a ComponentDef) -> Vec<&'a AliasBinding> {
     let mut aliases = Vec::new();
-    for item in &comp_def.body {
-        match item {
-            ComponentBodyItem::Alias(a) => aliases.push(a),
-            ComponentBodyItem::Node(n) => {
-                if let Some(content) = &n.content {
-                    collect_nested_aliases(content, &mut aliases);
-                }
-                for port in &n.ports {
-                    if let Expr::Node(elem) = &port.expr {
-                        if let Some(content) = &elem.content {
-                            collect_nested_aliases(content, &mut aliases);
-                        }
-                    }
-                }
-            }
-            ComponentBodyItem::Let(l) => {
-                if let Some(LetValue::Node(n)) = &l.value {
-                    if let Some(content) = &n.content {
-                        collect_nested_aliases(content, &mut aliases);
-                    }
-                    for port in &n.ports {
-                        if let Expr::Node(elem) = &port.expr {
-                            if let Some(content) = &elem.content {
-                                collect_nested_aliases(content, &mut aliases);
-                            }
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+    collect_nested_aliases(&comp_def.body, &mut aliases);
     aliases
 }
 
-fn collect_nested_lets<'a>(slot: &'a ContentSlot, out: &mut Vec<&'a LetBinding>) {
-    for item in &slot.items {
+fn collect_nested_lets<'a>(items: &'a [ContentItem], out: &mut Vec<&'a LetBinding>) {
+    for item in items {
         match item {
             ContentItem::Let(l) => {
                 out.push(l);
                 if let Some(LetValue::Node(n)) = &l.value {
                     if let Some(content) = &n.content {
-                        collect_nested_lets(content, out);
+                        collect_nested_lets(&content.items, out);
                     }
                     for port in &n.ports {
                         if let Expr::Node(elem) = &port.expr {
                             if let Some(content) = &elem.content {
-                                collect_nested_lets(content, out);
+                                collect_nested_lets(&content.items, out);
                             }
                         }
                     }
@@ -529,12 +498,12 @@ fn collect_nested_lets<'a>(slot: &'a ContentSlot, out: &mut Vec<&'a LetBinding>)
             }
             ContentItem::Node(n) => {
                 if let Some(content) = &n.content {
-                    collect_nested_lets(content, out);
+                    collect_nested_lets(&content.items, out);
                 }
                 for port in &n.ports {
                     if let Expr::Node(elem) = &port.expr {
                         if let Some(content) = &elem.content {
-                            collect_nested_lets(content, out);
+                            collect_nested_lets(&content.items, out);
                         }
                     }
                 }
@@ -546,38 +515,7 @@ fn collect_nested_lets<'a>(slot: &'a ContentSlot, out: &mut Vec<&'a LetBinding>)
 
 pub fn collect_all_component_lets<'a>(comp_def: &'a ComponentDef) -> Vec<&'a LetBinding> {
     let mut lets = Vec::new();
-    for item in &comp_def.body {
-        match item {
-            ComponentBodyItem::Let(l) => {
-                lets.push(l);
-                if let Some(LetValue::Node(n)) = &l.value {
-                    if let Some(content) = &n.content {
-                        collect_nested_lets(content, &mut lets);
-                    }
-                    for port in &n.ports {
-                        if let Expr::Node(elem) = &port.expr {
-                            if let Some(content) = &elem.content {
-                                collect_nested_lets(content, &mut lets);
-                            }
-                        }
-                    }
-                }
-            }
-            ComponentBodyItem::Node(n) => {
-                if let Some(content) = &n.content {
-                    collect_nested_lets(content, &mut lets);
-                }
-                for port in &n.ports {
-                    if let Expr::Node(elem) = &port.expr {
-                        if let Some(content) = &elem.content {
-                            collect_nested_lets(content, &mut lets);
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+    collect_nested_lets(&comp_def.body, &mut lets);
     lets
 }
 
@@ -1264,7 +1202,7 @@ fn expand_component_instance(
                         consumer_child_nodes.push((child_elem.clone(), Some(l.name.as_str().to_string())));
                     }
                 }
-                ContentItem::Alias(_) => {}
+                ContentItem::Alias(_) | ContentItem::State(_) | ContentItem::Env(_) => {}
             }
         }
     }
@@ -1779,6 +1717,7 @@ fn expand_component_instance(
             }
             ComponentBodyItem::Alias(_) => {}
             ComponentBodyItem::State(_) => {}
+            ComponentBodyItem::Text(_) => {}
         }
     }
 
@@ -2350,7 +2289,7 @@ fn expand_primitive_element(
                         }
                     }
                 }
-                ContentItem::Alias(_) => {}
+                ContentItem::Alias(_) | ContentItem::State(_) | ContentItem::Env(_) => {}
                 ContentItem::Children(_) => {
                     if let Some(consumer_items) = ctx.consumer_children {
                         for c_item in consumer_items {
@@ -2446,8 +2385,10 @@ fn expand_primitive_element(
                                         }
                                     }
                                 }
-                                ContentItem::Alias(_) => {}
-                                ContentItem::Children(_) => {}
+                                ContentItem::Alias(_)
+                                | ContentItem::Children(_)
+                                | ContentItem::State(_)
+                                | ContentItem::Env(_) => {}
                             }
                         }
                     }

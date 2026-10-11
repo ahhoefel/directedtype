@@ -11,6 +11,15 @@ pub struct ParserCursor<'a> {
     peeked: VecDeque<(Token, Span)>,
 }
 
+/// Specifies the parsing mode for a block / content slot enclosed in `{ ... }`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlotMode {
+    /// In a component definition: text is forbidden, top-level declarations like \state and \env are allowed
+    ComponentDef,
+    /// In an element content slot: text is allowed, \state and \env are forbidden
+    ContentSlot,
+}
+
 impl<'a> ParserCursor<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
@@ -139,8 +148,12 @@ impl<'a> ParserCursor<'a> {
         self.peeked.clear();
     }
 
-    /// Parses a content slot `{ ... }`, calling `parse_inline` when an inline node `\Ident` is encountered.
-    pub fn parse_content_slot<F>(&mut self, mut parse_inline: F) -> Result<ContentSlot, ParseError>
+    /// Parses a content slot or component definition `{ ... }`, calling `parse_inline` when an inline item starting with `\` is encountered.
+    pub fn parse_content_slot_mode<F>(
+        &mut self,
+        mode: SlotMode,
+        mut parse_inline: F,
+    ) -> Result<ContentSlot, ParseError>
     where
         F: FnMut(&mut Self) -> Result<ContentItem, ParseError>,
     {
@@ -214,7 +227,9 @@ impl<'a> ParserCursor<'a> {
 
             // Closing brace ends the content slot
             if rem.starts_with('}') {
-                flush_text(&mut raw_buf, &mut items, text_start, self.pos, true);
+                if mode == SlotMode::ContentSlot {
+                    flush_text(&mut raw_buf, &mut items, text_start, self.pos, true);
+                }
                 let close_span = Span::new(self.pos, self.pos + 1);
                 self.reset_pos(self.pos + 1);
 
@@ -227,7 +242,9 @@ impl<'a> ParserCursor<'a> {
 
             // Single line comment `//`
             if rem.starts_with("//") {
-                flush_text(&mut raw_buf, &mut items, text_start, self.pos, false);
+                if mode == SlotMode::ContentSlot {
+                    flush_text(&mut raw_buf, &mut items, text_start, self.pos, false);
+                }
                 self.pos += 2;
                 while self.pos < self.source.len() && self.source.as_bytes()[self.pos] != b'\n' {
                     self.pos += 1;
@@ -241,7 +258,9 @@ impl<'a> ParserCursor<'a> {
 
             // Multi-line comment `/* ... */`
             if rem.starts_with("/*") {
-                flush_text(&mut raw_buf, &mut items, text_start, self.pos, false);
+                if mode == SlotMode::ContentSlot {
+                    flush_text(&mut raw_buf, &mut items, text_start, self.pos, false);
+                }
                 self.pos += 2;
                 while self.pos + 1 < self.source.len()
                     && !self.source[self.pos..].starts_with("*/")
@@ -255,26 +274,42 @@ impl<'a> ParserCursor<'a> {
                 continue;
             }
 
-            // Backslash: check for TeX escape or inline node
+            // In ComponentDef mode, skip whitespace between items
+            if mode == SlotMode::ComponentDef {
+                let first_char = rem.chars().next().unwrap();
+                if first_char.is_whitespace() {
+                    self.pos += first_char.len_utf8();
+                    text_start = self.pos;
+                    continue;
+                }
+            }
+
+            // Backslash: check for TeX escape or inline item
             if let Some(after_backslash) = rem.strip_prefix('\\') {
-                if after_backslash.starts_with('\\') {
-                    raw_buf.push('\\');
-                    self.pos += 2;
-                    continue;
-                } else if after_backslash.starts_with('{') {
-                    raw_buf.push('{');
-                    self.pos += 2;
-                    continue;
-                } else if after_backslash.starts_with('}') {
-                    raw_buf.push('}');
-                    self.pos += 2;
-                    continue;
-                } else if after_backslash
+                if mode == SlotMode::ContentSlot {
+                    if after_backslash.starts_with('\\') {
+                        raw_buf.push('\\');
+                        self.pos += 2;
+                        continue;
+                    } else if after_backslash.starts_with('{') {
+                        raw_buf.push('{');
+                        self.pos += 2;
+                        continue;
+                    } else if after_backslash.starts_with('}') {
+                        raw_buf.push('}');
+                        self.pos += 2;
+                        continue;
+                    }
+                }
+
+                if after_backslash
                     .chars()
                     .next()
                     .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
                 {
-                    flush_text(&mut raw_buf, &mut items, text_start, self.pos, false);
+                    if mode == SlotMode::ContentSlot {
+                        flush_text(&mut raw_buf, &mut items, text_start, self.pos, false);
+                    }
                     self.reset_pos(self.pos);
                     let inline_item = parse_inline(self)?;
                     items.push(inline_item);
@@ -282,13 +317,38 @@ impl<'a> ParserCursor<'a> {
                     self.peeked.clear();
                     text_start = self.pos;
                     continue;
-                } else {
+                } else if mode == SlotMode::ContentSlot {
                     let span = Span::new(self.pos, self.pos + 2.min(rem.len()));
                     return Err(ParseError::InvalidEscape {
                         escape: rem[..2.min(rem.len())].to_string(),
                         span,
                     });
+                } else {
+                    let span = Span::new(self.pos, self.pos + 1);
+                    return Err(ParseError::UnexpectedToken {
+                        expected: "let, env, alias, state, Children, or element name after '\\'".to_string(),
+                        found: rem[..1].to_string(),
+                        span,
+                    });
                 }
+            }
+
+            // In ComponentDef mode, any non-whitespace, non-backslash character is illegal raw text!
+            if mode == SlotMode::ComponentDef {
+                let mut end = self.pos;
+                while end < self.source.len() {
+                    let c = self.source[end..].chars().next().unwrap();
+                    if c.is_whitespace() || c == '\\' || c == '}' {
+                        break;
+                    }
+                    end += c.len_utf8();
+                }
+                let span = Span::new(self.pos, end);
+                return Err(ParseError::UnexpectedToken {
+                    expected: "'\\' before command or element in component body".to_string(),
+                    found: self.source[self.pos..end].to_string(),
+                    span,
+                });
             }
 
             // Unescaped `{` in raw text is an error
@@ -301,11 +361,19 @@ impl<'a> ParserCursor<'a> {
                 });
             }
 
-            // Regular text character
+            // Regular text character (in ElementContent mode)
             let ch = rem.chars().next().unwrap();
             raw_buf.push(ch);
             self.pos += ch.len_utf8();
         }
+    }
+
+    /// Parses a content slot `{ ... }`, calling `parse_inline` when an inline node `\Ident` is encountered.
+    pub fn parse_content_slot<F>(&mut self, parse_inline: F) -> Result<ContentSlot, ParseError>
+    where
+        F: FnMut(&mut Self) -> Result<ContentItem, ParseError>,
+    {
+        self.parse_content_slot_mode(SlotMode::ContentSlot, parse_inline)
     }
 }
 

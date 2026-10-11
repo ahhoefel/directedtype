@@ -120,28 +120,7 @@ impl ComponentDef {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ComponentBodyItem {
-    Node(ElementNode),
-    Children(ChildrenDirective),
-    Let(LetBinding),
-    Env(EnvBinding),
-    Alias(AliasBinding),
-    State(StateBinding),
-}
-
-impl ComponentBodyItem {
-    pub fn span(&self) -> Span {
-        match self {
-            ComponentBodyItem::Node(n) => n.span,
-            ComponentBodyItem::Children(c) => c.span,
-            ComponentBodyItem::Let(l) => l.span,
-            ComponentBodyItem::Env(e) => e.span,
-            ComponentBodyItem::Alias(a) => a.span,
-            ComponentBodyItem::State(s) => s.span,
-        }
-    }
-}
+pub type ComponentBodyItem = ContentItem;
 
 /// Reactive state variable binding: `\state name = expr;`, `\state name: Type = expr;`, `\state name: Type: expr;`, or uninitialized `\state name: Type;` / `\state name;`
 #[derive(Debug, Clone, PartialEq)]
@@ -399,6 +378,8 @@ pub enum ContentItem {
     Children(ChildrenDirective),
     Let(LetBinding),
     Alias(AliasBinding),
+    State(StateBinding),
+    Env(EnvBinding),
 }
 
 impl ContentItem {
@@ -409,6 +390,8 @@ impl ContentItem {
             ContentItem::Children(c) => c.span,
             ContentItem::Let(l) => l.span,
             ContentItem::Alias(a) => a.span,
+            ContentItem::State(s) => s.span,
+            ContentItem::Env(e) => e.span,
         }
     }
 }

@@ -2,8 +2,10 @@ use crate::ast::{
     ChildrenDirective, ComponentKey, ContentItem, ElementNode, PortBinding,
 };
 use crate::error::ParseError;
-use crate::parser::component::{parse_alias_binding, parse_let_binding};
-use crate::parser::cursor::ParserCursor;
+use crate::parser::component::{
+    parse_alias_binding, parse_env_binding, parse_let_binding, parse_state_binding,
+};
+use crate::parser::cursor::{ParserCursor, SlotMode};
 use crate::parser::expr::{parse_expr, parse_ident};
 use crate::span::Span;
 use crate::token::Token;
@@ -171,7 +173,9 @@ pub fn parse_element_node(cursor: &mut ParserCursor<'_>) -> Result<ElementNode, 
     };
 
     let (content, content_span) = if let Some((Token::LBrace, _)) = cursor.peek_token()? {
-        let slot = cursor.parse_content_slot(|c| parse_content_item(c))?;
+        let slot = cursor.parse_content_slot_mode(SlotMode::ContentSlot, |c| {
+            parse_content_item(c, false)
+        })?;
         let s = slot.span;
         (Some(slot), Some(s))
     } else {
@@ -193,8 +197,11 @@ pub fn parse_element_node(cursor: &mut ParserCursor<'_>) -> Result<ElementNode, 
     })
 }
 
-/// Parses an inline item when `\` is encountered inside a content slot.
-pub fn parse_content_item(cursor: &mut ParserCursor<'_>) -> Result<ContentItem, ParseError> {
+/// Parses an inline item when `\` is encountered inside a content slot or component definition.
+pub fn parse_content_item(
+    cursor: &mut ParserCursor<'_>,
+    is_component_def: bool,
+) -> Result<ContentItem, ParseError> {
     let is_backslash = cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Backslash);
     if is_backslash {
         let next_tok = cursor.peek_nth(1)?.cloned();
@@ -212,20 +219,46 @@ pub fn parse_content_item(cursor: &mut ParserCursor<'_>) -> Result<ContentItem, 
                 return Ok(ContentItem::Alias(alias_binding));
             }
             Some((Token::State, span)) => {
-                return Err(ParseError::UnexpectedToken {
-                    expected: "element or directive (\\state is only allowed at the top level of a component definition)".to_string(),
-                    found: "\\state".to_string(),
-                    span,
-                });
+                if is_component_def {
+                    let state_binding = parse_state_binding(cursor)?;
+                    return Ok(ContentItem::State(state_binding));
+                } else {
+                    return Err(ParseError::UnexpectedToken {
+                        expected: "element or directive (\\state is only allowed at the top level of a component definition)".to_string(),
+                        found: "\\state".to_string(),
+                        span,
+                    });
+                }
             }
             Some((Token::Env, span)) => {
+                if is_component_def {
+                    let env_binding = parse_env_binding(cursor)?;
+                    return Ok(ContentItem::Env(env_binding));
+                } else {
+                    return Err(ParseError::UnexpectedToken {
+                        expected: "element or directive (\\env is only allowed at the top level of a component definition)".to_string(),
+                        found: "\\env".to_string(),
+                        span,
+                    });
+                }
+            }
+            Some((Token::Ident(_), _)) => {
+                let node = parse_element_node(cursor)?;
+                return Ok(ContentItem::Node(node));
+            }
+            Some((other, other_span)) => {
                 return Err(ParseError::UnexpectedToken {
-                    expected: "element or directive (\\env is only allowed at the top level of a component definition)".to_string(),
-                    found: "\\env".to_string(),
-                    span,
+                    expected: "let, env, alias, state, Children, or element name after '\\'".to_string(),
+                    found: other.to_string(),
+                    span: other_span,
                 });
             }
-            _ => {}
+            None => {
+                return Err(ParseError::UnexpectedEof {
+                    expected: "command or element name after '\\'".to_string(),
+                    span: Span::empty(cursor.pos()),
+                });
+            }
         }
     }
 

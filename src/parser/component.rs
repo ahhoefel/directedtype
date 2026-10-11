@@ -1,11 +1,11 @@
 use crate::ast::{
-    AliasBinding, ComponentBodyItem, ComponentDef, EnumDef, EnvBinding, Ident, LetBinding,
-    LetValue, ParamDef, StateBinding, TypeRef, UseDeclaration,
+    AliasBinding, ComponentDef, EnumDef, EnvBinding, Ident, LetBinding, LetValue, ParamDef,
+    StateBinding, TypeRef, UseDeclaration,
 };
 use crate::error::ParseError;
-use crate::parser::cursor::ParserCursor;
+use crate::parser::cursor::{ParserCursor, SlotMode};
 use crate::parser::expr::{parse_expr, parse_ident};
-use crate::parser::node::{parse_children_directive, parse_element_node};
+use crate::parser::node::{parse_content_item, parse_element_node};
 use crate::span::Span;
 use crate::token::Token;
 
@@ -126,7 +126,7 @@ pub fn parse_param_list(cursor: &mut ParserCursor<'_>) -> Result<(Vec<ParamDef>,
 /// Parses a component definition: `\Component Name(params) { body }`
 pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef, ParseError> {
     let slash_span = cursor.consume_token(&Token::Backslash)?;
-    cursor.consume_token(&Token::Component)?;
+    let comp_span = cursor.consume_token(&Token::Component)?;
     let name = parse_ident(cursor)?;
 
     let (params, _) = if let Some((Token::LParen, _)) = cursor.peek_token()? {
@@ -135,78 +135,16 @@ pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef
         (Vec::new(), slash_span)
     };
 
-    let lbrace_span = cursor.consume_token(&Token::LBrace)?;
-    let mut body = Vec::new();
+    let slot = cursor.parse_content_slot_mode(SlotMode::ComponentDef, |c| {
+        parse_content_item(c, true)
+    })?;
 
-    while let Some((tok, _)) = cursor.peek_token()? {
-        if tok == &Token::RBrace {
-            break;
-        }
-
-        if tok == &Token::Backslash {
-            let next_tok = cursor.peek_nth(1)?.cloned();
-            match next_tok {
-                Some((Token::Let, _)) => {
-                    let let_binding = parse_let_binding(cursor)?;
-                    body.push(ComponentBodyItem::Let(let_binding));
-                    continue;
-                }
-                Some((Token::Env, _)) => {
-                    let env_binding = parse_env_binding(cursor)?;
-                    body.push(ComponentBodyItem::Env(env_binding));
-                    continue;
-                }
-                Some((Token::Alias, _)) => {
-                    let alias_binding = parse_alias_binding(cursor)?;
-                    body.push(ComponentBodyItem::Alias(alias_binding));
-                    continue;
-                }
-                Some((Token::State, _)) => {
-                    let state_binding = parse_state_binding(cursor)?;
-                    body.push(ComponentBodyItem::State(state_binding));
-                    continue;
-                }
-                Some((Token::Children, _)) => {
-                    let directive = parse_children_directive(cursor)?;
-                    body.push(ComponentBodyItem::Children(directive));
-                    continue;
-                }
-                Some((Token::Ident(_), _)) => {
-                    let node = parse_element_node(cursor)?;
-                    body.push(ComponentBodyItem::Node(node));
-                    continue;
-                }
-                Some((other, other_span)) => {
-                    return Err(ParseError::UnexpectedToken {
-                        expected: "let, env, alias, state, Children, or element name after '\\'".to_string(),
-                        found: other.to_string(),
-                        span: other_span,
-                    });
-                }
-                None => {
-                    return Err(ParseError::UnexpectedEof {
-                        expected: "command or element name after '\\'".to_string(),
-                        span: Span::empty(cursor.pos()),
-                    });
-                }
-            }
-        }
-
-        let (tok_found, tok_span) = cursor.expect_token("command or element starting with '\\'")?;
-        return Err(ParseError::UnexpectedToken {
-            expected: "'\\' before command or element in component body".to_string(),
-            found: tok_found.to_string(),
-            span: tok_span,
-        });
-    }
-
-    let rbrace_span = cursor.consume_token(&Token::RBrace)?;
-    let span = slash_span.merge(lbrace_span).merge(rbrace_span);
+    let span = slash_span.merge(comp_span).merge(slot.span);
 
     Ok(ComponentDef {
         name,
         params,
-        body,
+        body: slot.items,
         span,
     })
 }
