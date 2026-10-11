@@ -1014,7 +1014,12 @@ impl Dom {
                     ContentItem::Node(child_node) => {
                         child_elements.push(child_node);
                     }
-                    ContentItem::Children(_) => {}
+                    ContentItem::Let(let_binding) => {
+                        if let Some(crate::ast::LetValue::Node(child_node)) = &let_binding.value {
+                            child_elements.push(child_node);
+                        }
+                    }
+                    ContentItem::Children(_) | ContentItem::Alias(_) => {}
                 }
             }
             if !text_parts.is_empty() {

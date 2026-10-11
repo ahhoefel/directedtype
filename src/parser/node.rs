@@ -2,6 +2,7 @@ use crate::ast::{
     ChildrenDirective, ComponentKey, ContentItem, ElementNode, PortBinding,
 };
 use crate::error::ParseError;
+use crate::parser::component::{parse_alias_binding, parse_let_binding};
 use crate::parser::cursor::ParserCursor;
 use crate::parser::expr::{parse_expr, parse_ident};
 use crate::span::Span;
@@ -194,12 +195,38 @@ pub fn parse_element_node(cursor: &mut ParserCursor<'_>) -> Result<ElementNode, 
 
 /// Parses an inline item when `\` is encountered inside a content slot.
 pub fn parse_content_item(cursor: &mut ParserCursor<'_>) -> Result<ContentItem, ParseError> {
-    let is_children = cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Backslash)
-        && cursor.peek_nth(1)?.is_some_and(|(t, _)| t == &Token::Children);
-
-    if is_children {
-        let directive = parse_children_directive(cursor)?;
-        return Ok(ContentItem::Children(directive));
+    let is_backslash = cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Backslash);
+    if is_backslash {
+        let next_tok = cursor.peek_nth(1)?.cloned();
+        match next_tok {
+            Some((Token::Children, _)) => {
+                let directive = parse_children_directive(cursor)?;
+                return Ok(ContentItem::Children(directive));
+            }
+            Some((Token::Let, _)) => {
+                let let_binding = parse_let_binding(cursor)?;
+                return Ok(ContentItem::Let(let_binding));
+            }
+            Some((Token::Alias, _)) => {
+                let alias_binding = parse_alias_binding(cursor)?;
+                return Ok(ContentItem::Alias(alias_binding));
+            }
+            Some((Token::State, span)) => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: "element or directive (\\state is only allowed at the top level of a component definition)".to_string(),
+                    found: "\\state".to_string(),
+                    span,
+                });
+            }
+            Some((Token::Env, span)) => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: "element or directive (\\env is only allowed at the top level of a component definition)".to_string(),
+                    found: "\\env".to_string(),
+                    span,
+                });
+            }
+            _ => {}
+        }
     }
 
     let node = parse_element_node(cursor)?;

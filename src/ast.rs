@@ -397,6 +397,8 @@ pub enum ContentItem {
     Text(TextChunk),
     Node(ElementNode),
     Children(ChildrenDirective),
+    Let(LetBinding),
+    Alias(AliasBinding),
 }
 
 impl ContentItem {
@@ -405,6 +407,8 @@ impl ContentItem {
             ContentItem::Text(t) => t.span,
             ContentItem::Node(n) => n.span,
             ContentItem::Children(c) => c.span,
+            ContentItem::Let(l) => l.span,
+            ContentItem::Alias(a) => a.span,
         }
     }
 }
