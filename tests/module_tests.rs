@@ -601,3 +601,333 @@ fn test_diamond_dependency_with_overloads() {
     assert_eq!(rects[1].rect.height, 85.0);
 }
 
+#[test]
+fn test_named_import_components_and_layout() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "ui/Widgets.dt",
+        r#"
+        \Component PrimaryButton(width: Number: 100) {
+            \Rect(x: 0, y: 0, width: width, height: 40, color: #2563EB)
+        }
+        \Component SecondaryButton(width: Number: 80) {
+            \Rect(x: 0, y: 0, width: width, height: 35, color: #64748B)
+        }
+        \Component SecretWidget() {
+            \Rect(x: 0, y: 0, width: 999, height: 999, color: #FF0000)
+        }
+        "#,
+    );
+
+    let main_src = r#"
+    \use { PrimaryButton, SecondaryButton as SecBtn } from "./ui/Widgets.dt";
+
+    \PrimaryButton(width: 150)
+    \SecBtn(width: 90)
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let layout = evaluate_document_with_resolver(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect("Failed to evaluate named import layout");
+
+    assert_eq!(layout.roots.len(), 2);
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    assert_eq!(rects[0].rect.width, 150.0);
+    assert_eq!(rects[1].rect.width, 90.0);
+}
+
+#[test]
+fn test_named_import_unimported_component_rejected() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "ui/Widgets.dt",
+        r#"
+        \Component PublicWidget() {
+            \Rect(x: 0, y: 0, width: 100, height: 50, color: #000)
+        }
+        \Component SecretWidget() {
+            \Rect(x: 0, y: 0, width: 999, height: 999, color: #FF0000)
+        }
+        "#,
+    );
+
+    let main_src = r#"
+    \use { PublicWidget } from "./ui/Widgets.dt";
+
+    \SecretWidget()
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let err = evaluate_document_with_resolver(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect_err("Unimported component should not be in scope");
+
+    match err {
+        CompileError::MissingPort { node, .. } => {
+            assert_eq!(node, "SecretWidget");
+        }
+        other => panic!("Expected MissingPort error on SecretWidget, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_named_import_unknown_symbol_error() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "ui/Widgets.dt",
+        r#"
+        \Component PublicWidget() {
+            \Rect(x: 0, y: 0, width: 100, height: 50, color: #000)
+        }
+        "#,
+    );
+
+    let main_src = r#"
+    \use { NonExistent } from "./ui/Widgets.dt";
+
+    \PublicWidget()
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let err = evaluate_document_with_resolver(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect_err("Importing non-existent symbol should fail");
+
+    match err {
+        CompileError::ImportError { message, .. } => {
+            assert!(message.contains("Cannot import 'NonExistent'"));
+            assert!(message.contains("symbol not found"));
+        }
+        other => panic!("Expected ImportError, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_named_import_helper_scoping_and_independence() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "ui/Card.dt",
+        r#"
+        \Component Helper(w: Number) {
+            \Rect(x: 0, y: 0, width: w, height: 20, color: #111)
+        }
+
+        \Component Card(width: Number) {
+            \Helper(w: width)
+            \Rect(x: 0, y: 20, width: width, height: 100, color: #222)
+        }
+        "#,
+    );
+
+    // Main imports Card, but ALSO defines its own Helper component with completely different signature/behavior!
+    let main_src = r#"
+    \use { Card } from "./ui/Card.dt";
+
+    \Component Helper(extra_h: Number) {
+        \Rect(x: 0, y: 150, width: 80, height: extra_h, color: #333)
+    }
+
+    \Card(width: 200)
+    \Helper(extra_h: 45)
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let layout = evaluate_document_with_resolver(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect("Caller should be able to define own Helper without colliding with module internal helper");
+
+    assert_eq!(layout.roots.len(), 2);
+    // Card produced Rect(width: 200, height: 20) from its internal Helper and Rect(width: 200, height: 100)
+    // Caller's Helper produced Rect(width: 80, height: 45)
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 3);
+    assert_eq!(rects[0].rect.width, 200.0);
+    assert_eq!(rects[0].rect.height, 20.0);
+    assert_eq!(rects[1].rect.width, 200.0);
+    assert_eq!(rects[1].rect.height, 100.0);
+    assert_eq!(rects[2].rect.width, 80.0);
+    assert_eq!(rects[2].rect.height, 45.0);
+}
+
+#[test]
+fn test_named_import_let_and_enum() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "theme/DesignTokens.dt",
+        r#"
+        \let primary_color = #2563EB;
+        \let card_height = 80;
+        \let secret_padding = 999;
+
+        \Enum ThemeVariant { Dark, Light }
+        \Enum SecretEnum { A, B }
+        "#,
+    );
+
+    let main_src = r#"
+    \use { primary_color as brand_color, card_height, ThemeVariant } from "./theme/DesignTokens.dt";
+
+    \Component TokenBox(variant: ThemeVariant) {
+        \Rect(x: 0, y: 0, width: 120, height: card_height, color: brand_color)
+    }
+
+    \TokenBox(variant: ThemeVariant.Dark)
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let layout = evaluate_document_with_resolver(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect("Named imports of let and enum should evaluate cleanly");
+
+    assert_eq!(layout.roots.len(), 1);
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").expect("Should have Rect");
+    assert_eq!(rect.rect.width, 120.0);
+    assert_eq!(rect.rect.height, 80.0);
+    assert_eq!(
+        rect.properties
+            .get("color")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_lowercase()),
+        Some("#2563eb".to_string())
+    );
+}
+
+#[test]
+fn test_transitive_enum_not_automatically_imported() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "components/Align.dt",
+        r#"
+        \Enum Align { Left, Center, Right }
+        "#,
+    );
+    resolver.insert(
+        "components/Card.dt",
+        r#"
+        \use { Align } from "./Align.dt";
+
+        \Component Card(align: Align: Align.Center) {
+            \Rect(x: 0, y: 0, width: 100, height: 50, color: #000)
+        }
+        "#,
+    );
+
+    // Main imports Card, but does NOT import Align. Using Align.Center in Main should fail.
+    let main_src = r#"
+    \use { Card } from "./components/Card.dt";
+
+    \Card(align: Align.Center)
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let err = evaluate_document_with_resolver(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect_err("Unimported enum Align should fail compilation");
+
+    match err {
+        CompileError::UnresolvedIdentifier { name, .. } => {
+            assert_eq!(name, "Align");
+        }
+        other => panic!("Expected UnresolvedIdentifier, got {:?}", other),
+    }
+
+    // Now explicitly import Align from Align.dt into Main; it must succeed.
+    let valid_main_src = r#"
+    \use { Card } from "./components/Card.dt";
+    \use { Align } from "./components/Align.dt";
+
+    \Card(align: Align.Center)
+    "#;
+
+    let valid_doc = parse(valid_main_src).expect("Failed to parse valid main");
+    let layout = evaluate_document_with_resolver(
+        &valid_doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect("Explicitly importing Align should succeed");
+
+    assert_eq!(layout.roots.len(), 1);
+}
+
+#[test]
+fn test_cannot_import_transitive_symbol_from_intermediary() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "components/Align.dt",
+        r#"
+        \Enum Align { Left, Center, Right }
+        "#,
+    );
+    resolver.insert(
+        "components/Card.dt",
+        r#"
+        \use { Align } from "./Align.dt";
+
+        \Component Card() {
+            \Rect(x: 0, y: 0, width: 100, height: 50, color: #000)
+        }
+        "#,
+    );
+
+    // Trying to import Align from Card.dt (which only imported it, didn't define it) must be rejected
+    let main_src = r#"
+    \use { Align } from "./components/Card.dt";
+
+    \Rect(x: 0, y: 0, width: 50, height: 50, color: #000)
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let err = evaluate_document_with_resolver(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect_err("Importing symbol from intermediary module should fail");
+
+    match err {
+        CompileError::ImportError { message, .. } => {
+            assert!(message.contains("Cannot import 'Align'"));
+            assert!(message.contains("symbol not found in './components/Card.dt'"));
+        }
+        other => panic!("Expected ImportError, got {:?}", other),
+    }
+}
+
+

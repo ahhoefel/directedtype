@@ -1,6 +1,6 @@
 use crate::ast::{
     AliasBinding, ComponentDef, EnumDef, EnvBinding, Ident, LetBinding, LetValue, ParamDef,
-    StateBinding, TypeRef, UseDeclaration,
+    StateBinding, TypeRef, UseDeclaration, UseItem,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::{ParserCursor, SlotMode};
@@ -390,60 +390,163 @@ pub fn parse_state_binding(cursor: &mut ParserCursor<'_>) -> Result<StateBinding
     })
 }
 
-/// Parses a module use/import declaration: `\use "path" [as Alias];`
+/// Parses a module use/import declaration:
+/// - Path import: `\use "path" [as Alias];`
+/// - Named import: `\use { item1, item2 as alias2 } from "path";`
 pub fn parse_use_declaration(cursor: &mut ParserCursor<'_>) -> Result<UseDeclaration, ParseError> {
     let bs_span = cursor.consume_token(&Token::Backslash)?;
     cursor.consume_token(&Token::Use)?;
 
-    let (path, path_span) = match cursor.next_token()? {
-        Some((Token::String(s), span)) => (s, span),
-        Some((tok, span)) => {
-            return Err(ParseError::UnexpectedToken {
-                expected: "string literal file path after '\\use'".to_string(),
-                found: tok.to_string(),
-                span,
-            });
-        }
-        None => {
-            return Err(ParseError::UnexpectedEof {
-                expected: "string literal file path after '\\use'".to_string(),
-                span: Span::empty(cursor.pos()),
-            });
-        }
-    };
+    // Check if this is a named import: `\use { ... } from "path"`
+    if let Some((Token::LBrace, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::LBrace)?;
+        let mut items = Vec::new();
 
-    let alias = if let Some((Token::As, _)) = cursor.peek_token()? {
-        cursor.consume_token(&Token::As)?;
+        while let Some((tok, _)) = cursor.peek_token()? {
+            if tok == &Token::RBrace {
+                break;
+            }
+
+            let name = parse_ident(cursor)?;
+            let alias = if let Some((Token::As, _)) = cursor.peek_token()? {
+                cursor.consume_token(&Token::As)?;
+                Some(parse_ident(cursor)?)
+            } else {
+                None
+            };
+
+            let item_span = match &alias {
+                Some(a) => name.span.merge(a.span),
+                None => name.span,
+            };
+
+            items.push(UseItem {
+                name,
+                alias,
+                span: item_span,
+            });
+
+            if let Some((Token::Comma, _)) = cursor.peek_token()? {
+                cursor.consume_token(&Token::Comma)?;
+            } else {
+                break;
+            }
+        }
+
+        let rbrace_span = cursor.consume_token(&Token::RBrace)?;
+        if items.is_empty() {
+            return Err(ParseError::UnexpectedToken {
+                expected: "at least one imported symbol inside '{ ... }'".to_string(),
+                found: "}".to_string(),
+                span: rbrace_span,
+            });
+        }
+
+        // Expect contextual keyword `from`
         match cursor.next_token()? {
-            Some((Token::Ident(name), span)) => Some(Ident::new(name, span)),
+            Some((Token::Ident(s), _)) if s == "from" => {}
             Some((tok, span)) => {
                 return Err(ParseError::UnexpectedToken {
-                    expected: "identifier alias after 'as'".to_string(),
+                    expected: "'from' keyword after import list".to_string(),
                     found: tok.to_string(),
                     span,
                 });
             }
             None => {
                 return Err(ParseError::UnexpectedEof {
-                    expected: "identifier alias after 'as'".to_string(),
+                    expected: "'from' keyword after import list".to_string(),
                     span: Span::empty(cursor.pos()),
                 });
             }
         }
-    } else {
-        None
-    };
 
-    let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
-        cursor.consume_token(&Token::Semicolon)?
-    } else if let Some(a) = &alias {
-        a.span
-    } else {
-        path_span
-    };
+        // Expect path string
+        let (path, path_span) = match cursor.next_token()? {
+            Some((Token::String(s), span)) => (s, span),
+            Some((tok, span)) => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: "string literal file path after 'from'".to_string(),
+                    found: tok.to_string(),
+                    span,
+                });
+            }
+            None => {
+                return Err(ParseError::UnexpectedEof {
+                    expected: "string literal file path after 'from'".to_string(),
+                    span: Span::empty(cursor.pos()),
+                });
+            }
+        };
 
-    let span = bs_span.merge(semi_span);
-    Ok(UseDeclaration { path, alias, span })
+        let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
+            cursor.consume_token(&Token::Semicolon)?
+        } else {
+            path_span
+        };
+
+        let span = bs_span.merge(semi_span);
+        Ok(UseDeclaration {
+            path,
+            alias: None,
+            items,
+            span,
+        })
+    } else {
+        let (path, path_span) = match cursor.next_token()? {
+            Some((Token::String(s), span)) => (s, span),
+            Some((tok, span)) => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: "string literal file path or '{' after '\\use'".to_string(),
+                    found: tok.to_string(),
+                    span,
+                });
+            }
+            None => {
+                return Err(ParseError::UnexpectedEof {
+                    expected: "string literal file path or '{' after '\\use'".to_string(),
+                    span: Span::empty(cursor.pos()),
+                });
+            }
+        };
+
+        let alias = if let Some((Token::As, _)) = cursor.peek_token()? {
+            cursor.consume_token(&Token::As)?;
+            match cursor.next_token()? {
+                Some((Token::Ident(name), span)) => Some(Ident::new(name, span)),
+                Some((tok, span)) => {
+                    return Err(ParseError::UnexpectedToken {
+                        expected: "identifier alias after 'as'".to_string(),
+                        found: tok.to_string(),
+                        span,
+                    });
+                }
+                None => {
+                    return Err(ParseError::UnexpectedEof {
+                        expected: "identifier alias after 'as'".to_string(),
+                        span: Span::empty(cursor.pos()),
+                    });
+                }
+            }
+        } else {
+            None
+        };
+
+        let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
+            cursor.consume_token(&Token::Semicolon)?
+        } else if let Some(a) = &alias {
+            a.span
+        } else {
+            path_span
+        };
+
+        let span = bs_span.merge(semi_span);
+        Ok(UseDeclaration {
+            path,
+            alias,
+            items: Vec::new(),
+            span,
+        })
+    }
 }
 
 /// Parses an enum definition: `\Enum Name { Variant1, Variant2, ... }`

@@ -8,8 +8,8 @@
 * **Scrollable Tree & Property Panels**: Integrate `ScrollView` into the DOM inspector sidebar and property panels so deep trees and long formula lists can be scrolled cleanly.
 
 ### 2. Language & Module Features
-* **Named Symbol Imports**: Support explicit imports (e.g. `\use { card_dark, button_primary } from "theme/default.dt"`) rather than implicitly pulling all top-level symbols into scope.
 * **Sizing Semantics & `auto`**: Clarify the role of `auto` vs. explicit intrinsic and extrinsic sizing contracts in the algebraic DAG.
+* **Improved error messages**. Error messages should include references to location in code where problems occur. In some cases they need more explanation. We also need to come up with standard ways of referencing the DOM and DAG, instead of numbered nodes which can't be traced back to the source.
 
 ### 3. Component Library & Primitives
 * **Standard Component Library**: Expand beyond `Button`, `Card`, `Link`, `Center`, and `ScrollView` to include `TextInput`, `Checkbox`, `Slider`, `Toggle`, `Tabs`, `Dialog/Modal`, and navigation bars.
@@ -21,6 +21,7 @@
 
 ## Completed Milestones
 
+* **Named Symbol Imports**: Explicit selective symbol imports (`\use { symbol [as alias], ... } from "path.dt";`), lexical and component scoping, internal dependency mangling to prevent scope pollution, and informative error handling.
 * **Live Hot-Reloading in the Viewer**: Instant layout and visual updates on file change.
 * **Spatial Clipping**: `scene.push_layer` rectangular and rounded-corner clipping boundaries.
 * **Hit Testing & Reverse-Painter's Dispatch**: Accurate hit testing respecting z-index, paint order, corner radius, and clip boundaries.

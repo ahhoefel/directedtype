@@ -1,5 +1,4 @@
-
-\use "components/Align.dt"
+\use { Align } from "components/Align.dt";
 
 \Enum BulletType {
     Bullet,

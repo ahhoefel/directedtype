@@ -1383,3 +1383,60 @@ fn test_backslash_keywords_accepted() {
     }
 }
 
+#[test]
+fn test_parse_named_use_declaration() {
+    let input = r#"
+    \use { card_dark, button_primary as btn } from "theme/default.dt";
+    \use { Header, Footer as PageFooter, } from "./layout.dt";
+    "#;
+
+    let doc = parse(input).expect("Failed to parse named use declarations");
+    assert_eq!(doc.items.len(), 2);
+
+    match &doc.items[0] {
+        Item::Use(u) => {
+            assert_eq!(u.path, "theme/default.dt");
+            assert!(u.is_named());
+            assert_eq!(u.items.len(), 2);
+            assert_eq!(u.items[0].name.as_str(), "card_dark");
+            assert!(u.items[0].alias.is_none());
+            assert_eq!(u.items[0].bound_name(), "card_dark");
+            assert_eq!(u.items[1].name.as_str(), "button_primary");
+            assert_eq!(u.items[1].alias.as_ref().unwrap().as_str(), "btn");
+            assert_eq!(u.items[1].bound_name(), "btn");
+        }
+        _ => panic!("Expected Item::Use"),
+    }
+
+    match &doc.items[1] {
+        Item::Use(u) => {
+            assert_eq!(u.path, "./layout.dt");
+            assert!(u.is_named());
+            assert_eq!(u.items.len(), 2);
+            assert_eq!(u.items[0].name.as_str(), "Header");
+            assert!(u.items[0].alias.is_none());
+            assert_eq!(u.items[0].bound_name(), "Header");
+            assert_eq!(u.items[1].name.as_str(), "Footer");
+            assert_eq!(u.items[1].alias.as_ref().unwrap().as_str(), "PageFooter");
+            assert_eq!(u.items[1].bound_name(), "PageFooter");
+        }
+        _ => panic!("Expected Item::Use"),
+    }
+}
+
+#[test]
+fn test_parse_named_use_errors() {
+    // Empty braces
+    let err1 = parse(r#"\use {} from "path.dt";"#).expect_err("Empty braces should fail");
+    assert!(err1.to_string().contains("at least one imported symbol"));
+
+    // Missing 'from'
+    let err2 = parse(r#"\use { foo } "path.dt";"#).expect_err("Missing from should fail");
+    assert!(err2.to_string().contains("'from' keyword"));
+
+    // Non-string path
+    let err3 = parse(r#"\use { foo } from path;"#).expect_err("Non-string path should fail");
+    assert!(err3.to_string().contains("string literal file path"));
+}
+
+

@@ -1,5 +1,6 @@
-\use "components/List.dt"
-\use "components/VStack.dt"
+\use { List, Item, BulletType } from "components/List.dt";
+\use { Align } from "components/Align.dt";
+\use { VStack } from "components/VStack.dt";
 
 \env font = \Font(family: "Arial", size: 16);
 \let inset = 20;

@@ -1,7 +1,12 @@
-use crate::ast::{ComponentDef, Document, Ident, Item, UseDeclaration};
+use crate::ast::{
+    ComponentDef, ContentItem, Document, ElementNode, Expr, Ident, Item, LetValue,
+    UseDeclaration,
+};
 use crate::compiler::error::{AmbiguousOverloadDetails, CompileError};
 use crate::parser::parse_document;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 /// Trait for resolving and loading source files (supports disk and in-memory virtual filesystems).
@@ -371,17 +376,30 @@ fn resolve_use_decl<R: FileResolver>(
     // Transitive imports first
     for item in &imported_doc.items {
         if let Item::Use(nested_u) = item {
+            let mut nested_imported_items = Vec::new();
             resolve_use_decl(
                 nested_u,
                 imported_base_dir,
                 resolver,
                 registry,
-                imported_items,
+                if u.is_named() {
+                    &mut nested_imported_items
+                } else {
+                    imported_items
+                },
                 active_stack,
                 cache,
                 module_exports,
                 visited_files,
             )?;
+        }
+    }
+
+    // Collect all enums defined directly in this imported document
+    let mut available_enums: HashMap<String, crate::ast::EnumDef> = HashMap::new();
+    for item in &imported_doc.items {
+        if let Item::Enum(e) = item {
+            available_enums.insert(e.name.as_str().to_string(), e.clone());
         }
     }
 
@@ -399,8 +417,164 @@ fn resolve_use_decl<R: FileResolver>(
         components
     };
 
-    // Collect top-level let, env, and enum bindings
-    if let Some(alias) = &u.alias {
+    if !u.items.is_empty() {
+        // Named symbol imports: \use { a, b as c } from "..."
+        for use_item in &u.items {
+            let symbol_name = use_item.name.as_str();
+            let target_name = use_item.bound_name();
+            let mut found = false;
+
+            // 1. Check if it's a component
+            if imported_components.contains_key(symbol_name) {
+                found = true;
+            }
+
+            // 2. Check if it's an available enum
+            if let Some(e) = available_enums.get(symbol_name) {
+                found = true;
+                let mut target_enum = e.clone();
+                if let Some(alias) = &use_item.alias {
+                    target_enum.name = Ident::new(alias.as_str(), alias.span);
+                }
+                if !imported_items.iter().any(|existing| match existing {
+                    Item::Enum(ex_e) => ex_e.name.as_str() == target_name,
+                    _ => false,
+                }) {
+                    imported_items.push(Item::Enum(target_enum));
+                }
+            }
+
+            // 3. Check top-level items (Let, Env, State)
+            for item in &imported_doc.items {
+                match item {
+                    Item::Let(l) if l.name.as_str() == symbol_name => {
+                        found = true;
+                        let mut target_let = l.clone();
+                        if let Some(alias) = &use_item.alias {
+                            target_let.name = Ident::new(alias.as_str(), alias.span);
+                        }
+                        if !imported_items.iter().any(|existing| match existing {
+                            Item::Let(ex_l) => ex_l.name.as_str() == target_name && ex_l.span == target_let.span,
+                            _ => false,
+                        }) {
+                            imported_items.push(Item::Let(target_let));
+                        }
+                    }
+                    Item::Env(env) if env.name.as_str() == symbol_name => {
+                        found = true;
+                        let mut target_env = env.clone();
+                        if let Some(alias) = &use_item.alias {
+                            target_env.name = Ident::new(alias.as_str(), alias.span);
+                        }
+                        if !imported_items.iter().any(|existing| match existing {
+                            Item::Env(ex_env) => ex_env.name.as_str() == target_name && ex_env.span == target_env.span,
+                            _ => false,
+                        }) {
+                            imported_items.push(Item::Env(target_env));
+                        }
+                    }
+                    Item::State(s) if s.name.as_str() == symbol_name => {
+                        found = true;
+                        let mut target_state = s.clone();
+                        if let Some(alias) = &use_item.alias {
+                            target_state.name = Ident::new(alias.as_str(), alias.span);
+                        }
+                        if !imported_items.iter().any(|existing| match existing {
+                            Item::State(ex_s) => ex_s.name.as_str() == target_name && ex_s.span == target_state.span,
+                            _ => false,
+                        }) {
+                            imported_items.push(Item::State(target_state));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            if !found {
+                return Err(CompileError::ImportError {
+                    path: u.path.clone(),
+                    message: format!(
+                        "Cannot import '{}': symbol not found in '{}'",
+                        symbol_name, u.path
+                    ),
+                    span: use_item.name.span,
+                });
+            }
+        }
+
+        // Compute reachable components from the directly imported component symbols
+        let mut reachable: HashSet<String> = HashSet::new();
+        let mut worklist: Vec<String> = u
+            .items
+            .iter()
+            .map(|it| it.name.as_str().to_string())
+            .filter(|name| imported_components.contains_key(name))
+            .collect();
+
+        while let Some(comp_name) = worklist.pop() {
+            if reachable.insert(comp_name.clone()) {
+                if let Some(overloads) = imported_components.get(&comp_name) {
+                    for o in overloads {
+                        let mut refs = HashSet::new();
+                        collect_referenced_component_names(o, &mut refs);
+                        for r in refs {
+                            if imported_components.contains_key(&r) && !reachable.contains(&r) {
+                                worklist.push(r);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Generate module unique hash
+        let mut hasher = DefaultHasher::new();
+        canonical_path.hash(&mut hasher);
+        let path_hash = hasher.finish();
+
+        // Mangle unexported internal helper components and track alias renames
+        let mut renames: HashMap<String, String> = HashMap::new();
+        for comp_name in &reachable {
+            let is_exported = u.items.iter().any(|it| it.name.as_str() == comp_name);
+            if !is_exported {
+                let mangled = format!("__dt_{:x}_{}", path_hash, comp_name);
+                renames.insert(comp_name.clone(), mangled);
+            }
+        }
+
+        // Register unexported helper components under mangled names
+        for (original_name, mangled_name) in &renames {
+            if let Some(overloads) = imported_components.get(original_name) {
+                for o in overloads {
+                    let mut comp = o.clone();
+                    rewrite_component_node_names(&mut comp, &renames);
+                    comp.name = Ident::new(mangled_name.clone(), comp.name.span);
+                    register_component_overload(registry, comp)?;
+                }
+            }
+        }
+
+        // Register exported component symbols under their imported/aliased names
+        for use_item in &u.items {
+            let symbol_name = use_item.name.as_str();
+            let target_name = use_item.bound_name();
+            if let Some(overloads) = imported_components.get(symbol_name) {
+                for o in overloads {
+                    let mut comp = o.clone();
+                    let mut local_renames = renames.clone();
+                    if symbol_name != target_name {
+                        local_renames.insert(symbol_name.to_string(), target_name.to_string());
+                    }
+                    rewrite_component_node_names(&mut comp, &local_renames);
+                    comp.name = Ident::new(
+                        target_name,
+                        use_item.alias.as_ref().map(|a| a.span).unwrap_or(use_item.name.span),
+                    );
+                    register_component_overload(registry, comp)?;
+                }
+            }
+        }
+    } else if let Some(alias) = &u.alias {
         for item in &imported_doc.items {
             if let Item::Enum(e) = item {
                 let mut aliased_enum = e.clone();
@@ -408,25 +582,7 @@ fn resolve_use_decl<R: FileResolver>(
                 imported_items.push(Item::Enum(aliased_enum));
             }
         }
-    } else if is_first_visit {
-        for item in &imported_doc.items {
-            match item {
-                Item::Let(l) => {
-                    imported_items.push(Item::Let(l.clone()));
-                }
-                Item::Env(e) => {
-                    imported_items.push(Item::Env(e.clone()));
-                }
-                Item::Enum(e) => {
-                    imported_items.push(Item::Enum(e.clone()));
-                }
-                _ => {}
-            }
-        }
-    }
 
-    // Register into caller's registry
-    if let Some(alias) = &u.alias {
         let alias_name = alias.as_str();
         let file_stem = raw_path
             .file_stem()
@@ -472,6 +628,23 @@ fn resolve_use_decl<R: FileResolver>(
             }
         }
     } else {
+        if is_first_visit {
+            for item in &imported_doc.items {
+                match item {
+                    Item::Let(l) => {
+                        imported_items.push(Item::Let(l.clone()));
+                    }
+                    Item::Env(e) => {
+                        imported_items.push(Item::Env(e.clone()));
+                    }
+                    Item::Enum(e) => {
+                        imported_items.push(Item::Enum(e.clone()));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         // No alias: import all components defined in the file
         for (_name, comps) in imported_components {
             for comp in comps {
@@ -483,3 +656,184 @@ fn resolve_use_decl<R: FileResolver>(
     active_stack.remove(&canonical_path);
     Ok(())
 }
+
+fn collect_referenced_component_names(comp: &ComponentDef, out: &mut HashSet<String>) {
+    for param in &comp.params {
+        if let Some(default_edge) = &param.default_edge {
+            collect_from_expr(default_edge, out);
+        }
+    }
+    for item in &comp.body {
+        collect_from_content_item(item, out);
+    }
+}
+
+fn collect_from_content_item(item: &ContentItem, out: &mut HashSet<String>) {
+    match item {
+        ContentItem::Node(node) => collect_from_element_node(node, out),
+        ContentItem::Let(l) => {
+            if let Some(val) = &l.value {
+                match val {
+                    LetValue::Node(n) => collect_from_element_node(n, out),
+                    LetValue::Expr(e) => collect_from_expr(e, out),
+                }
+            }
+        }
+        ContentItem::Children(c) => {
+            for port in &c.ports {
+                collect_from_expr(&port.expr, out);
+            }
+        }
+        ContentItem::Alias(a) => collect_from_expr(&a.value, out),
+        ContentItem::State(s) => {
+            if let Some(e) = &s.default {
+                collect_from_expr(e, out);
+            }
+        }
+        ContentItem::Env(env) => {
+            if let Some(e) = &env.value {
+                collect_from_expr(e, out);
+            }
+        }
+        ContentItem::Text(_) => {}
+    }
+}
+
+fn collect_from_element_node(node: &ElementNode, out: &mut HashSet<String>) {
+    out.insert(node.name.as_str().to_string());
+    if let Some(key) = &node.key {
+        for part in &key.parts {
+            collect_from_expr(part, out);
+        }
+    }
+    for port in &node.ports {
+        collect_from_expr(&port.expr, out);
+    }
+    if let Some(slot) = &node.content {
+        for item in &slot.items {
+            collect_from_content_item(item, out);
+        }
+    }
+}
+
+fn collect_from_expr(expr: &Expr, out: &mut HashSet<String>) {
+    match expr {
+        Expr::Node(node) => collect_from_element_node(node, out),
+        Expr::MemberAccess(m) => collect_from_expr(&m.target, out),
+        Expr::Ternary(t) => {
+            collect_from_expr(&t.condition, out);
+            collect_from_expr(&t.then_expr, out);
+            collect_from_expr(&t.else_expr, out);
+        }
+        Expr::Call(c) => {
+            for arg in &c.args {
+                collect_from_expr(arg, out);
+            }
+        }
+        Expr::MethodCall(m) => {
+            collect_from_expr(&m.target, out);
+            for arg in &m.args {
+                collect_from_expr(arg, out);
+            }
+        }
+        Expr::Binary(b) => {
+            collect_from_expr(&b.left, out);
+            collect_from_expr(&b.right, out);
+        }
+        Expr::Unary(u) => collect_from_expr(&u.operand, out),
+        Expr::Paren(p, _) => collect_from_expr(p, out),
+        Expr::Literal(_) | Expr::Ident(_) => {}
+    }
+}
+
+fn rewrite_component_node_names(comp: &mut ComponentDef, renames: &HashMap<String, String>) {
+    for param in &mut comp.params {
+        if let Some(default_edge) = &mut param.default_edge {
+            rewrite_expr(default_edge, renames);
+        }
+    }
+    for item in &mut comp.body {
+        rewrite_content_item(item, renames);
+    }
+}
+
+fn rewrite_content_item(item: &mut ContentItem, renames: &HashMap<String, String>) {
+    match item {
+        ContentItem::Node(node) => rewrite_element_node(node, renames),
+        ContentItem::Let(l) => {
+            if let Some(val) = &mut l.value {
+                match val {
+                    LetValue::Node(n) => rewrite_element_node(n, renames),
+                    LetValue::Expr(e) => rewrite_expr(e, renames),
+                }
+            }
+        }
+        ContentItem::Children(c) => {
+            for port in &mut c.ports {
+                rewrite_expr(&mut port.expr, renames);
+            }
+        }
+        ContentItem::Alias(a) => rewrite_expr(&mut a.value, renames),
+        ContentItem::State(s) => {
+            if let Some(e) = &mut s.default {
+                rewrite_expr(e, renames);
+            }
+        }
+        ContentItem::Env(env) => {
+            if let Some(e) = &mut env.value {
+                rewrite_expr(e, renames);
+            }
+        }
+        ContentItem::Text(_) => {}
+    }
+}
+
+fn rewrite_element_node(node: &mut ElementNode, renames: &HashMap<String, String>) {
+    if let Some(new_name) = renames.get(node.name.as_str()) {
+        node.name = Ident::new(new_name, node.name.span);
+    }
+    if let Some(key) = &mut node.key {
+        for part in &mut key.parts {
+            rewrite_expr(part, renames);
+        }
+    }
+    for port in &mut node.ports {
+        rewrite_expr(&mut port.expr, renames);
+    }
+    if let Some(slot) = &mut node.content {
+        for item in &mut slot.items {
+            rewrite_content_item(item, renames);
+        }
+    }
+}
+
+fn rewrite_expr(expr: &mut Expr, renames: &HashMap<String, String>) {
+    match expr {
+        Expr::Node(node) => rewrite_element_node(node, renames),
+        Expr::MemberAccess(m) => rewrite_expr(&mut m.target, renames),
+        Expr::Ternary(t) => {
+            rewrite_expr(&mut t.condition, renames);
+            rewrite_expr(&mut t.then_expr, renames);
+            rewrite_expr(&mut t.else_expr, renames);
+        }
+        Expr::Call(c) => {
+            for arg in &mut c.args {
+                rewrite_expr(arg, renames);
+            }
+        }
+        Expr::MethodCall(m) => {
+            rewrite_expr(&mut m.target, renames);
+            for arg in &mut m.args {
+                rewrite_expr(arg, renames);
+            }
+        }
+        Expr::Binary(b) => {
+            rewrite_expr(&mut b.left, renames);
+            rewrite_expr(&mut b.right, renames);
+        }
+        Expr::Unary(u) => rewrite_expr(&mut u.operand, renames),
+        Expr::Paren(p, _) => rewrite_expr(p, renames),
+        Expr::Literal(_) | Expr::Ident(_) => {}
+    }
+}
+

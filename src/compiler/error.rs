@@ -94,6 +94,12 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Unresolved identifier '{name}'. Did you forget to import it?")]
+    UnresolvedIdentifier {
+        name: String,
+        span: Span,
+    },
+
     #[error("Node '{node:?}' not found in compiled document")]
     NodeNotFound {
         node: crate::compiler::expanded::NodeId,
@@ -203,6 +209,7 @@ impl CompileError {
             | CompileError::BareEnvUse { span, .. }
             | CompileError::DuplicateOverloadSignature { span, .. }
             | CompileError::FontFamilyNotFound { span, .. }
+            | CompileError::UnresolvedIdentifier { span, .. }
             | CompileError::Custom { span, .. } => *span,
             CompileError::PotentiallyAmbiguousOverloads(details) => details.span,
             CompileError::NoMatchingOverload(details) => details.span,

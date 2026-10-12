@@ -70,12 +70,36 @@ impl EnumDef {
     }
 }
 
-/// Module import declaration: `\use "./components/Button.dt" [as Alias];`
+/// Single imported item in a named import declaration: `symbol [as alias]`
+#[derive(Debug, Clone, PartialEq)]
+pub struct UseItem {
+    pub name: Ident,
+    pub alias: Option<Ident>,
+    pub span: Span,
+}
+
+impl UseItem {
+    /// Returns the name this symbol will be bound to in the importing scope.
+    pub fn bound_name(&self) -> &str {
+        self.alias.as_ref().map(|a| a.as_str()).unwrap_or(self.name.as_str())
+    }
+}
+
+/// Module import declaration:
+/// - Wildcard import: `\use "./components/Button.dt" [as Alias];`
+/// - Named import: `\use { card_dark, button_primary as btn } from "theme/default.dt";`
 #[derive(Debug, Clone, PartialEq)]
 pub struct UseDeclaration {
     pub path: String,
     pub alias: Option<Ident>,
+    pub items: Vec<UseItem>,
     pub span: Span,
+}
+
+impl UseDeclaration {
+    pub fn is_named(&self) -> bool {
+        !self.items.is_empty()
+    }
 }
 
 /// Component definition: `\Component Name(params) { body }`

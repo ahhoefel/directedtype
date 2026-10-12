@@ -180,8 +180,8 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 if let Some(node_id) = NodeId::from_canonical_name(other) {
                     return Ok(Value::Node(node_id));
                 }
-                Err(CompileError::Custom {
-                    message: format!("Unresolved identifier in expression: '{}'", other),
+                Err(CompileError::UnresolvedIdentifier {
+                    name: other.to_string(),
                     span: id.span,
                 })
             }
@@ -209,6 +209,12 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         span: m.span,
                     });
                 }
+            }
+            if let Expr::Ident(target_id) = m.target.as_ref() {
+                return Err(CompileError::UnresolvedIdentifier {
+                    name: target_id.as_str().to_string(),
+                    span: target_id.span,
+                });
             }
             Err(CompileError::Custom {
                 message: format!("Unsupported member access target in evaluation: {:?}", m.target),
