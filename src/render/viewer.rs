@@ -21,9 +21,10 @@ use crate::compiler::evaluate_document_with_window;
 use crate::compiler::expanded::NodeId;
 use crate::compiler::layout::ResolvedLayout;
 use crate::compiler::module::FsResolver;
-use crate::compiler::CompiledDocument;
+use crate::compiler::{CompiledDocument, Value};
 use crate::interaction::{Event, EventKind, Modifiers, MouseButton, Point};
 use crate::parser::parse_document;
+use crate::render::browser_bar::{BrowserBar, BrowserBarHitResult, NavigationHistory};
 use crate::render::scene::{build_scene, ClipSceneCache, SceneOptions, TextSceneCache};
 
 #[cfg(target_os = "macos")]
@@ -102,6 +103,7 @@ pub struct ViewerConfig {
     pub width: u32,
     pub height: u32,
     pub scene_options: SceneOptions,
+    pub show_nav_bar: bool,
 }
 
 impl Default for ViewerConfig {
@@ -116,6 +118,7 @@ impl Default for ViewerConfig {
                 scroll_offset: (0.0, 0.0),
                 ..Default::default()
             },
+            show_nav_bar: false,
         }
     }
 }
@@ -184,6 +187,10 @@ pub struct ViewerApp {
     // Focus & target highlighting state
     focused_node: Option<NodeId>,
     target_node: Option<NodeId>,
+
+    // Browser navigation bar
+    browser_bar: Option<BrowserBar>,
+    watch_tx: Option<std::sync::mpsc::Sender<()>>,
 }
 
 /// Type alias for event callbacks dispatched by `ViewerApp`.
@@ -203,6 +210,11 @@ fn current_layout<'a>(
 
 impl ViewerApp {
     pub fn new(layout: ResolvedLayout, config: ViewerConfig) -> Self {
+        let browser_bar = if config.show_nav_bar {
+            Some(BrowserBar::new(String::new()))
+        } else {
+            None
+        };
         Self {
             config,
             watch_path: None,
@@ -237,6 +249,8 @@ impl ViewerApp {
             pending_scroll: None,
             focused_node: None,
             target_node: None,
+            browser_bar,
+            watch_tx: None,
         }
     }
 
@@ -247,6 +261,11 @@ impl ViewerApp {
             let _ = compiled.attach_registry(&registry);
         }
         let focused_node = compiled.focused_node;
+        let browser_bar = if config.show_nav_bar {
+            Some(BrowserBar::new(String::new()))
+        } else {
+            None
+        };
         Self {
             config,
             watch_path: None,
@@ -281,6 +300,8 @@ impl ViewerApp {
             pending_scroll: None,
             focused_node,
             target_node: None,
+            browser_bar,
+            watch_tx: None,
         }
     }
 
@@ -438,25 +459,33 @@ impl ViewerApp {
         } else {
             (self.config.width as f64, self.config.height as f64)
         };
+        let nav_bar_h = self.nav_bar_height();
+        let viewport_h = (win_h - nav_bar_h).max(1.0);
 
         if let Some(point) = self.cursor_pos {
+            // Ignore scroll gestures on the navigation bar itself
+            if point.y < nav_bar_h {
+                return;
+            }
+
             let panel_x = win_w - self.panel_component.width;
 
             if self.inspect_mode && point.x >= panel_x {
-                let divider_y = self.panel_component.divider_y(win_h);
-                if point.y < divider_y {
+                let panel_y = point.y - nav_bar_h;
+                let divider_y = self.panel_component.divider_y(viewport_h);
+                if panel_y < divider_y {
                     let tree_items = crate::inspector::build_tree_items_from_layout(
                         self.layout(),
                         &self.inspector_state,
                     );
-                    let max_scroll = self.panel_component.max_scroll(tree_items.len(), win_h);
+                    let max_scroll = self.panel_component.max_scroll(tree_items.len(), viewport_h);
                     self.inspector_state.scroll_by(-delta_y, max_scroll);
                 } else {
                     let max_detail_scroll = self.panel_component.max_detail_scroll_with_state(
                         self.selected_node,
                         self.layout(),
                         Some(&self.inspector_state),
-                        win_h,
+                        viewport_h,
                     );
                     self.inspector_state.scroll_detail_by(-delta_y, max_detail_scroll);
                 }
@@ -466,7 +495,7 @@ impl ViewerApp {
                 return;
             }
 
-            let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
+            let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
             let mut handled = false;
             if let Some(ref hit_res) = self.layout().hit_test(doc_point) {
                 let scroll_event = Event::new(
@@ -481,7 +510,7 @@ impl ViewerApp {
 
             // Window document scrolling occurs only if not handled by an inner container:
             if !handled {
-                let max_scroll = self.max_scroll_y(win_h);
+                let max_scroll = self.max_scroll_y(viewport_h);
                 let old_scroll = self.scroll_y;
                 self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
                 if (self.scroll_y - old_scroll).abs() > 0.001 {
@@ -492,7 +521,7 @@ impl ViewerApp {
             }
         } else {
             // No cursor position known; fall back to scrolling window document
-            let max_scroll = self.max_scroll_y(win_h);
+            let max_scroll = self.max_scroll_y(viewport_h);
             let old_scroll = self.scroll_y;
             self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
             if (self.scroll_y - old_scroll).abs() > 0.001 {
@@ -540,7 +569,8 @@ impl ViewerApp {
         } else {
             self.config.height as f64
         };
-        let max_scroll = self.max_scroll_y(win_h);
+        let nav_bar_h = self.nav_bar_height();
+        let max_scroll = self.max_scroll_y((win_h - nav_bar_h).max(1.0));
         self.scroll_y = target_y.clamp(0.0, max_scroll);
         if let Some(w) = &self.window {
             w.request_redraw();
@@ -568,7 +598,11 @@ impl ViewerApp {
         if let Some((target_id, _scope_id)) = self.layout().resolve_anchor(from_node, url) {
             self.target_node = Some(target_id);
             self.set_focused_node(Some(target_id));
-            self.scroll_to_node(target_id)
+            let scrolled = self.scroll_to_node(target_id);
+            if scrolled {
+                self.update_url_with_anchor(url);
+            }
+            scrolled
         } else {
             false
         }
@@ -872,6 +906,11 @@ impl ViewerApp {
 
     /// Executes a high-level context action emitted during component interaction.
     pub fn execute_action(&mut self, action: ContextAction) {
+        self.execute_action_with_context(action, None);
+    }
+
+    /// Executes a high-level context action with optional link anchor context.
+    pub fn execute_action_with_context(&mut self, action: ContextAction, link_anchor: Option<&str>) {
         match action {
             ContextAction::ScrollToNode { target, container } => {
                 if let Some(pane_id) = container {
@@ -891,9 +930,26 @@ impl ViewerApp {
                     self.set_focused_node(Some(target));
                     self.scroll_to_node(target);
                 }
+
+                // If this scroll was triggered by an anchor link or target node has an anchor name, update the URL bar
+                let anchor_str = link_anchor.map(|s| s.to_string()).or_else(|| {
+                    self.layout()
+                        .get_node(target)
+                        .and_then(|n| n.anchor_name.clone().map(|a| format!("#{a}")))
+                });
+                if let Some(a) = anchor_str {
+                    self.update_url_with_anchor(&a);
+                }
             }
             ContextAction::OpenUrl { url } => {
                 println!("[Viewer] Opening link: {}", url);
+                let is_dt_target = url.ends_with(".dt")
+                    || url.contains(".dt#")
+                    || url.starts_with('#')
+                    || (!url.contains("://") && !url.starts_with("mailto:"));
+                if is_dt_target && self.navigate_to(&url).is_ok() {
+                    return;
+                }
                 #[cfg(target_os = "macos")]
                 let _ = std::process::Command::new("open").arg(&url).spawn();
                 #[cfg(target_os = "linux")]
@@ -909,6 +965,16 @@ impl ViewerApp {
 
     fn dispatch_event_with_bubble(&mut self, mut event: Event, bubble_path: &[NodeId]) -> bool {
         event.bubble_path = bubble_path.to_vec();
+
+        // Extract clicked anchor url if any node in bubble_path is a link with url containing '#'
+        let clicked_anchor = bubble_path.iter().find_map(|&id| {
+            self.layout().get_node(id).and_then(|n| {
+                n.properties.get("url").and_then(|v| match v {
+                    Value::String(s) if s.contains('#') => Some(s.clone()),
+                    _ => None,
+                })
+            })
+        });
 
         let mut actions = Vec::new();
         let mut handled = false;
@@ -938,7 +1004,7 @@ impl ViewerApp {
         }
 
         for action in actions {
-            self.execute_action(action);
+            self.execute_action_with_context(action, clicked_anchor.as_deref());
         }
 
         handled
@@ -990,13 +1056,415 @@ impl ViewerApp {
         self.doc.as_ref()
     }
 
+    /// Returns a reference to the browser navigation bar, if enabled.
+    pub fn browser_bar(&self) -> Option<&BrowserBar> {
+        self.browser_bar.as_ref()
+    }
+
+    /// Returns a mutable reference to the browser navigation bar, if enabled.
+    pub fn browser_bar_mut(&mut self) -> Option<&mut BrowserBar> {
+        self.browser_bar.as_mut()
+    }
+
+    /// Returns the current navigation bar height (0.0 if disabled, 42.0 if enabled).
+    #[inline]
+    pub fn nav_bar_height(&self) -> f64 {
+        if self.config.show_nav_bar {
+            self.browser_bar.as_ref().map(|b| b.height).unwrap_or(42.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// Enables or disables the browser navigation bar.
+    pub fn with_browser_bar(mut self, enabled: bool) -> Self {
+        self.config.show_nav_bar = enabled;
+        if enabled && self.browser_bar.is_none() {
+            let initial_url = self
+                .watch_path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default();
+            self.browser_bar = Some(BrowserBar::new(initial_url));
+        } else if !enabled {
+            self.browser_bar = None;
+        }
+        self
+    }
+
     /// Attaches a file path to watch for live changes.
     pub fn with_watch_path(mut self, path: PathBuf) -> Self {
+        if let Some(bar) = &mut self.browser_bar {
+            let url_str = path.display().to_string();
+            bar.history = NavigationHistory::new(url_str.clone());
+            bar.url_bar.set_text(&url_str);
+        }
         self.watch_path = Some(path);
         self
     }
 
+    /// Updates the browser bar and navigation history with an anchor on the current document.
+    pub fn update_url_with_anchor(&mut self, anchor: &str) {
+        let anchor_name = if let Some(idx) = anchor.rfind('#') {
+            &anchor[idx + 1..]
+        } else {
+            anchor
+        };
+        if anchor_name.is_empty() {
+            return;
+        }
+
+        let base_url = if let Some(bar) = &self.browser_bar {
+            if let Some(cur) = bar.history.current() {
+                cur.split('#').next().unwrap_or(cur).to_string()
+            } else {
+                self.watch_path
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default()
+            }
+        } else {
+            self.watch_path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default()
+        };
+
+        let new_url = if base_url.is_empty() {
+            format!("#{anchor_name}")
+        } else {
+            format!("{base_url}#{anchor_name}")
+        };
+
+        if let Some(bar) = &mut self.browser_bar {
+            if bar.history.current() != Some(&new_url) {
+                bar.history.push(new_url.clone());
+            }
+            bar.url_bar.set_text(&new_url);
+            bar.url_bar.blur();
+        }
+
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+
+    /// Navigates the viewer browser to the target file path or document URL.
+    pub fn navigate_to(&mut self, target: &str) -> Result<(), String> {
+        let trimmed = target.trim();
+        if trimmed.is_empty() {
+            return Err("Target path is empty".into());
+        }
+
+        let trimmed = trimmed.strip_prefix("file://").unwrap_or(trimmed);
+
+        let (file_part, anchor_part) = match trimmed.split_once('#') {
+            Some((f, a)) => (f.trim(), Some(a.trim())),
+            None => (trimmed, None),
+        };
+
+        // If file_part is empty, scroll to anchor in current document
+        if file_part.is_empty() {
+            if let Some(anchor) = anchor_part {
+                let anchor_str = format!("#{anchor}");
+                if self.scroll_to_anchor(None, &anchor_str) {
+                    return Ok(());
+                } else {
+                    return Err(format!("Anchor not found: '{anchor_str}'"));
+                }
+            } else {
+                return Ok(());
+            }
+        }
+
+        let base_dir = self
+            .watch_path
+            .as_deref()
+            .and_then(|p| p.parent())
+            .unwrap_or_else(|| std::path::Path::new("."));
+
+        let candidate = PathBuf::from(file_part);
+        let resolved = if candidate.exists() {
+            candidate
+        } else if base_dir.join(&candidate).exists() {
+            base_dir.join(&candidate)
+        } else if !file_part.ends_with(".dt") && base_dir.join(format!("{file_part}.dt")).exists() {
+            base_dir.join(format!("{file_part}.dt"))
+        } else if !file_part.ends_with(".dt") && PathBuf::from(format!("{file_part}.dt")).exists() {
+            PathBuf::from(format!("{file_part}.dt"))
+        } else {
+            return Err(format!("File not found: '{}'", file_part));
+        };
+
+        // If this is the currently loaded document, just scroll to anchor or top
+        let is_same_doc = self.watch_path.as_ref().map_or(false, |p| p == &resolved);
+        if is_same_doc {
+            if let Some(anchor) = anchor_part {
+                let anchor_str = format!("#{anchor}");
+                if self.scroll_to_anchor(None, &anchor_str) {
+                    return Ok(());
+                } else {
+                    return Err(format!("Anchor not found: '{anchor_str}'"));
+                }
+            } else {
+                self.scroll_to_y(0.0);
+                let display_str = resolved.display().to_string();
+                if let Some(bar) = &mut self.browser_bar {
+                    bar.history.push(display_str.clone());
+                    bar.url_bar.set_text(&display_str);
+                    bar.url_bar.blur();
+                }
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+                return Ok(());
+            }
+        }
+
+        let source = std::fs::read_to_string(&resolved)
+            .map_err(|e| format!("Failed to read '{}': {e}", resolved.display()))?;
+
+        let doc = parse_document(&source)
+            .map_err(|e| format!("Parse error in '{}': {e}", resolved.display()))?;
+
+        let nav_bar_h = self.nav_bar_height();
+        let (logical_w, logical_h) = if let Some(window) = &self.window {
+            let scale = window.scale_factor();
+            let size = window.inner_size();
+            if size.width > 0 && size.height > 0 {
+                (size.width as f64 / scale, (size.height as f64 / scale - nav_bar_h).max(50.0))
+            } else {
+                (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
+            }
+        } else {
+            (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
+        };
+
+        let new_base_dir = resolved.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let resolver = FsResolver;
+        let compiled = CompiledDocument::compile_with_registry(
+            &doc,
+            logical_w,
+            logical_h,
+            new_base_dir,
+            &resolver,
+            &self.component_registry,
+        )
+        .map_err(|e| format!("Layout evaluation error in '{}': {e}", resolved.display()))?;
+
+        self.doc = Some(doc);
+        self.compiled = Some(compiled);
+        self.watch_path = Some(resolved.clone());
+        self.scroll_x = 0.0;
+        self.scroll_y = 0.0;
+        self.pending_scroll = None;
+        self.hovered_node = None;
+        self.selected_node = None;
+        self.focused_node = None;
+        self.target_node = None;
+
+        let display_str = if let Some(anchor) = anchor_part {
+            format!("{}#{}", resolved.display(), anchor)
+        } else {
+            resolved.display().to_string()
+        };
+        if let Some(bar) = &mut self.browser_bar {
+            bar.history.push(display_str.clone());
+            bar.url_bar.set_text(&display_str);
+            bar.url_bar.blur();
+        }
+
+        if let Some(window) = &self.window {
+            let filename = resolved.file_name().unwrap_or_default().to_string_lossy();
+            window.set_title(&format!("DirectedType - {filename}"));
+            window.request_redraw();
+        }
+
+        if let Some(anchor) = anchor_part {
+            let anchor_str = format!("#{anchor}");
+            self.scroll_to_anchor(None, &anchor_str);
+        }
+
+        self.rewatch_current_path();
+        println!("[Viewer] Navigated to: {}", display_str);
+        Ok(())
+    }
+
+    /// Navigates back one step in browser history.
+    pub fn go_back(&mut self) -> bool {
+        let prev = if let Some(bar) = &mut self.browser_bar {
+            bar.history.go_back().map(|s| s.to_string())
+        } else {
+            None
+        };
+
+        if let Some(url) = prev {
+            if let Err(e) = self.load_history_document(&url) {
+                eprintln!("[Viewer] Error navigating back to '{url}': {e}");
+                return false;
+            }
+            if let Some(bar) = &mut self.browser_bar {
+                bar.url_bar.set_text(&url);
+                bar.url_bar.blur();
+            }
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+            println!("[Viewer] Navigated Back to: {url}");
+            return true;
+        }
+        false
+    }
+
+    /// Navigates forward one step in browser history.
+    pub fn go_forward(&mut self) -> bool {
+        let next = if let Some(bar) = &mut self.browser_bar {
+            bar.history.go_forward().map(|s| s.to_string())
+        } else {
+            None
+        };
+
+        if let Some(url) = next {
+            if let Err(e) = self.load_history_document(&url) {
+                eprintln!("[Viewer] Error navigating forward to '{url}': {e}");
+                return false;
+            }
+            if let Some(bar) = &mut self.browser_bar {
+                bar.url_bar.set_text(&url);
+                bar.url_bar.blur();
+            }
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+            println!("[Viewer] Navigated Forward to: {url}");
+            return true;
+        }
+        false
+    }
+
+    fn load_history_document(&mut self, url: &str) -> Result<(), String> {
+        let (file_part, anchor_opt) = match url.split_once('#') {
+            Some((f, a)) => (f, Some(a)),
+            None => (url, None),
+        };
+
+        let is_same_doc = self.watch_path.as_ref().map_or(false, |p| {
+            file_part.is_empty()
+                || p == &PathBuf::from(file_part)
+                || p.ends_with(file_part)
+                || PathBuf::from(file_part).ends_with(p.file_name().unwrap_or_default())
+        });
+
+        if is_same_doc {
+            if let Some(anchor) = anchor_opt {
+                self.scroll_to_anchor(None, &format!("#{anchor}"));
+            } else {
+                self.scroll_to_y(0.0);
+            }
+            return Ok(());
+        }
+
+        let path = PathBuf::from(file_part);
+        let source = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read '{}': {e}", path.display()))?;
+
+        let doc = parse_document(&source)
+            .map_err(|e| format!("Parse error in '{}': {e}", path.display()))?;
+
+        let nav_bar_h = self.nav_bar_height();
+        let (logical_w, logical_h) = if let Some(window) = &self.window {
+            let scale = window.scale_factor();
+            let size = window.inner_size();
+            if size.width > 0 && size.height > 0 {
+                (size.width as f64 / scale, (size.height as f64 / scale - nav_bar_h).max(50.0))
+            } else {
+                (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
+            }
+        } else {
+            (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
+        };
+
+        let base_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let resolver = FsResolver;
+        let compiled = CompiledDocument::compile_with_registry(
+            &doc,
+            logical_w,
+            logical_h,
+            base_dir,
+            &resolver,
+            &self.component_registry,
+        )
+        .map_err(|e| format!("Layout evaluation error in '{}': {e}", path.display()))?;
+
+        self.doc = Some(doc);
+        self.compiled = Some(compiled);
+        self.watch_path = Some(path.clone());
+        self.scroll_x = 0.0;
+        self.scroll_y = 0.0;
+        self.pending_scroll = None;
+        self.hovered_node = None;
+        self.selected_node = None;
+        self.focused_node = None;
+        self.target_node = None;
+
+        if let Some(window) = &self.window {
+            let filename = path.file_name().unwrap_or_default().to_string_lossy();
+            window.set_title(&format!("DirectedType - {filename}"));
+        }
+
+        if let Some(anchor) = anchor_opt {
+            self.scroll_to_anchor(None, &format!("#{anchor}"));
+        }
+
+        self.rewatch_current_path();
+        Ok(())
+    }
+
+    /// Re-binds the filesystem hot-reload watcher to the directory of the current file path.
+    pub fn rewatch_current_path(&mut self) {
+        let path = match &self.watch_path {
+            Some(p) => p.clone(),
+            None => return,
+        };
+        let tx = match &self.watch_tx {
+            Some(t) => t.clone(),
+            None => return,
+        };
+
+        let target_filename = path.file_name().map(|n| n.to_os_string());
+        let parent_dir = path
+            .parent()
+            .and_then(|p| if p.as_os_str().is_empty() { None } else { Some(p) })
+            .unwrap_or_else(|| std::path::Path::new("."));
+
+        if let Ok(mut watcher) = RecommendedWatcher::new(
+            move |res: Result<NotifyEvent, notify::Error>| {
+                if let Ok(event) = res {
+                    if !event.kind.is_access() {
+                        let matches = if let Some(target) = &target_filename {
+                            event.paths.is_empty()
+                                || event.paths.iter().any(|p| p.file_name() == Some(target.as_os_str()))
+                        } else {
+                            true
+                        };
+                        if matches {
+                            let _ = tx.send(());
+                        }
+                    }
+                }
+            },
+            notify::Config::default(),
+        ) {
+            if watcher.watch(parent_dir, RecursiveMode::NonRecursive).is_ok() {
+                self._watcher = Some(watcher);
+                println!("[HotReload] Watching for live changes in: {}", path.display());
+            }
+        }
+    }
+
     fn update_layout_for_size(&mut self, logical_w: f64, logical_h: f64) {
+        let nav_bar_h = self.nav_bar_height();
+        let doc_h = (logical_h - nav_bar_h).max(50.0);
         if let Some(doc) = &self.doc {
             if let Some(compiled) = &mut self.compiled {
                 let base_dir = self
@@ -1008,7 +1476,7 @@ impl ViewerApp {
                 if let Ok(mut new_compiled) = CompiledDocument::compile_with_registry(
                     doc,
                     logical_w,
-                    logical_h,
+                    doc_h,
                     base_dir,
                     &resolver,
                     &self.component_registry,
@@ -1018,7 +1486,7 @@ impl ViewerApp {
                     }
                     *compiled = new_compiled;
                 }
-            } else if let Ok(new_layout) = evaluate_document_with_window(doc, logical_w, logical_h) {
+            } else if let Ok(new_layout) = evaluate_document_with_window(doc, logical_w, doc_h) {
                 self.static_layout = new_layout;
             }
         }
@@ -1048,16 +1516,17 @@ impl ViewerApp {
             }
         };
 
+        let nav_bar_h = self.nav_bar_height();
         let (logical_w, logical_h) = if let Some(window) = &self.window {
             let scale = window.scale_factor();
             let size = window.inner_size();
             if size.width > 0 && size.height > 0 {
-                (size.width as f64 / scale, size.height as f64 / scale)
+                (size.width as f64 / scale, (size.height as f64 / scale - nav_bar_h).max(50.0))
             } else {
-                (self.config.width as f64, self.config.height as f64)
+                (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
             }
         } else {
-            (self.config.width as f64, self.config.height as f64)
+            (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
         };
 
         if let Some(compiled) = &mut self.compiled {
@@ -1118,6 +1587,7 @@ impl ViewerApp {
     /// Synchronously renders a frame to the current swapchain texture and presents it.
     pub fn render_frame(&mut self) {
         self.flush_pending_scroll();
+        let nav_bar_h = self.nav_bar_height();
         let (surface, renderer, window) = match (
             &mut self.surface,
             &mut self.renderer,
@@ -1174,7 +1644,7 @@ impl ViewerApp {
 
         let layout = current_layout(&self.compiled, &self.static_layout);
 
-        let mut scene = build_scene(
+        let doc_scene = build_scene(
             layout,
             &mut self.font_cx,
             &mut self.layout_cx,
@@ -1195,6 +1665,17 @@ impl ViewerApp {
         } else {
             self.config.height as f64
         };
+        let canvas_h = (win_h - nav_bar_h).max(1.0);
+
+        let mut scene = Scene::new();
+        if nav_bar_h > 0.0 {
+            scene.append(
+                &doc_scene,
+                Some(vello::kurbo::Affine::translate((0.0, nav_bar_h * scale))),
+            );
+        } else {
+            scene.append(&doc_scene, None);
+        }
 
         let canvas_w = if self.inspect_mode {
             (win_w - self.panel_component.width).max(100.0)
@@ -1204,7 +1685,7 @@ impl ViewerApp {
 
         if self.inspect_mode {
             let overlay = crate::inspector::InspectOverlayComponent::default();
-            let overlay_transform = vello::kurbo::Affine::translate((-self.scroll_x, -self.scroll_y));
+            let overlay_transform = vello::kurbo::Affine::translate((-self.scroll_x, nav_bar_h - self.scroll_y));
             let panel_w = self.panel_component.width;
             let panel_x = win_w - panel_w;
 
@@ -1222,7 +1703,7 @@ impl ViewerApp {
                             &mut self.font_cx,
                             &mut self.layout_cx,
                             canvas_w,
-                            win_h,
+                            canvas_h,
                         );
                     }
                 }
@@ -1240,7 +1721,7 @@ impl ViewerApp {
                         &mut self.font_cx,
                         &mut self.layout_cx,
                         canvas_w,
-                        win_h,
+                        canvas_h,
                     );
                 }
             }
@@ -1254,7 +1735,7 @@ impl ViewerApp {
             self.panel_component.render_to_scene(
                 &mut panel_scene,
                 panel_x,
-                win_h,
+                canvas_h,
                 &tree_items,
                 &self.inspector_state,
                 layout,
@@ -1262,14 +1743,21 @@ impl ViewerApp {
                 &mut self.layout_cx,
             );
 
+            let panel_affine = if (scale - 1.0).abs() > 0.001 {
+                Some(
+                    vello::kurbo::Affine::scale(scale)
+                        * vello::kurbo::Affine::translate((0.0, nav_bar_h)),
+                )
+            } else {
+                Some(vello::kurbo::Affine::translate((0.0, nav_bar_h)))
+            };
+
             if (scale - 1.0).abs() > 0.001 {
-                let scale_affine = Some(vello::kurbo::Affine::scale(scale));
-                scene.append(&overlay_scene, scale_affine);
-                scene.append(&panel_scene, scale_affine);
+                scene.append(&overlay_scene, Some(vello::kurbo::Affine::scale(scale)));
             } else {
                 scene.append(&overlay_scene, None);
-                scene.append(&panel_scene, None);
             }
+            scene.append(&panel_scene, panel_affine);
         }
 
         // Render subtle scrollbar thumb if document height exceeds viewport
@@ -1278,12 +1766,12 @@ impl ViewerApp {
             .iter()
             .filter(|n| n.clip.is_none())
             .fold(0.0f64, |acc, n| acc.max(n.rect.y + n.rect.height));
-        if content_h > win_h {
-            let max_scroll = (content_h - win_h).max(1.0);
-            let track_h = win_h;
-            let thumb_h = ((win_h / content_h) * track_h).max(24.0).min(track_h);
+        if content_h > canvas_h {
+            let max_scroll = (content_h - canvas_h).max(1.0);
+            let track_h = canvas_h;
+            let thumb_h = ((canvas_h / content_h) * track_h).max(24.0).min(track_h);
             let scroll_ratio = (self.scroll_y / max_scroll).clamp(0.0, 1.0);
-            let thumb_y = scroll_ratio * (track_h - thumb_h);
+            let thumb_y = nav_bar_h + scroll_ratio * (track_h - thumb_h);
             let thumb_w = 6.0;
             let thumb_x = canvas_w - thumb_w - 3.0;
 
@@ -1308,6 +1796,23 @@ impl ViewerApp {
                 scene.append(&scrollbar_scene, Some(vello::kurbo::Affine::scale(scale)));
             } else {
                 scene.append(&scrollbar_scene, None);
+            }
+        }
+
+        // Render browser navigation bar (URL bar, Back/Forward buttons, Reload, Inspect) on top
+        if let Some(browser_bar) = &self.browser_bar {
+            let mut bar_scene = Scene::new();
+            browser_bar.render_to_scene(
+                &mut bar_scene,
+                win_w,
+                self.inspect_mode,
+                &mut self.font_cx,
+                &mut self.layout_cx,
+            );
+            if (scale - 1.0).abs() > 0.001 {
+                scene.append(&bar_scene, Some(vello::kurbo::Affine::scale(scale)));
+            } else {
+                scene.append(&bar_scene, None);
             }
         }
 
@@ -1526,20 +2031,61 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 let point = Point::new(position.x / scale, position.y / scale);
                 self.cursor_pos = Some(point);
 
+                let nav_bar_h = self.nav_bar_height();
+                let (win_w, win_h) = if let Some(w) = &self.window {
+                    let size = w.inner_size();
+                    (size.width as f64 / scale, size.height as f64 / scale)
+                } else {
+                    (self.config.width as f64, self.config.height as f64)
+                };
+
+                if point.y < nav_bar_h {
+                    if let Some(bar) = &mut self.browser_bar {
+                        if bar.handle_mouse_move(point.x, point.y, win_w) {
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                        if let Some(w) = &self.window {
+                            if bar.url_bar_hovered {
+                                w.set_cursor(winit::window::CursorIcon::Text);
+                            } else if bar.back_hovered || bar.forward_hovered || bar.reload_hovered || bar.inspect_hovered {
+                                w.set_cursor(winit::window::CursorIcon::Pointer);
+                            } else {
+                                w.set_cursor(winit::window::CursorIcon::Default);
+                            }
+                        }
+                    }
+                    if let Some(old_id) = self.hovered_node.take() {
+                        let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+                        let leave_event = Event::new(
+                            EventKind::PointerLeave,
+                            doc_point,
+                            Point::new(0.0, 0.0),
+                            self.modifiers,
+                            old_id,
+                        );
+                        let bubble = self.layout().bubble_path_for_node(old_id);
+                        self.dispatch_event_with_bubble(leave_event, &bubble);
+                    }
+                    return;
+                } else if let Some(bar) = &mut self.browser_bar {
+                    if bar.handle_mouse_move(-1.0, -1.0, win_w) {
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
+                }
+
                 if self.is_dragging_scrollbar {
-                    let (_win_w, win_h) = if let Some(w) = &self.window {
-                        let size = w.inner_size();
-                        (size.width as f64 / scale, size.height as f64 / scale)
-                    } else {
-                        (self.config.width as f64, self.config.height as f64)
-                    };
+                    let canvas_h = (win_h - nav_bar_h).max(1.0);
                     let content_h = self.content_height();
-                    if content_h > win_h {
-                        let track_h = win_h;
-                        let thumb_h = ((win_h / content_h) * track_h).max(24.0).min(track_h);
+                    if content_h > canvas_h {
+                        let track_h = canvas_h;
+                        let thumb_h = ((canvas_h / content_h) * track_h).max(24.0).min(track_h);
                         let available_track = (track_h - thumb_h).max(1.0);
-                        let max_scroll = (content_h - win_h).max(0.0);
-                        let dy = point.y - self.scrollbar_drag_start_y;
+                        let max_scroll = (content_h - canvas_h).max(0.0);
+                        let dy = (point.y - nav_bar_h) - self.scrollbar_drag_start_y;
                         let scroll_delta = (dy / available_track) * max_scroll;
                         self.scroll_y = (self.scrollbar_start_scroll_y + scroll_delta).clamp(0.0, max_scroll);
                         if let Some(w) = &self.window {
@@ -1550,16 +2096,12 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 }
 
                 if self.inspect_mode {
-                    let (win_w, win_h) = if let Some(w) = &self.window {
-                        let size = w.inner_size();
-                        (size.width as f64 / scale, size.height as f64 / scale)
-                    } else {
-                        (self.config.width as f64, self.config.height as f64)
-                    };
                     let panel_x = win_w - self.panel_component.width;
 
                     if point.x >= panel_x {
-                        let btn_hovered = self.panel_component.is_cursor_btn_hovered(point.x, point.y, panel_x);
+                        let panel_y = point.y - nav_bar_h;
+                        let canvas_h = (win_h - nav_bar_h).max(1.0);
+                        let btn_hovered = self.panel_component.is_cursor_btn_hovered(point.x, panel_y, panel_x);
                         let mut needs_redraw = false;
 
                         if self.inspector_state.inspect_cursor_hovered != btn_hovered {
@@ -1573,9 +2115,9 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         );
                         let panel_hovered = self.panel_component.handle_mouse_move(
                             point.x,
-                            point.y,
+                            panel_y,
                             panel_x,
-                            win_h,
+                            canvas_h,
                             &tree_items,
                             &self.inspector_state,
                         );
@@ -1592,7 +2134,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                         // Clear canvas hover state when moving into panel
                         if let Some(old_id) = self.hovered_node.take() {
-                            let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
+                            let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
                             let leave_event = Event::new(
                                 EventKind::PointerLeave,
                                 doc_point,
@@ -1613,7 +2155,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 }
 
                 // Cursor is over the canvas
-                let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
+                let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
                 let hit = self.layout().hit_test(doc_point);
                 let new_hovered = hit.as_ref().map(|h| h.target);
 
@@ -1707,11 +2249,65 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     } else {
                         (self.config.width as f64, self.config.height as f64)
                     };
+                    let nav_bar_h = self.nav_bar_height();
+
+                    // Check click in Navigation Bar
+                    if point.y < nav_bar_h {
+                        if state == ElementState::Pressed {
+                            if let Some(bar) = &mut self.browser_bar {
+                                match bar.hit_test(point.x, point.y, win_w) {
+                                    BrowserBarHitResult::Back => {
+                                        self.go_back();
+                                    }
+                                    BrowserBarHitResult::Forward => {
+                                        self.go_forward();
+                                    }
+                                    BrowserBarHitResult::Reload => {
+                                        self.reload_document();
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                    }
+                                    BrowserBarHitResult::ToggleInspect => {
+                                        self.inspect_mode = !self.inspect_mode;
+                                        if !self.inspect_mode {
+                                            self.hovered_node = None;
+                                            self.inspector_state.set_hovered_id(None);
+                                            self.inspector_state.inspect_cursor_active = false;
+                                        }
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                    }
+                                    BrowserBarHitResult::FocusUrlBar(_) => {
+                                        bar.url_bar.focus();
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                    }
+                                    BrowserBarHitResult::Consumed | BrowserBarHitResult::None => {}
+                                }
+                            }
+                        }
+                        return;
+                    }
+
+                    // Click outside nav bar: blur URL bar if it was focused
+                    if let Some(bar) = &mut self.browser_bar {
+                        if bar.url_bar.is_focused {
+                            bar.url_bar.blur();
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                    }
 
                     if self.inspect_mode {
                         let panel_x = win_w - self.panel_component.width;
                         if point.x >= panel_x {
                             if state == ElementState::Pressed {
+                                let panel_y = point.y - nav_bar_h;
+                                let canvas_h = (win_h - nav_bar_h).max(1.0);
                                 let layout = current_layout(&self.compiled, &self.static_layout);
                                 let tree_items = crate::inspector::build_tree_items_from_layout(
                                     layout,
@@ -1719,9 +2315,9 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                 );
                                 let action = self.panel_component.handle_click(
                                     point.x,
-                                    point.y,
+                                    panel_y,
                                     panel_x,
-                                    win_h,
+                                    canvas_h,
                                     &tree_items,
                                     &self.inspector_state,
                                     Some(layout),
@@ -1790,6 +2386,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         }
                     }
 
+                    let canvas_h = (win_h - nav_bar_h).max(1.0);
                     let content_h = self.content_height();
                     let canvas_w = if self.inspect_mode {
                         (win_w - self.panel_component.width).max(100.0)
@@ -1798,9 +2395,9 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     };
 
                     if state == ElementState::Pressed {
-                        if content_h > win_h && point.x >= canvas_w - 14.0 && point.x <= canvas_w {
+                        if content_h > canvas_h && point.y >= nav_bar_h && point.x >= canvas_w - 14.0 && point.x <= canvas_w {
                             self.is_dragging_scrollbar = true;
-                            self.scrollbar_drag_start_y = point.y;
+                            self.scrollbar_drag_start_y = point.y - nav_bar_h;
                             self.scrollbar_start_scroll_y = self.scroll_y;
                             return;
                         }
@@ -1810,7 +2407,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
 
                     // Mouse input is over canvas area
-                    let doc_point = Point::new(point.x + self.scroll_x, point.y + self.scroll_y);
+                    let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
                     let hit = self.layout().hit_test(doc_point);
                     match state {
                         ElementState::Pressed => {
@@ -1940,9 +2537,10 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
             WindowEvent::CursorLeft { .. } => {
                 self.flush_pending_scroll();
                 self.is_dragging_scrollbar = false;
+                let nav_bar_h = self.nav_bar_height();
                 if let Some(old_id) = self.hovered_node.take() {
                     let pt = self.cursor_pos.unwrap_or_default();
-                    let doc_pt = Point::new(pt.x + self.scroll_x, pt.y + self.scroll_y);
+                    let doc_pt = Point::new(pt.x + self.scroll_x, (pt.y - nav_bar_h) + self.scroll_y);
                     let leave_event = Event::new(
                         EventKind::PointerLeave,
                         doc_pt,
@@ -1952,6 +2550,9 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     );
                     let bubble = self.layout().bubble_path_for_node(old_id);
                     self.dispatch_event_with_bubble(leave_event, &bubble);
+                }
+                if let Some(bar) = &mut self.browser_bar {
+                    bar.handle_mouse_move(-1.0, -1.0, 1000.0);
                 }
                 self.inspector_state.set_hovered_id(None);
                 self.inspector_state.inspect_cursor_hovered = false;
@@ -1978,6 +2579,134 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 ..
             } => {
                 self.flush_pending_scroll();
+
+                // 1. If URL bar is focused, dispatch all keystrokes to URL editing
+                if self.browser_bar.as_ref().map_or(false, |b| b.url_bar.is_focused) {
+                    match &logical_key {
+                        Key::Named(NamedKey::Enter) => {
+                            let text = self.browser_bar.as_ref().unwrap().url_bar.text.clone();
+                            if let Err(e) = self.navigate_to(&text) {
+                                eprintln!("[Viewer] Navigation error: {e}");
+                                if let Some(bar) = &mut self.browser_bar {
+                                    bar.url_bar.has_error = true;
+                                }
+                            }
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                        Key::Named(NamedKey::Escape) => {
+                            let cur_url = self
+                                .browser_bar
+                                .as_ref()
+                                .and_then(|b| b.history.current())
+                                .unwrap_or("")
+                                .to_string();
+                            if let Some(bar) = &mut self.browser_bar {
+                                bar.url_bar.cancel_editing(&cur_url);
+                            }
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                        Key::Named(NamedKey::Backspace) => {
+                            if let Some(bar) = &mut self.browser_bar {
+                                bar.url_bar.delete_backward();
+                            }
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                        Key::Named(NamedKey::Delete) => {
+                            if let Some(bar) = &mut self.browser_bar {
+                                bar.url_bar.delete_forward();
+                            }
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                        Key::Named(NamedKey::ArrowLeft) => {
+                            if let Some(bar) = &mut self.browser_bar {
+                                bar.url_bar.move_cursor_left();
+                            }
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                        Key::Named(NamedKey::ArrowRight) => {
+                            if let Some(bar) = &mut self.browser_bar {
+                                bar.url_bar.move_cursor_right();
+                            }
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                        Key::Named(NamedKey::Home) => {
+                            if let Some(bar) = &mut self.browser_bar {
+                                bar.url_bar.move_cursor_home();
+                            }
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                        Key::Named(NamedKey::End) => {
+                            if let Some(bar) = &mut self.browser_bar {
+                                bar.url_bar.move_cursor_end();
+                            }
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                        Key::Character(s) => {
+                            if !self.modifiers.ctrl && !self.modifiers.meta {
+                                if let Some(bar) = &mut self.browser_bar {
+                                    bar.url_bar.insert_str(s.as_str());
+                                }
+                                if let Some(w) = &self.window {
+                                    w.request_redraw();
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                    return;
+                }
+
+                // 2. Browser navigation shortcuts:
+                if (self.modifiers.alt && logical_key == Key::Named(NamedKey::ArrowLeft))
+                    || (self.modifiers.meta && logical_key == Key::Character("[".into()))
+                {
+                    self.go_back();
+                    return;
+                }
+                if (self.modifiers.alt && logical_key == Key::Named(NamedKey::ArrowRight))
+                    || (self.modifiers.meta && logical_key == Key::Character("]".into()))
+                {
+                    self.go_forward();
+                    return;
+                }
+                if (self.modifiers.meta || self.modifiers.ctrl)
+                    && (logical_key == Key::Character("l".into()) || logical_key == Key::Character("L".into()))
+                {
+                    if let Some(bar) = &mut self.browser_bar {
+                        bar.url_bar.focus();
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
+                    return;
+                }
+                if (self.modifiers.meta || self.modifiers.ctrl)
+                    && (logical_key == Key::Character("r".into()) || logical_key == Key::Character("R".into()))
+                {
+                    self.reload_document();
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                    return;
+                }
+
+                // 3. Document interaction shortcuts:
                 match logical_key {
                 Key::Named(NamedKey::Tab) => {
                     if self.modifiers.shift {

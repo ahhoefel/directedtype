@@ -1445,4 +1445,119 @@ fn test_link_demo_keyboard_tabbing_and_link_focus_order() {
     );
 }
 
+#[test]
+fn test_anchor_link_click_updates_url_bar_and_history() {
+    let source = std::fs::read_to_string("examples/link_demo.dt").expect("read link_demo.dt");
+    let doc = directedtype::parser::parse_document(&source).expect("parse ok");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let resolver = directedtype::compiler::module::FsResolver;
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("examples"),
+        &resolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let mut viewer = directedtype::render::viewer::ViewerApp::new_with_compiled(
+        compiled,
+        directedtype::render::viewer::ViewerConfig {
+            show_nav_bar: true,
+            ..Default::default()
+        },
+    )
+    .with_watch_path(std::path::PathBuf::from("examples/link_demo.dt"))
+    .with_document(doc);
+
+    // Initial state: URL bar shows current document, back is disabled
+    assert_eq!(
+        viewer.browser_bar().unwrap().url_bar.text,
+        "examples/link_demo.dt"
+    );
+    assert_eq!(
+        viewer.browser_bar().unwrap().history.current(),
+        Some("examples/link_demo.dt")
+    );
+    assert!(!viewer.browser_bar().unwrap().history.can_go_back());
+
+    // Find link 1 (#inline-links) and activate it
+    let link1 = viewer
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| {
+            n.properties
+                .get("url")
+                .and_then(|v| v.as_str())
+                == Some("#inline-links")
+        })
+        .expect("find #inline-links link");
+    let link1_id = link1.id;
+
+    viewer.set_focused_node(Some(link1_id));
+    assert!(viewer.activate_focused_node(), "link 1 click handled");
+
+    // URL bar must now show the anchor URL
+    assert_eq!(
+        viewer.browser_bar().unwrap().url_bar.text,
+        "examples/link_demo.dt#inline-links"
+    );
+    assert_eq!(
+        viewer.browser_bar().unwrap().history.current(),
+        Some("examples/link_demo.dt#inline-links")
+    );
+    assert!(viewer.browser_bar().unwrap().history.can_go_back());
+
+    // Find link 2 (#custom-styling) and activate it
+    let link2 = viewer
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| {
+            n.properties
+                .get("url")
+                .and_then(|v| v.as_str())
+                == Some("#custom-styling")
+        })
+        .expect("find #custom-styling link");
+    let link2_id = link2.id;
+
+    viewer.set_focused_node(Some(link2_id));
+    assert!(viewer.activate_focused_node(), "link 2 click handled");
+
+    // URL bar must now show #custom-styling
+    assert_eq!(
+        viewer.browser_bar().unwrap().url_bar.text,
+        "examples/link_demo.dt#custom-styling"
+    );
+    assert_eq!(
+        viewer.browser_bar().unwrap().history.current(),
+        Some("examples/link_demo.dt#custom-styling")
+    );
+
+    // Go Back -> returns to #inline-links
+    assert!(viewer.go_back(), "go back to link 1");
+    assert_eq!(
+        viewer.browser_bar().unwrap().url_bar.text,
+        "examples/link_demo.dt#inline-links"
+    );
+
+    // Go Back again -> returns to base document
+    assert!(viewer.go_back(), "go back to root");
+    assert_eq!(
+        viewer.browser_bar().unwrap().url_bar.text,
+        "examples/link_demo.dt"
+    );
+    assert_eq!(viewer.scroll_y(), 0.0);
+
+    // Go Forward -> returns to #inline-links
+    assert!(viewer.go_forward(), "go forward to link 1");
+    assert_eq!(
+        viewer.browser_bar().unwrap().url_bar.text,
+        "examples/link_demo.dt#inline-links"
+    );
+}
+
 

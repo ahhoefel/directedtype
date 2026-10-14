@@ -3015,26 +3015,50 @@ fn expand_primitive_element(
     };
 
     if elem.name.as_str() == "Text" {
-        let baseline_call = Expr::Binary(BinaryExpr {
-            op: BinaryOp::Add,
-            left: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
-                member: Ident::new("y", elem.span),
+        if ports.contains_key("baseline") && !ports.contains_key("y") && !ports.contains_key("top") {
+            let y_from_baseline = Expr::Binary(BinaryExpr {
+                op: BinaryOp::Sub,
+                left: Box::new(Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("baseline", elem.span),
+                    span: elem.span,
+                })),
+                right: Box::new(Expr::Call(CallExpr {
+                    callee: Ident::new("text_baseline_offset", elem.span),
+                    args: vec![
+                        size_expr.clone(),
+                        weight_expr.clone(),
+                        font_expr.clone(),
+                        start_at_expr.clone(),
+                    ],
+                    span: elem.span,
+                })),
                 span: elem.span,
-            })),
-            right: Box::new(Expr::Call(CallExpr {
-                callee: Ident::new("text_baseline_offset", elem.span),
-                args: vec![
-                    size_expr.clone(),
-                    weight_expr.clone(),
-                    font_expr.clone(),
-                    start_at_expr.clone(),
-                ],
+            });
+            ports.insert("y".to_string(), y_from_baseline.clone());
+            authored_ports.insert("y".to_string(), y_from_baseline);
+        } else {
+            let baseline_call = Expr::Binary(BinaryExpr {
+                op: BinaryOp::Add,
+                left: Box::new(Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("y", elem.span),
+                    span: elem.span,
+                })),
+                right: Box::new(Expr::Call(CallExpr {
+                    callee: Ident::new("text_baseline_offset", elem.span),
+                    args: vec![
+                        size_expr.clone(),
+                        weight_expr.clone(),
+                        font_expr.clone(),
+                        start_at_expr.clone(),
+                    ],
+                    span: elem.span,
+                })),
                 span: elem.span,
-            })),
-            span: elem.span,
-        });
-        ports.entry("baseline".to_string()).or_insert(baseline_call);
+            });
+            ports.entry("baseline".to_string()).or_insert(baseline_call);
+        }
     }
 
     let text_arg_expr = if ports.contains_key("text") {

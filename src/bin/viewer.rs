@@ -134,6 +134,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             width,
             height,
             scene_options,
+            show_nav_bar: true,
+            ..Default::default()
         };
         run_viewer_with_file(file_path, config)?;
     }
