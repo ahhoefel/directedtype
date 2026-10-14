@@ -59,6 +59,10 @@ pub enum ContextAction {
     SetFocus {
         target: Option<NodeId>,
     },
+    /// Capture all subsequent pointer events (moves and release) to the specified node until released.
+    CapturePointer(NodeId),
+    /// Release any active pointer capture.
+    ReleasePointer,
 }
 
 /// A strongly typed handle to a scrollable viewport (either the outer window or a specific `ScrollView`).
@@ -276,6 +280,21 @@ impl<'a> Context<'a> {
     /// Queues an action to update focus to a target node.
     pub fn set_focus(&mut self, target: Option<NodeId>) {
         self.actions.push(ContextAction::SetFocus { target });
+    }
+
+    /// Requests pointer capture for this component instance until mouse release or explicit release.
+    pub fn capture_pointer(&mut self) {
+        self.actions.push(ContextAction::CapturePointer(self.node_id));
+    }
+
+    /// Requests pointer capture specifically for a target node (e.g. a child element).
+    pub fn capture_pointer_for(&mut self, target: NodeId) {
+        self.actions.push(ContextAction::CapturePointer(target));
+    }
+
+    /// Releases any active pointer capture.
+    pub fn release_pointer(&mut self) {
+        self.actions.push(ContextAction::ReleasePointer);
     }
 
     /// Drains and returns all recorded context actions.

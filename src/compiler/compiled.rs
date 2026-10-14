@@ -502,6 +502,11 @@ impl CompiledDocument {
             crate::component::ContextAction::OpenUrl { .. } => {
                 Ok(HashSet::new())
             }
+            crate::component::ContextAction::CapturePointer(..)
+            | crate::component::ContextAction::ReleasePointer => {
+                // Pointer capture is handled by the viewer/interaction layer
+                Ok(HashSet::new())
+            }
         }
     }
 

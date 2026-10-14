@@ -1,10 +1,13 @@
-use directedtype::compiler::evaluate_document_with_window;
+use directedtype::compiler::{compile_document_with_registry, evaluate_document_with_window, FsResolver};
+use directedtype::component::{ComponentRegistry, Context, DispatchError};
 use directedtype::interaction::{Event, EventKind, Modifiers, MouseButton, Point};
 use directedtype::parse;
 use directedtype::render::{ViewerApp, ViewerConfig};
+use directedtype_macros::component;
 use pretty_assertions::assert_eq;
 use std::cell::RefCell;
 use std::rc::Rc;
+use winit::event::ElementState;
 
 #[test]
 fn test_hit_test_basic_rect() {
@@ -241,3 +244,177 @@ fn test_hit_test_inline_link_multi_line_disjoint_fragments() {
         assert_eq!(hit_prefix.target, text_node.id);
     }
 }
+
+#[test]
+fn test_pointer_capture_explicit_routing() {
+    let input = r#"
+    \Rect(x: 10, y: 10, width: 100, height: 50, color: #ff0000)
+    \Rect(x: 200, y: 200, width: 100, height: 50, color: #0000ff)
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let layout = evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout error");
+    let rect_a = layout.nodes[0].clone();
+    let rect_b = layout.nodes[1].clone();
+
+    let mut app = ViewerApp::new(layout.clone(), ViewerConfig::default());
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let events_clone = Rc::clone(&events);
+    app.set_event_handler(move |event, _| {
+        events_clone
+            .borrow_mut()
+            .push((event.kind.clone(), event.target, event.local_point));
+    });
+
+    // 1. Move to (250, 225) without capture -> hits Rect B
+    app.dispatch_cursor_moved(Point::new(250.0, 225.0));
+    {
+        let evs = events.borrow();
+        assert!(!evs.is_empty());
+        let last = evs.last().unwrap();
+        assert_eq!(last.1, rect_b.id);
+    }
+
+    // 2. Explicitly capture pointer to Rect A
+    app.set_captured_node(Some(rect_a.id));
+    assert_eq!(app.captured_node(), Some(rect_a.id));
+
+    // 3. Move to (250, 225) (over Rect B) with capture -> MUST route to Rect A!
+    events.borrow_mut().clear();
+    app.dispatch_cursor_moved(Point::new(250.0, 225.0));
+    {
+        let evs = events.borrow();
+        assert_eq!(evs.len(), 1);
+        let (kind, target, local_pt) = &evs[0];
+        assert_eq!(*kind, EventKind::PointerMove);
+        assert_eq!(*target, rect_a.id);
+        // local_point relative to rect_a (10, 10): 250 - 10 = 240, 225 - 10 = 215
+        assert_eq!(*local_pt, Point::new(240.0, 215.0));
+    }
+
+    // 4. Move far to the left of Rect A: (-20, -15)
+    events.borrow_mut().clear();
+    app.dispatch_cursor_moved(Point::new(-20.0, -15.0));
+    {
+        let evs = events.borrow();
+        assert_eq!(evs.len(), 1);
+        let (kind, target, local_pt) = &evs[0];
+        assert_eq!(*kind, EventKind::PointerMove);
+        assert_eq!(*target, rect_a.id);
+        // Clean negative offset for clamping: -20 - 10 = -30, -15 - 10 = -25
+        assert_eq!(*local_pt, Point::new(-30.0, -25.0));
+    }
+
+    // 5. Release mouse button -> Dispatches PointerUp to Rect A and automatically releases capture!
+    events.borrow_mut().clear();
+    app.dispatch_mouse_input(ElementState::Released, MouseButton::Left, Point::new(250.0, 225.0));
+    {
+        let evs = events.borrow();
+        assert_eq!(evs.len(), 1);
+        let (kind, target, _) = &evs[0];
+        assert_eq!(*kind, EventKind::PointerUp { button: MouseButton::Left });
+        assert_eq!(*target, rect_a.id);
+    }
+    assert_eq!(app.captured_node(), None, "Capture must automatically release on PointerUp");
+
+    // 6. Next move over Rect B hits Rect B normally
+    events.borrow_mut().clear();
+    app.dispatch_cursor_moved(Point::new(250.0, 225.0));
+    {
+        let evs = events.borrow();
+        assert!(!evs.is_empty());
+        let last = evs.last().unwrap();
+        assert_eq!(last.1, rect_b.id);
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+struct DragTargetCompanion {
+    pub down_called: bool,
+    pub drag_moves: Vec<Point>,
+    pub up_called: bool,
+}
+
+#[component]
+impl DragTargetCompanion {
+    pub fn on_down(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        self.down_called = true;
+        ctx.capture_pointer();
+        Ok(())
+    }
+
+    pub fn on_move(&mut self, event: &mut Event) -> Result<(), DispatchError> {
+        self.drag_moves.push(event.local_point);
+        Ok(())
+    }
+
+    pub fn on_up(&mut self) -> Result<(), DispatchError> {
+        self.up_called = true;
+        Ok(())
+    }
+}
+
+#[test]
+fn test_pointer_capture_via_context_action_and_companion() {
+    let input = r#"
+    \Component Draggable(x: Number = 50, y: Number = 50, width: Number = 100, height: Number = 50) {
+        \Rect(
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            color: #3b82f6,
+            on_pointer_down: self.on_down,
+            on_pointer_move: self.on_move,
+            on_pointer_up: self.on_up
+        )
+    }
+
+    \Draggable(x: 50, y: 50)
+    \Rect(x: 300, y: 300, width: 100, height: 100, color: #10b981)
+    "#;
+    let doc = parse(input).expect("Parse error");
+    let mut registry = ComponentRegistry::standard();
+    registry.register_companion("Draggable", "Draggable.rs", || {
+        Box::new(DragTargetCompanion::default())
+    });
+
+    let compiled = compile_document_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("."),
+        &FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let mut app = ViewerApp::new_with_compiled(compiled, ViewerConfig::default());
+    let drag_node = app
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| n.name == "Draggable")
+        .expect("Draggable node found")
+        .id;
+
+    assert_eq!(app.captured_node(), None);
+
+    // 1. Mouse down inside Draggable rect at (60, 60)
+    app.dispatch_mouse_input(ElementState::Pressed, MouseButton::Left, Point::new(60.0, 60.0));
+
+    // Captured node should now be set to Draggable component node (which called ctx.capture_pointer())!
+    assert_eq!(app.captured_node(), Some(drag_node), "Draggable must acquire pointer capture on down");
+
+    // 2. Drag cursor far across the screen to (400, 400) (over the green Rect at 300, 300)
+    app.dispatch_cursor_moved(Point::new(400.0, 400.0));
+
+    // 3. Move cursor to negative coordinates (-50, -50)
+    app.dispatch_cursor_moved(Point::new(-50.0, -50.0));
+
+    // 4. Release mouse button
+    app.dispatch_mouse_input(ElementState::Released, MouseButton::Left, Point::new(400.0, 400.0));
+
+    // Capture must now be released!
+    assert_eq!(app.captured_node(), None, "Capture must release after PointerUp");
+}
+

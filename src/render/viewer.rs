@@ -169,6 +169,7 @@ pub struct ViewerApp {
     cursor_pos: Option<Point>,
     hovered_node: Option<NodeId>,
     pressed_node: Option<(NodeId, MouseButton)>,
+    captured_node: Option<NodeId>,
     modifiers: Modifiers,
     inspect_mode: bool,
     selected_node: Option<NodeId>,
@@ -235,6 +236,7 @@ impl ViewerApp {
             cursor_pos: None,
             hovered_node: None,
             pressed_node: None,
+            captured_node: None,
             modifiers: Modifiers::default(),
             inspect_mode: false,
             selected_node: None,
@@ -286,6 +288,7 @@ impl ViewerApp {
             cursor_pos: None,
             hovered_node: None,
             pressed_node: None,
+            captured_node: None,
             modifiers: Modifiers::default(),
             inspect_mode: false,
             selected_node: None,
@@ -337,6 +340,21 @@ impl ViewerApp {
     /// Returns the currently hovered visual node, if any.
     pub fn hovered_node(&self) -> Option<NodeId> {
         self.hovered_node
+    }
+
+    /// Returns the currently captured node, if any.
+    pub fn captured_node(&self) -> Option<NodeId> {
+        self.captured_node
+    }
+
+    /// Explicitly sets or clears the captured pointer node.
+    pub fn set_captured_node(&mut self, node: Option<NodeId>) {
+        self.captured_node = node;
+    }
+
+    /// Releases any active pointer capture.
+    pub fn release_pointer_capture(&mut self) {
+        self.captured_node = None;
     }
 
     /// Returns whether the spatial element picker cursor is actively picking elements.
@@ -527,6 +545,174 @@ impl ViewerApp {
             if (self.scroll_y - old_scroll).abs() > 0.001 {
                 if let Some(w) = &self.window {
                     w.request_redraw();
+                }
+            }
+        }
+    }
+
+    /// Dispatches a cursor movement in logical window coordinates `(x, y)`.
+    /// Respects active pointer capture if set, routing moves directly to the captured node.
+    pub fn dispatch_cursor_moved(&mut self, point: Point) -> bool {
+        self.cursor_pos = Some(point);
+        let nav_bar_h = self.nav_bar_height();
+
+        if let Some(target_id) = self.captured_node {
+            let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+            if let Some(target_node) = self.layout().get_node(target_id) {
+                let local_point = Point::new(
+                    doc_point.x - target_node.rect.x,
+                    doc_point.y - target_node.rect.y,
+                );
+                let bubble = self.layout().bubble_path_for_node(target_id);
+                let move_event = Event::new(
+                    EventKind::PointerMove,
+                    doc_point,
+                    local_point,
+                    self.modifiers,
+                    target_id,
+                );
+                return self.dispatch_event_with_bubble(move_event, &bubble);
+            } else {
+                self.captured_node = None;
+            }
+        }
+
+        let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+        let hit = self.layout().hit_test(doc_point);
+        let new_hovered = hit.as_ref().map(|h| h.target);
+
+        let mut handled = false;
+        if new_hovered != self.hovered_node {
+            if let Some(old_id) = self.hovered_node {
+                let leave_event = Event::new(
+                    EventKind::PointerLeave,
+                    doc_point,
+                    Point::new(0.0, 0.0),
+                    self.modifiers,
+                    old_id,
+                );
+                let bubble = self.layout().bubble_path_for_node(old_id);
+                handled |= self.dispatch_event_with_bubble(leave_event, &bubble);
+            }
+
+            if let Some(ref hit_res) = hit {
+                let enter_event = Event::new(
+                    EventKind::PointerEnter,
+                    doc_point,
+                    hit_res.local_point,
+                    self.modifiers,
+                    hit_res.target,
+                );
+                handled |= self.dispatch_event_with_bubble(enter_event, &hit_res.bubble_path);
+            }
+
+            self.hovered_node = new_hovered;
+        }
+
+        if let Some(ref hit_res) = hit {
+            let move_event = Event::new(
+                EventKind::PointerMove,
+                doc_point,
+                hit_res.local_point,
+                self.modifiers,
+                hit_res.target,
+            );
+            handled |= self.dispatch_event_with_bubble(move_event, &hit_res.bubble_path);
+        }
+
+        handled
+    }
+
+    /// Dispatches a mouse input event (Pressed / Released) at logical window coordinates `(x, y)`.
+    /// Respects active pointer capture if set.
+    pub fn dispatch_mouse_input(
+        &mut self,
+        state: winit::event::ElementState,
+        button: MouseButton,
+        point: Point,
+    ) -> bool {
+        self.cursor_pos = Some(point);
+        let nav_bar_h = self.nav_bar_height();
+        let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+        let hit = self.layout().hit_test(doc_point);
+
+        match state {
+            winit::event::ElementState::Pressed => {
+                if let Some(ref hit_res) = hit {
+                    self.pressed_node = Some((hit_res.target, button));
+                    let down_event = Event::new(
+                        EventKind::PointerDown { button },
+                        doc_point,
+                        hit_res.local_point,
+                        self.modifiers,
+                        hit_res.target,
+                    );
+                    self.dispatch_event_with_bubble(down_event, &hit_res.bubble_path)
+                } else {
+                    self.pressed_node = None;
+                    false
+                }
+            }
+            winit::event::ElementState::Released => {
+                if let Some(captured_id) = self.captured_node.take() {
+                    self.pressed_node = None;
+                    if let Some(captured_node) = self.layout().get_node(captured_id) {
+                        let local_point = Point::new(
+                            doc_point.x - captured_node.rect.x,
+                            doc_point.y - captured_node.rect.y,
+                        );
+                        let bubble = self.layout().bubble_path_for_node(captured_id);
+                        let up_event = Event::new(
+                            EventKind::PointerUp { button },
+                            doc_point,
+                            local_point,
+                            self.modifiers,
+                            captured_id,
+                        );
+                        let mut handled = self.dispatch_event_with_bubble(up_event, &bubble);
+
+                        if let Some(ref hit_res) = hit {
+                            if hit_res.bubble_path.contains(&captured_id) {
+                                let click_event = Event::new(
+                                    EventKind::Click { button },
+                                    doc_point,
+                                    local_point,
+                                    self.modifiers,
+                                    captured_id,
+                                );
+                                handled |= self.dispatch_event_with_bubble(click_event, &bubble);
+                            }
+                        }
+                        return handled;
+                    }
+                    false
+                } else if let Some((pressed_id, pressed_btn)) = self.pressed_node.take() {
+                    if let Some(ref hit_res) = hit {
+                        let up_event = Event::new(
+                            EventKind::PointerUp { button },
+                            doc_point,
+                            hit_res.local_point,
+                            self.modifiers,
+                            hit_res.target,
+                        );
+                        let mut handled = self.dispatch_event_with_bubble(up_event, &hit_res.bubble_path);
+
+                        if pressed_btn == button && hit_res.bubble_path.contains(&pressed_id) {
+                            let click_event = Event::new(
+                                EventKind::Click { button },
+                                doc_point,
+                                hit_res.local_point,
+                                self.modifiers,
+                                hit_res.target,
+                            );
+                            handled |= self.dispatch_event_with_bubble(click_event, &hit_res.bubble_path);
+                        }
+                        handled
+                    } else {
+                        false
+                    }
+                } else {
+                    false
                 }
             }
         }
@@ -959,6 +1145,12 @@ impl ViewerApp {
             }
             ContextAction::SetFocus { target } => {
                 self.set_focused_node(target);
+            }
+            ContextAction::CapturePointer(target) => {
+                self.captured_node = Some(target);
+            }
+            ContextAction::ReleasePointer => {
+                self.captured_node = None;
             }
         }
     }
@@ -2032,6 +2224,29 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 self.cursor_pos = Some(point);
 
                 let nav_bar_h = self.nav_bar_height();
+
+                // If pointer is captured by a node, route all movements directly to that node
+                if let Some(target_id) = self.captured_node {
+                    let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+                    if let Some(target_node) = self.layout().get_node(target_id) {
+                        let local_point = Point::new(
+                            doc_point.x - target_node.rect.x,
+                            doc_point.y - target_node.rect.y,
+                        );
+                        let bubble = self.layout().bubble_path_for_node(target_id);
+                        let move_event = Event::new(
+                            EventKind::PointerMove,
+                            doc_point,
+                            local_point,
+                            self.modifiers,
+                            target_id,
+                        );
+                        self.dispatch_event_with_bubble(move_event, &bubble);
+                        return;
+                    } else {
+                        self.captured_node = None;
+                    }
+                }
                 let (win_w, win_h) = if let Some(w) = &self.window {
                     let size = w.inner_size();
                     (size.width as f64 / scale, size.height as f64 / scale)
@@ -2250,6 +2465,44 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         (self.config.width as f64, self.config.height as f64)
                     };
                     let nav_bar_h = self.nav_bar_height();
+
+                    // If a node held pointer capture and the button is released, dispatch PointerUp directly to it and release capture!
+                    if state == ElementState::Released {
+                        if let Some(captured_id) = self.captured_node.take() {
+                            self.pressed_node = None;
+                            let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+                            let hit = self.layout().hit_test(doc_point);
+                            if let Some(captured_node) = self.layout().get_node(captured_id) {
+                                let local_point = Point::new(
+                                    doc_point.x - captured_node.rect.x,
+                                    doc_point.y - captured_node.rect.y,
+                                );
+                                let bubble = self.layout().bubble_path_for_node(captured_id);
+                                let up_event = Event::new(
+                                    EventKind::PointerUp { button: btn },
+                                    doc_point,
+                                    local_point,
+                                    self.modifiers,
+                                    captured_id,
+                                );
+                                self.dispatch_event_with_bubble(up_event, &bubble);
+
+                                if let Some(ref hit_res) = hit {
+                                    if hit_res.bubble_path.contains(&captured_id) {
+                                        let click_event = Event::new(
+                                            EventKind::Click { button: btn },
+                                            doc_point,
+                                            local_point,
+                                            self.modifiers,
+                                            captured_id,
+                                        );
+                                        self.dispatch_event_with_bubble(click_event, &bubble);
+                                    }
+                                }
+                            }
+                            return;
+                        }
+                    }
 
                     // Check click in Navigation Bar
                     if point.y < nav_bar_h {
@@ -2562,6 +2815,13 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
                 }
                 self.cursor_pos = None;
+            }
+            WindowEvent::Focused(focused) => {
+                if !focused {
+                    self.captured_node = None;
+                    self.pressed_node = None;
+                    self.is_dragging_scrollbar = false;
+                }
             }
             WindowEvent::ModifiersChanged(new_mods) => {
                 self.modifiers.shift = new_mods.state().shift_key();
