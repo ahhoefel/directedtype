@@ -1152,6 +1152,21 @@ impl ViewerApp {
             ContextAction::ReleasePointer => {
                 self.captured_node = None;
             }
+            ContextAction::InvokeCallback {
+                target,
+                method,
+                payload,
+            } => {
+                if let Some(compiled) = &mut self.compiled {
+                    if let Ok(changed) = compiled.dispatch_callback(target, &method, payload) {
+                        if !changed.is_empty() {
+                            if let Some(window) = &self.window {
+                                window.request_redraw();
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

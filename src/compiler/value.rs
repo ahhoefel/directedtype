@@ -135,3 +135,34 @@ impl From<&str> for Value {
         Value::String(s.to_string())
     }
 }
+
+impl From<f32> for Value {
+    fn from(n: f32) -> Self {
+        Value::Number(n as f64)
+    }
+}
+
+impl From<i32> for Value {
+    fn from(n: i32) -> Self {
+        Value::Number(n as f64)
+    }
+}
+
+impl From<i64> for Value {
+    fn from(n: i64) -> Self {
+        Value::Number(n as f64)
+    }
+}
+
+impl From<usize> for Value {
+    fn from(n: usize) -> Self {
+        Value::Number(n as f64)
+    }
+}
+
+impl From<()> for Value {
+    fn from(_: ()) -> Self {
+        Value::Bool(true)
+    }
+}
+

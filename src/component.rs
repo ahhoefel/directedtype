@@ -42,7 +42,7 @@ pub enum DispatchError {
 }
 
 /// An action emitted by a component method (e.g. navigation, scrolling, external URL opening).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ContextAction {
     /// Scroll to bring a target node into view.
     /// `container: None` scrolls the window/viewport.
@@ -63,6 +63,152 @@ pub enum ContextAction {
     CapturePointer(NodeId),
     /// Release any active pointer capture.
     ReleasePointer,
+    /// Invokes an event handler method on a target component instance with an explicit payload.
+    InvokeCallback {
+        target: NodeId,
+        method: String,
+        payload: Value,
+    },
+}
+
+/// A strongly-typed callable handle to an event handler method on a target component instance.
+///
+/// Encapsulates the target component's identity (`NodeId`) and method name, guaranteeing
+/// compile-time type safety for payloads without requiring direct mutable references.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Callback<T = ()> {
+    pub target: NodeId,
+    pub method: String,
+    _marker: std::marker::PhantomData<fn(T)>,
+}
+
+impl<T> Callback<T> {
+    pub fn new(target: NodeId, method: impl Into<String>) -> Self {
+        Self {
+            target,
+            method: method.into(),
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn target(&self) -> NodeId {
+        self.target
+    }
+
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl<T: Into<Value>> Callback<T> {
+    /// Invokes the callback on the target component instance with the given typed payload.
+    pub fn call(&self, ctx: &mut Context<'_>, payload: T) {
+        ctx.actions.push(ContextAction::InvokeCallback {
+            target: self.target,
+            method: self.method.clone(),
+            payload: payload.into(),
+        });
+    }
+}
+
+/// Convenience trait for invoking optional callbacks with a single method call.
+pub trait EmitCallback<T> {
+    fn emit(&self, ctx: &mut Context<'_>, payload: T);
+}
+
+impl<T: Into<Value> + Clone> EmitCallback<T> for Option<Callback<T>> {
+    fn emit(&self, ctx: &mut Context<'_>, payload: T) {
+        if let Some(cb) = self {
+            cb.call(ctx, payload);
+        }
+    }
+}
+
+/// Trait for deserializing or converting an event payload into a strongly-typed Rust method argument.
+pub trait FromPayload: Sized {
+    fn from_payload(payload: Option<&Value>) -> Option<Self>;
+}
+
+impl FromPayload for f64 {
+    fn from_payload(payload: Option<&Value>) -> Option<Self> {
+        match payload {
+            Some(Value::Number(n)) => Some(*n),
+            _ => None,
+        }
+    }
+}
+
+impl FromPayload for f32 {
+    fn from_payload(payload: Option<&Value>) -> Option<Self> {
+        match payload {
+            Some(Value::Number(n)) => Some(*n as f32),
+            _ => None,
+        }
+    }
+}
+
+impl FromPayload for i32 {
+    fn from_payload(payload: Option<&Value>) -> Option<Self> {
+        match payload {
+            Some(Value::Number(n)) => Some(*n as i32),
+            _ => None,
+        }
+    }
+}
+
+impl FromPayload for i64 {
+    fn from_payload(payload: Option<&Value>) -> Option<Self> {
+        match payload {
+            Some(Value::Number(n)) => Some(*n as i64),
+            _ => None,
+        }
+    }
+}
+
+impl FromPayload for usize {
+    fn from_payload(payload: Option<&Value>) -> Option<Self> {
+        match payload {
+            Some(Value::Number(n)) => Some(*n as usize),
+            _ => None,
+        }
+    }
+}
+
+impl FromPayload for bool {
+    fn from_payload(payload: Option<&Value>) -> Option<Self> {
+        match payload {
+            Some(Value::Bool(b)) => Some(*b),
+            _ => None,
+        }
+    }
+}
+
+impl FromPayload for String {
+    fn from_payload(payload: Option<&Value>) -> Option<Self> {
+        match payload {
+            Some(Value::String(s)) | Some(Value::Color(s)) => Some(s.clone()),
+            Some(Value::Enum { variant, .. }) => Some(variant.clone()),
+            _ => None,
+        }
+    }
+}
+
+impl FromPayload for Value {
+    fn from_payload(payload: Option<&Value>) -> Option<Self> {
+        payload.cloned()
+    }
+}
+
+impl FromPayload for () {
+    fn from_payload(_payload: Option<&Value>) -> Option<Self> {
+        Some(())
+    }
+}
+
+impl<T: FromPayload> FromPayload for Option<T> {
+    fn from_payload(payload: Option<&Value>) -> Option<Self> {
+        Some(T::from_payload(payload))
+    }
 }
 
 /// A strongly typed handle to a scrollable viewport (either the outer window or a specific `ScrollView`).
@@ -106,6 +252,7 @@ impl<'b> ViewHandle<'b> {
 /// record state mutations for the one-way pipeline, and queue high-level context actions.
 pub struct Context<'a> {
     node_id: NodeId,
+    event_target: Option<NodeId>,
     parent_id: Option<NodeId>,
     key: Option<&'a ComponentKey>,
     ports: &'a HashMap<String, Value>,
@@ -122,8 +269,20 @@ impl<'a> Context<'a> {
         ports: &'a HashMap<String, Value>,
         layout: &'a ResolvedLayout,
     ) -> Self {
+        Self::with_target(node_id, None, parent_id, key, ports, layout)
+    }
+
+    pub fn with_target(
+        node_id: NodeId,
+        event_target: Option<NodeId>,
+        parent_id: Option<NodeId>,
+        key: Option<&'a ComponentKey>,
+        ports: &'a HashMap<String, Value>,
+        layout: &'a ResolvedLayout,
+    ) -> Self {
         Self {
             node_id,
+            event_target,
             parent_id,
             key,
             ports,
@@ -282,9 +441,10 @@ impl<'a> Context<'a> {
         self.actions.push(ContextAction::SetFocus { target });
     }
 
-    /// Requests pointer capture for this component instance until mouse release or explicit release.
+    /// Requests pointer capture for the currently interacting element (or this component if not in an event).
     pub fn capture_pointer(&mut self) {
-        self.actions.push(ContextAction::CapturePointer(self.node_id));
+        let target = self.event_target.unwrap_or(self.node_id);
+        self.actions.push(ContextAction::CapturePointer(target));
     }
 
     /// Requests pointer capture specifically for a target node (e.g. a child element).
@@ -295,6 +455,27 @@ impl<'a> Context<'a> {
     /// Releases any active pointer capture.
     pub fn release_pointer(&mut self) {
         self.actions.push(ContextAction::ReleasePointer);
+    }
+
+    /// Looks up an event handler or callback binding configured on this component's node
+    /// and returns a strongly-typed `Callback<T>`.
+    pub fn get_callback<T>(&self, port_name: &str) -> Option<Callback<T>> {
+        let node = self.layout.get_node(self.node_id)?;
+        let binding = node
+            .event_handlers
+            .get(port_name)
+            .or_else(|| {
+                if !port_name.starts_with("on_") {
+                    let prefixed = format!("on_{}", port_name);
+                    node.event_handlers.get(&prefixed)
+                } else {
+                    node.event_handlers.get(port_name.strip_prefix("on_").unwrap_or(port_name))
+                }
+            })?;
+        match &binding.target {
+            EventHandlerTarget::Component(id) => Some(Callback::new(*id, binding.method.clone())),
+            EventHandlerTarget::Env(_) => None,
+        }
     }
 
     /// Drains and returns all recorded context actions.
@@ -387,6 +568,9 @@ impl ComponentRegistry {
         });
         registry.register_companion("ScrollView", "components/ScrollView.rs", || {
             Box::new(std_components::ScrollView::default())
+        });
+        registry.register_companion("Slider", "components/Slider.rs", || {
+            Box::new(std_components::Slider::default())
         });
         registry
     }
@@ -566,9 +750,91 @@ pub mod std_components {
             Ok(())
         }
     }
+
+    /// Standard interactive Slider companion component.
+    #[derive(Default, Debug, Clone)]
+    pub struct Slider {
+        pub min: f64,
+        pub max: f64,
+        pub value: f64,
+        pub is_dragging: bool,
+        pub on_change: Option<super::Callback<f64>>,
+    }
+
+    impl Slider {
+        pub fn new() -> Self {
+            Self {
+                min: 0.0,
+                max: 100.0,
+                value: 0.0,
+                is_dragging: false,
+                on_change: None,
+            }
+        }
+    }
+
+    #[component]
+    impl Slider {
+        pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
+            self.on_change = ctx.get_callback("on_change");
+            if let Some(min) = ctx.get_port_number("min") {
+                self.min = min;
+            }
+            if let Some(max) = ctx.get_port_number("max") {
+                self.max = max;
+            }
+            if let Some(val) = ctx.get_port_number("value") {
+                self.value = val.clamp(self.min, self.max);
+                ctx.set_state("current_value", self.value);
+            }
+        }
+
+        pub fn on_pointer_down(
+            &mut self,
+            event: &mut crate::interaction::Event,
+            ctx: &mut Context<'_>,
+        ) -> Result<(), DispatchError> {
+            self.is_dragging = true;
+            ctx.capture_pointer();
+            self.handle_drag(event.local_point.x, ctx);
+            Ok(())
+        }
+
+        pub fn on_pointer_move(
+            &mut self,
+            event: &mut crate::interaction::Event,
+            ctx: &mut Context<'_>,
+        ) -> Result<(), DispatchError> {
+            if self.is_dragging {
+                self.handle_drag(event.local_point.x, ctx);
+            }
+            Ok(())
+        }
+
+        pub fn on_pointer_up(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+            self.is_dragging = false;
+            ctx.release_pointer();
+            Ok(())
+        }
+
+        fn handle_drag(&mut self, local_x: f64, ctx: &mut Context<'_>) {
+            use super::EmitCallback;
+            let width = ctx.get_port_number("width").unwrap_or(200.0);
+            let ratio = if width > 0.0 {
+                (local_x / width).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let new_value = self.min + ratio * (self.max - self.min);
+
+            self.value = new_value;
+            ctx.set_state("current_value", new_value);
+            self.on_change.emit(ctx, new_value);
+        }
+    }
 }
 
-pub use std_components::{Button, Card, Link, ScrollView};
+pub use std_components::{Button, Card, Link, ScrollView, Slider};
 
 
 /// Container managing live `Component` instances keyed by their `NodeId`.

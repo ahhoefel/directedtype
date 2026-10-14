@@ -1,5 +1,5 @@
 use directedtype::compiler::{compile_document_with_registry, evaluate_document_with_window, FsResolver};
-use directedtype::component::{ComponentRegistry, Context, DispatchError};
+use directedtype::component::{Callback, ComponentRegistry, Context, DispatchError, EmitCallback};
 use directedtype::interaction::{Event, EventKind, Modifiers, MouseButton, Point};
 use directedtype::parse;
 use directedtype::render::{ViewerApp, ViewerConfig};
@@ -393,8 +393,8 @@ fn test_pointer_capture_via_context_action_and_companion() {
         .layout()
         .nodes
         .iter()
-        .find(|n| n.name == "Draggable")
-        .expect("Draggable node found")
+        .find(|n| n.name == "Rect" && n.rect.x == 50.0)
+        .expect("Draggable rect found")
         .id;
 
     assert_eq!(app.captured_node(), None);
@@ -402,7 +402,7 @@ fn test_pointer_capture_via_context_action_and_companion() {
     // 1. Mouse down inside Draggable rect at (60, 60)
     app.dispatch_mouse_input(ElementState::Pressed, MouseButton::Left, Point::new(60.0, 60.0));
 
-    // Captured node should now be set to Draggable component node (which called ctx.capture_pointer())!
+    // Captured node should now be set to the interactive Rect (which received pointer down and called ctx.capture_pointer())!
     assert_eq!(app.captured_node(), Some(drag_node), "Draggable must acquire pointer capture on down");
 
     // 2. Drag cursor far across the screen to (400, 400) (over the green Rect at 300, 300)
@@ -417,4 +417,190 @@ fn test_pointer_capture_via_context_action_and_companion() {
     // Capture must now be released!
     assert_eq!(app.captured_node(), None, "Capture must release after PointerUp");
 }
+
+#[derive(Default)]
+struct TestSlider {
+    pub value: f64,
+    pub on_change: Option<Callback<f64>>,
+}
+
+#[component]
+impl TestSlider {
+    pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
+        self.on_change = ctx.get_callback("on_change");
+        if let Some(v) = ctx.get_state_number("value") {
+            self.value = v;
+        }
+    }
+
+    pub fn on_pointer_down(&mut self, event: &mut Event, ctx: &mut Context<'_>) {
+        ctx.capture_pointer();
+        self.handle_drag(event.local_point.x, ctx);
+    }
+
+    pub fn on_pointer_move(&mut self, event: &mut Event, ctx: &mut Context<'_>) {
+        self.handle_drag(event.local_point.x, ctx);
+    }
+
+    pub fn on_pointer_up(&mut self, ctx: &mut Context<'_>) {
+        ctx.release_pointer();
+    }
+
+    fn handle_drag(&mut self, local_x: f64, ctx: &mut Context<'_>) {
+        let new_val = (local_x / 100.0 * 100.0).clamp(0.0, 100.0);
+        self.value = new_val;
+        ctx.set_state("value", new_val);
+        self.on_change.emit(ctx, new_val);
+    }
+}
+
+#[derive(Default)]
+struct TestAudioPanel {
+    pub current_volume: f64,
+}
+
+#[component]
+impl TestAudioPanel {
+    pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
+        if let Some(v) = ctx.get_state_number("volume") {
+            self.current_volume = v;
+        }
+    }
+
+    pub fn set_volume(&mut self, val: f64, ctx: &mut Context<'_>) {
+        self.current_volume = val;
+        ctx.set_state("volume", val);
+    }
+}
+
+#[test]
+fn test_component_typed_callback_wiring_and_execution() {
+    let input = r#"
+    \Component TestSlider(
+        x: Number: 0,
+        y: Number: 0,
+        width: Number: 100,
+        height: Number: 20
+    ) {
+        \state value: 0;
+        \Rect(
+            x: self.x,
+            y: self.y,
+            width: self.width,
+            height: self.height,
+            color: #333333,
+            on_pointer_down: self.on_pointer_down,
+            on_pointer_move: self.on_pointer_move,
+            on_pointer_up: self.on_pointer_up
+        )
+    }
+
+    \Component TestAudioPanel() {
+        \state volume: 25;
+        \TestSlider(
+            x: 10,
+            y: 10,
+            width: 100,
+            height: 20,
+            on_change: self.set_volume
+        )
+    }
+
+    \TestAudioPanel()
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let mut registry = ComponentRegistry::new();
+    registry.register("TestSlider", || Box::new(TestSlider::default()));
+    registry.register("TestAudioPanel", || Box::new(TestAudioPanel::default()));
+
+    let compiled = compile_document_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("."),
+        &FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let mut app = ViewerApp::new_with_compiled(compiled, ViewerConfig::default());
+
+    let slider_node = app
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| n.name == "TestSlider")
+        .expect("TestSlider node found")
+        .id;
+
+    let panel_node = app
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| n.name == "TestAudioPanel")
+        .expect("TestAudioPanel node found")
+        .id;
+
+    // Initial state check
+    assert_eq!(
+        app.compiled().unwrap().get_state(panel_node, "volume"),
+        Some(&directedtype::Value::Number(25.0))
+    );
+    assert_eq!(
+        app.compiled().unwrap().get_state(slider_node, "value"),
+        Some(&directedtype::Value::Number(0.0))
+    );
+
+    let rect_node = app
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| n.name == "Rect" && n.parent == Some(slider_node))
+        .expect("Slider Rect found")
+        .id;
+
+    // 1. Mouse down at (60, 15), which is local_x = 50 in the slider (x: 10 to 110)
+    app.dispatch_mouse_input(ElementState::Pressed, MouseButton::Left, Point::new(60.0, 15.0));
+
+    // Pointer capture must be active on the slider's interactive Rect!
+    assert_eq!(app.captured_node(), Some(rect_node));
+
+    // Both Slider's value and AudioPanel's volume must have been updated in one batch!
+    assert_eq!(
+        app.compiled().unwrap().get_state(slider_node, "value"),
+        Some(&directedtype::Value::Number(50.0))
+    );
+    assert_eq!(
+        app.compiled().unwrap().get_state(panel_node, "volume"),
+        Some(&directedtype::Value::Number(50.0))
+    );
+
+    // 2. Drag to (85, 15) -> local_x = 75
+    app.dispatch_cursor_moved(Point::new(85.0, 15.0));
+    assert_eq!(
+        app.compiled().unwrap().get_state(slider_node, "value"),
+        Some(&directedtype::Value::Number(75.0))
+    );
+    assert_eq!(
+        app.compiled().unwrap().get_state(panel_node, "volume"),
+        Some(&directedtype::Value::Number(75.0))
+    );
+
+    // 3. Drag far outside window to (300, 15) -> clamped to 100
+    app.dispatch_cursor_moved(Point::new(300.0, 15.0));
+    assert_eq!(
+        app.compiled().unwrap().get_state(slider_node, "value"),
+        Some(&directedtype::Value::Number(100.0))
+    );
+    assert_eq!(
+        app.compiled().unwrap().get_state(panel_node, "volume"),
+        Some(&directedtype::Value::Number(100.0))
+    );
+
+    // 4. Release mouse button -> capture is cleared
+    app.dispatch_mouse_input(ElementState::Released, MouseButton::Left, Point::new(300.0, 15.0));
+    assert_eq!(app.captured_node(), None);
+}
+
 

@@ -1,0 +1,62 @@
+// DirectedType Standard Component Library: Slider
+// Horizontal slider component with interactive track, active fill, draggable thumb, and typed callback.
+
+\Component Slider(
+    x: Number: 0,
+    y: Number: 0,
+    width: Number: 200,
+    height: Number: 24,
+    min: Number: 0,
+    max: Number: 100,
+    value: Number: 0,
+    track_height: Number: 6,
+    thumb_size: Number: 18,
+    track_color: Color: #334155,
+    fill_color: Color: #3b82f6,
+    thumb_color: Color: #ffffff,
+    on_change: None
+) {
+    \state current_value: 0;
+
+    // Inactive track background
+    \Rect(
+        x: self.x,
+        y: self.y + (self.height - self.track_height) / 2,
+        width: self.width,
+        height: self.track_height,
+        radius: self.track_height / 2,
+        color: self.track_color
+    )
+
+    // Active fill track
+    \Rect(
+        x: self.x,
+        y: self.y + (self.height - self.track_height) / 2,
+        width: max(0, min(self.width, (current_value - self.min) / max(1, self.max - self.min) * (self.width - self.thumb_size) + self.thumb_size / 2)),
+        height: self.track_height,
+        radius: self.track_height / 2,
+        color: self.fill_color
+    )
+
+    // Draggable thumb knob
+    \Rect(
+        x: self.x + max(0, min(self.width - self.thumb_size, (current_value - self.min) / max(1, self.max - self.min) * (self.width - self.thumb_size))),
+        y: self.y + (self.height - self.thumb_size) / 2,
+        width: self.thumb_size,
+        height: self.thumb_size,
+        radius: self.thumb_size / 2,
+        color: self.thumb_color
+    )
+
+    // Full interactive hit area covering slider bounds
+    \Rect(
+        x: self.x,
+        y: self.y,
+        width: self.width,
+        height: self.height,
+        color: #00000000,
+        on_pointer_down: self.on_pointer_down,
+        on_pointer_move: self.on_pointer_move,
+        on_pointer_up: self.on_pointer_up
+    )
+}

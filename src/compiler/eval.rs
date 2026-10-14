@@ -358,6 +358,50 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         })
                     }
                 }
+                "round" => {
+                    let val = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    Ok(Value::Number(val.round()))
+                }
+                "floor" => {
+                    let val = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    Ok(Value::Number(val.floor()))
+                }
+                "ceil" => {
+                    let val = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    Ok(Value::Number(val.ceil()))
+                }
+                "abs" => {
+                    let val = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    Ok(Value::Number(val.abs()))
+                }
+                "hsl" | "hsla" => {
+                    let h = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let s = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(100.0);
+                    let l = evaluated_args.get(2).and_then(|v| v.as_f64()).unwrap_or(50.0);
+                    let s_norm = if s > 1.0 { (s / 100.0).clamp(0.0, 1.0) } else { s.clamp(0.0, 1.0) };
+                    let l_norm = if l > 1.0 { (l / 100.0).clamp(0.0, 1.0) } else { l.clamp(0.0, 1.0) };
+                    let (r, g, b) = hsl_to_rgb(h, s_norm, l_norm);
+                    if c.callee.as_str() == "hsla" || evaluated_args.len() >= 4 {
+                        let a = evaluated_args.get(3).and_then(|v| v.as_f64()).unwrap_or(1.0);
+                        let a_u8 = (if a <= 1.0 { a.clamp(0.0, 1.0) * 255.0 } else { a.clamp(0.0, 255.0) }).round() as u8;
+                        Ok(Value::Color(format!("#{:02x}{:02x}{:02x}{:02x}", r, g, b, a_u8)))
+                    } else {
+                        Ok(Value::Color(format!("#{:02x}{:02x}{:02x}", r, g, b)))
+                    }
+                }
+                "rgb" | "rgba" => {
+                    let r = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0).clamp(0.0, 255.0).round() as u8;
+                    let g = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0).clamp(0.0, 255.0).round() as u8;
+                    let b = evaluated_args.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0).clamp(0.0, 255.0).round() as u8;
+                    if c.callee.as_str() == "rgba" || evaluated_args.len() >= 4 {
+                        let a = evaluated_args.get(3).and_then(|v| v.as_f64()).unwrap_or(1.0);
+                        let a_u8 = (if a <= 1.0 { a.clamp(0.0, 1.0) * 255.0 } else { a.clamp(0.0, 255.0) }).round() as u8;
+                        Ok(Value::Color(format!("#{:02x}{:02x}{:02x}{:02x}", r, g, b, a_u8)))
+                    } else {
+                        Ok(Value::Color(format!("#{:02x}{:02x}{:02x}", r, g, b)))
+                    }
+                }
+
 
                 "text_height" => {
                     let text = evaluated_args.first().and_then(|v| v.as_str()).unwrap_or("");
@@ -498,3 +542,34 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         }),
     }
 }
+
+pub(crate) fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
+    let h = ((h % 360.0) + 360.0) % 360.0;
+    let s = s.clamp(0.0, 1.0);
+    let l = l.clamp(0.0, 1.0);
+
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let x = c * (1.0 - (((h / 60.0) % 2.0) - 1.0).abs());
+    let m = l - c / 2.0;
+
+    let (r_prime, g_prime, b_prime) = if h < 60.0 {
+        (c, x, 0.0)
+    } else if h < 120.0 {
+        (x, c, 0.0)
+    } else if h < 180.0 {
+        (0.0, c, x)
+    } else if h < 240.0 {
+        (0.0, x, c)
+    } else if h < 300.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+
+    let r = ((r_prime + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+    let g = ((g_prime + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+    let b = ((b_prime + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+
+    (r, g, b)
+}
+

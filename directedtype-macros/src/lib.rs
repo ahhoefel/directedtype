@@ -65,38 +65,47 @@ pub fn component(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 .filter(|arg| !matches!(arg, FnArg::Receiver(_)))
                 .collect();
 
-            let call_expr = match other_args.len() {
-                0 => quote! { self.#method_name() },
-                1 => {
-                    let arg = other_args[0];
-                    if is_event_type(arg) {
-                        quote! { self.#method_name(event) }
-                    } else {
-                        quote! { self.#method_name(ctx) }
+            let mut extract_stmts = Vec::new();
+            let mut call_args = Vec::new();
+
+            for (i, arg) in other_args.iter().enumerate() {
+                match classify_arg(arg) {
+                    ArgKind::Event => {
+                        call_args.push(quote! { event });
+                    }
+                    ArgKind::Context => {
+                        call_args.push(quote! { ctx });
+                    }
+                    ArgKind::Payload => {
+                        let var_name = quote::format_ident!("__dt_arg_{}", i);
+                        extract_stmts.push(quote! {
+                            let #var_name = match directedtype::component::FromPayload::from_payload(event.payload.as_ref()) {
+                                Some(v) => v,
+                                None => return Err(directedtype::component::DispatchError::Custom(
+                                    format!("Invalid or missing payload for method '{}'", #method_str)
+                                )),
+                            };
+                        });
+                        call_args.push(quote! { #var_name });
                     }
                 }
-                2 => {
-                    if is_event_type(other_args[0]) {
-                        quote! { self.#method_name(event, ctx) }
-                    } else {
-                        quote! { self.#method_name(ctx, event) }
-                    }
-                }
-                _ => {
-                    // Unsupported argument count (> 2)
-                    continue;
-                }
-            };
+            }
+
+            let call_expr = quote! { self.#method_name(#(#call_args),*) };
 
             let arm_body = match &method.sig.output {
                 ReturnType::Default => quote! {
                     {
+                        #(#extract_stmts)*
                         #call_expr;
                         Ok(())
                     }
                 },
                 ReturnType::Type(_, _) => quote! {
-                    #call_expr
+                    {
+                        #(#extract_stmts)*
+                        #call_expr
+                    }
                 },
             };
 
@@ -141,17 +150,30 @@ pub fn component(_attr: TokenStream, item: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-fn is_event_type(arg: &FnArg) -> bool {
+enum ArgKind {
+    Event,
+    Context,
+    Payload,
+}
+
+fn classify_arg(arg: &FnArg) -> ArgKind {
     match arg {
         FnArg::Typed(pat_type) => {
-            if let Pat::Ident(pat_ident) = &*pat_type.pat {
-                if pat_ident.ident == "event" {
-                    return true;
-                }
-            }
+            let ident_name = if let Pat::Ident(pat_ident) = &*pat_type.pat {
+                pat_ident.ident.to_string()
+            } else {
+                String::new()
+            };
             let type_str = quote!(#pat_type).to_string();
-            type_str.contains("Event")
+
+            if type_str.contains("Event") || ident_name == "event" {
+                ArgKind::Event
+            } else if type_str.contains("Context") || ident_name == "ctx" {
+                ArgKind::Context
+            } else {
+                ArgKind::Payload
+            }
         }
-        _ => false,
+        FnArg::Receiver(_) => unreachable!(),
     }
 }

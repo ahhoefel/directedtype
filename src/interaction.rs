@@ -60,6 +60,7 @@ pub enum EventKind {
     Scroll { delta_x: f64, delta_y: f64 },
     Focus,
     Blur,
+    Callback,
 }
 
 /// A high-level DirectedType interaction event.
@@ -81,6 +82,9 @@ pub struct Event {
 
     /// Flag requesting event propagation to continue to the next ancestor node.
     pub propagation_continued: bool,
+
+    /// Optional runtime value payload passed to semantic callbacks or custom events.
+    pub payload: Option<crate::compiler::Value>,
 }
 
 impl Event {
@@ -100,6 +104,52 @@ impl Event {
             current_target: target,
             bubble_path: Vec::new(),
             propagation_continued: false,
+            payload: None,
+        }
+    }
+
+    /// Creates a semantic callback event targeted at a specific component instance with a payload.
+    pub fn callback(target: NodeId, payload: crate::compiler::Value) -> Self {
+        Self {
+            kind: EventKind::Callback,
+            global_point: Point::new(0.0, 0.0),
+            local_point: Point::new(0.0, 0.0),
+            modifiers: Modifiers::default(),
+            target,
+            current_target: target,
+            bubble_path: Vec::new(),
+            propagation_continued: false,
+            payload: Some(payload),
+        }
+    }
+
+    /// Attaches a value payload to this event.
+    pub fn with_payload(mut self, payload: crate::compiler::Value) -> Self {
+        self.payload = Some(payload);
+        self
+    }
+
+    /// Returns the event payload as a floating-point number, if present.
+    pub fn payload_number(&self) -> Option<f64> {
+        match self.payload.as_ref()? {
+            crate::compiler::Value::Number(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    /// Returns the event payload as a boolean, if present.
+    pub fn payload_bool(&self) -> Option<bool> {
+        match self.payload.as_ref()? {
+            crate::compiler::Value::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    /// Returns the event payload as a string slice, if present.
+    pub fn payload_str(&self) -> Option<&str> {
+        match self.payload.as_ref()? {
+            crate::compiler::Value::String(s) => Some(s.as_str()),
+            _ => None,
         }
     }
 

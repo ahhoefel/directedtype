@@ -9,6 +9,8 @@ use crate::compiler::module::{FileResolver, FsResolver};
 use crate::compiler::scope::ScopeId;
 use crate::compiler::topo::{sort_graph, TopologicalSchedule};
 use crate::compiler::value::Value;
+use crate::component::{Context, DispatchError};
+use crate::interaction::Event;
 use crate::span::Span;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -366,6 +368,7 @@ impl CompiledDocument {
             EventKind::Scroll { .. } => "on_scroll",
             EventKind::Focus => "on_focus",
             EventKind::Blur => "on_blur",
+            EventKind::Callback => "on_callback",
         };
 
         let mut all_changed_vars = HashSet::new();
@@ -390,8 +393,9 @@ impl CompiledDocument {
                                 None => continue,
                             };
 
-                            let mut ctx = Context::new(
+                            let mut ctx = Context::with_target(
                                 target_node_id,
+                                Some(event.target),
                                 target_node.parent,
                                 target_node.key.as_ref(),
                                 &target_node.properties,
@@ -412,7 +416,24 @@ impl CompiledDocument {
                                 }
                             }
 
-                            self.actions.extend(actions);
+                            for action in actions {
+                                match action {
+                                    crate::component::ContextAction::InvokeCallback {
+                                        target: cb_target,
+                                        method: cb_method,
+                                        payload: cb_payload,
+                                    } => {
+                                        if let Ok(cb_changed) =
+                                            self.dispatch_callback(cb_target, &cb_method, cb_payload)
+                                        {
+                                            all_changed_vars.extend(cb_changed);
+                                        }
+                                    }
+                                    other => {
+                                        self.actions.push(other);
+                                    }
+                                }
+                            }
 
                             // By default, event propagation stops on the first node with a matching handler,
                             // unless event.continue_propagation() was called.
@@ -507,7 +528,74 @@ impl CompiledDocument {
                 // Pointer capture is handled by the viewer/interaction layer
                 Ok(HashSet::new())
             }
+            crate::component::ContextAction::InvokeCallback {
+                target,
+                method,
+                payload,
+            } => self.dispatch_callback(target, &method, payload),
         }
+    }
+
+    /// Dispatches a callback invocation directly to a target component instance with a typed payload.
+    ///
+    /// Executes the callback method within the One-Way Pipeline, applies any returned state mutations,
+    /// and recursively evaluates any chained callback actions emitted by the target.
+    pub fn dispatch_callback(
+        &mut self,
+        target: NodeId,
+        method: &str,
+        payload: Value,
+    ) -> Result<HashSet<VarId>, DispatchError> {
+        let mut all_changed_vars = HashSet::new();
+        let pending_actions;
+
+        if let Some(component) = self.instances.get_mut(target) {
+            let target_node = self
+                .layout
+                .get_node(target)
+                .ok_or(DispatchError::InstanceNotFound(target))?;
+
+            let mut ctx = Context::new(
+                target,
+                target_node.parent,
+                target_node.key.as_ref(),
+                &target_node.properties,
+                &self.layout,
+            );
+
+            let mut event = Event::callback(target, payload);
+            component.dispatch(method, &mut event, &mut ctx)?;
+
+            let mutations = ctx.take_mutations();
+            pending_actions = ctx.take_actions();
+            drop(ctx);
+
+            for (state_name, val) in mutations {
+                if let Ok(changed) = self.set_state(target, &state_name, val) {
+                    all_changed_vars.extend(changed);
+                }
+            }
+        } else {
+            return Err(DispatchError::InstanceNotFound(target));
+        }
+
+        for action in pending_actions {
+            match action {
+                crate::component::ContextAction::InvokeCallback {
+                    target: cb_target,
+                    method: cb_method,
+                    payload: cb_payload,
+                } => {
+                    let cascaded = self.dispatch_callback(cb_target, &cb_method, cb_payload)?;
+                    all_changed_vars.extend(cascaded);
+                }
+                other => {
+                    self.actions.push(other);
+                }
+            }
+        }
+
+        Ok(all_changed_vars)
     }
 
     /// Returns a reference to the active `InstanceManager`.

@@ -15,8 +15,8 @@ extern crate self as directedtype;
 
 pub use ast::Document;
 pub use component::{
-    Component, ComponentFactory, ComponentRegistry, Context, DispatchError, EventHandlerBinding,
-    EventHandlerTarget, InstanceManager,
+    Callback, Component, ComponentFactory, ComponentRegistry, Context, DispatchError, EmitCallback,
+    EventHandlerBinding, EventHandlerTarget, FromPayload, InstanceManager,
 };
 pub use directedtype_macros::component;
 pub use compiler::{

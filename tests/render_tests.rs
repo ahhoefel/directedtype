@@ -936,4 +936,30 @@ fn test_line_height_demo_compiles_and_renders() {
     save_golden_or_preview(&img, "line_height_demo.png");
 }
 
+#[test]
+fn test_render_slider_demo_example() {
+    let input = std::fs::read_to_string("examples/slider_demo.dt").expect("read slider_demo.dt");
+    let doc = directedtype::parse(&input).expect("parse ok");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("examples"),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("slider_demo.dt must compile");
+
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let options = SceneOptions::default();
+    let img = renderer
+        .render_layout(&compiled.layout, 800, 600, &options)
+        .expect("render layout ok");
+    assert_eq!(img.width(), 800);
+    assert_eq!(img.height(), 600);
+    save_golden_or_preview(&img, "slider_demo.png");
+}
+
+
 
