@@ -366,3 +366,65 @@ fn test_vcenter_height_capped_by_child_height() {
     assert_eq!(rect.rect.height, 500.0);
 }
 
+#[test]
+fn test_hcenter_wrapping_padout_capped_by_child_width() {
+    let input = r#"
+    \use "components/PadOut.dt"
+    \use "components/HCenter.dt"
+
+    \let content = \HCenter {
+        \PadOut(padding_x: 40, padding_y: 40) {
+            \Rect(width: 480, height: 100, color: #3b82f6)
+        }
+    };
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    // Window width is 400, smaller than card (480) + padding (80) = 560
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        400.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let padout_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "PadOut")
+        .expect("padout found");
+
+    let hcenter_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "HCenter")
+        .expect("hcenter found");
+
+    let rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Rect")
+        .expect("rect found");
+
+    // PadOut width wraps Rect (480) + 2 * 40 = 560
+    assert_eq!(padout_node.rect.width, 560.0);
+    assert_eq!(padout_node.rect.height, 180.0);
+
+    // HCenter width is capped at 560 (since content 560 > available window width 400)
+    assert_eq!(hcenter_node.rect.width, 560.0);
+    assert_eq!(hcenter_node.rect.x, 0.0);
+
+    // Rect is inside PadOut starting at x = 0 + 40 = 40
+    assert_eq!(rect.rect.x, 40.0);
+    assert_eq!(rect.rect.y, 40.0);
+    assert_eq!(rect.rect.width, 480.0);
+}
+
+

@@ -660,7 +660,7 @@ fn test_render_link_demo_with_target_highlight() {
 #[test]
 fn test_render_link_focus_highlight() {
     let source = r#"
-\use "components/Padding.dt"
+\use "components/PadIn.dt"
 \use "components/VStack.dt"
 \use "components/LinkStyle.dt"
 \use "components/Link.dt"
@@ -679,7 +679,7 @@ fn test_render_link_focus_highlight() {
     focused_bg: #fee2e2
 );
 
-\Padding(padding: 30, x: 0, y: 0) {
+\PadIn(padding: 30, x: 0, y: 0) {
     \VStack(gap: 16) {
         \Text(size: 20) {
             Check out \Link(url: "https://directedtype.org", link_style: red_link_style){DirectedType Engine} today.
@@ -736,7 +736,7 @@ fn test_render_link_focus_highlight() {
 #[test]
 fn test_render_link_hover_highlight() {
     let source = r#"
-\use "components/Padding.dt"
+\use "components/PadIn.dt"
 \use "components/VStack.dt"
 \use "components/LinkStyle.dt"
 \use "components/Link.dt"
@@ -754,7 +754,7 @@ fn test_render_link_hover_highlight() {
     focused_bg: #fee2e2
 );
 
-\Padding(padding: 30, x: 0, y: 0) {
+\PadIn(padding: 30, x: 0, y: 0) {
     \VStack(gap: 16) {
         \Text(size: 20) {
             Hovering over \Link(url: "https://directedtype.org", link_style: blue_hover_link_style){DirectedType Engine} reveals hover styles.

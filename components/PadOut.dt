@@ -1,0 +1,80 @@
+// DirectedType Standard Component Library: PadOut
+// Outward/bottom-up padding container: sizes itself by adding margins to its single child's bounds.
+// Does NOT push width or height down into child.
+
+// 1. 2D Uniform Outward Padding
+\Component PadOut(
+    padding: Number,
+    x: Number: parent.left,
+    y: Number: parent.top
+) {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \alias width = only(children.width) + (2 * padding);
+    \alias height = only(children.height) + (2 * padding);
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children {
+        x: x + padding,
+        y: y + padding
+    }
+}
+
+// 2. 2D Asymmetric Outward Padding
+\Component PadOut(
+    padding_x: Number,
+    padding_y: Number,
+    x: Number: parent.left,
+    y: Number: parent.top
+) {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \alias width = only(children.width) + (2 * padding_x);
+    \alias height = only(children.height) + (2 * padding_y);
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children {
+        x: x + padding_x,
+        y: y + padding_y
+    }
+}
+
+// 3. 1D Horizontal Outward Padding (vertical is child's height)
+\Component PadOut(
+    padding_x: Number,
+    x: Number: parent.left,
+    y: Number: parent.top
+) {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \alias width = only(children.width) + (2 * padding_x);
+    \alias height = only(children.height);
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children {
+        x: x + padding_x,
+        y: y
+    }
+}
+
+// 4. 1D Vertical Outward Padding (horizontal is child's width)
+\Component PadOut(
+    padding_y: Number,
+    x: Number: parent.left,
+    y: Number: parent.top
+) {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \alias width = only(children.width);
+    \alias height = only(children.height) + (2 * padding_y);
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children {
+        x: x,
+        y: y + padding_y
+    }
+}

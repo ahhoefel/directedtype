@@ -2,7 +2,8 @@
 // Showcases vertically stacked flow with left, center, right, and stretch alignments,
 // dynamic child spacing (gap), and container padding.
 
-\use "../components/Padding.dt"
+\use "../components/PadIn.dt"
+\use "../components/PadOut.dt"
 \use "../components/VStack.dt"
 \use "../components/HStack.dt"
 \use "../components/Card.dt"
@@ -29,8 +30,8 @@
     color: #0f172a
 )
 
-// Main Page Layout using declarative Padding and VStack
-\Padding(padding_x: 40, padding_y: 36, x: 0, y: 0) {
+// Main Page Layout using declarative PadIn and VStack
+\PadIn(padding_x: 40, padding_y: 36, x: 0, y: 0) {
     \VStack(gap: 14) {
     // Header Section
     \Text(

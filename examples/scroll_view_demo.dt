@@ -2,7 +2,6 @@
 // Demonstrates hardware-clipped scroll viewports, interactive mousewheel scrolling,
 // dynamic scrollbar tracking, and targeted navigation via \Link(url: "...", view: pane).
 
-\use "components/Padding.dt"
 \use "components/VStack.dt"
 \use "components/HStack.dt"
 \use "components/Card.dt"

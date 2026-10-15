@@ -1,4 +1,4 @@
-\use "components/Padding.dt"
+\use "components/PadOut.dt"
 \use "components/VStack.dt"
 \use "components/HStack.dt"
 \use "components/Card.dt"
@@ -91,7 +91,7 @@
     focused_bg: #e0f2fe
 );
 
-\Padding(padding: 40, x: 0, y: 0) {
+\PadOut(padding: 40, x: 0, y: 0) {
     \VStack(
         width: min(max(window.width - 80, 400), 740),
         gap: 22,

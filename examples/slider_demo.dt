@@ -1,7 +1,7 @@
 // DirectedType Standard Component Library Demo: Slider & Callbacks
 // Showcases hardware pointer capture, smooth dragging, and strongly-typed callbacks.
 
-\use "../components/Padding.dt"
+\use "../components/PadOut.dt"
 \use "../components/HCenter.dt"
 \use "../components/VStack.dt"
 \use "../components/HStack.dt"
@@ -10,6 +10,8 @@
 \use "../components/Divider.dt"
 \use "../components/Spacer.dt"
 \use "../theme/default.dt"
+
+\Window(title: "Studio Audio Mixer")
 
 // Background Canvas
 \Rect(
@@ -116,9 +118,9 @@
     };
 }
 
-// Main Page Layout: fixed to top with equal top and bottom padding, centered horizontally
-\let content = \Padding(padding_x: 40, padding_y: 40, x: 0, y: 0) {
-    \HCenter {
+// Main Page Layout: centered horizontally with outward padding around the card
+\let content = \HCenter {
+    \PadOut(padding_x: 40, padding_y: 40) {
         \AudioMixer(width: 480)
     }
 };

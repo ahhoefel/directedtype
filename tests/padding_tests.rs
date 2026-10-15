@@ -4,11 +4,11 @@ use directedtype::parse;
 use std::path::Path;
 
 #[test]
-fn test_fluid_uniform_padding() {
+fn test_padout_uniform_wrapping_rect() {
     let input = r#"
-    \use "components/Padding.dt"
+    \use "components/PadOut.dt"
 
-    \Padding(padding: 20, x: 10, y: 15) {
+    \PadOut(padding: 20, x: 10, y: 15) {
         \Rect(width: 100, height: 60, color: #3b82f6)
     }
     "#;
@@ -31,20 +31,18 @@ fn test_fluid_uniform_padding() {
     assert_eq!(rect.rect.width, 100.0);
     assert_eq!(rect.rect.height, 60.0);
 
-    let padding_node = compiled.layout.nodes.iter().find(|n| n.name == "Padding").expect("Padding found");
-    // Fluid width: parent.width (800) - 2 * x (20) = 780
-    assert_eq!(padding_node.rect.width, 780.0);
-    // Height wraps children + padding: 60 + 2 * 20 = 100
-    assert_eq!(padding_node.rect.height, 100.0);
+    let padout_node = compiled.layout.nodes.iter().find(|n| n.name == "PadOut").expect("PadOut found");
+    assert_eq!(padout_node.rect.width, 140.0); // 100 + 2 * 20
+    assert_eq!(padout_node.rect.height, 100.0); // 60 + 2 * 20
 }
 
 #[test]
-fn test_explicit_width_uniform_padding() {
+fn test_padin_uniform_insetting_child() {
     let input = r#"
-    \use "components/Padding.dt"
+    \use "components/PadIn.dt"
 
-    \Padding(width: 140, padding: 20, x: 10, y: 15) {
-        \Rect(width: 100, height: 60, color: #3b82f6)
+    \PadIn(padding: 20, x: 10, y: 15) {
+        \Rect(color: #3b82f6)
     }
     "#;
 
@@ -61,21 +59,25 @@ fn test_explicit_width_uniform_padding() {
     .expect("compile ok");
 
     let rect = compiled.layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect found");
-    assert_eq!(rect.rect.x, 30.0);
-    assert_eq!(rect.rect.y, 35.0);
+    assert_eq!(rect.rect.x, 30.0); // 10 + 20
+    assert_eq!(rect.rect.y, 35.0); // 15 + 20
+    // available_width = 800 - 2 * 10 = 780; inner_width = 780 - 40 = 740
+    assert_eq!(rect.rect.width, 740.0);
+    // available_height = 600 - 2 * 15 = 570; inner_height = 570 - 40 = 530
+    assert_eq!(rect.rect.height, 530.0);
 
-    let padding_node = compiled.layout.nodes.iter().find(|n| n.name == "Padding").expect("Padding found");
-    assert_eq!(padding_node.rect.width, 140.0);
-    assert_eq!(padding_node.rect.height, 100.0);
+    let padin_node = compiled.layout.nodes.iter().find(|n| n.name == "PadIn").expect("PadIn found");
+    assert_eq!(padin_node.rect.width, 780.0);
+    assert_eq!(padin_node.rect.height, 570.0);
 }
 
 #[test]
-fn test_fluid_asymmetric_padding_wrapping_hstack() {
+fn test_padout_asymmetric_wrapping_hstack() {
     let input = r#"
-    \use "components/Padding.dt"
+    \use "components/PadOut.dt"
     \use "components/HStack.dt"
 
-    \Padding(padding_x: 20, padding_y: 24, x: 10, y: 20) {
+    \PadOut(padding_x: 20, padding_y: 24, x: 10, y: 20) {
         \HStack(gap: 16) {
             \Rect(width: 100, height: 40, color: #3b82f6)
             \Rect(width: 150, height: 50, color: #10b981)
@@ -99,7 +101,6 @@ fn test_fluid_asymmetric_padding_wrapping_hstack() {
     let rects: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Rect").collect();
     assert_eq!(rects.len(), 3);
 
-    // Inset by padding_x (20) and padding_y (24):
     assert_eq!(rects[0].rect.x, 30.0);
     assert_eq!(rects[0].rect.y, 44.0);
 
@@ -111,25 +112,24 @@ fn test_fluid_asymmetric_padding_wrapping_hstack() {
     assert_eq!(rects[2].rect.x, 312.0);
     assert_eq!(rects[2].rect.y, 44.0);
 
-    let padding_node = compiled.layout.nodes.iter().find(|n| n.name == "Padding").expect("Padding found");
-    // Fluid width: parent.width (800) - 2 * 10 = 780
-    assert_eq!(padding_node.rect.width, 780.0);
-    // HStack bottom is 44 + 50 = 94. Padding bottom is 94 + 24 = 118.
-    // Padding height is 118 - 20 = 98.
-    assert_eq!(padding_node.rect.height, 98.0);
+    let padout_node = compiled.layout.nodes.iter().find(|n| n.name == "PadOut").expect("PadOut found");
+    // HStack width = 100 + 150 + 80 + 32 = 362. PadOut width = 362 + 40 = 402.
+    assert_eq!(padout_node.rect.width, 402.0);
+    // HStack height = 50. PadOut height = 50 + 48 = 98.
+    assert_eq!(padout_node.rect.height, 98.0);
 }
 
 #[test]
-fn test_explicit_width_padding_wrapping_vstack() {
+fn test_padin_asymmetric_insetting_vstack() {
     let input = r#"
-    \use "components/Padding.dt"
+    \use "components/PadIn.dt"
     \use "components/VStack.dt"
 
-    \Padding(width: 300, padding: 20, x: 10, y: 20) {
-        \VStack(gap: 16) {
-            \Rect(width: 100, height: 40, color: #3b82f6)
-            \Rect(width: 150, height: 50, color: #10b981)
-            \Rect(width: 80, height: 30, color: #f59e0b)
+    \PadIn(padding_x: 20, padding_y: 24, x: 10, y: 20) {
+        \VStack(align: Align.Stretch, gap: 16) {
+            \Rect(height: 40, color: #3b82f6)
+            \Rect(height: 50, color: #10b981)
+            \Rect(height: 30, color: #f59e0b)
         }
     }
     "#;
@@ -149,89 +149,85 @@ fn test_explicit_width_padding_wrapping_vstack() {
     let rects: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Rect").collect();
     assert_eq!(rects.len(), 3);
 
+    // Inner width: 800 - 20 (2*x) - 40 (2*padding_x) = 740
     assert_eq!(rects[0].rect.x, 30.0);
-    assert_eq!(rects[0].rect.y, 40.0);
+    assert_eq!(rects[0].rect.y, 44.0);
 
-    // rect 1: 40 + 40 + 16 = 96
+    // rect 1: 44 + 40 + 16 = 100
     assert_eq!(rects[1].rect.x, 30.0);
-    assert_eq!(rects[1].rect.y, 96.0);
+    assert_eq!(rects[1].rect.y, 100.0);
 
-    // rect 2: 96 + 50 + 16 = 162
+    // rect 2: 100 + 50 + 16 = 166
     assert_eq!(rects[2].rect.x, 30.0);
-    assert_eq!(rects[2].rect.y, 162.0);
+    assert_eq!(rects[2].rect.y, 166.0);
 
-    let padding_node = compiled.layout.nodes.iter().find(|n| n.name == "Padding").expect("Padding found");
-    assert_eq!(padding_node.rect.width, 300.0);
-    // VStack bottom is 162 + 30 = 192. Padding bottom is 192 + 20 = 212.
-    // Padding height is 212 - 20 = 192.
-    assert_eq!(padding_node.rect.height, 192.0);
+    let padin_node = compiled.layout.nodes.iter().find(|n| n.name == "PadIn").expect("PadIn found");
+    assert_eq!(padin_node.rect.width, 780.0);
+    assert_eq!(padin_node.rect.height, 560.0);
 }
 
 #[test]
-fn test_directional_4_sided_padding() {
+fn test_padout_assertion_rejects_multiple_children() {
     let input = r#"
-    \use "components/Padding.dt"
+    \use "components/PadOut.dt"
 
-    \Padding(width: 145, padding_top: 10, padding_right: 30, padding_bottom: 20, padding_left: 15, x: 50, y: 50) {
-        \Rect(width: 100, height: 50, color: #ef4444)
+    \PadOut(padding: 20) {
+        \Rect(width: 100, height: 50, color: #ff0000)
+        \Rect(width: 100, height: 50, color: #00ff00)
     }
     "#;
 
     let doc = parse(input).expect("parse ok");
     let registry = ComponentRegistry::standard();
-    let compiled = CompiledDocument::compile_with_registry(
+    let result = CompiledDocument::compile_with_registry(
         &doc,
         800.0,
         600.0,
         Path::new("."),
         &directedtype::compiler::FsResolver,
         &registry,
-    )
-    .expect("compile ok");
+    );
 
-    let rect = compiled.layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect found");
-    assert_eq!(rect.rect.x, 65.0); // 50 + 15
-    assert_eq!(rect.rect.y, 60.0); // 50 + 10
-
-    let padding_node = compiled.layout.nodes.iter().find(|n| n.name == "Padding").expect("Padding found");
-    assert_eq!(padding_node.rect.width, 145.0); // 100 + 15 + 30
-    assert_eq!(padding_node.rect.height, 80.0); // 50 + 10 + 20
-}
-
-#[test]
-fn test_stretch_alignment_inside_explicit_width_padding() {
-    let input = r#"
-    \use "components/Padding.dt"
-    \use "components/VStack.dt"
-
-    \Padding(width: 400, padding_x: 25, padding_y: 20, x: 0, y: 0) {
-        \VStack(align: Align.Stretch, gap: 10) {
-            \Rect(height: 40, color: #8b5cf6)
-            \Rect(width: 150, height: 40, color: #ec4899)
+    match result {
+        Err(directedtype::compiler::error::CompileError::AssertionFailed { message, .. }) => {
+            assert!(
+                message.contains("Should have only one child.") || message.contains("only() expected exactly one child"),
+                "unexpected assertion message: {}", message
+            );
         }
+        other => panic!("expected CompileError::AssertionFailed, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_padin_assertion_rejects_multiple_children() {
+    let input = r#"
+    \use "components/PadIn.dt"
+
+    \PadIn(padding: 20) {
+        \Rect(width: 100, height: 50, color: #ff0000)
+        \Rect(width: 100, height: 50, color: #00ff00)
     }
     "#;
 
     let doc = parse(input).expect("parse ok");
     let registry = ComponentRegistry::standard();
-    let compiled = CompiledDocument::compile_with_registry(
+    let result = CompiledDocument::compile_with_registry(
         &doc,
         800.0,
         600.0,
         Path::new("."),
         &directedtype::compiler::FsResolver,
         &registry,
-    )
-    .expect("compile ok");
+    );
 
-    let rects: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Rect").collect();
-    assert_eq!(rects.len(), 2);
-
-    // Inner width = 400 - 2 * 25 = 350
-    assert_eq!(rects[0].rect.x, 25.0);
-    assert_eq!(rects[0].rect.width, 350.0);
-
-    // Explicit override
-    assert_eq!(rects[1].rect.x, 25.0);
-    assert_eq!(rects[1].rect.width, 150.0);
+    match result {
+        Err(directedtype::compiler::error::CompileError::AssertionFailed { message, .. }) => {
+            assert!(
+                message.contains("Should have only one child.") || message.contains("only() expected exactly one child"),
+                "unexpected assertion message: {}", message
+            );
+        }
+        other => panic!("expected CompileError::AssertionFailed, got {:?}", other),
+    }
 }

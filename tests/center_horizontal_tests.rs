@@ -43,12 +43,15 @@ fn test_center_horizontal_fluid_in_window() {
 #[test]
 fn test_center_horizontal_inside_padding() {
     let input = r#"
-    \use "components/Padding.dt"
+    \use "components/PadIn.dt"
+    \use "components/PadOut.dt"
     \use "components/HCenter.dt"
 
-    \Padding(padding_x: 40, padding_y: 50, x: 0, y: 0) {
+    \PadIn(padding_x: 40) {
         \HCenter {
-            \Rect(width: 480, height: 200, color: #3b82f6)
+            \PadOut(padding_y: 50) {
+                \Rect(width: 480, height: 200, color: #3b82f6)
+            }
         }
     }
     "#;
@@ -72,34 +75,34 @@ fn test_center_horizontal_inside_padding() {
         .find(|n| n.name == "Rect")
         .expect("rect found");
 
-    // Padding inner_width = 800 - 80 = 720
+    // PadIn inner_width = 800 - 80 = 720
     // HCenter centers: 40 + (720 - 480) / 2 = 40 + 120 = 160
     assert_eq!(rect.rect.x, 160.0);
     // Fixed to top padding: y = 50
     assert_eq!(rect.rect.y, 50.0);
 
-    let padding_node = compiled
+    let padout_node = compiled
         .layout
         .nodes
         .iter()
-        .find(|n| n.name == "Padding")
-        .expect("padding node found");
+        .find(|n| n.name == "PadOut")
+        .expect("padout node found");
 
     // Height = rect.height (200) + 2 * padding_y (100) = 300
-    assert_eq!(padding_node.rect.height, 300.0);
-    assert_eq!(padding_node.rect.y, 0.0);
+    assert_eq!(padout_node.rect.height, 300.0);
+    assert_eq!(padout_node.rect.y, 0.0);
     // Bottom = 300 (rect bottom 250 + 50 bottom padding)
-    assert_eq!(padding_node.rect.y + padding_node.rect.height, 300.0);
+    assert_eq!(padout_node.rect.y + padout_node.rect.height, 300.0);
 }
 
 #[test]
 fn test_center_horizontal_clamps_when_narrower_than_child() {
     let input = r#"
-    \use "components/Padding.dt"
+    \use "components/PadOut.dt"
     \use "components/HCenter.dt"
 
-    \Padding(padding_x: 40, padding_y: 40, x: 0, y: 0) {
-        \HCenter {
+    \HCenter {
+        \PadOut(padding_x: 40, padding_y: 40) {
             \Rect(width: 480, height: 100, color: #3b82f6)
         }
     }

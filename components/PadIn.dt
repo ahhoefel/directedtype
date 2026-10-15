@@ -1,0 +1,101 @@
+// DirectedType Standard Component Library: PadIn
+// Inward/top-down padding container: insets dimensions from parent container and pushes them to single child.
+
+// 1. 2D Uniform Inward Padding
+\Component PadIn(
+    padding: Number,
+    x: Number: parent.left,
+    y: Number: parent.top
+) {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \let available_width = parent.width - (2 * (x - parent.left));
+    \let inner_width = available_width - (2 * padding);
+    \let available_height = parent.height - (2 * (y - parent.top));
+    \let inner_height = available_height - (2 * padding);
+
+    \alias width = available_width;
+    \alias height = available_height;
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children {
+        x: x + padding,
+        y: y + padding,
+        width: inner_width,
+        height: inner_height
+    }
+}
+
+// 2. 2D Asymmetric Inward Padding
+\Component PadIn(
+    padding_x: Number,
+    padding_y: Number,
+    x: Number: parent.left,
+    y: Number: parent.top
+) {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \let available_width = parent.width - (2 * (x - parent.left));
+    \let inner_width = available_width - (2 * padding_x);
+    \let available_height = parent.height - (2 * (y - parent.top));
+    \let inner_height = available_height - (2 * padding_y);
+
+    \alias width = available_width;
+    \alias height = available_height;
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children {
+        x: x + padding_x,
+        y: y + padding_y,
+        width: inner_width,
+        height: inner_height
+    }
+}
+
+// 3. 1D Horizontal Inward Padding (vertical is pass-through)
+\Component PadIn(
+    padding_x: Number,
+    x: Number: parent.left,
+    y: Number: parent.top
+) {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \let available_width = parent.width - (2 * (x - parent.left));
+    \let inner_width = available_width - (2 * padding_x);
+
+    \alias width = available_width;
+    \alias right = x + width;
+    \alias height = only(children.height);
+    \alias bottom = y + height;
+
+    \Children {
+        x: x + padding_x,
+        y: y,
+        width: inner_width
+    }
+}
+
+// 4. 1D Vertical Inward Padding (horizontal is pass-through)
+\Component PadIn(
+    padding_y: Number,
+    x: Number: parent.left,
+    y: Number: parent.top
+) {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \let available_height = parent.height - (2 * (y - parent.top));
+    \let inner_height = available_height - (2 * padding_y);
+
+    \alias height = available_height;
+    \alias bottom = y + height;
+    \alias width = only(children.width);
+    \alias right = x + width;
+
+    \Children {
+        x: x,
+        y: y + padding_y,
+        height: inner_height
+    }
+}
