@@ -145,6 +145,13 @@ pub fn register_component_overload(
     registry: &mut HashMap<String, Vec<ComponentDef>>,
     comp: ComponentDef,
 ) -> Result<(), CompileError> {
+    if comp.name.as_str() == "Window" {
+        return Err(CompileError::Custom {
+            message: "Cannot define component named 'Window'; 'Window' is reserved for ambient window configuration".to_string(),
+            span: comp.name.span,
+        });
+    }
+
     let name = comp.name.as_str().to_string();
     let overloads = registry.entry(name.clone()).or_default();
 

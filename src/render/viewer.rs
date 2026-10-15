@@ -19,6 +19,7 @@ use crate::ast::Document;
 use crate::component::{ComponentRegistry, ContextAction};
 use crate::compiler::evaluate_document_with_window;
 use crate::compiler::expanded::NodeId;
+use crate::compiler::graph::VarId;
 use crate::compiler::layout::ResolvedLayout;
 use crate::compiler::module::FsResolver;
 use crate::compiler::{CompiledDocument, Value};
@@ -183,6 +184,9 @@ pub struct ViewerApp {
     is_dragging_scrollbar: bool,
     scrollbar_drag_start_y: f64,
     scrollbar_start_scroll_y: f64,
+    is_dragging_h_scrollbar: bool,
+    scrollbar_drag_start_x: f64,
+    scrollbar_start_scroll_x: f64,
     pending_scroll: Option<PendingScroll>,
 
     // Focus & target highlighting state
@@ -248,6 +252,9 @@ impl ViewerApp {
             is_dragging_scrollbar: false,
             scrollbar_drag_start_y: 0.0,
             scrollbar_start_scroll_y: 0.0,
+            is_dragging_h_scrollbar: false,
+            scrollbar_drag_start_x: 0.0,
+            scrollbar_start_scroll_x: 0.0,
             pending_scroll: None,
             focused_node: None,
             target_node: None,
@@ -300,6 +307,9 @@ impl ViewerApp {
             is_dragging_scrollbar: false,
             scrollbar_drag_start_y: 0.0,
             scrollbar_start_scroll_y: 0.0,
+            is_dragging_h_scrollbar: false,
+            scrollbar_drag_start_x: 0.0,
+            scrollbar_start_scroll_x: 0.0,
             pending_scroll: None,
             focused_node,
             target_node: None,
@@ -391,6 +401,10 @@ impl ViewerApp {
     /// Sets the vertical scroll offset directly.
     pub fn set_scroll_y(&mut self, y: f64) {
         self.pending_scroll = None;
+        if !self.is_vscroll_enabled() {
+            self.scroll_y = 0.0;
+            return;
+        }
         self.scroll_y = y.max(0.0);
         self.clamp_scroll();
         if let Some(w) = &self.window {
@@ -406,6 +420,10 @@ impl ViewerApp {
     /// Sets the horizontal scroll offset directly.
     pub fn set_scroll_x(&mut self, x: f64) {
         self.pending_scroll = None;
+        if !self.is_hscroll_enabled() {
+            self.scroll_x = 0.0;
+            return;
+        }
         self.scroll_x = x.max(0.0);
         self.clamp_scroll();
         if let Some(w) = &self.window {
@@ -427,6 +445,16 @@ impl ViewerApp {
         if let Some(w) = &self.window {
             w.request_redraw();
         }
+    }
+
+    /// Returns whether the vertical scrollbar is currently being dragged.
+    pub fn is_dragging_v_scrollbar(&self) -> bool {
+        self.is_dragging_scrollbar
+    }
+
+    /// Returns whether the horizontal scrollbar is currently being dragged.
+    pub fn is_dragging_h_scrollbar(&self) -> bool {
+        self.is_dragging_h_scrollbar
     }
 
     /// Returns the accumulated pending scroll deltas awaiting dispatch, if any.
@@ -482,6 +510,11 @@ impl ViewerApp {
         };
         let nav_bar_h = self.nav_bar_height();
         let viewport_h = (win_h - nav_bar_h).max(1.0);
+        let canvas_w = if self.inspect_mode {
+            (win_w - self.panel_component.width).max(100.0)
+        } else {
+            win_w
+        };
 
         if let Some(point) = self.cursor_pos {
             // Ignore scroll gestures on the navigation bar itself
@@ -531,10 +564,24 @@ impl ViewerApp {
 
             // Window document scrolling occurs only if not handled by an inner container:
             if !handled {
-                let max_scroll = self.max_scroll_y(viewport_h);
-                let old_scroll = self.scroll_y;
-                self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
-                if (self.scroll_y - old_scroll).abs() > 0.001 {
+                let mut changed = false;
+                if self.is_vscroll_enabled() {
+                    let max_scroll = self.max_scroll_y(viewport_h);
+                    let old_scroll = self.scroll_y;
+                    self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
+                    if (self.scroll_y - old_scroll).abs() > 0.001 {
+                        changed = true;
+                    }
+                }
+                if self.is_hscroll_enabled() {
+                    let max_scroll_x = self.max_scroll_x(canvas_w);
+                    let old_scroll_x = self.scroll_x;
+                    self.scroll_x = (self.scroll_x - delta_x).clamp(0.0, max_scroll_x);
+                    if (self.scroll_x - old_scroll_x).abs() > 0.001 {
+                        changed = true;
+                    }
+                }
+                if changed {
                     if let Some(w) = &self.window {
                         w.request_redraw();
                     }
@@ -542,10 +589,24 @@ impl ViewerApp {
             }
         } else {
             // No cursor position known; fall back to scrolling window document
-            let max_scroll = self.max_scroll_y(viewport_h);
-            let old_scroll = self.scroll_y;
-            self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
-            if (self.scroll_y - old_scroll).abs() > 0.001 {
+            let mut changed = false;
+            if self.is_vscroll_enabled() {
+                let max_scroll = self.max_scroll_y(viewport_h);
+                let old_scroll = self.scroll_y;
+                self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
+                if (self.scroll_y - old_scroll).abs() > 0.001 {
+                    changed = true;
+                }
+            }
+            if self.is_hscroll_enabled() {
+                let max_scroll_x = self.max_scroll_x(canvas_w);
+                let old_scroll_x = self.scroll_x;
+                self.scroll_x = (self.scroll_x - delta_x).clamp(0.0, max_scroll_x);
+                if (self.scroll_x - old_scroll_x).abs() > 0.001 {
+                    changed = true;
+                }
+            }
+            if changed {
                 if let Some(w) = &self.window {
                     w.request_redraw();
                 }
@@ -748,6 +809,11 @@ impl ViewerApp {
         (self.content_height() - viewport_h).max(0.0)
     }
 
+    /// Computes the maximum horizontal scroll offset for a given viewport width.
+    pub fn max_scroll_x(&self, viewport_w: f64) -> f64 {
+        (self.content_width() - viewport_w).max(0.0)
+    }
+
     /// Returns the logical viewport dimensions available for document content: `(width, height)`.
     pub fn viewport_size(&self) -> (f64, f64) {
         let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
@@ -777,28 +843,94 @@ impl ViewerApp {
         }
     }
 
+    /// Returns whether vertical scrolling is enabled on the ambient window.
+    #[inline]
+    pub fn is_vscroll_enabled(&self) -> bool {
+        if let Some(val) = self.layout().values.get(&VarId::new(NodeId::WINDOW, "vscroll")) {
+            val.is_truthy()
+        } else {
+            true
+        }
+    }
+
+    /// Returns whether horizontal scrolling is enabled on the ambient window.
+    #[inline]
+    pub fn is_hscroll_enabled(&self) -> bool {
+        if let Some(val) = self.layout().values.get(&VarId::new(NodeId::WINDOW, "hscroll")) {
+            val.is_truthy()
+        } else {
+            true
+        }
+    }
+
+    /// Updates the OS window title using ambient `window.title` if set,
+    /// or falling back to the document filename or config title.
+    pub fn update_window_title(&self) {
+        if let Some(window) = &self.window {
+            if let Some(title_val) = self.layout().values.get(&VarId::new(NodeId::WINDOW, "title")) {
+                if let Some(title_str) = title_val.as_str() {
+                    window.set_title(title_str);
+                    return;
+                }
+            }
+            if let Some(ref path) = self.watch_path {
+                let filename = path.file_name().unwrap_or_default().to_string_lossy();
+                window.set_title(&format!("DirectedType - {filename}"));
+            } else {
+                window.set_title(&self.config.title);
+            }
+        }
+    }
+
     /// Clamps the vertical and horizontal scroll positions so that the viewport
     /// does not scroll past the boundaries of the document content.
     pub fn clamp_scroll(&mut self) {
         let (vp_w, vp_h) = self.viewport_size();
-        let content_h = self.content_height();
-        if content_h > 0.0 {
-            let max_scroll_y = self.max_scroll_y(vp_h);
-            self.scroll_y = self.scroll_y.clamp(0.0, max_scroll_y);
+        if !self.is_vscroll_enabled() {
+            self.scroll_y = 0.0;
+        } else {
+            let content_h = self.content_height();
+            if content_h > 0.0 {
+                let max_scroll_y = self.max_scroll_y(vp_h);
+                self.scroll_y = self.scroll_y.clamp(0.0, max_scroll_y);
+            }
         }
-        let content_w = self.content_width();
-        if content_w > 0.0 {
-            let max_scroll_x = (content_w - vp_w).max(0.0);
-            self.scroll_x = self.scroll_x.clamp(0.0, max_scroll_x);
+        if !self.is_hscroll_enabled() {
+            self.scroll_x = 0.0;
+        } else {
+            let content_w = self.content_width();
+            if content_w > 0.0 {
+                let max_scroll_x = self.max_scroll_x(vp_w);
+                self.scroll_x = self.scroll_x.clamp(0.0, max_scroll_x);
+            }
         }
     }
 
     /// Scrolls vertically to a target Y position, clamping to valid scroll range.
     pub fn scroll_to_y(&mut self, target_y: f64) {
         self.pending_scroll = None;
+        if !self.is_vscroll_enabled() {
+            self.scroll_y = 0.0;
+            return;
+        }
         let (_vp_w, vp_h) = self.viewport_size();
         let max_scroll = self.max_scroll_y(vp_h);
         self.scroll_y = target_y.clamp(0.0, max_scroll);
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Scrolls horizontally to a target X position, clamping to valid scroll range.
+    pub fn scroll_to_x(&mut self, target_x: f64) {
+        self.pending_scroll = None;
+        if !self.is_hscroll_enabled() {
+            self.scroll_x = 0.0;
+            return;
+        }
+        let (vp_w, _vp_h) = self.viewport_size();
+        let max_scroll = self.max_scroll_x(vp_w);
+        self.scroll_x = target_x.clamp(0.0, max_scroll);
         if let Some(w) = &self.window {
             w.request_redraw();
         }
@@ -1533,8 +1665,7 @@ impl ViewerApp {
         }
 
         if let Some(window) = &self.window {
-            let filename = resolved.file_name().unwrap_or_default().to_string_lossy();
-            window.set_title(&format!("DirectedType - {filename}"));
+            self.update_window_title();
             window.request_redraw();
         }
 
@@ -1665,9 +1796,8 @@ impl ViewerApp {
         self.focused_node = None;
         self.target_node = None;
 
-        if let Some(window) = &self.window {
-            let filename = path.file_name().unwrap_or_default().to_string_lossy();
-            window.set_title(&format!("DirectedType - {filename}"));
+        if let Some(_) = &self.window {
+            self.update_window_title();
         }
 
         if let Some(anchor) = anchor_opt {
@@ -1812,6 +1942,7 @@ impl ViewerApp {
                     self.text_cache.clear();
                     self.render_frame();
                     if let Some(window) = &self.window {
+                        self.update_window_title();
                         window.request_redraw();
                     }
                 }
@@ -1832,6 +1963,7 @@ impl ViewerApp {
                     self.text_cache.clear();
                     self.render_frame();
                     if let Some(window) = &self.window {
+                        self.update_window_title();
                         window.request_redraw();
                     }
                 }
@@ -2019,20 +2151,81 @@ impl ViewerApp {
             scene.append(&panel_scene, panel_affine);
         }
 
-        // Render subtle scrollbar thumb if document height exceeds viewport
+        // Render subtle scrollbar thumbs if document content exceeds viewport
         let content_h = layout
             .nodes
             .iter()
             .filter(|n| n.clip.is_none())
             .fold(0.0f64, |acc, n| acc.max(n.rect.y + n.rect.height));
-        if content_h > canvas_h {
+        let vscroll_enabled = layout
+            .values
+            .get(&VarId::new(NodeId::WINDOW, "vscroll"))
+            .map(|v| v.is_truthy())
+            .unwrap_or(true);
+
+        let content_w = layout
+            .nodes
+            .iter()
+            .filter(|n| n.clip.is_none())
+            .fold(0.0f64, |acc, n| acc.max(n.rect.x + n.rect.width));
+        let hscroll_enabled = layout
+            .values
+            .get(&VarId::new(NodeId::WINDOW, "hscroll"))
+            .map(|v| v.is_truthy())
+            .unwrap_or(true);
+
+        let show_v_scrollbar = vscroll_enabled && content_h > canvas_h;
+        let show_h_scrollbar = hscroll_enabled && content_w > canvas_w;
+
+        if show_v_scrollbar {
             let max_scroll = (content_h - canvas_h).max(1.0);
-            let track_h = canvas_h;
+            let track_h = if show_h_scrollbar {
+                (canvas_h - 14.0).max(24.0)
+            } else {
+                canvas_h
+            };
             let thumb_h = ((canvas_h / content_h) * track_h).max(24.0).min(track_h);
             let scroll_ratio = (self.scroll_y / max_scroll).clamp(0.0, 1.0);
             let thumb_y = nav_bar_h + scroll_ratio * (track_h - thumb_h);
             let thumb_w = 6.0;
             let thumb_x = canvas_w - thumb_w - 3.0;
+
+            let mut scrollbar_scene = Scene::new();
+            let thumb_rrect = vello::kurbo::RoundedRect::new(
+                thumb_x,
+                thumb_y,
+                thumb_x + thumb_w,
+                thumb_y + thumb_h,
+                3.0,
+            );
+            let thumb_color = Color::from_rgba8(120, 120, 128, 140);
+            scrollbar_scene.fill(
+                vello::peniko::Fill::NonZero,
+                vello::kurbo::Affine::IDENTITY,
+                vello::peniko::Brush::Solid(thumb_color),
+                None,
+                &thumb_rrect,
+            );
+
+            if (scale - 1.0).abs() > 0.001 {
+                scene.append(&scrollbar_scene, Some(vello::kurbo::Affine::scale(scale)));
+            } else {
+                scene.append(&scrollbar_scene, None);
+            }
+        }
+
+        if show_h_scrollbar {
+            let max_scroll = (content_w - canvas_w).max(1.0);
+            let track_w = if show_v_scrollbar {
+                (canvas_w - 14.0).max(24.0)
+            } else {
+                canvas_w
+            };
+            let thumb_w = ((canvas_w / content_w) * track_w).max(24.0).min(track_w);
+            let scroll_ratio = (self.scroll_x / max_scroll).clamp(0.0, 1.0);
+            let thumb_x = scroll_ratio * (track_w - thumb_w);
+            let thumb_h = 6.0;
+            let thumb_y = nav_bar_h + canvas_h - thumb_h - 3.0;
 
             let mut scrollbar_scene = Scene::new();
             let thumb_rrect = vello::kurbo::RoundedRect::new(
@@ -2137,8 +2330,14 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
             return;
         }
 
+        let initial_title = if let Some(title_val) = self.layout().values.get(&VarId::new(NodeId::WINDOW, "title")) {
+            title_val.as_str().map(|s| s.to_string()).unwrap_or_else(|| self.config.title.clone())
+        } else {
+            self.config.title.clone()
+        };
+
         let window_attrs = Window::default_attributes()
-            .with_title(&self.config.title)
+            .with_title(&initial_title)
             .with_inner_size(LogicalSize::new(
                 self.config.width as f64,
                 self.config.height as f64,
@@ -2357,17 +2556,50 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
                 }
 
-                if self.is_dragging_scrollbar {
-                    let canvas_h = (win_h - nav_bar_h).max(1.0);
-                    let content_h = self.content_height();
+                let canvas_h = (win_h - nav_bar_h).max(1.0);
+                let canvas_w = if self.inspect_mode {
+                    (win_w - self.panel_component.width).max(100.0)
+                } else {
+                    win_w
+                };
+                let content_h = self.content_height();
+                let content_w = self.content_width();
+                let show_v = self.is_vscroll_enabled() && content_h > canvas_h;
+                let show_h = self.is_hscroll_enabled() && content_w > canvas_w;
+
+                if self.is_vscroll_enabled() && self.is_dragging_scrollbar {
                     if content_h > canvas_h {
-                        let track_h = canvas_h;
+                        let track_h = if show_h {
+                            (canvas_h - 14.0).max(24.0)
+                        } else {
+                            canvas_h
+                        };
                         let thumb_h = ((canvas_h / content_h) * track_h).max(24.0).min(track_h);
                         let available_track = (track_h - thumb_h).max(1.0);
                         let max_scroll = (content_h - canvas_h).max(0.0);
                         let dy = (point.y - nav_bar_h) - self.scrollbar_drag_start_y;
                         let scroll_delta = (dy / available_track) * max_scroll;
                         self.scroll_y = (self.scrollbar_start_scroll_y + scroll_delta).clamp(0.0, max_scroll);
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
+                    return;
+                }
+
+                if self.is_hscroll_enabled() && self.is_dragging_h_scrollbar {
+                    if content_w > canvas_w {
+                        let track_w = if show_v {
+                            (canvas_w - 14.0).max(24.0)
+                        } else {
+                            canvas_w
+                        };
+                        let thumb_w = ((canvas_w / content_w) * track_w).max(24.0).min(track_w);
+                        let available_track = (track_w - thumb_w).max(1.0);
+                        let max_scroll = (content_w - canvas_w).max(0.0);
+                        let dx = point.x - self.scrollbar_drag_start_x;
+                        let scroll_delta = (dx / available_track) * max_scroll;
+                        self.scroll_x = (self.scrollbar_start_scroll_x + scroll_delta).clamp(0.0, max_scroll);
                         if let Some(w) = &self.window {
                             w.request_redraw();
                         }
@@ -2706,22 +2938,66 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                     let canvas_h = (win_h - nav_bar_h).max(1.0);
                     let content_h = self.content_height();
+                    let content_w = self.content_width();
                     let canvas_w = if self.inspect_mode {
                         (win_w - self.panel_component.width).max(100.0)
                     } else {
                         win_w
                     };
 
+                    let show_v = self.is_vscroll_enabled() && content_h > canvas_h;
+                    let show_h = self.is_hscroll_enabled() && content_w > canvas_w;
+
                     if state == ElementState::Pressed {
-                        if content_h > canvas_h && point.y >= nav_bar_h && point.x >= canvas_w - 14.0 && point.x <= canvas_w {
+                        let v_bottom_limit = if show_h {
+                            nav_bar_h + canvas_h - 14.0
+                        } else {
+                            nav_bar_h + canvas_h
+                        };
+                        let h_right_limit = if show_v {
+                            canvas_w - 14.0
+                        } else {
+                            canvas_w
+                        };
+
+                        // Vertical scrollbar click hit-test
+                        if show_v
+                            && point.y >= nav_bar_h
+                            && point.y <= v_bottom_limit
+                            && point.x >= canvas_w - 14.0
+                            && point.x <= canvas_w
+                        {
                             self.is_dragging_scrollbar = true;
                             self.scrollbar_drag_start_y = point.y - nav_bar_h;
                             self.scrollbar_start_scroll_y = self.scroll_y;
                             return;
                         }
-                    } else if self.is_dragging_scrollbar {
-                        self.is_dragging_scrollbar = false;
-                        return;
+
+                        // Horizontal scrollbar click hit-test
+                        if show_h
+                            && point.y >= nav_bar_h + canvas_h - 14.0
+                            && point.y <= nav_bar_h + canvas_h
+                            && point.x >= 0.0
+                            && point.x <= h_right_limit
+                        {
+                            self.is_dragging_h_scrollbar = true;
+                            self.scrollbar_drag_start_x = point.x;
+                            self.scrollbar_start_scroll_x = self.scroll_x;
+                            return;
+                        }
+                    } else {
+                        let mut was_dragging = false;
+                        if self.is_dragging_scrollbar {
+                            self.is_dragging_scrollbar = false;
+                            was_dragging = true;
+                        }
+                        if self.is_dragging_h_scrollbar {
+                            self.is_dragging_h_scrollbar = false;
+                            was_dragging = true;
+                        }
+                        if was_dragging {
+                            return;
+                        }
                     }
 
                     // Mouse input is over canvas area
@@ -2855,6 +3131,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
             WindowEvent::CursorLeft { .. } => {
                 self.flush_pending_scroll();
                 self.is_dragging_scrollbar = false;
+                self.is_dragging_h_scrollbar = false;
                 let nav_bar_h = self.nav_bar_height();
                 if let Some(old_id) = self.hovered_node.take() {
                     let pt = self.cursor_pos.unwrap_or_default();
@@ -2886,6 +3163,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     self.captured_node = None;
                     self.pressed_node = None;
                     self.is_dragging_scrollbar = false;
+                    self.is_dragging_h_scrollbar = false;
                 }
             }
             WindowEvent::ModifiersChanged(new_mods) => {

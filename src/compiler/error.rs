@@ -165,6 +165,28 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Duplicate \\Window declaration")]
+    DuplicateWindowDeclaration {
+        span: Span,
+        second_span: Span,
+    },
+
+    #[error("\\Window declaration cannot be nested inside another element or component")]
+    NestedWindowDeclaration {
+        span: Span,
+    },
+
+    #[error("\\Window declaration does not accept children")]
+    WindowContentNotAllowed {
+        span: Span,
+    },
+
+    #[error("Disallowed port '{port}' on \\Window. Ambient spatial geometry and arbitrary custom ports cannot be set on \\Window; only viewer runtime control ports ('title', 'vscroll', 'hscroll') are supported")]
+    DisallowedWindowPort {
+        port: String,
+        span: Span,
+    },
+
     #[error("{message}")]
     Custom {
         message: String,
@@ -215,6 +237,10 @@ impl CompileError {
             | CompileError::BareEnvUse { span, .. }
             | CompileError::DuplicateOverloadSignature { span, .. }
             | CompileError::FontFamilyNotFound { span, .. }
+            | CompileError::DuplicateWindowDeclaration { span, .. }
+            | CompileError::NestedWindowDeclaration { span, .. }
+            | CompileError::WindowContentNotAllowed { span, .. }
+            | CompileError::DisallowedWindowPort { span, .. }
             | CompileError::AssertionFailed { span, .. }
             | CompileError::UnresolvedIdentifier { span, .. }
             | CompileError::Custom { span, .. } => *span,
