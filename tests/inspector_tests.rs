@@ -853,28 +853,7 @@ fn test_expandable_reference_properties() {
         rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
     });
     for key in &prop_keys {
-        let val = text_node.properties.get(key);
-        let eval_str = if let Some(v) = val {
-            match v {
-                directedtype::compiler::Value::Node(ref_id) => {
-                    if let Some(rn) = layout.get_node(*ref_id) {
-                        if let Some(var) = &rn.var_name {
-                            format!("{var} (\\{})", rn.name)
-                        } else {
-                            format!("\\{}", rn.name)
-                        }
-                    } else {
-                        format!("{v}")
-                    }
-                }
-                _ => format!("{v}"),
-            }
-        } else {
-            String::new()
-        };
-        let formula_str = text_node.formulas.get(key).cloned().unwrap_or_default();
-        let has_formula = !formula_str.is_empty() && formula_str != eval_str;
-        let row_h = if has_formula { 36.0 } else { 22.0 };
+        let row_h = 18.0;
         if key == "font" {
             test_y += 5.0; // Click inside this row!
             break;

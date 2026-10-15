@@ -175,14 +175,7 @@ impl InspectPanelComponent {
                 }
             }
             for key in &prop_keys {
-                let eval_str = if let Some(val) = node.properties.get(key) {
-                    format!("{val}")
-                } else {
-                    String::new()
-                };
-                let formula_str = node.formulas.get(key).cloned().unwrap_or_default();
-                let has_formula = !formula_str.is_empty() && formula_str != eval_str;
-                h += if has_formula { 36.0 } else { 22.0 };
+                h += 18.0;
 
                 if let Some(Value::Node(ref_id)) = node.properties.get(key) {
                     let is_expanded = state.is_some_and(|s| s.is_property_ref_expanded(node.id, key));
@@ -190,13 +183,7 @@ impl InspectPanelComponent {
                         if let Some(rn) = layout.get_node(*ref_id) {
                             let mut child_keys: Vec<String> = rn.properties.keys().cloned().collect();
                             child_keys.retain(|k| k != "clip");
-                            for ck in &child_keys {
-                                let c_val = rn.properties.get(ck);
-                                let c_eval = c_val.map(|v| format!("{v}")).unwrap_or_default();
-                                let c_form = rn.formulas.get(ck).cloned().unwrap_or_else(|| c_eval.clone());
-                                let c_has = c_form != c_eval && !c_form.is_empty();
-                                h += if c_has { 32.0 } else { 19.0 };
-                            }
+                            h += child_keys.len() as f64 * 17.0;
                         }
                     }
                 }
@@ -293,15 +280,13 @@ impl InspectPanelComponent {
                     String::new()
                 };
                 let formula_str = node.formulas.get(key).cloned().unwrap_or_default();
-                let prop_w = 24.0 + key.len() as f64 * 8.0 + eval_str.len() as f64 * 8.0 + 40.0;
+                let has_formula = !formula_str.is_empty() && formula_str != eval_str;
+                let mut prop_w = 24.0 + key.len() as f64 * 8.0 + eval_str.len() as f64 * 8.0 + 40.0;
+                if has_formula {
+                    prop_w += (4 + formula_str.len()) as f64 * 7.5;
+                }
                 if prop_w > max_w {
                     max_w = prop_w;
-                }
-                if !formula_str.is_empty() {
-                    let form_w = 24.0 + formula_str.len() as f64 * 7.5 + 30.0;
-                    if form_w > max_w {
-                        max_w = form_w;
-                    }
                 }
 
                 if let Some(Value::Node(ref_id)) = node.properties.get(key) {
@@ -314,15 +299,13 @@ impl InspectPanelComponent {
                                 let c_val = rn.properties.get(ck);
                                 let c_eval = c_val.map(|v| format!("{v}")).unwrap_or_default();
                                 let c_form = rn.formulas.get(ck).cloned().unwrap_or_else(|| c_eval.clone());
-                                let c_w = 40.0 + ck.len() as f64 * 8.0 + c_eval.len() as f64 * 8.0 + 40.0;
+                                let c_has = !c_form.is_empty() && c_form != c_eval;
+                                let mut c_w = 40.0 + ck.len() as f64 * 8.0 + c_eval.len() as f64 * 8.0 + 40.0;
+                                if c_has {
+                                    c_w += (4 + c_form.len()) as f64 * 7.5;
+                                }
                                 if c_w > max_w {
                                     max_w = c_w;
-                                }
-                                if !c_form.is_empty() {
-                                    let c_form_w = 40.0 + c_form.len() as f64 * 7.5 + 30.0;
-                                    if c_form_w > max_w {
-                                        max_w = c_form_w;
-                                    }
                                 }
                             }
                         }
@@ -605,15 +588,7 @@ impl InspectPanelComponent {
                         for key in &prop_keys {
                             let val = node.properties.get(key);
                             let is_node_ref = matches!(val, Some(Value::Node(_)));
-
-                            let eval_str = if let Some(v) = val {
-                                format!("{v}")
-                            } else {
-                                String::new()
-                            };
-                            let formula_str = node.formulas.get(key).cloned().unwrap_or_else(|| eval_str.clone());
-                            let has_formula = formula_str != eval_str && !formula_str.is_empty();
-                            let row_h = if has_formula { 36.0 } else { 22.0 };
+                            let row_h = 18.0;
 
                             if is_node_ref {
                                 if py >= cur_y && py < cur_y + row_h {
@@ -633,11 +608,7 @@ impl InspectPanelComponent {
                                         let mut child_keys: Vec<String> = rn.properties.keys().cloned().collect();
                                         child_keys.retain(|k| k != "clip");
                                         for ck in &child_keys {
-                                            let c_val = rn.properties.get(ck);
-                                            let c_eval = c_val.map(|v| format!("{v}")).unwrap_or_default();
-                                            let c_form = rn.formulas.get(ck).cloned().unwrap_or_else(|| c_eval.clone());
-                                            let c_has = c_form != c_eval && !c_form.is_empty();
-                                            let c_h = if c_has { 32.0 } else { 19.0 };
+                                            let c_h = 17.0;
                                             if py >= cur_y && py < cur_y + c_h {
                                                 return PanelHitResult::SelectProperty(*ref_id, ck.clone());
                                             }
@@ -1062,7 +1033,7 @@ impl InspectPanelComponent {
         } else {
             "COMPONENT DETAILS"
         };
-        self.draw_text_snippet(
+        self.draw_text_snippet_centered(
             scene,
             font_cx,
             layout_cx,
@@ -1076,7 +1047,8 @@ impl InspectPanelComponent {
             },
             false,
             panel_x + 10.0,
-            divider_y + 6.0,
+            divider_y,
+            self.divider_height,
         );
 
         let selected_node = state.selected_id.and_then(|id| layout.get_node(id));
@@ -1084,7 +1056,7 @@ impl InspectPanelComponent {
         // Right pill in divider: selected component name & ID or property label
         if let Some((sel_nid, ref sel_prop)) = state.selected_property {
             let label = format!("{}.{}", layout.node_display_label(sel_nid), sel_prop);
-            self.draw_text_snippet(
+            self.draw_text_snippet_centered(
                 scene,
                 font_cx,
                 layout_cx,
@@ -1094,7 +1066,8 @@ impl InspectPanelComponent {
                 Color::from_rgb8(56, 189, 248), // cyan 400
                 true,
                 panel_x + 200.0,
-                divider_y + 6.0,
+                divider_y,
+                self.divider_height,
             );
         } else if let Some(node) = selected_node {
             let id_str = node.properties.get("id").and_then(|v| v.as_str());
@@ -1103,7 +1076,7 @@ impl InspectPanelComponent {
             } else {
                 format!("\\{}", node.name)
             };
-            self.draw_text_snippet(
+            self.draw_text_snippet_centered(
                 scene,
                 font_cx,
                 layout_cx,
@@ -1113,10 +1086,11 @@ impl InspectPanelComponent {
                 Color::from_rgb8(56, 189, 248), // cyan 400
                 true,
                 panel_x + 160.0,
-                divider_y + 6.0,
+                divider_y,
+                self.divider_height,
             );
         } else {
-            self.draw_text_snippet(
+            self.draw_text_snippet_centered(
                 scene,
                 font_cx,
                 layout_cx,
@@ -1126,7 +1100,8 @@ impl InspectPanelComponent {
                 Color::from_rgb8(100, 116, 139), // slate 500
                 false,
                 panel_x + 160.0,
-                divider_y + 6.5,
+                divider_y,
+                self.divider_height,
             );
         }
 
@@ -1158,6 +1133,7 @@ impl InspectPanelComponent {
             let base_y = detail_y - state.detail_scroll_offset;
             let base_x = panel_x - state.detail_scroll_offset_x;
             let card_w = (panel_w - 20.0).max(total_detail_content_w - 20.0);
+            let dim_card_w = (panel_w - 20.0).max(200.0);
             let mut cur_y = base_y + 10.0;
 
             // --- Section A: Dimensions & Box Model ---
@@ -1177,7 +1153,7 @@ impl InspectPanelComponent {
 
             let card_x = base_x + 10.0;
             let card_h = 76.0;
-            let card_rrect = RoundedRect::new(card_x, cur_y, card_x + card_w, cur_y + card_h, 6.0);
+            let card_rrect = RoundedRect::new(card_x, cur_y, card_x + dim_card_w, cur_y + card_h, 6.0);
             scene.fill(
                 Fill::NonZero,
                 Affine::IDENTITY,
@@ -1215,7 +1191,7 @@ impl InspectPanelComponent {
             // Center Box Model Pill
             let box_x = card_x + 10.0;
             let box_y = cur_y + 28.0;
-            let box_w = (card_w - 20.0).max(100.0);
+            let box_w = (dim_card_w - 20.0).max(100.0);
             let box_h = 34.0;
             let box_rrect = RoundedRect::new(box_x, box_y, box_x + box_w, box_y + box_h, 4.0);
             scene.fill(
@@ -1486,7 +1462,7 @@ impl InspectPanelComponent {
 
                 let formula_str = node.formulas.get(key).cloned().unwrap_or_default();
                 let has_formula = !formula_str.is_empty() && formula_str != eval_str;
-                let row_h = if has_formula { 36.0 } else { 22.0 };
+                let row_h = 18.0;
 
                 let is_ref_expanded = is_node_ref && state.is_property_ref_expanded(node.id, key);
 
@@ -1494,7 +1470,7 @@ impl InspectPanelComponent {
                 if cur_y + row_h >= detail_y && cur_y <= win_h {
                     let prop_x = base_x + 12.0;
 
-                    // Line 1: Chevron (for node refs) or Typographic bullet (for standard props)
+                    // Chevron (for node refs) or Typographic bullet (for standard props)
                     if is_node_ref {
                         let chevron_col = if is_ref_expanded {
                             Color::from_rgb8(192, 132, 252) // purple 400
@@ -1585,48 +1561,33 @@ impl InspectPanelComponent {
                         cur_y + 1.5,
                     );
 
-                    if !has_formula && !is_node_ref {
-                        self.draw_text_snippet(
+                    // Inline formula: `← formula`
+                    if has_formula {
+                        let arrow_adv = self.draw_text_snippet(
                             scene,
                             font_cx,
                             layout_cx,
-                            " (literal)",
-                            9.0,
+                            " ← ",
+                            10.5,
                             FontWeight::NORMAL,
                             Color::from_rgb8(100, 116, 139), // slate 500
-                            false,
-                            val_x + val_adv + 4.0,
-                            cur_y + 2.5,
+                            true,
+                            val_x + val_adv,
+                            cur_y + 1.5,
                         );
-                    }
-
-                    // Line 2: Formula / Equation (if non-trivial)
-                    if has_formula {
-                        let formula_line = format!("  ↳ {formula_str}");
                         self.draw_text_snippet(
                             scene,
                             font_cx,
                             layout_cx,
-                            &formula_line,
-                            9.5,
+                            &formula_str,
+                            10.5,
                             FontWeight::NORMAL,
                             Color::from_rgb8(203, 213, 225), // slate 300
                             true,
-                            prop_x + 6.0,
-                            cur_y + 18.0,
+                            val_x + val_adv + arrow_adv,
+                            cur_y + 1.5,
                         );
                     }
-
-                    // Subtle separator line under each property row
-                    let sep_y = cur_y + row_h - 1.0;
-                    let sep_stroke = Stroke::new(1.0);
-                    scene.stroke(
-                        &sep_stroke,
-                        Affine::IDENTITY,
-                        Brush::Solid(Color::from_rgb8(24, 32, 47)),
-                        None,
-                        &Line::new((prop_x, sep_y), (card_x + card_w, sep_y)),
-                    );
                 }
 
                 cur_y += row_h;
@@ -1661,7 +1622,7 @@ impl InspectPanelComponent {
                                 let c_eval = c_val.map(|v| format!("{v}")).unwrap_or_default();
                                 let c_form = rn.formulas.get(ck).cloned().unwrap_or_else(|| c_eval.clone());
                                 let c_has = c_form != c_eval && !c_form.is_empty();
-                                let c_row_h = if c_has { 32.0 } else { 19.0 };
+                                let c_row_h = 17.0;
 
                                 if cur_y + c_row_h >= detail_y && cur_y <= win_h {
                                     // Bullet
@@ -1733,32 +1694,30 @@ impl InspectPanelComponent {
                                         cur_y + 1.0,
                                     );
 
-                                    if !c_has {
-                                        self.draw_text_snippet(
+                                    if c_has {
+                                        let c_arrow_adv = self.draw_text_snippet(
                                             scene,
                                             font_cx,
                                             layout_cx,
-                                            " (literal)",
-                                            8.5,
+                                            " ← ",
+                                            9.5,
                                             FontWeight::NORMAL,
                                             Color::from_rgb8(100, 116, 139),
-                                            false,
-                                            c_val_x + c_val_adv + 3.0,
-                                            cur_y + 2.0,
+                                            true,
+                                            c_val_x + c_val_adv,
+                                            cur_y + 1.0,
                                         );
-                                    } else {
-                                        let formula_line = format!("  ↳ {c_form}");
                                         self.draw_text_snippet(
                                             scene,
                                             font_cx,
                                             layout_cx,
-                                            &formula_line,
-                                            8.5,
+                                            &c_form,
+                                            9.5,
                                             FontWeight::NORMAL,
                                             Color::from_rgb8(203, 213, 225),
                                             true,
-                                            child_indent_x + 4.0,
-                                            cur_y + 16.0,
+                                            c_val_x + c_val_adv + c_arrow_adv,
+                                            cur_y + 1.0,
                                         );
                                     }
                                 }
@@ -2380,6 +2339,77 @@ impl InspectPanelComponent {
         let mut layout = builder.build(text);
         layout.break_all_lines(None);
         layout.align(Alignment::Start, parley::layout::AlignmentOptions::default());
+
+        let text_affine = Affine::translate((x, y));
+        for line in layout.lines() {
+            for item in line.items() {
+                if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                    let run = glyph_run.run();
+                    let font = run.font();
+                    let glyphs = glyph_run.positioned_glyphs().map(|g| vello::Glyph {
+                        id: g.id,
+                        x: g.x,
+                        y: g.y,
+                    });
+
+                    scene
+                        .draw_glyphs(font)
+                        .font_size(run.font_size())
+                        .transform(text_affine)
+                        .brush(Brush::Solid(color))
+                        .draw(Fill::NonZero, glyphs);
+                }
+            }
+        }
+
+        layout.full_width() as f64
+    }
+
+    /// Internal helper to render a single-line text snippet vertically centered by cap-height
+    /// within `[box_y, box_y + box_h]`, returning its advance width.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_text_snippet_centered(
+        &self,
+        scene: &mut Scene,
+        font_cx: &mut FontContext,
+        layout_cx: &mut LayoutContext<()>,
+        text: &str,
+        font_size: f32,
+        font_weight: FontWeight,
+        color: Color,
+        is_monospace: bool,
+        x: f64,
+        box_y: f64,
+        box_h: f64,
+    ) -> f64 {
+        if text.is_empty() {
+            return 0.0;
+        }
+
+        let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
+        builder.push_default(StyleProperty::FontSize(font_size));
+        if (font_weight.value() - 400.0).abs() > 1.0 {
+            builder.push_default(StyleProperty::FontWeight(font_weight));
+        }
+        if is_monospace {
+            #[cfg(target_os = "macos")]
+            builder.push_default(StyleProperty::FontFamily(FontFamily::named("Menlo")));
+            #[cfg(not(target_os = "macos"))]
+            builder.push_default(StyleProperty::FontFamily(FontFamily::Generic(GenericFamily::Monospace)));
+        }
+
+        let mut layout = builder.build(text);
+        layout.break_all_lines(None);
+        layout.align(Alignment::Start, parley::layout::AlignmentOptions::default());
+
+        let cap_height = (font_size * 0.71) as f64;
+        let baseline_offset = layout
+            .lines()
+            .next()
+            .map(|l| l.metrics().baseline as f64)
+            .unwrap_or((font_size * 0.8) as f64);
+        let target_baseline = (box_h + cap_height) / 2.0;
+        let y = box_y + target_baseline - baseline_offset;
 
         let text_affine = Affine::translate((x, y));
         for line in layout.lines() {
