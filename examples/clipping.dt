@@ -42,12 +42,11 @@
     }
 }
 
-\VStack(
+\VStackStretch(
     x: 32,
     y: 32,
     gap: 20,
-    width: min(max(window.width - 64, 400), 600),
-    align: Align.Stretch
+    width: min(max(window.width - 64, 400), 600)
 ) {
     \Text(size: 28, weight: 700, color: #0f172a) {
         Spatial Clipping Demonstration

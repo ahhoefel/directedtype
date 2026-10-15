@@ -1,0 +1,39 @@
+// DirectedType Standard Component Library: VStackStretch
+// Vertically stacked flow container that stretches all child components to its full width.
+// Requires or inherits an explicit width and pushes it to every child.
+
+// 1. Explicit Fixed Width & Fixed Height VStackStretch
+\Component VStackStretch(
+    width: Number,
+    height: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
+    gap: Number: 0
+) {
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children {
+        x: x,
+        y: prev ? prev.bottom + gap : y,
+        width: width
+    }
+}
+
+// 2. Explicit Fixed Width & Intrinsic Height VStackStretch
+\Component VStackStretch(
+    width: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
+    gap: Number: 0
+) {
+    \alias right = x + width;
+    \alias height = sum(children.height) + max(0, num_children - 1) * gap;
+    \alias bottom = y + height;
+
+    \Children {
+        x: x,
+        y: prev ? prev.bottom + gap : y,
+        width: width
+    }
+}

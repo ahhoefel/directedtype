@@ -254,7 +254,7 @@ fn test_hstack_stretch_alignment() {
     let input = r#"
     \use "components/HStack.dt"
 
-    \HStack(height: 120, x: 10, y: 20, gap: 16, align: Align.Stretch) {
+    \HStackStretch(height: 120, x: 10, y: 20, gap: 16) {
         \Rect(width: 100, color: #3b82f6)
         \Rect(width: 150, color: #10b981)
     }

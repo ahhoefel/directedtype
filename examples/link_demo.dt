@@ -92,10 +92,9 @@
 );
 
 \PadOut(padding: 40, x: 0, y: 0) {
-    \VStack(
+    \VStackStretch(
         width: min(max(window.width - 80, 400), 740),
-        gap: 22,
-        align: Align.Stretch
+        gap: 22
     ) {
         \Anchor("top")
 

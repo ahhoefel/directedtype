@@ -1,8 +1,9 @@
 // DirectedType Standard Component Library: HStack
 // Horizontally stacked flow container with cross-axis alignment and child spacing (gap).
 \use "components/Align.dt"
+\use "components/HStackStretch.dt"
 
-// 1. Explicit Fixed Width & Fixed Height HStack: supports cross-axis Align.Stretch
+// 1. Explicit Fixed Width & Fixed Height HStack: supports cross-axis alignment
 \Component HStack(
     width: Number,
     height: Number,
@@ -11,7 +12,6 @@
     gap: Number: 0,
     align: Align: Align.Top
 ) {
-    \let is_stretch = align == Align.Stretch;
     \let is_center = align == Align.Center;
     \let is_bottom = align == Align.Bottom;
 
@@ -24,12 +24,11 @@
             is_bottom ? (y + height - child.height) : (
                 y
             )
-        ),
-        height: is_stretch ? height : auto
+        )
     }
 }
 
-// 2. Intrinsic Width & Fixed Height HStack: content-wrapping width with cross-axis Align.Stretch
+// 2. Intrinsic Width & Fixed Height HStack: content-wrapping width with cross-axis alignment
 \Component HStack(
     height: Number,
     x: Number: parent.left,
@@ -37,7 +36,6 @@
     gap: Number: 0,
     align: Align: Align.Top
 ) {
-    \let is_stretch = align == Align.Stretch;
     \let is_center = align == Align.Center;
     \let is_bottom = align == Align.Bottom;
 
@@ -51,8 +49,7 @@
             is_bottom ? (y + height - child.height) : (
                 y
             )
-        ),
-        height: is_stretch ? height : auto
+        )
     }
 }
 

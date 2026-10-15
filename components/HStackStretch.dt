@@ -1,0 +1,39 @@
+// DirectedType Standard Component Library: HStackStretch
+// Horizontally stacked flow container that stretches all child components to its full height.
+// Requires or inherits an explicit height and pushes it to every child.
+
+// 1. Explicit Fixed Width & Fixed Height HStackStretch
+\Component HStackStretch(
+    width: Number,
+    height: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
+    gap: Number: 0
+) {
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children {
+        x: prev ? prev.right + gap : x,
+        y: y,
+        height: height
+    }
+}
+
+// 2. Intrinsic Width & Fixed Height HStackStretch
+\Component HStackStretch(
+    height: Number,
+    x: Number: parent.left,
+    y: Number: parent.top,
+    gap: Number: 0
+) {
+    \alias width = sum(children.width) + max(0, num_children - 1) * gap;
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children {
+        x: prev ? prev.right + gap : x,
+        y: y,
+        height: height
+    }
+}

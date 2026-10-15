@@ -20,12 +20,11 @@
 )
 
 // Main Page Layout
-\VStack(
+\VStackStretch(
     x: 40,
     y: 36,
     width: min(window.width - 80, 720),
-    gap: 14,
-    align: Align.Stretch
+    gap: 14
 ) {
     // Header Section
     \Text(

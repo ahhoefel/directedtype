@@ -19,10 +19,9 @@
 
 // Main Page Layout with uniform window margin padding
 \PadOut(padding: 40, x: 0, y: 0) {
-    \VStack(
+    \VStackStretch(
         width: min(max(window.width - 80, 400), 720),
-        gap: 20,
-        align: Align.Stretch
+        gap: 20
     ) {
         // Document Header
         \Text(size: 34, weight: 700, color: #0f172a) {

@@ -119,7 +119,7 @@ fn test_vstack_stretch_alignment() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(x: 0, y: 0, width: 500, align: Align.Stretch) {
+    \VStackStretch(x: 0, y: 0, width: 500) {
         \Rect(height: 50, color: #8b5cf6)
         \Rect(width: 200, height: 40, color: #ec4899)
     }
@@ -156,7 +156,7 @@ fn test_vstack_with_button_and_text_composition() {
     \use "components/Button.dt"
     \use "theme/default.dt"
 
-    \VStack(x: 20, y: 20, width: 350, align: Align.Stretch, gap: 14) {
+    \VStackStretch(x: 20, y: 20, width: 350, gap: 14) {
         \Text(size: 20, weight: 700) { Header Title }
         \Button(style: button_primary, label: "Submit Order")
     }

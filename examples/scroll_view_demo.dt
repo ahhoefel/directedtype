@@ -146,10 +146,9 @@
         scrollbar_color: #94a3b8b0,
         scrollbar_width: 6
     ) {
-        \VStack(
+        \VStackStretch(
             width: max(pane_width, 420) - 48,
-            gap: 20,
-            align: Align.Stretch
+            gap: 20
         ) {
             // Section 1: Overview
             \Card(style: section_card_style, width: parent.width, gap: 10) {

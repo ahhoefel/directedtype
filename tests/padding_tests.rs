@@ -126,7 +126,7 @@ fn test_padin_asymmetric_insetting_vstack() {
     \use "components/VStack.dt"
 
     \PadIn(padding_x: 20, padding_y: 24, x: 10, y: 20) {
-        \VStack(align: Align.Stretch, gap: 16) {
+        \VStackStretch(gap: 16) {
             \Rect(height: 40, color: #3b82f6)
             \Rect(height: 50, color: #10b981)
             \Rect(height: 30, color: #f59e0b)

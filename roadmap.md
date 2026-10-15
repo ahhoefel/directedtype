@@ -8,11 +8,10 @@
 
 ### 2. Diagnostics & Language Ergonomics
 * **Human-Readable Node & Error Diagnostics**: Replace raw numbered node IDs (`NodeId(1)`) with hierarchical, human-readable DOM/DAG component path references (e.g. `Window/VStack/Card#header/Text`). Add source spans and clear diagnostic explanations to all compiler and runtime errors.
-* **Eliminate `auto` Sentinel**: Replace the remaining `is_stretch ? width : auto` compiler sentinel in `VStack`/`HStack` and `is_auto_expr` check in `expand.rs` with formal conditional port emission in `\Children` or dedicated stretch overloads.
-* Find ways to compile time check the dag flow. For instance, does putting a \PadOut around a component that is sized from top-down in the dom give an error? Are there component combinations that should not be allowed but aren't detectable through DAG cycles? Do DAG cycles detect everything, but do we need better error messages about why certain component pairs are incompatible?
+* **Compile-Time DAG Flow Checks & Cycle Diagnostics**: Find ways to compile-time check DAG flow compatibility. For example, does wrapping a top-down sized component with `\PadOut` produce a clear error? Identify component combinations that conflict or need clearer diagnostics explaining why certain component pairs cannot compose.
 
 ### 3. Component Library & Primitives
-* **Standard Component Library**: Expand standard components beyond `Button`, `Card`, `Link`, `HCenter`, `VCenter`, `PadIn`, `PadOut`, `ScrollView`, `Slider`, and `NavBar` to include `TextInput`, `Checkbox`, `Toggle`, `Tabs`, `Dialog/Modal`, and menus.
+* **Standard Component Library**: Expand standard components beyond `Button`, `Card`, `Link`, `HCenter`, `VCenter`, `PadIn`, `PadOut`, `VStack`, `VStackStretch`, `HStack`, `HStackStretch`, `ScrollView`, `Slider`, and `NavBar` to include `TextInput`, `Checkbox`, `Toggle`, `Tabs`, `Dialog/Modal`, and menus.
 * **Graphical Primitives**: Add vector paths, strokes, complex borders, gradients, and custom canvas-like layout compositions.
 * **Showcase Applications**: Build multi-pane documentation readers, split editors, and rich interactive applications demonstrating single-pass reactive DAG layout and event flows.
 
@@ -20,6 +19,7 @@
 
 ## Completed Milestones
 
+* **Elimination of `auto` Sentinel (`\VStackStretch` / `\HStackStretch`)**: Completely eradicated `auto` keywords and sentinels from the grammar, compiler, and component library. Replaced `is_stretch ? width : auto` and compiler `is_auto_expr` with dedicated `\VStackStretch` and `\HStackStretch` components that unconditionally push cross-axis constraints to children.
 * **Top-Level `\Window` Declaration & Dual Scrollbars**: Declarative `\Window(title, vscroll, hscroll)` configuration, bidirectional scrollbar rendering, draggable thumb interaction, hit-testing, automatic content clamping, and arrow-key scrolling in the Viewer.
 * **Directional Padding Primitives (`PadIn` / `PadOut`)**: Replaced ambiguous `\Padding` and implicit "auto" sizing with pure directional primitives: `\PadIn` for top-down/inward parent sizing and `\PadOut` for bottom-up/outward child sizing, with 1D (`padding_x`, `padding_y`) and 2D overloads and single-child assertions.
 * **Built-in `only()` Aggregate Function & Content Capping**: Added `only()` child aggregate function with cardinality assertions. Added lower-end content capping (`max(available, only(children))`) to `HCenter` and `VCenter` to prevent content clipping in narrow viewports.

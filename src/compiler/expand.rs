@@ -1712,26 +1712,7 @@ fn expand_component_instance(
                     };
 
                     for ambient in &dir.ports {
-                        if let Expr::Ternary(tern) = &ambient.expr {
-                            if is_auto_expr(&tern.else_expr) || is_auto_expr(&tern.then_expr) {
-                                if let Some(Literal::Bool(b, _)) = resolve_ident_or_member_to_literal(&tern.condition, &ambient_scope_ctx) {
-                                    let chosen = if b { &tern.then_expr } else { &tern.else_expr };
-                                    if is_auto_expr(chosen) {
-                                        continue;
-                                    } else {
-                                        let rewritten = rewrite_expr(chosen, &ambient_scope_ctx)?;
-                                        merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
-                                        authored_ambient_ports.insert(ambient.name.as_str().to_string(), *chosen.clone());
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-
                         let rewritten = rewrite_expr(&ambient.expr, &ambient_scope_ctx)?;
-                        if is_auto_expr(&rewritten) {
-                            continue;
-                        }
                         merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
                         authored_ambient_ports.insert(ambient.name.as_str().to_string(), ambient.expr.clone());
                     }
@@ -3532,14 +3513,6 @@ fn expand_primitive_element(
     node.event_handlers = event_handlers;
 
     Ok(())
-}
-
-fn is_auto_expr(expr: &Expr) -> bool {
-    match expr {
-        Expr::Ident(id) => id.as_str() == "auto",
-        Expr::Literal(Literal::String(s, _)) => s == "auto",
-        _ => false,
-    }
 }
 
 fn resolve_ident_or_member_to_literal<'a>(

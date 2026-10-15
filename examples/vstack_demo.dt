@@ -125,10 +125,9 @@
         ) {
             \Text(size: 13, weight: 700, color: #4ade80) { ALIGN: STRETCH }
 
-            \VStack(
+            \VStackStretch(
                 width: 183,
-                gap: 14,
-                align: Align.Stretch
+                gap: 14
             ) {
                 \Rect(height: 32, radius: 6, color: #10b981)
                 \Button(style: button_success, label: "Full Width Button")
