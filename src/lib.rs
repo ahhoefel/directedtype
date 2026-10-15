@@ -26,8 +26,8 @@ pub use compiler::{
 pub use dom::{Dom, DomError, DomHitTestResult, NodeHandle, Transaction};
 pub use error::ParseError;
 pub use inspector::{
-    InspectOverlayComponent, InspectOverlayStyle, InspectPanelComponent, InspectTargetInfo,
-    InspectorState,
+    InspectOverlayComponent, InspectOverlayStyle, InspectPanelComponent, InspectorScrollbarKind,
+    InspectTargetInfo, InspectorState,
 };
 pub use interaction::{Event, EventKind, HitTestResult, Modifiers, MouseButton, Point};
 pub use parser::parse_document as parse;

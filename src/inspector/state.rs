@@ -47,8 +47,14 @@ pub struct InspectorState {
     /// Vertical scroll offset (in logical pixels) inside the tree view.
     pub scroll_offset: f64,
 
+    /// Horizontal scroll offset (in logical pixels) inside the tree view.
+    pub scroll_offset_x: f64,
+
     /// Vertical scroll offset (in logical pixels) inside the component details bottom panel.
     pub detail_scroll_offset: f64,
+
+    /// Horizontal scroll offset (in logical pixels) inside the component details bottom panel.
+    pub detail_scroll_offset_x: f64,
 
     /// Set of expanded reference properties in the component details bottom panel.
     /// Keyed by (referring_node_id, property_key).
@@ -98,6 +104,8 @@ impl InspectorState {
         if self.selected_id != id {
             self.selected_id = id;
             self.selected_property = None;
+            self.detail_scroll_offset = 0.0;
+            self.detail_scroll_offset_x = 0.0;
             true
         } else {
             false
@@ -160,9 +168,19 @@ impl InspectorState {
         self.scroll_offset = (self.scroll_offset + delta).clamp(0.0, max_scroll.max(0.0));
     }
 
+    /// Scrolls the tree view horizontally by `delta`, clamped between `0.0` and `max_scroll`.
+    pub fn scroll_x_by(&mut self, delta: f64, max_scroll: f64) {
+        self.scroll_offset_x = (self.scroll_offset_x + delta).clamp(0.0, max_scroll.max(0.0));
+    }
+
     /// Scrolls the component details view by `delta`, clamped between `0.0` and `max_scroll`.
     pub fn scroll_detail_by(&mut self, delta: f64, max_scroll: f64) {
         self.detail_scroll_offset = (self.detail_scroll_offset + delta).clamp(0.0, max_scroll.max(0.0));
+    }
+
+    /// Scrolls the component details view horizontally by `delta`, clamped between `0.0` and `max_scroll`.
+    pub fn scroll_detail_x_by(&mut self, delta: f64, max_scroll: f64) {
+        self.detail_scroll_offset_x = (self.detail_scroll_offset_x + delta).clamp(0.0, max_scroll.max(0.0));
     }
 
     pub fn clear_selection(&mut self) {
@@ -171,6 +189,8 @@ impl InspectorState {
         self.selected_id = None;
         self.hovered_id = None;
         self.selected_property = None;
+        self.detail_scroll_offset = 0.0;
+        self.detail_scroll_offset_x = 0.0;
     }
 
     /// Returns the node that should currently be visually highlighted on screen:
@@ -202,11 +222,13 @@ impl InspectorState {
     pub fn select_property(&mut self, node_id: NodeId, prop: &str) {
         self.selected_property = Some((node_id, prop.to_string()));
         self.detail_scroll_offset = 0.0;
+        self.detail_scroll_offset_x = 0.0;
     }
 
     /// Clears the selected property and returns to the general component details view.
     pub fn clear_selected_property(&mut self) {
         self.selected_property = None;
         self.detail_scroll_offset = 0.0;
+        self.detail_scroll_offset_x = 0.0;
     }
 }

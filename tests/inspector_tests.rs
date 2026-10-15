@@ -1231,6 +1231,189 @@ fn test_render_property_details_headless() {
     assert_eq!(img.height(), 600);
 }
 
+#[test]
+fn test_inspector_horizontal_scroll_and_bounds() {
+    let source = r#"
+\Component VeryLongNamedComponentWithManyParametersAndDeepHierarchy(x = 0, y = 0, extra_long_parameter_expression_name = 100) {
+    \Rect(x: x, y: y, width: 400, height: 100, color: #3b82f6)
+}
+\Component GrandChild(x = 0, y = 0) {
+    \VeryLongNamedComponentWithManyParametersAndDeepHierarchy(x: 0, y: 0)
+}
+\Component InnerChild(x = 0, y = 0) {
+    \GrandChild(x: 0, y: 0)
+}
+\Component DeepNestedContainer(x = 0, y = 0, width = 500) {
+    \InnerChild(x: 0, y: 0)
+}
+\DeepNestedContainer(x: 0, y: 0, width: 500)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let mut state = directedtype::inspector::InspectorState::new();
+
+    // Nodes are expanded by default; ensure none are collapsed
+    state.collapsed_ids.clear();
+
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+    let total_tree_w = panel.total_tree_width(&tree_items);
+    assert!(total_tree_w > panel.width, "Deep tree with long names should exceed default panel width (380px)");
+
+    let max_tree_scroll_x = panel.max_tree_scroll_x(&tree_items);
+    assert_eq!(max_tree_scroll_x, total_tree_w - panel.width);
+
+    // Test horizontal scroll clamping
+    state.scroll_x_by(50.0, max_tree_scroll_x);
+    assert_eq!(state.scroll_offset_x, 50.0);
+
+    state.scroll_x_by(1000.0, max_tree_scroll_x);
+    assert_eq!(state.scroll_offset_x, max_tree_scroll_x);
+
+    state.scroll_x_by(-5000.0, max_tree_scroll_x);
+    assert_eq!(state.scroll_offset_x, 0.0);
+
+    // Now test details panel horizontal scroll
+    let rect_node = layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect node found");
+    state.set_selected_id(Some(rect_node.id));
+
+    let total_detail_w = panel.total_detail_content_width(Some(rect_node.id), &layout, Some(&state));
+    assert!(total_detail_w >= panel.width);
+
+    let max_detail_scroll_x = panel.max_detail_scroll_x(Some(rect_node.id), &layout, Some(&state));
+    assert_eq!(max_detail_scroll_x, (total_detail_w - panel.width).max(0.0));
+
+    state.scroll_detail_x_by(40.0, 100.0);
+    assert_eq!(state.detail_scroll_offset_x, 40.0);
+
+    // Resetting selection should reset detail_scroll_offset_x to 0.0
+    state.set_selected_id(None);
+    assert_eq!(state.detail_scroll_offset_x, 0.0);
+}
+
+#[test]
+fn test_inspector_scrollbar_hit_testing() {
+    let source = r#"
+\Component LongList(x = 0, y = 0, width = 500) {
+    \Rect(x: 0, y: 0, width: 600, height: 20, color: #111111)
+    \Rect(x: 0, y: 25, width: 600, height: 20, color: #222222)
+    \Rect(x: 0, y: 50, width: 600, height: 20, color: #333333)
+    \Rect(x: 0, y: 75, width: 600, height: 20, color: #444444)
+    \Rect(x: 0, y: 100, width: 600, height: 20, color: #555555)
+    \Rect(x: 0, y: 125, width: 600, height: 20, color: #666666)
+    \Rect(x: 0, y: 150, width: 600, height: 20, color: #777777)
+    \Rect(x: 0, y: 175, width: 600, height: 20, color: #888888)
+    \Rect(x: 0, y: 200, width: 600, height: 20, color: #999999)
+    \Rect(x: 0, y: 225, width: 600, height: 20, color: #aaaaaa)
+    \Rect(x: 0, y: 250, width: 600, height: 20, color: #bbbbbb)
+    \Rect(x: 0, y: 275, width: 600, height: 20, color: #cccccc)
+    \Rect(x: 0, y: 300, width: 600, height: 20, color: #dddddd)
+    \Rect(x: 0, y: 325, width: 600, height: 20, color: #eeeeee)
+}
+\LongList(x: 0, y: 0, width: 500)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let mut state = directedtype::inspector::InspectorState::new();
+
+    let win_h = 400.0;
+    let panel_x = 200.0;
+    let divider_y = panel.divider_y(win_h);
+
+    state.collapsed_ids.clear();
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    // 1. Hit-test tree vertical scrollbar (right 12px of tree area)
+    let v_hit = panel.hit_test_scrollbar(
+        panel_x + panel.width - 6.0,
+        panel.header_height + 20.0,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+        &layout,
+    );
+    assert_eq!(v_hit, Some(directedtype::inspector::InspectorScrollbarKind::TreeVertical));
+
+    // 2. Normal tree row click (away from scrollbars) should return None for scrollbars
+    let normal_hit = panel.hit_test_scrollbar(
+        panel_x + 50.0,
+        panel.header_height + 20.0,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+        &layout,
+    );
+    assert_eq!(normal_hit, None);
+
+    // 3. Select a node and check detail panel vertical scrollbar
+    let first_rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    state.set_selected_id(Some(first_rect.id));
+
+    let detail_y = divider_y + panel.divider_height;
+    let detail_v_hit = panel.hit_test_scrollbar(
+        panel_x + panel.width - 6.0,
+        detail_y + 30.0,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+        &layout,
+    );
+    assert_eq!(detail_v_hit, Some(directedtype::inspector::InspectorScrollbarKind::DetailVertical));
+}
+
+#[test]
+fn test_render_inspector_with_horizontal_scrollbars() {
+    let source = r#"
+\Component InnerDeepChild(x = 0, y = 0, very_long_formula_and_variable_name_causing_overflow = 123456789) {
+    \Rect(x: x, y: y, width: 500, height: 60, color: #06b6d4)
+}
+\Component LargeComponentWithWideTree(x = 0, y = 0, width = 600) {
+    \InnerDeepChild(x: 0, y: 0)
+}
+\LargeComponentWithWideTree(x: 0, y: 0, width: 600)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let mut state = directedtype::inspector::InspectorState::new();
+
+    state.collapsed_ids.clear();
+    let rect_node = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    state.set_selected_id(Some(rect_node.id));
+    state.scroll_offset_x = 45.0;
+    state.detail_scroll_offset_x = 30.0;
+
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    let mut scene = vello::Scene::new();
+    let mut font_cx = parley::FontContext::new();
+    let mut layout_cx = parley::LayoutContext::new();
+
+    panel.render_to_scene(
+        &mut scene,
+        0.0,
+        500.0,
+        &tree_items,
+        &state,
+        &layout,
+        &mut font_cx,
+        &mut layout_cx,
+    );
+
+    let mut renderer = directedtype::render::HeadlessRenderer::new().expect("init renderer");
+    let img = renderer.render_scene(&scene, 380, 500).expect("render scene ok");
+    assert_eq!(img.width(), 380);
+    assert_eq!(img.height(), 500);
+}
+
+
 
 
 

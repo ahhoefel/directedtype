@@ -3,7 +3,6 @@
 ## Active & Upcoming Priorities
 
 ### 1. DOM Inspector UI & Usability
-* **Scrollable Tree & Property Panels**: Integrate `ScrollView` into the DOM inspector sidebar and property panels so deep trees and long formula lists can be navigated without clipping.
 * **Component Breadcrumbs & Selection Sync**: Add breadcrumb navigation and visual indicators linking the selected node in the visual tree to its entry in the property DAG panel.
 
 ### 2. Diagnostics & Language Ergonomics
@@ -19,6 +18,7 @@
 
 ## Completed Milestones
 
+* **Scrollable Tree & Property Panels in DOM Inspector**: Full 2D scrollability (vertical and horizontal) in both the top DOM tree view and bottom component/property details panel. Deep trees, long formula strings, DAG traces, and expanded object references can be inspected without clipping. Supports wheel and trackpad scroll gestures (`delta_x` and `delta_y`), interactive draggable dual scrollbars with hit-testing and track guards preventing phantom row clicks, and automatic selection reset behavior.
 * **Elimination of `auto` Sentinel (`\VStackStretch` / `\HStackStretch`)**: Completely eradicated `auto` keywords and sentinels from the grammar, compiler, and component library. Replaced `is_stretch ? width : auto` and compiler `is_auto_expr` with dedicated `\VStackStretch` and `\HStackStretch` components that unconditionally push cross-axis constraints to children.
 * **Top-Level `\Window` Declaration & Dual Scrollbars**: Declarative `\Window(title, vscroll, hscroll)` configuration, bidirectional scrollbar rendering, draggable thumb interaction, hit-testing, automatic content clamping, and arrow-key scrolling in the Viewer.
 * **Directional Padding Primitives (`PadIn` / `PadOut`)**: Replaced ambiguous `\Padding` and implicit "auto" sizing with pure directional primitives: `\PadIn` for top-down/inward parent sizing and `\PadOut` for bottom-up/outward child sizing, with 1D (`padding_x`, `padding_y`) and 2D overloads and single-child assertions.

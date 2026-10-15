@@ -14,7 +14,7 @@ pub use model::{
     DagTraceDependency, InspectTargetInfo, PortEquationEntry, PortOriginKind,
 };
 pub use overlay::{InspectOverlayComponent, InspectOverlayStyle};
-pub use panel::{InspectPanelComponent, PanelHitResult};
+pub use panel::{InspectPanelComponent, InspectorScrollbarKind, PanelHitResult};
 pub use state::{InspectorState, InspectorTab};
 pub use view::{
     build_tree_items, build_tree_items_from_layout, extract_box_model, extract_port_equations,

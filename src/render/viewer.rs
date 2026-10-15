@@ -188,6 +188,7 @@ pub struct ViewerApp {
     scrollbar_drag_start_x: f64,
     scrollbar_start_scroll_x: f64,
     pending_scroll: Option<PendingScroll>,
+    inspector_scrollbar_drag: Option<(crate::inspector::InspectorScrollbarKind, f64, f64)>,
 
     // Focus & target highlighting state
     focused_node: Option<NodeId>,
@@ -256,6 +257,7 @@ impl ViewerApp {
             scrollbar_drag_start_x: 0.0,
             scrollbar_start_scroll_x: 0.0,
             pending_scroll: None,
+            inspector_scrollbar_drag: None,
             focused_node: None,
             target_node: None,
             browser_bar,
@@ -311,6 +313,7 @@ impl ViewerApp {
             scrollbar_drag_start_x: 0.0,
             scrollbar_start_scroll_x: 0.0,
             pending_scroll: None,
+            inspector_scrollbar_drag: None,
             focused_node,
             target_node: None,
             browser_bar,
@@ -532,16 +535,32 @@ impl ViewerApp {
                         self.layout(),
                         &self.inspector_state,
                     );
-                    let max_scroll = self.panel_component.max_scroll(tree_items.len(), viewport_h);
-                    self.inspector_state.scroll_by(-delta_y, max_scroll);
+                    let max_scroll_y = self.panel_component.max_scroll(tree_items.len(), viewport_h);
+                    let max_scroll_x = self.panel_component.max_tree_scroll_x(&tree_items);
+                    if delta_y.abs() > 0.0 {
+                        self.inspector_state.scroll_by(-delta_y, max_scroll_y);
+                    }
+                    if delta_x.abs() > 0.0 {
+                        self.inspector_state.scroll_x_by(-delta_x, max_scroll_x);
+                    }
                 } else {
-                    let max_detail_scroll = self.panel_component.max_detail_scroll_with_state(
+                    let max_detail_scroll_y = self.panel_component.max_detail_scroll_with_state(
                         self.selected_node,
                         self.layout(),
                         Some(&self.inspector_state),
                         viewport_h,
                     );
-                    self.inspector_state.scroll_detail_by(-delta_y, max_detail_scroll);
+                    let max_detail_scroll_x = self.panel_component.max_detail_scroll_x(
+                        self.selected_node,
+                        self.layout(),
+                        Some(&self.inspector_state),
+                    );
+                    if delta_y.abs() > 0.0 {
+                        self.inspector_state.scroll_detail_by(-delta_y, max_detail_scroll_y);
+                    }
+                    if delta_x.abs() > 0.0 {
+                        self.inspector_state.scroll_detail_x_by(-delta_x, max_detail_scroll_x);
+                    }
                 }
                 if let Some(w) = &self.window {
                     w.request_redraw();
@@ -2608,6 +2627,97 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 }
 
                 if self.inspect_mode {
+                    if let Some((kind, start_pos, start_offset)) = self.inspector_scrollbar_drag {
+                        let canvas_h = (win_h - nav_bar_h).max(1.0);
+                        let layout = current_layout(&self.compiled, &self.static_layout);
+                        match kind {
+                            crate::inspector::InspectorScrollbarKind::TreeVertical => {
+                                let divider_y = self.panel_component.divider_y(canvas_h);
+                                let visible_h = divider_y - self.panel_component.header_height;
+                                let tree_items = crate::inspector::build_tree_items_from_layout(layout, &self.inspector_state);
+                                let total_h = tree_items.len() as f64 * self.panel_component.row_height;
+                                if total_h > visible_h {
+                                    let total_w = self.panel_component.total_tree_width(&tree_items);
+                                    let has_h_bar = total_w > self.panel_component.width && visible_h > 30.0;
+                                    let v_track_h = if has_h_bar { (visible_h - 8.0).max(18.0) } else { visible_h };
+                                    let thumb_h = ((visible_h / total_h) * v_track_h).max(18.0).min(v_track_h);
+                                    let available_track = (v_track_h - thumb_h).max(1.0);
+                                    let max_scroll = (total_h - visible_h).max(0.0);
+                                    let dy = (point.y - nav_bar_h) - start_pos;
+                                    let scroll_delta = (dy / available_track) * max_scroll;
+                                    self.inspector_state.scroll_offset = (start_offset + scroll_delta).clamp(0.0, max_scroll);
+                                    if let Some(w) = &self.window {
+                                        w.request_redraw();
+                                    }
+                                }
+                            }
+                            crate::inspector::InspectorScrollbarKind::TreeHorizontal => {
+                                let divider_y = self.panel_component.divider_y(canvas_h);
+                                let visible_h = divider_y - self.panel_component.header_height;
+                                let tree_items = crate::inspector::build_tree_items_from_layout(layout, &self.inspector_state);
+                                let total_w = self.panel_component.total_tree_width(&tree_items);
+                                let panel_w = self.panel_component.width;
+                                if total_w > panel_w {
+                                    let total_h = tree_items.len() as f64 * self.panel_component.row_height;
+                                    let has_v_bar = total_h > visible_h && visible_h > 30.0;
+                                    let h_track_w = if has_v_bar { (panel_w - 8.0).max(18.0) } else { panel_w - 4.0 };
+                                    let thumb_w = ((panel_w / total_w) * h_track_w).max(18.0).min(h_track_w);
+                                    let available_track = (h_track_w - thumb_w).max(1.0);
+                                    let max_scroll = (total_w - panel_w).max(0.0);
+                                    let dx = point.x - start_pos;
+                                    let scroll_delta = (dx / available_track) * max_scroll;
+                                    self.inspector_state.scroll_offset_x = (start_offset + scroll_delta).clamp(0.0, max_scroll);
+                                    if let Some(w) = &self.window {
+                                        w.request_redraw();
+                                    }
+                                }
+                            }
+                            crate::inspector::InspectorScrollbarKind::DetailVertical => {
+                                let divider_y = self.panel_component.divider_y(canvas_h);
+                                let detail_y = divider_y + self.panel_component.divider_height;
+                                let detail_h = (canvas_h - detail_y).max(0.0);
+                                let total_h = self.panel_component.total_detail_content_height(self.selected_node, layout, Some(&self.inspector_state));
+                                if total_h > detail_h {
+                                    let total_w = self.panel_component.total_detail_content_width(self.selected_node, layout, Some(&self.inspector_state));
+                                    let panel_w = self.panel_component.width;
+                                    let has_h_bar = total_w > panel_w && detail_h > 30.0;
+                                    let v_track_h = if has_h_bar { (detail_h - 8.0).max(18.0) } else { detail_h };
+                                    let thumb_h = ((detail_h / total_h) * v_track_h).max(18.0).min(v_track_h);
+                                    let available_track = (v_track_h - thumb_h).max(1.0);
+                                    let max_scroll = (total_h - detail_h).max(0.0);
+                                    let dy = (point.y - nav_bar_h) - start_pos;
+                                    let scroll_delta = (dy / available_track) * max_scroll;
+                                    self.inspector_state.detail_scroll_offset = (start_offset + scroll_delta).clamp(0.0, max_scroll);
+                                    if let Some(w) = &self.window {
+                                        w.request_redraw();
+                                    }
+                                }
+                            }
+                            crate::inspector::InspectorScrollbarKind::DetailHorizontal => {
+                                let divider_y = self.panel_component.divider_y(canvas_h);
+                                let detail_y = divider_y + self.panel_component.divider_height;
+                                let detail_h = (canvas_h - detail_y).max(0.0);
+                                let total_w = self.panel_component.total_detail_content_width(self.selected_node, layout, Some(&self.inspector_state));
+                                let panel_w = self.panel_component.width;
+                                if total_w > panel_w {
+                                    let total_h = self.panel_component.total_detail_content_height(self.selected_node, layout, Some(&self.inspector_state));
+                                    let has_v_bar = total_h > detail_h && detail_h > 30.0;
+                                    let h_track_w = if has_v_bar { (panel_w - 8.0).max(18.0) } else { panel_w - 4.0 };
+                                    let thumb_w = ((panel_w / total_w) * h_track_w).max(18.0).min(h_track_w);
+                                    let available_track = (h_track_w - thumb_w).max(1.0);
+                                    let max_scroll = (total_w - panel_w).max(0.0);
+                                    let dx = point.x - start_pos;
+                                    let scroll_delta = (dx / available_track) * max_scroll;
+                                    self.inspector_state.detail_scroll_offset_x = (start_offset + scroll_delta).clamp(0.0, max_scroll);
+                                    if let Some(w) = &self.window {
+                                        w.request_redraw();
+                                    }
+                                }
+                            }
+                        }
+                        return;
+                    }
+
                     let panel_x = win_w - self.panel_component.width;
 
                     if point.x >= panel_x {
@@ -2852,6 +2962,11 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         }
                     }
 
+                    if state == ElementState::Released && self.inspector_scrollbar_drag.is_some() {
+                        self.inspector_scrollbar_drag = None;
+                        return;
+                    }
+
                     if self.inspect_mode {
                         let panel_x = win_w - self.panel_component.width;
                         if point.x >= panel_x {
@@ -2863,6 +2978,26 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                     layout,
                                     &self.inspector_state,
                                 );
+
+                                if let Some(sb_kind) = self.panel_component.hit_test_scrollbar(
+                                    point.x,
+                                    panel_y,
+                                    panel_x,
+                                    canvas_h,
+                                    &tree_items,
+                                    &self.inspector_state,
+                                    layout,
+                                ) {
+                                    let (start_pos, start_offset) = match sb_kind {
+                                        crate::inspector::InspectorScrollbarKind::TreeVertical => (panel_y, self.inspector_state.scroll_offset),
+                                        crate::inspector::InspectorScrollbarKind::TreeHorizontal => (point.x, self.inspector_state.scroll_offset_x),
+                                        crate::inspector::InspectorScrollbarKind::DetailVertical => (panel_y, self.inspector_state.detail_scroll_offset),
+                                        crate::inspector::InspectorScrollbarKind::DetailHorizontal => (point.x, self.inspector_state.detail_scroll_offset_x),
+                                    };
+                                    self.inspector_scrollbar_drag = Some((sb_kind, start_pos, start_offset));
+                                    return;
+                                }
+
                                 let action = self.panel_component.handle_click(
                                     point.x,
                                     panel_y,
@@ -3132,6 +3267,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 self.flush_pending_scroll();
                 self.is_dragging_scrollbar = false;
                 self.is_dragging_h_scrollbar = false;
+                self.inspector_scrollbar_drag = None;
                 let nav_bar_h = self.nav_bar_height();
                 if let Some(old_id) = self.hovered_node.take() {
                     let pt = self.cursor_pos.unwrap_or_default();
@@ -3164,6 +3300,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     self.pressed_node = None;
                     self.is_dragging_scrollbar = false;
                     self.is_dragging_h_scrollbar = false;
+                    self.inspector_scrollbar_drag = None;
                 }
             }
             WindowEvent::ModifiersChanged(new_mods) => {

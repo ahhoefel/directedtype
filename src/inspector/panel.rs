@@ -32,6 +32,15 @@ pub enum PanelHitResult {
     BackToComponentDetails,
 }
 
+/// Interactive scrollbar kinds within the inspector side panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectorScrollbarKind {
+    TreeVertical,
+    TreeHorizontal,
+    DetailVertical,
+    DetailHorizontal,
+}
+
 /// The docked side panel component rendering the Component DOM tree and selected component details.
 #[derive(Debug, Clone)]
 pub struct InspectPanelComponent {
@@ -77,33 +86,54 @@ impl InspectPanelComponent {
         (content_h - visible_h).max(0.0)
     }
 
-    /// Computes the maximum vertical scroll offset for the bottom details panel.
-    pub fn max_detail_scroll(&self, selected_id: Option<NodeId>, layout: &ResolvedLayout, win_h: f64) -> f64 {
-        self.max_detail_scroll_with_state(selected_id, layout, None, win_h)
+    /// Computes the total content width of tree items.
+    pub fn total_tree_width(&self, items: &[DomTreeItem]) -> f64 {
+        let mut max_w = self.width;
+        for item in items {
+            let indent_x = 8.0 + item.depth as f64 * self.indent_step;
+            let mut w = indent_x + 14.0;
+            if let Some(var) = &item.var_name {
+                w += var.len() as f64 * 7.5 + 16.0;
+            }
+            w += item.tag.len() as f64 * 8.0 + 8.0;
+            if let Some(kid) = item.key.as_ref().map(|k| k.format_key()).or_else(|| item.id_name.clone()) {
+                w += kid.len() as f64 * 7.5 + 8.0;
+            }
+            if !item.port_summary.is_empty() {
+                w += item.port_summary.len() as f64 * 7.0 + 10.0;
+            }
+            w += 24.0;
+            if w > max_w {
+                max_w = w;
+            }
+        }
+        max_w
     }
 
-    /// Computes the maximum vertical scroll offset for the bottom details panel taking state into account.
-    pub fn max_detail_scroll_with_state(
+    /// Computes the maximum horizontal scroll offset for tree items.
+    pub fn max_tree_scroll_x(&self, items: &[DomTreeItem]) -> f64 {
+        let total_w = self.total_tree_width(items);
+        (total_w - self.width).max(0.0)
+    }
+
+    /// Computes the total vertical content height of the bottom details panel.
+    pub fn total_detail_content_height(
         &self,
         selected_id: Option<NodeId>,
         layout: &ResolvedLayout,
         state: Option<&InspectorState>,
-        win_h: f64,
     ) -> f64 {
-        let detail_y = self.divider_y(win_h);
-        let detail_visible_h = (win_h - (detail_y + self.divider_height)).max(0.0);
-
         if let Some((sel_nid, ref sel_prop)) = state.and_then(|s| s.selected_property.as_ref()) {
             if let Some(trace) = crate::inspector::build_property_dag_trace(layout, *sel_nid, sel_prop) {
                 let mut h = 10.0 + 30.0 + 96.0 + 16.0;
                 h += 18.0 + if trace.upstream_dependencies.is_empty() { 45.0 + 14.0 } else { trace.upstream_dependencies.len() as f64 * 38.0 + 10.0 };
                 h += 18.0 + if trace.downstream_dependents.is_empty() { 38.0 + 14.0 } else { trace.downstream_dependents.len() as f64 * 36.0 + 10.0 };
                 h += 50.0;
-                return (h - detail_visible_h).max(0.0);
+                return h;
             }
         }
 
-        let content_h = if let Some(node) = selected_id.and_then(|id| layout.get_node(id)) {
+        if let Some(node) = selected_id.and_then(|id| layout.get_node(id)) {
             let mut h = 10.0 + 14.0 + 76.0 + 16.0;
             if !node.state_vars.is_empty() {
                 h += 18.0 + node.state_vars.len() as f64 * 24.0 + 10.0;
@@ -146,8 +176,197 @@ impl InspectPanelComponent {
             h + 30.0
         } else {
             120.0
-        };
+        }
+    }
+
+    /// Computes the maximum vertical scroll offset for the bottom details panel.
+    pub fn max_detail_scroll(&self, selected_id: Option<NodeId>, layout: &ResolvedLayout, win_h: f64) -> f64 {
+        self.max_detail_scroll_with_state(selected_id, layout, None, win_h)
+    }
+
+    /// Computes the maximum vertical scroll offset for the bottom details panel taking state into account.
+    pub fn max_detail_scroll_with_state(
+        &self,
+        selected_id: Option<NodeId>,
+        layout: &ResolvedLayout,
+        state: Option<&InspectorState>,
+        win_h: f64,
+    ) -> f64 {
+        let detail_y = self.divider_y(win_h);
+        let detail_visible_h = (win_h - (detail_y + self.divider_height)).max(0.0);
+        let content_h = self.total_detail_content_height(selected_id, layout, state);
         (content_h - detail_visible_h).max(0.0)
+    }
+
+    /// Computes the total content width of the bottom details panel.
+    pub fn total_detail_content_width(
+        &self,
+        selected_id: Option<NodeId>,
+        layout: &ResolvedLayout,
+        state: Option<&InspectorState>,
+    ) -> f64 {
+        let mut max_w = self.width;
+
+        if let Some((sel_nid, ref sel_prop)) = state.and_then(|s| s.selected_property.as_ref()) {
+            if let Some(trace) = crate::inspector::build_property_dag_trace(layout, *sel_nid, sel_prop) {
+                let bc_w = 10.0 + 145.0 + 15.0 + (trace.target_label.len() + trace.port_name.len()) as f64 * 8.0 + 40.0;
+                if bc_w > max_w {
+                    max_w = bc_w;
+                }
+                for dep in &trace.upstream_dependencies {
+                    let w = 20.0 + dep.node_label.len() as f64 * 8.0 + dep.port_name.len() as f64 * 8.0 + dep.value_str.len() as f64 * 8.0 + 90.0;
+                    if w > max_w {
+                        max_w = w;
+                    }
+                    if !dep.equation_str.is_empty() {
+                        let eq_w = 20.0 + dep.equation_str.len() as f64 * 7.5 + 40.0;
+                        if eq_w > max_w {
+                            max_w = eq_w;
+                        }
+                    }
+                }
+                for dep in &trace.downstream_dependents {
+                    let w = 20.0 + dep.node_label.len() as f64 * 8.0 + dep.port_name.len() as f64 * 8.0 + dep.value_str.len() as f64 * 8.0 + 90.0;
+                    if w > max_w {
+                        max_w = w;
+                    }
+                }
+                let eq_hero_w = 20.0 + trace.equation_str.len() as f64 * 8.0 + 80.0;
+                if eq_hero_w > max_w {
+                    max_w = eq_hero_w;
+                }
+                let desc_w = 20.0 + trace.origin_description.len() as f64 * 7.0 + 40.0;
+                if desc_w > max_w {
+                    max_w = desc_w;
+                }
+                return max_w;
+            }
+        }
+
+        if let Some(node) = selected_id.and_then(|id| layout.get_node(id)) {
+            for (s_name, _) in &node.state_vars {
+                let val_str = layout.get_value(node.id, s_name).map(|v| format!("{v}")).unwrap_or_default();
+                let w = 24.0 + s_name.len() as f64 * 8.0 + val_str.len() as f64 * 8.0 + 50.0;
+                if w > max_w {
+                    max_w = w;
+                }
+            }
+            let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
+            prop_keys.retain(|k| k != "clip");
+            for geom in ["x", "y", "width", "height", "z"] {
+                if !prop_keys.contains(&geom.to_string()) {
+                    prop_keys.push(geom.to_string());
+                }
+            }
+            for key in &prop_keys {
+                let eval_str = if let Some(val) = node.properties.get(key) {
+                    format!("{val}")
+                } else {
+                    String::new()
+                };
+                let formula_str = node.formulas.get(key).cloned().unwrap_or_default();
+                let prop_w = 24.0 + key.len() as f64 * 8.0 + eval_str.len() as f64 * 8.0 + 40.0;
+                if prop_w > max_w {
+                    max_w = prop_w;
+                }
+                if !formula_str.is_empty() {
+                    let form_w = 24.0 + formula_str.len() as f64 * 7.5 + 30.0;
+                    if form_w > max_w {
+                        max_w = form_w;
+                    }
+                }
+
+                if let Some(Value::Node(ref_id)) = node.properties.get(key) {
+                    let is_expanded = state.is_some_and(|s| s.is_property_ref_expanded(node.id, key));
+                    if is_expanded {
+                        if let Some(rn) = layout.get_node(*ref_id) {
+                            let mut child_keys: Vec<String> = rn.properties.keys().cloned().collect();
+                            child_keys.retain(|k| k != "clip");
+                            for ck in &child_keys {
+                                let c_val = rn.properties.get(ck);
+                                let c_eval = c_val.map(|v| format!("{v}")).unwrap_or_default();
+                                let c_form = rn.formulas.get(ck).cloned().unwrap_or_else(|| c_eval.clone());
+                                let c_w = 40.0 + ck.len() as f64 * 8.0 + c_eval.len() as f64 * 8.0 + 40.0;
+                                if c_w > max_w {
+                                    max_w = c_w;
+                                }
+                                if !c_form.is_empty() {
+                                    let c_form_w = 40.0 + c_form.len() as f64 * 7.5 + 30.0;
+                                    if c_form_w > max_w {
+                                        max_w = c_form_w;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        max_w
+    }
+
+    /// Computes the maximum horizontal scroll offset for the bottom details panel.
+    pub fn max_detail_scroll_x(
+        &self,
+        selected_id: Option<NodeId>,
+        layout: &ResolvedLayout,
+        state: Option<&InspectorState>,
+    ) -> f64 {
+        let content_w = self.total_detail_content_width(selected_id, layout, state);
+        (content_w - self.width).max(0.0)
+    }
+
+    /// Hit-tests scrollbar thumbs / tracks within the inspector panel.
+    pub fn hit_test_scrollbar(
+        &self,
+        px: f64,
+        py: f64,
+        panel_x: f64,
+        win_h: f64,
+        items: &[DomTreeItem],
+        state: &InspectorState,
+        layout: &ResolvedLayout,
+    ) -> Option<InspectorScrollbarKind> {
+        let divider_y = self.divider_y(win_h);
+        let panel_w = self.width;
+
+        // Tree vertical scrollbar
+        let total_tree_h = items.len() as f64 * self.row_height;
+        let visible_tree_h = divider_y - self.header_height;
+        if total_tree_h > visible_tree_h && visible_tree_h > 30.0 {
+            if px >= panel_x + panel_w - 12.0 && px <= panel_x + panel_w && py >= self.header_height && py < divider_y {
+                return Some(InspectorScrollbarKind::TreeVertical);
+            }
+        }
+
+        // Tree horizontal scrollbar
+        let total_tree_w = self.total_tree_width(items);
+        if total_tree_w > panel_w && visible_tree_h > 30.0 {
+            if py >= divider_y - 10.0 && py < divider_y && px >= panel_x && px <= panel_x + panel_w - 12.0 {
+                return Some(InspectorScrollbarKind::TreeHorizontal);
+            }
+        }
+
+        let detail_y = divider_y + self.divider_height;
+        let detail_h = (win_h - detail_y).max(0.0);
+
+        // Detail vertical scrollbar
+        let total_detail_h = self.total_detail_content_height(state.selected_id, layout, Some(state));
+        if total_detail_h > detail_h && detail_h > 30.0 {
+            if px >= panel_x + panel_w - 12.0 && px <= panel_x + panel_w && py >= detail_y && py <= win_h {
+                return Some(InspectorScrollbarKind::DetailVertical);
+            }
+        }
+
+        // Detail horizontal scrollbar
+        let total_detail_w = self.total_detail_content_width(state.selected_id, layout, Some(state));
+        if total_detail_w > panel_w && detail_h > 30.0 {
+            if py >= win_h - 10.0 && py <= win_h && px >= panel_x && px <= panel_x + panel_w - 12.0 {
+                return Some(InspectorScrollbarKind::DetailHorizontal);
+            }
+        }
+
+        None
     }
 
     /// Returns true if `(px, py)` is inside the header pick tool (`[↖]`) button.
@@ -182,6 +401,16 @@ impl InspectPanelComponent {
         let divider_y = self.divider_y(win_h);
         // Only clicks within the DOM tree area interact with tree items
         if py < divider_y {
+            let total_tree_h = items.len() as f64 * self.row_height;
+            let visible_tree_h = divider_y - self.header_height;
+            if total_tree_h > visible_tree_h && px >= panel_x + self.width - 12.0 {
+                return PanelHitResult::None;
+            }
+            let total_tree_w = self.total_tree_width(items);
+            if total_tree_w > self.width && py >= divider_y - 8.0 {
+                return PanelHitResult::None;
+            }
+
             let content_y = py - self.header_height + state.scroll_offset;
             if content_y < 0.0 {
                 return PanelHitResult::None;
@@ -193,7 +422,7 @@ impl InspectPanelComponent {
 
             let item = &items[row_idx];
             if let Some(node_id) = item.node_id {
-                let indent_x = panel_x + 8.0 + item.depth as f64 * self.indent_step;
+                let indent_x = panel_x + 8.0 + item.depth as f64 * self.indent_step - state.scroll_offset_x;
                 // If clicking directly on or near the chevron area
                 if item.has_children && px >= indent_x - 4.0 && px <= indent_x + 18.0 {
                     PanelHitResult::ToggleExpand(node_id)
@@ -207,12 +436,23 @@ impl InspectPanelComponent {
             let detail_y = divider_y + self.divider_height;
             if py >= detail_y {
                 if let Some(layout) = layout {
+                    let total_detail_h = self.total_detail_content_height(state.selected_id, layout, Some(state));
+                    let detail_h = (win_h - detail_y).max(0.0);
+                    if total_detail_h > detail_h && px >= panel_x + self.width - 12.0 {
+                        return PanelHitResult::None;
+                    }
+                    let total_detail_w = self.total_detail_content_width(state.selected_id, layout, Some(state));
+                    if total_detail_w > self.width && py >= win_h - 8.0 {
+                        return PanelHitResult::None;
+                    }
+
                     if let Some((sel_nid, ref sel_prop)) = state.selected_property {
                         let base_y = detail_y - state.detail_scroll_offset;
+                        let base_x = panel_x - state.detail_scroll_offset_x;
                         let mut cur_y = base_y + 10.0;
 
                         // Check [← Back to Component] button
-                        if py >= cur_y && py <= cur_y + 24.0 && px >= panel_x + 10.0 && px <= panel_x + 155.0 {
+                        if py >= cur_y && py <= cur_y + 24.0 && px >= base_x + 10.0 && px <= base_x + 155.0 {
                             return PanelHitResult::BackToComponentDetails;
                         }
 
@@ -227,7 +467,9 @@ impl InspectPanelComponent {
                             } else {
                                 for dep in &trace.upstream_dependencies {
                                     let row_h = 34.0;
-                                    if py >= cur_y && py < cur_y + row_h {
+                                    let dep_x = base_x + 10.0;
+                                    let dep_w = self.width - 20.0;
+                                    if py >= cur_y && py < cur_y + row_h && px >= dep_x && px <= dep_x + dep_w {
                                         return PanelHitResult::SelectProperty(dep.node_id, dep.port_name.clone());
                                     }
                                     cur_y += row_h + 4.0;
@@ -242,7 +484,9 @@ impl InspectPanelComponent {
                             } else {
                                 for dep in &trace.downstream_dependents {
                                     let row_h = 32.0;
-                                    if py >= cur_y && py < cur_y + row_h {
+                                    let dep_x = base_x + 10.0;
+                                    let dep_w = self.width - 20.0;
+                                    if py >= cur_y && py < cur_y + row_h && px >= dep_x && px <= dep_x + dep_w {
                                         return PanelHitResult::SelectProperty(dep.node_id, dep.port_name.clone());
                                     }
                                     cur_y += row_h + 4.0;
@@ -255,10 +499,11 @@ impl InspectPanelComponent {
 
                     if let Some(node) = state.selected_id.and_then(|id| layout.get_node(id)) {
                         let base_y = detail_y - state.detail_scroll_offset;
+                        let base_x = panel_x - state.detail_scroll_offset_x;
                         let mut cur_y = base_y + 10.0;
                         cur_y += 14.0; // Section A label
 
-                        let card_x = panel_x + 10.0;
+                        let card_x = base_x + 10.0;
                         let card_w = self.width - 20.0;
                         let coord_y = cur_y + 7.0;
                         if py >= coord_y - 2.0 && py <= coord_y + 16.0 {
@@ -396,6 +641,16 @@ impl InspectPanelComponent {
             return None;
         }
 
+        let total_tree_h = items.len() as f64 * self.row_height;
+        let visible_tree_h = divider_y - self.header_height;
+        if total_tree_h > visible_tree_h && px >= panel_x + self.width - 12.0 {
+            return None;
+        }
+        let total_tree_w = self.total_tree_width(items);
+        if total_tree_w > self.width && py >= divider_y - 8.0 {
+            return None;
+        }
+
         let content_y = py - self.header_height + state.scroll_offset;
         if content_y < 0.0 {
             return None;
@@ -487,7 +742,7 @@ impl InspectPanelComponent {
             }
 
             // Chevron (aligned with text baseline)
-            let indent_x = panel_x + 8.0 + item.depth as f64 * self.indent_step;
+            let indent_x = panel_x + 8.0 + item.depth as f64 * self.indent_step - state.scroll_offset_x;
             if item.has_children {
                 let chevron_col = if item.is_expanded {
                     Color::from_rgb8(148, 163, 184) // slate 400
@@ -587,21 +842,51 @@ impl InspectPanelComponent {
 
         scene.pop_layer();
 
-        // Top Tree Scrollbar Indicator (if tree content overflows)
+        // Top Tree Scrollbars (vertical and horizontal indicators)
         let total_tree_h = items.len() as f64 * self.row_height;
         let visible_tree_h = divider_y - self.header_height;
-        if total_tree_h > visible_tree_h && visible_tree_h > 30.0 {
+        let total_tree_w = self.total_tree_width(items);
+        let has_h_bar = total_tree_w > panel_w && visible_tree_h > 30.0;
+        let has_v_bar = total_tree_h > visible_tree_h && visible_tree_h > 30.0;
+
+        let v_track_h = if has_h_bar { visible_tree_h - 8.0 } else { visible_tree_h };
+        let h_track_w = if has_v_bar { panel_w - 8.0 } else { panel_w - 4.0 };
+
+        if has_v_bar {
             let bar_w = 4.0;
             let track_x = panel_x + panel_w - bar_w - 2.0;
-            let thumb_h = ((visible_tree_h / total_tree_h) * visible_tree_h).max(18.0).min(visible_tree_h);
-            let scroll_ratio = state.scroll_offset / (total_tree_h - visible_tree_h).max(1.0);
-            let thumb_y = self.header_height + scroll_ratio * (visible_tree_h - thumb_h);
+            let thumb_h = ((visible_tree_h / total_tree_h) * v_track_h).max(18.0).min(v_track_h);
+            let scroll_ratio = (state.scroll_offset / (total_tree_h - visible_tree_h).max(1.0)).clamp(0.0, 1.0);
+            let thumb_y = self.header_height + scroll_ratio * (v_track_h - thumb_h);
 
             let thumb_rrect = RoundedRect::new(
                 track_x,
                 thumb_y,
                 track_x + bar_w,
                 thumb_y + thumb_h,
+                2.0,
+            );
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                Brush::Solid(Color::from_rgba8(148, 163, 184, 120)),
+                None,
+                &thumb_rrect,
+            );
+        }
+
+        if has_h_bar {
+            let bar_h = 4.0;
+            let track_y = divider_y - bar_h - 2.0;
+            let thumb_w = ((panel_w / total_tree_w) * h_track_w).max(18.0).min(h_track_w);
+            let scroll_ratio = (state.scroll_offset_x / (total_tree_w - panel_w).max(1.0)).clamp(0.0, 1.0);
+            let thumb_x = panel_x + 2.0 + scroll_ratio * (h_track_w - thumb_w);
+
+            let thumb_rrect = RoundedRect::new(
+                thumb_x,
+                track_y,
+                thumb_x + thumb_w,
+                track_y + bar_h,
                 2.0,
             );
             scene.fill(
@@ -823,14 +1108,11 @@ impl InspectPanelComponent {
         let detail_clip = Rect::new(panel_x, detail_y, panel_x + panel_w, win_h);
         scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &detail_clip);
 
-        let mut total_detail_content_h = 100.0;
+        let mut total_detail_content_h = self.total_detail_content_height(state.selected_id, layout, Some(state));
+        let total_detail_content_w = self.total_detail_content_width(state.selected_id, layout, Some(state));
 
         if let Some((sel_nid, ref sel_prop)) = state.selected_property {
             if let Some(trace) = crate::inspector::build_property_dag_trace(layout, sel_nid, sel_prop) {
-                total_detail_content_h = 10.0 + 30.0 + 96.0 + 16.0
-                    + 18.0 + if trace.upstream_dependencies.is_empty() { 45.0 + 14.0 } else { trace.upstream_dependencies.len() as f64 * 38.0 + 10.0 }
-                    + 18.0 + if trace.downstream_dependents.is_empty() { 38.0 + 14.0 } else { trace.downstream_dependents.len() as f64 * 36.0 + 10.0 }
-                    + 50.0;
                 self.render_property_details(
                     scene,
                     font_cx,
@@ -841,10 +1123,13 @@ impl InspectPanelComponent {
                     win_h,
                     state,
                     &trace,
+                    total_detail_content_w,
                 );
             }
         } else if let Some(node) = selected_node {
             let base_y = detail_y - state.detail_scroll_offset;
+            let base_x = panel_x - state.detail_scroll_offset_x;
+            let card_w = (panel_w - 20.0).max(total_detail_content_w - 20.0);
             let mut cur_y = base_y + 10.0;
 
             // --- Section A: Dimensions & Box Model ---
@@ -857,13 +1142,12 @@ impl InspectPanelComponent {
                 FontWeight::BOLD,
                 Color::from_rgb8(148, 163, 184), // slate 400
                 false,
-                panel_x + 12.0,
+                base_x + 12.0,
                 cur_y,
             );
             cur_y += 14.0;
 
-            let card_x = panel_x + 10.0;
-            let card_w = panel_w - 20.0;
+            let card_x = base_x + 10.0;
             let card_h = 76.0;
             let card_rrect = RoundedRect::new(card_x, cur_y, card_x + card_w, cur_y + card_h, 6.0);
             scene.fill(
@@ -903,7 +1187,7 @@ impl InspectPanelComponent {
             // Center Box Model Pill
             let box_x = card_x + 10.0;
             let box_y = cur_y + 28.0;
-            let box_w = card_w - 20.0;
+            let box_w = (card_w - 20.0).max(100.0);
             let box_h = 34.0;
             let box_rrect = RoundedRect::new(box_x, box_y, box_x + box_w, box_y + box_h, 4.0);
             scene.fill(
@@ -948,7 +1232,7 @@ impl InspectPanelComponent {
                     FontWeight::BOLD,
                     Color::from_rgb8(192, 132, 252), // purple 400
                     false,
-                    panel_x + 12.0,
+                    base_x + 12.0,
                     cur_y,
                 );
                 cur_y += 18.0;
@@ -962,7 +1246,7 @@ impl InspectPanelComponent {
 
                     let row_h = 24.0;
                     if cur_y + row_h >= detail_y && cur_y <= win_h {
-                        let state_x = panel_x + 12.0;
+                        let state_x = base_x + 12.0;
 
                         // Live state indicator dot (purple halo + vibrant dot)
                         let dot_cx = state_x + 4.0;
@@ -1086,7 +1370,7 @@ impl InspectPanelComponent {
                             Affine::IDENTITY,
                             Brush::Solid(Color::from_rgb8(24, 32, 47)),
                             None,
-                            &Line::new((state_x, sep_y), (panel_x + panel_w - 12.0, sep_y)),
+                            &Line::new((state_x, sep_y), (card_x + card_w, sep_y)),
                         );
                     }
 
@@ -1106,7 +1390,7 @@ impl InspectPanelComponent {
                 FontWeight::BOLD,
                 Color::from_rgb8(148, 163, 184), // slate 400
                 false,
-                panel_x + 12.0,
+                base_x + 12.0,
                 cur_y,
             );
             cur_y += 18.0;
@@ -1180,7 +1464,7 @@ impl InspectPanelComponent {
 
                 // Only draw if within visible viewport
                 if cur_y + row_h >= detail_y && cur_y <= win_h {
-                    let prop_x = panel_x + 12.0;
+                    let prop_x = base_x + 12.0;
 
                     // Line 1: Chevron (for node refs) or Typographic bullet (for standard props)
                     if is_node_ref {
@@ -1313,7 +1597,7 @@ impl InspectPanelComponent {
                         Affine::IDENTITY,
                         Brush::Solid(Color::from_rgb8(24, 32, 47)),
                         None,
-                        &Line::new((prop_x, sep_y), (panel_x + panel_w - 12.0, sep_y)),
+                        &Line::new((prop_x, sep_y), (card_x + card_w, sep_y)),
                     );
                 }
 
@@ -1341,8 +1625,8 @@ impl InspectPanelComponent {
                             });
 
                             let child_start_y = cur_y;
-                            let guide_x = panel_x + 20.0;
-                            let child_indent_x = panel_x + 28.0;
+                            let guide_x = base_x + 20.0;
+                            let child_indent_x = base_x + 28.0;
 
                             for ck in &child_keys {
                                 let c_val = rn.properties.get(ck);
@@ -1520,19 +1804,48 @@ impl InspectPanelComponent {
 
         scene.pop_layer();
 
-        // Bottom Details Scrollbar (if content overflows bottom panel height)
-        if total_detail_content_h > detail_h && detail_h > 30.0 {
+        // Bottom Details Scrollbars (vertical and horizontal indicators)
+        let has_detail_v = total_detail_content_h > detail_h && detail_h > 30.0;
+        let has_detail_h = total_detail_content_w > panel_w && detail_h > 30.0;
+
+        let v_track_h = if has_detail_h { (detail_h - 8.0).max(18.0) } else { detail_h };
+        let h_track_w = if has_detail_v { (panel_w - 8.0).max(18.0) } else { panel_w - 4.0 };
+
+        if has_detail_v {
             let bar_w = 4.0;
             let track_x = panel_x + panel_w - bar_w - 2.0;
-            let thumb_h = ((detail_h / total_detail_content_h) * detail_h).max(18.0).min(detail_h);
-            let scroll_ratio = state.detail_scroll_offset / (total_detail_content_h - detail_h).max(1.0);
-            let thumb_y = detail_y + scroll_ratio * (detail_h - thumb_h);
+            let thumb_h = ((detail_h / total_detail_content_h) * v_track_h).max(18.0).min(v_track_h);
+            let scroll_ratio = (state.detail_scroll_offset / (total_detail_content_h - detail_h).max(1.0)).clamp(0.0, 1.0);
+            let thumb_y = detail_y + scroll_ratio * (v_track_h - thumb_h);
 
             let thumb_rrect = RoundedRect::new(
                 track_x,
                 thumb_y,
                 track_x + bar_w,
                 thumb_y + thumb_h,
+                2.0,
+            );
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                Brush::Solid(Color::from_rgba8(148, 163, 184, 120)),
+                None,
+                &thumb_rrect,
+            );
+        }
+
+        if has_detail_h {
+            let bar_h = 4.0;
+            let track_y = win_h - bar_h - 2.0;
+            let thumb_w = ((panel_w / total_detail_content_w) * h_track_w).max(18.0).min(h_track_w);
+            let scroll_ratio = (state.detail_scroll_offset_x / (total_detail_content_w - panel_w).max(1.0)).clamp(0.0, 1.0);
+            let thumb_x = panel_x + 2.0 + scroll_ratio * (h_track_w - thumb_w);
+
+            let thumb_rrect = RoundedRect::new(
+                thumb_x,
+                track_y,
+                thumb_x + thumb_w,
+                track_y + bar_h,
                 2.0,
             );
             scene.fill(
@@ -1558,12 +1871,15 @@ impl InspectPanelComponent {
         _win_h: f64,
         state: &InspectorState,
         trace: &crate::inspector::DagPropertyTrace,
+        content_w: f64,
     ) {
         let base_y = detail_y - state.detail_scroll_offset;
+        let base_x = panel_x - state.detail_scroll_offset_x;
+        let card_w = (panel_w - 20.0).max(content_w - 20.0);
         let mut cur_y = base_y + 10.0;
 
         // 1. Navigation Toolbar: [← Back to Component] + Breadcrumbs
-        let btn_x = panel_x + 10.0;
+        let btn_x = base_x + 10.0;
         let btn_w = 145.0;
         let btn_h = 22.0;
         let btn_rrect = RoundedRect::new(btn_x, cur_y, btn_x + btn_w, cur_y + btn_h, 4.0);
@@ -1612,8 +1928,7 @@ impl InspectPanelComponent {
         cur_y += 30.0;
 
         // 2. Inspected Property Hero Card
-        let card_x = panel_x + 10.0;
-        let card_w = panel_w - 20.0;
+        let card_x = base_x + 10.0;
         let card_h = 96.0;
         let card_rrect = RoundedRect::new(card_x, cur_y, card_x + card_w, cur_y + card_h, 6.0);
         scene.fill(
@@ -1808,7 +2123,7 @@ impl InspectPanelComponent {
             FontWeight::BOLD,
             Color::from_rgb8(148, 163, 184),
             false,
-            panel_x + 12.0,
+            base_x + 12.0,
             cur_y,
         );
         let in_count = format!("({} input{})", trace.upstream_dependencies.len(), if trace.upstream_dependencies.len() == 1 { "" } else { "s" });
@@ -1821,13 +2136,13 @@ impl InspectPanelComponent {
             FontWeight::NORMAL,
             Color::from_rgb8(100, 116, 139),
             false,
-            panel_x + 230.0,
+            base_x + 230.0,
             cur_y,
         );
         cur_y += 18.0;
 
         if trace.upstream_dependencies.is_empty() {
-            let empty_rrect = RoundedRect::new(panel_x + 10.0, cur_y, panel_x + panel_w - 10.0, cur_y + 45.0, 4.0);
+            let empty_rrect = RoundedRect::new(base_x + 10.0, cur_y, base_x + 10.0 + card_w, cur_y + 45.0, 4.0);
             scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(24, 32, 47)), None, &empty_rrect);
             let empty_stroke = Stroke::new(1.0);
             scene.stroke(&empty_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(45, 55, 72)), None, &empty_rrect);
@@ -1841,7 +2156,7 @@ impl InspectPanelComponent {
                 FontWeight::BOLD,
                 Color::from_rgb8(251, 191, 36), // amber 400
                 false,
-                panel_x + 20.0,
+                base_x + 20.0,
                 cur_y + 8.0,
             );
             let subtext = if trace.origin_kind == crate::inspector::PortOriginKind::InferredDefault {
@@ -1858,14 +2173,14 @@ impl InspectPanelComponent {
                 FontWeight::NORMAL,
                 Color::from_rgb8(148, 163, 184),
                 false,
-                panel_x + 20.0,
+                base_x + 20.0,
                 cur_y + 24.0,
             );
             cur_y += 45.0 + 14.0;
         } else {
             for dep in &trace.upstream_dependencies {
-                let dep_x = panel_x + 10.0;
-                let dep_w = panel_w - 20.0;
+                let dep_x = base_x + 10.0;
+                let dep_w = card_w;
                 let dep_h = 34.0;
                 let dep_rrect = RoundedRect::new(dep_x, cur_y, dep_x + dep_w, cur_y + dep_h, 4.0);
                 scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(24, 32, 47)), None, &dep_rrect);
@@ -1907,7 +2222,7 @@ impl InspectPanelComponent {
             FontWeight::BOLD,
             Color::from_rgb8(148, 163, 184),
             false,
-            panel_x + 12.0,
+            base_x + 12.0,
             cur_y,
         );
         let out_count = format!("({} dependent{})", trace.downstream_dependents.len(), if trace.downstream_dependents.len() == 1 { "" } else { "s" });
@@ -1920,13 +2235,13 @@ impl InspectPanelComponent {
             FontWeight::NORMAL,
             Color::from_rgb8(100, 116, 139),
             false,
-            panel_x + 230.0,
+            base_x + 230.0,
             cur_y,
         );
         cur_y += 18.0;
 
         if trace.downstream_dependents.is_empty() {
-            let empty_rrect = RoundedRect::new(panel_x + 10.0, cur_y, panel_x + panel_w - 10.0, cur_y + 38.0, 4.0);
+            let empty_rrect = RoundedRect::new(base_x + 10.0, cur_y, base_x + 10.0 + card_w, cur_y + 38.0, 4.0);
             scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(24, 32, 47)), None, &empty_rrect);
             let empty_stroke = Stroke::new(1.0);
             scene.stroke(&empty_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(45, 55, 72)), None, &empty_rrect);
@@ -1940,14 +2255,14 @@ impl InspectPanelComponent {
                 FontWeight::NORMAL,
                 Color::from_rgb8(148, 163, 184),
                 false,
-                panel_x + 20.0,
+                base_x + 20.0,
                 cur_y + 11.0,
             );
             cur_y += 38.0 + 14.0;
         } else {
             for dep in &trace.downstream_dependents {
-                let dep_x = panel_x + 10.0;
-                let dep_w = panel_w - 20.0;
+                let dep_x = base_x + 10.0;
+                let dep_w = card_w;
                 let dep_h = 32.0;
                 let dep_rrect = RoundedRect::new(dep_x, cur_y, dep_x + dep_w, cur_y + dep_h, 4.0);
                 scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(24, 32, 47)), None, &dep_rrect);
@@ -1973,16 +2288,16 @@ impl InspectPanelComponent {
         }
 
         // 5. Section: DAG Identifiers & Metrics
-        let stats_rrect = RoundedRect::new(panel_x + 10.0, cur_y, panel_x + panel_w - 10.0, cur_y + 44.0, 4.0);
+        let stats_rrect = RoundedRect::new(base_x + 10.0, cur_y, base_x + 10.0 + card_w, cur_y + 44.0, 4.0);
         scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(17, 24, 39)), None, &stats_rrect);
         let stats_stroke = Stroke::new(1.0);
         scene.stroke(&stats_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(30, 41, 59)), None, &stats_rrect);
 
         let var_id_str = format!("DAG VarId: {}", trace.canonical_var);
-        self.draw_text_snippet(scene, font_cx, layout_cx, &var_id_str, 9.0, FontWeight::NORMAL, Color::from_rgb8(148, 163, 184), true, panel_x + 18.0, cur_y + 7.0);
+        self.draw_text_snippet(scene, font_cx, layout_cx, &var_id_str, 9.0, FontWeight::NORMAL, Color::from_rgb8(148, 163, 184), true, base_x + 18.0, cur_y + 7.0);
 
         let metrics_str = format!("In-degree: {} | Out-degree: {}", trace.upstream_dependencies.len(), trace.downstream_dependents.len());
-        self.draw_text_snippet(scene, font_cx, layout_cx, &metrics_str, 9.0, FontWeight::NORMAL, Color::from_rgb8(100, 116, 139), true, panel_x + 18.0, cur_y + 24.0);
+        self.draw_text_snippet(scene, font_cx, layout_cx, &metrics_str, 9.0, FontWeight::NORMAL, Color::from_rgb8(100, 116, 139), true, base_x + 18.0, cur_y + 24.0);
     }
 
     /// Internal helper to render a single-line text snippet, returning its advance width.
