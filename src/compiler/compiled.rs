@@ -260,6 +260,77 @@ impl CompiledDocument {
             .or_else(|| self.layout.get_value(node_id, state_name))
     }
 
+    /// Updates the ambient window dimensions (`window.width`, `window.height`, `window.right`, `window.bottom`)
+    /// and incrementally re-evaluates all downstream layout variables.
+    pub fn resize_window(
+        &mut self,
+        window_width: f64,
+        window_height: f64,
+    ) -> Result<HashSet<VarId>, CompileError> {
+        let window_span = Span::default();
+        let width_id = VarId::new(NodeId::WINDOW, "width");
+        let height_id = VarId::new(NodeId::WINDOW, "height");
+        let right_id = VarId::new(NodeId::WINDOW, "right");
+        let bottom_id = VarId::new(NodeId::WINDOW, "bottom");
+
+        if let Some(var) = self.graph.variables.get_mut(&width_id) {
+            var.equation =
+                crate::ast::Expr::Literal(crate::ast::Literal::Number(window_width, window_span));
+        }
+        if let Some(var) = self.graph.variables.get_mut(&height_id) {
+            var.equation =
+                crate::ast::Expr::Literal(crate::ast::Literal::Number(window_height, window_span));
+        }
+        if let Some(var) = self.graph.variables.get_mut(&right_id) {
+            var.equation =
+                crate::ast::Expr::Literal(crate::ast::Literal::Number(window_width, window_span));
+        }
+        if let Some(var) = self.graph.variables.get_mut(&bottom_id) {
+            var.equation =
+                crate::ast::Expr::Literal(crate::ast::Literal::Number(window_height, window_span));
+        }
+
+        if let Some(ref mut layout_graph) = self.layout.graph {
+            if let Some(var) = layout_graph.variables.get_mut(&width_id) {
+                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Number(
+                    window_width,
+                    window_span,
+                ));
+            }
+            if let Some(var) = layout_graph.variables.get_mut(&height_id) {
+                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Number(
+                    window_height,
+                    window_span,
+                ));
+            }
+            if let Some(var) = layout_graph.variables.get_mut(&right_id) {
+                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Number(
+                    window_width,
+                    window_span,
+                ));
+            }
+            if let Some(var) = layout_graph.variables.get_mut(&bottom_id) {
+                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Number(
+                    window_height,
+                    window_span,
+                ));
+            }
+        }
+
+        let dirty_roots = [width_id, height_id, right_id, bottom_id];
+        let changed = invalidate_and_reevaluate(
+            &self.graph,
+            &self.schedule,
+            &mut self.layout.values,
+            &dirty_roots,
+            &self.state_overrides,
+        )?;
+
+        update_resolved_layout(&mut self.layout, &self.expanded, &changed);
+
+        Ok(changed)
+    }
+
     /// Returns the current resolved layout.
     pub fn layout(&self) -> &ResolvedLayout {
         &self.layout

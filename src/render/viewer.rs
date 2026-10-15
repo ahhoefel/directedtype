@@ -334,7 +334,18 @@ impl ViewerApp {
 
     /// Toggles the interactive visual inspector overlay.
     pub fn set_inspect_mode(&mut self, enabled: bool) {
+        if self.inspect_mode == enabled {
+            return;
+        }
         self.inspect_mode = enabled;
+        if !self.inspect_mode {
+            self.hovered_node = None;
+            self.inspector_state.set_hovered_id(None);
+            self.inspector_state.inspect_cursor_active = false;
+        }
+        let (win_w, win_h) = self.logical_window_size();
+        self.update_layout_for_size(win_w, win_h);
+        self.clamp_scroll();
         if let Some(w) = &self.window {
             w.request_redraw();
         }
@@ -833,10 +844,9 @@ impl ViewerApp {
         (self.content_width() - viewport_w).max(0.0)
     }
 
-    /// Returns the logical viewport dimensions available for document content: `(width, height)`.
-    pub fn viewport_size(&self) -> (f64, f64) {
+    /// Returns the total logical window dimensions: `(width, height)`.
+    fn logical_window_size(&self) -> (f64, f64) {
         let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
-        let nav_bar_h = self.nav_bar_height();
         if let Some(w) = &self.window {
             let size = w.inner_size();
             let w_logical = if size.width > 0 {
@@ -845,21 +855,32 @@ impl ViewerApp {
                 self.config.width as f64
             };
             let h_logical = if size.height > 0 {
-                (size.height as f64 / scale - nav_bar_h).max(1.0)
+                size.height as f64 / scale
             } else {
-                (self.config.height as f64 - nav_bar_h).max(1.0)
+                self.config.height as f64
             };
             (w_logical, h_logical)
         } else if let Some(surface) = &self.surface {
-            let w_logical = surface.config.width as f64 / scale;
-            let h_logical = (surface.config.height as f64 / scale - nav_bar_h).max(1.0);
-            (w_logical, h_logical)
-        } else {
             (
-                self.config.width as f64,
-                (self.config.height as f64 - nav_bar_h).max(1.0),
+                surface.config.width as f64 / scale,
+                surface.config.height as f64 / scale,
             )
+        } else {
+            (self.config.width as f64, self.config.height as f64)
         }
+    }
+
+    /// Returns the logical viewport dimensions available for document content: `(width, height)`.
+    pub fn viewport_size(&self) -> (f64, f64) {
+        let (win_w, win_h) = self.logical_window_size();
+        let nav_bar_h = self.nav_bar_height();
+        let vp_w = if self.inspect_mode {
+            (win_w - self.panel_component.width).max(100.0)
+        } else {
+            win_w
+        };
+        let vp_h = (win_h - nav_bar_h).max(1.0);
+        (vp_w, vp_h)
     }
 
     /// Returns whether vertical scrolling is enabled on the ambient window.
@@ -1214,13 +1235,7 @@ impl ViewerApp {
             (node.rect.y, node.rect.height)
         };
 
-        let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
-        let win_h = if let Some(w) = &self.window {
-            let size = w.inner_size();
-            size.height as f64 / scale
-        } else {
-            self.config.height as f64
-        };
+        let (_vp_w, win_h) = self.viewport_size();
 
         let max_scroll = self.max_scroll_y(win_h);
         let padding = 20.0;
@@ -1636,18 +1651,8 @@ impl ViewerApp {
         let doc = parse_document(&source)
             .map_err(|e| format!("Parse error in '{}': {e}", resolved.display()))?;
 
-        let nav_bar_h = self.nav_bar_height();
-        let (logical_w, logical_h) = if let Some(window) = &self.window {
-            let scale = window.scale_factor();
-            let size = window.inner_size();
-            if size.width > 0 && size.height > 0 {
-                (size.width as f64 / scale, (size.height as f64 / scale - nav_bar_h).max(50.0))
-            } else {
-                (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
-            }
-        } else {
-            (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
-        };
+        let (vp_w, vp_h) = self.viewport_size();
+        let (logical_w, logical_h) = (vp_w, vp_h.max(50.0));
 
         let new_base_dir = resolved.parent().unwrap_or_else(|| std::path::Path::new("."));
         let resolver = FsResolver;
@@ -1779,18 +1784,8 @@ impl ViewerApp {
         let doc = parse_document(&source)
             .map_err(|e| format!("Parse error in '{}': {e}", path.display()))?;
 
-        let nav_bar_h = self.nav_bar_height();
-        let (logical_w, logical_h) = if let Some(window) = &self.window {
-            let scale = window.scale_factor();
-            let size = window.inner_size();
-            if size.width > 0 && size.height > 0 {
-                (size.width as f64 / scale, (size.height as f64 / scale - nav_bar_h).max(50.0))
-            } else {
-                (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
-            }
-        } else {
-            (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
-        };
+        let (vp_w, vp_h) = self.viewport_size();
+        let (logical_w, logical_h) = (vp_w, vp_h.max(50.0));
 
         let base_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
         let resolver = FsResolver;
@@ -1871,29 +1866,16 @@ impl ViewerApp {
 
     fn update_layout_for_size(&mut self, logical_w: f64, logical_h: f64) {
         let nav_bar_h = self.nav_bar_height();
+        let doc_w = if self.inspect_mode {
+            (logical_w - self.panel_component.width).max(100.0)
+        } else {
+            logical_w
+        };
         let doc_h = (logical_h - nav_bar_h).max(50.0);
-        if let Some(doc) = &self.doc {
-            if let Some(compiled) = &mut self.compiled {
-                let base_dir = self
-                    .watch_path
-                    .as_deref()
-                    .and_then(|p| p.parent())
-                    .unwrap_or_else(|| std::path::Path::new("."));
-                let resolver = FsResolver;
-                if let Ok(mut new_compiled) = CompiledDocument::compile_with_registry(
-                    doc,
-                    logical_w,
-                    doc_h,
-                    base_dir,
-                    &resolver,
-                    &self.component_registry,
-                ) {
-                    for (var_id, val) in &compiled.state_overrides {
-                        let _ = new_compiled.set_state(var_id.node, &var_id.port, val.clone());
-                    }
-                    *compiled = new_compiled;
-                }
-            } else if let Ok(new_layout) = evaluate_document_with_window(doc, logical_w, doc_h) {
+        if let Some(compiled) = &mut self.compiled {
+            let _ = compiled.resize_window(doc_w, doc_h);
+        } else if let Some(doc) = &self.doc {
+            if let Ok(new_layout) = evaluate_document_with_window(doc, doc_w, doc_h) {
                 self.static_layout = new_layout;
             }
         }
@@ -1923,18 +1905,8 @@ impl ViewerApp {
             }
         };
 
-        let nav_bar_h = self.nav_bar_height();
-        let (logical_w, logical_h) = if let Some(window) = &self.window {
-            let scale = window.scale_factor();
-            let size = window.inner_size();
-            if size.width > 0 && size.height > 0 {
-                (size.width as f64 / scale, (size.height as f64 / scale - nav_bar_h).max(50.0))
-            } else {
-                (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
-            }
-        } else {
-            (self.config.width as f64, (self.config.height as f64 - nav_bar_h).max(50.0))
-        };
+        let (vp_w, vp_h) = self.viewport_size();
+        let (logical_w, logical_h) = (vp_w, vp_h.max(50.0));
 
         if let Some(compiled) = &mut self.compiled {
             let base_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
@@ -2077,7 +2049,24 @@ impl ViewerApp {
         };
         let canvas_h = (win_h - nav_bar_h).max(1.0);
 
+        let canvas_w = if self.inspect_mode {
+            (win_w - self.panel_component.width).max(100.0)
+        } else {
+            win_w
+        };
+
         let mut scene = Scene::new();
+        let canvas_clip = vello::kurbo::Rect::new(
+            0.0,
+            nav_bar_h * scale,
+            canvas_w * scale,
+            (nav_bar_h + canvas_h) * scale,
+        );
+        scene.push_clip_layer(
+            vello::peniko::Fill::NonZero,
+            vello::kurbo::Affine::IDENTITY,
+            &canvas_clip,
+        );
         if nav_bar_h > 0.0 {
             scene.append(
                 &doc_scene,
@@ -2086,12 +2075,7 @@ impl ViewerApp {
         } else {
             scene.append(&doc_scene, None);
         }
-
-        let canvas_w = if self.inspect_mode {
-            (win_w - self.panel_component.width).max(100.0)
-        } else {
-            win_w
-        };
+        scene.pop_layer();
 
         if self.inspect_mode {
             let overlay = crate::inspector::InspectOverlayComponent::default();
@@ -2929,15 +2913,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                         }
                                     }
                                     BrowserBarHitResult::ToggleInspect => {
-                                        self.inspect_mode = !self.inspect_mode;
-                                        if !self.inspect_mode {
-                                            self.hovered_node = None;
-                                            self.inspector_state.set_hovered_id(None);
-                                            self.inspector_state.inspect_cursor_active = false;
-                                        }
-                                        if let Some(w) = &self.window {
-                                            w.request_redraw();
-                                        }
+                                        self.set_inspect_mode(!self.inspect_mode);
                                     }
                                     BrowserBarHitResult::FocusUrlBar(_) => {
                                         bar.url_bar.focus();
@@ -3461,12 +3437,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
                 }
                 Key::Named(NamedKey::ArrowDown) => {
-                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
-                    let win_h = if let Some(w) = &self.window {
-                        w.inner_size().height as f64 / scale
-                    } else {
-                        self.config.height as f64
-                    };
+                    let (_vp_w, win_h) = self.viewport_size();
                     let max_scroll = self.max_scroll_y(win_h);
                     self.scroll_y = (self.scroll_y + 40.0).clamp(0.0, max_scroll);
                     if let Some(w) = &self.window {
@@ -3474,12 +3445,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
                 }
                 Key::Named(NamedKey::ArrowUp) => {
-                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
-                    let win_h = if let Some(w) = &self.window {
-                        w.inner_size().height as f64 / scale
-                    } else {
-                        self.config.height as f64
-                    };
+                    let (_vp_w, win_h) = self.viewport_size();
                     let max_scroll = self.max_scroll_y(win_h);
                     self.scroll_y = (self.scroll_y - 40.0).clamp(0.0, max_scroll);
                     if let Some(w) = &self.window {
@@ -3487,12 +3453,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
                 }
                 Key::Named(NamedKey::PageDown) => {
-                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
-                    let win_h = if let Some(w) = &self.window {
-                        w.inner_size().height as f64 / scale
-                    } else {
-                        self.config.height as f64
-                    };
+                    let (_vp_w, win_h) = self.viewport_size();
                     let max_scroll = self.max_scroll_y(win_h);
                     self.scroll_y = (self.scroll_y + win_h * 0.8).clamp(0.0, max_scroll);
                     if let Some(w) = &self.window {
@@ -3500,12 +3461,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
                 }
                 Key::Named(NamedKey::PageUp) => {
-                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
-                    let win_h = if let Some(w) = &self.window {
-                        w.inner_size().height as f64 / scale
-                    } else {
-                        self.config.height as f64
-                    };
+                    let (_vp_w, win_h) = self.viewport_size();
                     let max_scroll = self.max_scroll_y(win_h);
                     self.scroll_y = (self.scroll_y - win_h * 0.8).clamp(0.0, max_scroll);
                     if let Some(w) = &self.window {
@@ -3519,12 +3475,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
                 }
                 Key::Named(NamedKey::End) => {
-                    let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
-                    let win_h = if let Some(w) = &self.window {
-                        w.inner_size().height as f64 / scale
-                    } else {
-                        self.config.height as f64
-                    };
+                    let (_vp_w, win_h) = self.viewport_size();
                     let max_scroll = self.max_scroll_y(win_h);
                     self.scroll_y = max_scroll;
                     if let Some(w) = &self.window {
@@ -3550,19 +3501,11 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     self.layout().print_dom();
                 }
                 Key::Character(c) if c.eq_ignore_ascii_case("i") => {
-                    self.inspect_mode = !self.inspect_mode;
-                    if !self.inspect_mode {
-                        self.hovered_node = None;
-                        self.inspector_state.set_hovered_id(None);
-                        self.inspector_state.inspect_cursor_active = false;
-                    }
+                    self.set_inspect_mode(!self.inspect_mode);
                     println!(
                         "[Inspector] Mode: {}",
                         if self.inspect_mode { "ON (Docked DOM inspector active)" } else { "OFF" }
                     );
-                    if let Some(w) = &self.window {
-                        w.request_redraw();
-                    }
                 }
                 Key::Character(c) if c.eq_ignore_ascii_case("c") => {
                     if self.inspect_mode {

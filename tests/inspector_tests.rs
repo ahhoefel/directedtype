@@ -1413,7 +1413,86 @@ fn test_render_inspector_with_horizontal_scrollbars() {
     assert_eq!(img.height(), 500);
 }
 
+#[test]
+fn test_inspect_mode_resizes_main_panel_window_to_visible_area() {
+    let source = r#"
+\Rect("main_bg"; x: 0, y: 0, width: window.width, height: window.height, color: #f8fafc)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_window(&doc, 1024.0, 768.0)
+        .expect("compile ok");
 
+    let mut app = directedtype::render::ViewerApp::new_with_compiled(
+        compiled,
+        directedtype::render::ViewerConfig {
+            width: 1024,
+            height: 768,
+            show_nav_bar: false,
+            ..Default::default()
+        },
+    );
 
+    // Initially, inspect mode is off: viewport and window.width are full 1024px
+    assert_eq!(app.viewport_size(), (1024.0, 768.0));
+    assert_eq!(app.content_width(), 1024.0);
+    assert_eq!(app.max_scroll_x(app.viewport_size().0), 0.0);
 
+    // Enable inspect mode: main panel window.width should shrink to visible area (1024 - 380 = 644)
+    app.set_inspect_mode(true);
+    assert_eq!(app.viewport_size(), (644.0, 768.0));
+    assert_eq!(app.content_width(), 644.0);
+    assert_eq!(
+        app.max_scroll_x(app.viewport_size().0),
+        0.0,
+        "Main panel sized to window.width should fit visible area with no horizontal overflow"
+    );
+
+    // Disable inspect mode: main panel window.width should expand back to 1024
+    app.set_inspect_mode(false);
+    assert_eq!(app.viewport_size(), (1024.0, 768.0));
+    assert_eq!(app.content_width(), 1024.0);
+    assert_eq!(app.max_scroll_x(app.viewport_size().0), 0.0);
+}
+
+#[test]
+fn test_inspect_mode_allows_horizontal_scrolling_for_wide_content() {
+    let source = r#"
+\Rect("wide_box"; x: 0, y: 0, width: 900, height: 400, color: #3b82f6)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_window(&doc, 1024.0, 768.0)
+        .expect("compile ok");
+
+    let mut app = directedtype::render::ViewerApp::new_with_compiled(
+        compiled,
+        directedtype::render::ViewerConfig {
+            width: 1024,
+            height: 768,
+            show_nav_bar: false,
+            ..Default::default()
+        },
+    );
+
+    // With inspector closed (1024px viewport), 900px content fits without scrolling
+    assert_eq!(app.max_scroll_x(app.viewport_size().0), 0.0);
+
+    // With inspector open (644px visible viewport), 900px content overflows by 256px
+    app.set_inspect_mode(true);
+    let (vp_w, _) = app.viewport_size();
+    assert_eq!(vp_w, 644.0);
+    assert_eq!(app.max_scroll_x(vp_w), 256.0);
+
+    // Horizontal scrolling should work and not be clamped back to 0
+    app.dispatch_scroll(-100.0, 0.0);
+    assert_eq!(app.scroll_x(), 100.0);
+    app.clamp_scroll();
+    assert_eq!(app.scroll_x(), 100.0);
+
+    app.scroll_to_x(500.0);
+    assert_eq!(app.scroll_x(), 256.0);
+
+    // Closing the inspector restores 1024px viewport and clamps scroll_x back to 0
+    app.set_inspect_mode(false);
+    assert_eq!(app.scroll_x(), 0.0);
+}
 
