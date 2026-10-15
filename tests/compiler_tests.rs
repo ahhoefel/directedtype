@@ -3381,6 +3381,59 @@ fn test_dag_backed_let_rejects_caller_override() {
     );
 }
 
+#[test]
+fn test_number_to_string_builtins() {
+    let input = r#"
+    \let pi = 3.14159265;
+    \let n1 = 123.456;
+    \let small = 0.0012345;
+    \let whole = 42;
+
+    \Text(
+        text: to_fixed(pi, 2),
+        size: 14, width: 100, height: 20, color: #fff
+    )
+    \Text(
+        text: pi.to_fixed(4),
+        size: 14, width: 100, height: 20, color: #fff
+    )
+    \Text(
+        text: whole.to_fixed(0),
+        size: 14, width: 100, height: 20, color: #fff
+    )
+    \Text(
+        text: to_precision(n1, 4),
+        size: 14, width: 100, height: 20, color: #fff
+    )
+    \Text(
+        text: small.to_precision(2),
+        size: 14, width: 100, height: 20, color: #fff
+    )
+    \Text(
+        text: n1.to_precision(2),
+        size: 14, width: 100, height: 20, color: #fff
+    )
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("evaluate ok");
+    let texts: Vec<Option<String>> = layout
+        .nodes
+        .iter()
+        .filter(|n| n.name == "Text")
+        .map(|n| n.properties.get("text").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .collect();
+    assert_eq!(texts.len(), 6);
+
+    assert_eq!(texts[0].as_deref(), Some("3.14"));
+    assert_eq!(texts[1].as_deref(), Some("3.1416"));
+    assert_eq!(texts[2].as_deref(), Some("42"));
+    assert_eq!(texts[3].as_deref(), Some("123.5"));
+    assert_eq!(texts[4].as_deref(), Some("0.0012"));
+    assert_eq!(texts[5].as_deref(), Some("120"));
+}
+
+
 
 
 

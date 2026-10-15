@@ -402,6 +402,17 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     }
                 }
 
+                "to_fixed" => {
+                    let val = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let decimals = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0).max(0.0) as usize;
+                    Ok(Value::String(format_fixed(val, decimals)))
+                }
+                "to_precision" => {
+                    let val = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let sigfigs = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(1.0).max(1.0) as usize;
+                    Ok(Value::String(format_sigfigs(val, sigfigs)))
+                }
+
 
                 "text_height" => {
                     let text = evaluated_args.first().and_then(|v| v.as_str()).unwrap_or("");
@@ -528,6 +539,26 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         Ok(Value::String(format!("#/{}", target)))
                     }
                 }
+                "to_fixed" => {
+                    let decimals = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0).max(0.0) as usize;
+                    match target_val {
+                        Value::Number(n) => Ok(Value::String(format_fixed(n, decimals))),
+                        _ => Err(CompileError::Custom {
+                            message: format!("to_fixed() can only be called on Number, got {}", target_val.type_name()),
+                            span: mc.span,
+                        }),
+                    }
+                }
+                "to_precision" => {
+                    let sigfigs = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(1.0).max(1.0) as usize;
+                    match target_val {
+                        Value::Number(n) => Ok(Value::String(format_sigfigs(n, sigfigs))),
+                        _ => Err(CompileError::Custom {
+                            message: format!("to_precision() can only be called on Number, got {}", target_val.type_name()),
+                            span: mc.span,
+                        }),
+                    }
+                }
                 other => Err(CompileError::Custom {
                     message: format!("Unknown method '{}' called on expression", other),
                     span: mc.span,
@@ -572,4 +603,66 @@ pub(crate) fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
 
     (r, g, b)
 }
+
+pub(crate) fn format_fixed(val: f64, decimals: usize) -> String {
+    if !val.is_finite() {
+        return format!("{val}");
+    }
+    let rounded = if decimals == 0 {
+        let r = val.round();
+        if r == 0.0 { 0.0 } else { r }
+    } else {
+        val
+    };
+    let s = format!("{:.prec$}", rounded, prec = decimals);
+    if s == format!("-{:.prec$}", 0.0, prec = decimals) {
+        format!("{:.prec$}", 0.0, prec = decimals)
+    } else {
+        s
+    }
+}
+
+pub(crate) fn format_sigfigs(val: f64, sigfigs: usize) -> String {
+    if !val.is_finite() {
+        return format!("{val}");
+    }
+    if sigfigs == 0 {
+        return Value::Number(val).to_display_string();
+    }
+    if val == 0.0 {
+        if sigfigs == 1 {
+            return "0".to_string();
+        } else {
+            return format!("0.{:0<prec$}", "", prec = sigfigs - 1);
+        }
+    }
+
+    let abs_val = val.abs();
+    let magnitude = abs_val.log10().floor() as i32;
+    let decimals = sigfigs as i32 - 1 - magnitude;
+
+    let rounded = if decimals >= 0 {
+        let factor = 10_f64.powi(decimals);
+        (val * factor).round() / factor
+    } else {
+        let factor = 10_f64.powi(-decimals);
+        (val / factor).round() * factor
+    };
+
+    let new_magnitude = if rounded == 0.0 { 0 } else { rounded.abs().log10().floor() as i32 };
+    let final_decimals = (sigfigs as i32 - 1 - new_magnitude).max(0) as usize;
+
+    let s = if final_decimals > 0 {
+        format!("{:.prec$}", rounded, prec = final_decimals)
+    } else {
+        format!("{:.0}", rounded)
+    };
+
+    if s.starts_with("-0") && s.trim_start_matches('-').parse::<f64>().map(|v| v == 0.0).unwrap_or(false) {
+        s.trim_start_matches('-').to_string()
+    } else {
+        s
+    }
+}
+
 

@@ -14,7 +14,7 @@
     \let is_max = count >= 10;
     \let is_zero = count <= 0;
     \let bar_width = (count * 26) + 12;
-    \let count_label = "Count: " + count;
+    \let count_label = "Count: " + to_fixed(count, 0);
     \let status_label = is_max ? "MAX (10)" : (is_zero ? "MIN (0)" : "Active");
 
     \alias width = 360;

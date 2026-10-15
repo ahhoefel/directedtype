@@ -45,7 +45,7 @@
     \Rect(x: x, y: y1, width: 1, height: y2 - y1, color: #ef4444)
     \Rect(x: x-arm, y: y1, width: 2*arm, height: 1, color: #ef4444)
     \Rect(x: x-arm, y: y2, width: 2*arm, height: 1, color: #ef4444)
-    \Text(x: x + 2, y: (y1 + y2)/2, color: color, text: "" + (y2 - y1))
+    \Text(x: x + 2, y: (y1 + y2)/2, color: color, text: to_fixed(y2 - y1, 2))
 }
 
 \Center{
