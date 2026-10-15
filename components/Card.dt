@@ -19,8 +19,8 @@
     \state focused: Boolean = false;
 
     \alias right = x + width;
-    \alias bottom = max(children.bottom) > y ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
-    \alias height = bottom - y;
+    \alias height = sum(children.height) + max(0, num_children - 1) * gap + (2 * style.padding_y);
+    \alias bottom = y + height;
 
     \let current_bg = focused ? focused_bg : style.bg;
     \let current_border_color = focused ? focused_border_color : style.border_color;
@@ -64,8 +64,8 @@
 
     \alias right = x + resolved_width;
     \alias width = resolved_width;
-    \alias bottom = max(children.bottom) > y ? max(children.bottom) + style.padding_y : y + (2 * style.padding_y);
-    \alias height = bottom - y;
+    \alias height = sum(children.height) + max(0, num_children - 1) * gap + (2 * style.padding_y);
+    \alias bottom = y + height;
 
     \let current_bg = focused ? focused_bg : style.bg;
     \let current_border_color = focused ? focused_border_color : style.border_color;

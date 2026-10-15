@@ -12,8 +12,8 @@
     \let inner_width = width - (2 * padding);
 
     \alias right = x + width;
-    \alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding : y + (2 * padding);
-    \alias height = bottom - y;
+    \alias height = sum(children.height) + (2 * padding);
+    \alias bottom = y + height;
 
     \Children {
         x: x + padding,
@@ -33,8 +33,8 @@
 
     \alias right = x + resolved_width;
     \alias width = resolved_width;
-    \alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding : y + (2 * padding);
-    \alias height = bottom - y;
+    \alias height = sum(children.height) + (2 * padding);
+    \alias bottom = y + height;
 
     \Children {
         x: x + padding,
@@ -54,8 +54,8 @@
     \let inner_width = width - (2 * padding_x);
 
     \alias right = x + width;
-    \alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_y : y + (2 * padding_y);
-    \alias height = bottom - y;
+    \alias height = sum(children.height) + (2 * padding_y);
+    \alias bottom = y + height;
 
     \Children {
         x: x + padding_x,
@@ -76,8 +76,8 @@
 
     \alias right = x + resolved_width;
     \alias width = resolved_width;
-    \alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_y : y + (2 * padding_y);
-    \alias height = bottom - y;
+    \alias height = sum(children.height) + (2 * padding_y);
+    \alias bottom = y + height;
 
     \Children {
         x: x + padding_x,
@@ -99,8 +99,8 @@
     \let inner_width = width - padding_left - padding_right;
 
     \alias right = x + width;
-    \alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_bottom : y + padding_top + padding_bottom;
-    \alias height = bottom - y;
+    \alias height = sum(children.height) + padding_top + padding_bottom;
+    \alias bottom = y + height;
 
     \Children {
         x: x + padding_left,
@@ -123,8 +123,8 @@
 
     \alias right = x + resolved_width;
     \alias width = resolved_width;
-    \alias bottom = max(children.bottom) > 0 ? max(children.bottom) + padding_bottom : y + padding_top + padding_bottom;
-    \alias height = bottom - y;
+    \alias height = sum(children.height) + padding_top + padding_bottom;
+    \alias bottom = y + height;
 
     \Children {
         x: x + padding_left,

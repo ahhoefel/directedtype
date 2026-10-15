@@ -326,7 +326,7 @@ impl<'a> ParserCursor<'a> {
                 } else {
                     let span = Span::new(self.pos, self.pos + 1);
                     return Err(ParseError::UnexpectedToken {
-                        expected: "let, env, alias, state, Children, or element name after '\\'".to_string(),
+                        expected: "let, env, alias, state, assert, Children, or element name after '\\'".to_string(),
                         found: rem[..1].to_string(),
                         span,
                     });

@@ -1,6 +1,8 @@
 // DirectedType Standard Component Library Demo: Slider & Callbacks
 // Showcases hardware pointer capture, smooth dragging, and strongly-typed callbacks.
 
+\use "../components/Padding.dt"
+\use "../components/HCenter.dt"
 \use "../components/VStack.dt"
 \use "../components/HStack.dt"
 \use "../components/Card.dt"
@@ -13,21 +15,25 @@
 \Rect(
     x: 0,
     y: 0,
-    width: window.width,
-    height: window.height,
+    width: max(window.width, content.width),
+    height: max(window.height, content.bottom),
     color: #0f172a
 )
 
 \Component AudioMixer(
-    x: Number: 0,
-    y: Number: 0,
-    width: Number: 480
+    width: Number: 480,
+    x: Number: parent.left,
+    y: Number: parent.top
 ) {
     \state master: 75;
     \state bass: 40;
     \state treble: 60;
 
-    \Card("mixer_card"; x: self.x, y: self.y, width: self.width, style: card_dark, gap: 16) {
+    \alias height = card.height;
+    \alias right = card.right;
+    \alias bottom = card.bottom;
+
+    \let card = \Card("mixer_card"; x: self.x, y: self.y, width: self.width, style: card_dark, gap: 16) {
         \Text(size: 18, weight: 700, color: #f8fafc) {
             Studio Audio Mixer
         }
@@ -42,7 +48,7 @@
             \HStack(gap: 8) {
                 \Text(size: 14, weight: 600, color: #e2e8f0) { Master Volume }
                 \Spacer(width: 1)
-                \Text(text: self.master + "%", size: 14, weight: 700, color: #38bdf8)
+                \Text(text: to_fixed(self.master, 0) + "%", size: 14, weight: 700, color: #38bdf8)
             }
             \Slider(
                 width: 400,
@@ -60,7 +66,7 @@
             \HStack(gap: 8) {
                 \Text(size: 14, weight: 600, color: #e2e8f0) { Bass Boost }
                 \Spacer(width: 1)
-                \Text(text: self.bass + "%", size: 14, weight: 700, color: #a855f7)
+                \Text(text: to_fixed(self.bass, 0) + "%", size: 14, weight: 700, color: #a855f7)
             }
             \Slider(
                 width: 400,
@@ -78,7 +84,7 @@
             \HStack(gap: 8) {
                 \Text(size: 14, weight: 600, color: #e2e8f0) { Treble }
                 \Spacer(width: 1)
-                \Text(text: self.treble + "%", size: 14, weight: 700, color: #10b981)
+                \Text(text: to_fixed(self.treble, 0) + "%", size: 14, weight: 700, color: #10b981)
             }
             \Slider(
                 width: 400,
@@ -98,7 +104,7 @@
             \HStack(gap: 8) {
                 \Text(size: 14, weight: 600, color: #e2e8f0) { Output Visualizer }
                 \Spacer(width: 1)
-                \Text(text: round(40 + self.bass * 3.6) + "w × " + round(20 + self.treble * 0.8) + "h", size: 12, weight: 600, color: #94a3b8)
+                \Text(text: to_fixed(40 + self.bass * 3.6, 0) + "w × " + to_fixed(20 + self.treble * 0.8, 0) + "h", size: 12, weight: 600, color: #94a3b8)
             }
             \Rect(
                 width: max(40, min(400, 40 + self.bass * 3.6)),
@@ -107,13 +113,13 @@
                 radius: 8
             )
         }
-    }
+    };
 }
 
-// Center the mixer on the page
-\AudioMixer(
-    x: (window.width - 480) / 2,
-    y: 50,
-    width: 480
-)
+// Main Page Layout: fixed to top with equal top and bottom padding, centered horizontally
+\let content = \Padding(padding_x: 40, padding_y: 40, x: 0, y: 0) {
+    \HCenter {
+        \AudioMixer(width: 480)
+    }
+};
 

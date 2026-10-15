@@ -3,7 +3,7 @@ use crate::ast::{
 };
 use crate::error::ParseError;
 use crate::parser::component::{
-    parse_alias_binding, parse_env_binding, parse_let_binding, parse_state_binding,
+    parse_alias_binding, parse_assert_directive, parse_env_binding, parse_let_binding, parse_state_binding,
 };
 use crate::parser::cursor::{ParserCursor, SlotMode};
 use crate::parser::expr::{parse_expr, parse_ident};
@@ -218,6 +218,10 @@ pub fn parse_content_item(
                 let alias_binding = parse_alias_binding(cursor)?;
                 return Ok(ContentItem::Alias(alias_binding));
             }
+            Some((Token::Assert, _)) => {
+                let assert_dir = parse_assert_directive(cursor)?;
+                return Ok(ContentItem::Assert(assert_dir));
+            }
             Some((Token::State, span)) => {
                 if is_component_def {
                     let state_binding = parse_state_binding(cursor)?;
@@ -248,7 +252,7 @@ pub fn parse_content_item(
             }
             Some((other, other_span)) => {
                 return Err(ParseError::UnexpectedToken {
-                    expected: "let, env, alias, state, Children, or element name after '\\'".to_string(),
+                    expected: "let, env, alias, state, assert, Children, or element name after '\\'".to_string(),
                     found: other.to_string(),
                     span: other_span,
                 });

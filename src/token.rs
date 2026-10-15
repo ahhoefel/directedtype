@@ -35,6 +35,9 @@ pub enum Token {
     #[token("use")]
     Use,
 
+    #[token("assert")]
+    Assert,
+
     #[token("as")]
     As,
 
@@ -168,6 +171,7 @@ impl fmt::Display for Token {
             Token::Alias => write!(f, "alias"),
             Token::State => write!(f, "state"),
             Token::Use => write!(f, "use"),
+            Token::Assert => write!(f, "assert"),
             Token::As => write!(f, "as"),
             Token::True => write!(f, "true"),
             Token::False => write!(f, "false"),

@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::compiler::error::{CompileError, NoMatchingOverloadDetails};
+use crate::compiler::eval::eval_expr;
 use crate::compiler::expanded::{ExpandedDocument, ExpandedNode, NodeId};
 use crate::compiler::scope::ScopeId;
 use crate::compiler::text::{CursorKind, SpanStyle, TextSpan};
@@ -1202,7 +1203,7 @@ fn expand_component_instance(
                         consumer_child_nodes.push((child_elem.clone(), Some(l.name.as_str().to_string())));
                     }
                 }
-                ContentItem::Alias(_) | ContentItem::State(_) | ContentItem::Env(_) => {}
+                ContentItem::Alias(_) | ContentItem::State(_) | ContentItem::Env(_) | ContentItem::Assert(_) => {}
             }
         }
     }
@@ -1718,6 +1719,7 @@ fn expand_component_instance(
             ComponentBodyItem::Alias(_) => {}
             ComponentBodyItem::State(_) => {}
             ComponentBodyItem::Text(_) => {}
+            ComponentBodyItem::Assert(_) => {}
         }
     }
 
@@ -1771,6 +1773,61 @@ fn expand_component_instance(
                             span: expr.span(),
                         });
                     }
+                }
+            }
+        }
+    }
+
+    // Validate assertions in component body
+    let mut const_env = HashMap::new();
+    for (port_name, port_expr) in comp_ports.iter() {
+        if let Some(states) = scope_ctx.declared_state_names {
+            if states.contains(port_name) {
+                continue;
+            }
+        }
+        if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, &scope_ctx) {
+            let val = match lit {
+                Literal::Number(n, _) => crate::compiler::value::Value::Number(n),
+                Literal::String(s, _) => crate::compiler::value::Value::String(s),
+                Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
+                Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
+                Literal::Enum(e, v, _) => crate::compiler::value::Value::Enum { enum_name: e, variant: v },
+            };
+            const_env.insert(crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name), val.clone());
+            if let Some(parent) = ctx.parent_id {
+                const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
+            }
+        } else if let Ok(val) = eval_expr(port_expr, &HashMap::new()) {
+            const_env.insert(crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name), val.clone());
+            if let Some(parent) = ctx.parent_id {
+                const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
+            }
+        }
+    }
+
+    for item in &comp_def.body {
+        if let ComponentBodyItem::Assert(assert_dir) = item {
+            let mut rewritten = rewrite_expr(&assert_dir.condition, &scope_ctx)?;
+            rewritten = resolve_forward_scope_refs(&rewritten, &final_local_scope);
+            match eval_expr(&rewritten, &const_env) {
+                Ok(val) => {
+                    if !val.is_truthy() {
+                        let msg = assert_dir
+                            .message
+                            .clone()
+                            .unwrap_or_else(|| format!("Assertion failed: {}", assert_dir.condition));
+                        return Err(CompileError::AssertionFailed {
+                            message: msg,
+                            span: assert_dir.span,
+                        });
+                    }
+                }
+                Err(e) => {
+                    return Err(CompileError::Custom {
+                        message: format!("Could not evaluate assertion condition: {}", e),
+                        span: assert_dir.span,
+                    });
                 }
             }
         }
@@ -2289,7 +2346,7 @@ fn expand_primitive_element(
                         }
                     }
                 }
-                ContentItem::Alias(_) | ContentItem::State(_) | ContentItem::Env(_) => {}
+                ContentItem::Alias(_) | ContentItem::State(_) | ContentItem::Env(_) | ContentItem::Assert(_) => {}
                 ContentItem::Children(_) => {
                     if let Some(consumer_items) = ctx.consumer_children {
                         for c_item in consumer_items {
@@ -2388,7 +2445,8 @@ fn expand_primitive_element(
                                 ContentItem::Alias(_)
                                 | ContentItem::Children(_)
                                 | ContentItem::State(_)
-                                | ContentItem::Env(_) => {}
+                                | ContentItem::Env(_)
+                                | ContentItem::Assert(_) => {}
                             }
                         }
                     }
@@ -2537,6 +2595,34 @@ fn expand_primitive_element(
     let mut ports = HashMap::new();
     let mut authored_ports = HashMap::new();
     let mut event_handlers = HashMap::new();
+
+    if let Some(content_slot) = &elem.content {
+        for item in &content_slot.items {
+            if let ContentItem::Assert(assert_dir) = item {
+                let rewritten = rewrite_expr(&assert_dir.condition, &scope_ctx)?;
+                match eval_expr(&rewritten, &HashMap::new()) {
+                    Ok(val) => {
+                        if !val.is_truthy() {
+                            let msg = assert_dir
+                                .message
+                                .clone()
+                                .unwrap_or_else(|| format!("Assertion failed: {}", assert_dir.condition));
+                            return Err(CompileError::AssertionFailed {
+                                message: msg,
+                                span: assert_dir.span,
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        return Err(CompileError::Custom {
+                            message: format!("Could not evaluate assertion condition: {}", e),
+                            span: assert_dir.span,
+                        });
+                    }
+                }
+            }
+        }
+    }
     for (port_name, expr) in resolved_port_exprs {
         if let Some(ambient_expr) = ctx.ambient_authored_ports.and_then(|m| m.get(&port_name)) {
             authored_ports.insert(port_name.clone(), ambient_expr.clone());

@@ -685,6 +685,7 @@ fn collect_from_content_item(item: &ContentItem, out: &mut HashSet<String>) {
             }
         }
         ContentItem::Alias(a) => collect_from_expr(&a.value, out),
+        ContentItem::Assert(a) => collect_from_expr(&a.condition, out),
         ContentItem::State(s) => {
             if let Some(e) = &s.default {
                 collect_from_expr(e, out);
@@ -774,6 +775,7 @@ fn rewrite_content_item(item: &mut ContentItem, renames: &HashMap<String, String
             }
         }
         ContentItem::Alias(a) => rewrite_expr(&mut a.value, renames),
+        ContentItem::Assert(a) => rewrite_expr(&mut a.condition, renames),
         ContentItem::State(s) => {
             if let Some(e) = &mut s.default {
                 rewrite_expr(e, renames);

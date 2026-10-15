@@ -1022,7 +1022,8 @@ impl Dom {
                     ContentItem::Children(_)
                     | ContentItem::Alias(_)
                     | ContentItem::State(_)
-                    | ContentItem::Env(_) => {}
+                    | ContentItem::Env(_)
+                    | ContentItem::Assert(_) => {}
                 }
             }
             if !text_parts.is_empty() {

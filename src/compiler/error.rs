@@ -94,6 +94,12 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Assertion failed: {message}")]
+    AssertionFailed {
+        message: String,
+        span: Span,
+    },
+
     #[error("Unresolved identifier '{name}'. Did you forget to import it?")]
     UnresolvedIdentifier {
         name: String,
@@ -209,6 +215,7 @@ impl CompileError {
             | CompileError::BareEnvUse { span, .. }
             | CompileError::DuplicateOverloadSignature { span, .. }
             | CompileError::FontFamilyNotFound { span, .. }
+            | CompileError::AssertionFailed { span, .. }
             | CompileError::UnresolvedIdentifier { span, .. }
             | CompileError::Custom { span, .. } => *span,
             CompileError::PotentiallyAmbiguousOverloads(details) => details.span,

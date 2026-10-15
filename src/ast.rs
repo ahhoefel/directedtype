@@ -404,6 +404,7 @@ pub enum ContentItem {
     Alias(AliasBinding),
     State(StateBinding),
     Env(EnvBinding),
+    Assert(AssertDirective),
 }
 
 impl ContentItem {
@@ -416,8 +417,17 @@ impl ContentItem {
             ContentItem::Alias(a) => a.span,
             ContentItem::State(s) => s.span,
             ContentItem::Env(e) => e.span,
+            ContentItem::Assert(a) => a.span,
         }
     }
+}
+
+/// An assertion directive: `\assert condition as "message";` or `\assert condition;`
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssertDirective {
+    pub condition: Expr,
+    pub message: Option<String>,
+    pub span: Span,
 }
 
 /// A normalized raw text chunk inside a content slot.

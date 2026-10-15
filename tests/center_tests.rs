@@ -147,3 +147,38 @@ fn test_center_explicit_dimensions_in_parent() {
     assert_eq!(inner_rect.rect.x, 95.0); // 20 + (200 - 50) / 2
     assert_eq!(inner_rect.rect.y, 75.0); // 40 + (100 - 30) / 2
 }
+
+#[test]
+fn test_center_with_card() {
+    let input = r#"
+    \use "components/Center.dt"
+    \use "components/Card.dt"
+    \use "theme/default.dt"
+
+    \Center {
+        \Card(width: 400, style: card_dark) {
+            \Text { Hello }
+        }
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok: Card inside Center must not produce cyclic dependency");
+
+    let card_node = compiled.layout.nodes.iter().find(|n| n.name == "Card").expect("Card found");
+    assert_eq!(card_node.rect.width, 400.0);
+    // Card centered in 800x600:
+    // x = (800 - 400) / 2 = 200
+    assert_eq!(card_node.rect.x, 200.0);
+    assert_eq!(card_node.rect.y, (600.0 - card_node.rect.height) / 2.0);
+}
+

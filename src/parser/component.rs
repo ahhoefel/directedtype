@@ -1,6 +1,6 @@
 use crate::ast::{
-    AliasBinding, ComponentDef, EnumDef, EnvBinding, Ident, LetBinding, LetValue, ParamDef,
-    StateBinding, TypeRef, UseDeclaration, UseItem,
+    AliasBinding, AssertDirective, ComponentDef, EnumDef, EnvBinding, Expr, Ident, LetBinding, LetValue, Literal,
+    ParamDef, StateBinding, TypeRef, UseDeclaration, UseItem,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::{ParserCursor, SlotMode};
@@ -386,6 +386,46 @@ pub fn parse_state_binding(cursor: &mut ParserCursor<'_>) -> Result<StateBinding
         name,
         type_annotation,
         default,
+        span,
+    })
+}
+
+/// Parses an assertion directive:
+/// `\assert condition as "message";` or `\assert condition;`
+pub fn parse_assert_directive(cursor: &mut ParserCursor<'_>) -> Result<AssertDirective, ParseError> {
+    let bs_span = cursor.consume_token(&Token::Backslash)?;
+    let assert_span = cursor.consume_token(&Token::Assert)?;
+    let start_span = bs_span.merge(assert_span);
+
+    let condition = parse_expr(cursor)?;
+
+    let mut message = None;
+    let mut end_span = condition.span();
+
+    if let Some((Token::As, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::As)?;
+        if let Some((Token::String(msg), span)) = cursor.peek_token()?.cloned() {
+            cursor.next_token()?;
+            message = Some(msg);
+            end_span = span;
+        } else {
+            let msg_expr = parse_expr(cursor)?;
+            end_span = msg_expr.span();
+            if let Expr::Literal(Literal::String(s, _)) = msg_expr {
+                message = Some(s);
+            }
+        }
+    }
+
+    if let Some((Token::Semicolon, span)) = cursor.peek_token()?.cloned() {
+        end_span = span;
+        cursor.consume_token(&Token::Semicolon)?;
+    }
+
+    let span = start_span.merge(end_span);
+    Ok(AssertDirective {
+        condition,
+        message,
         span,
     })
 }
