@@ -69,8 +69,36 @@ impl Default for InspectPanelComponent {
 }
 
 impl InspectPanelComponent {
+    /// Minimum width of the inspector panel in logical pixels.
+    pub const MIN_WIDTH: f64 = 220.0;
+
+    /// Minimum width reserved for the main document panel in logical pixels.
+    pub const MIN_MAIN_PANEL_WIDTH: f64 = 100.0;
+
+    /// Half-width of the draggable resize border hit zone around `panel_x` in logical pixels.
+    pub const RESIZE_BORDER_HIT_HALF_WIDTH: f64 = 5.0;
+
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Returns true if `(px, py)` (where `py` is relative to the top of the panel)
+    /// falls within the draggable left border hit zone around `panel_x`.
+    pub fn is_resize_border_hovered(&self, px: f64, py: f64, panel_x: f64, win_h: f64) -> bool {
+        py >= 0.0 && py <= win_h && (px - panel_x).abs() <= Self::RESIZE_BORDER_HIT_HALF_WIDTH
+    }
+
+    /// Sets the panel width clamped to valid bounds for a window of width `win_w`.
+    /// Returns `true` if the width changed.
+    pub fn set_width_clamped(&mut self, new_width: f64, win_w: f64) -> bool {
+        let max_width = (win_w - Self::MIN_MAIN_PANEL_WIDTH).max(Self::MIN_WIDTH);
+        let clamped = new_width.clamp(Self::MIN_WIDTH, max_width);
+        if (self.width - clamped).abs() > 0.01 {
+            self.width = clamped;
+            true
+        } else {
+            false
+        }
     }
 
     /// Computes the Y coordinate where the top DOM tree ends and the section divider begins.
@@ -1854,6 +1882,24 @@ impl InspectPanelComponent {
                 Brush::Solid(Color::from_rgba8(148, 163, 184, 120)),
                 None,
                 &thumb_rrect,
+            );
+        }
+
+        // Left resize border highlight when hovered or actively resizing
+        if state.resize_border_hovered || state.is_resizing_panel {
+            let border_stroke = Stroke::new(2.5);
+            let border_color = if state.is_resizing_panel {
+                Color::from_rgb8(56, 189, 248) // sky-400
+            } else {
+                Color::from_rgb8(14, 165, 233) // sky-500
+            };
+            let border_line = Line::new((panel_x, 0.0), (panel_x, win_h));
+            scene.stroke(
+                &border_stroke,
+                Affine::IDENTITY,
+                Brush::Solid(border_color),
+                None,
+                &border_line,
             );
         }
     }

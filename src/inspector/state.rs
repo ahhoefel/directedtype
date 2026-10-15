@@ -62,6 +62,12 @@ pub struct InspectorState {
 
     /// Currently selected property / port for DAG inspection: `Some((NodeId, PortName))`.
     pub selected_property: Option<(NodeId, String)>,
+
+    /// Whether the left resize border of the inspector panel is hovered by the mouse.
+    pub resize_border_hovered: bool,
+
+    /// Whether the left resize border of the inspector panel is actively being dragged.
+    pub is_resizing_panel: bool,
 }
 
 impl InspectorState {

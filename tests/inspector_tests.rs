@@ -1496,3 +1496,71 @@ fn test_inspect_mode_allows_horizontal_scrolling_for_wide_content() {
     assert_eq!(app.scroll_x(), 0.0);
 }
 
+#[test]
+fn test_inspector_panel_resize_border_hit_test_and_clamping() {
+    let mut panel = directedtype::inspector::InspectPanelComponent::default();
+    assert_eq!(panel.width, 380.0);
+
+    let win_w = 1024.0;
+    let win_h = 768.0;
+    let panel_x = win_w - panel.width; // 644.0
+
+    // Hit zone around panel_x = 644.0 (+/- 5.0px)
+    assert!(panel.is_resize_border_hovered(644.0, 200.0, panel_x, win_h));
+    assert!(panel.is_resize_border_hovered(639.5, 200.0, panel_x, win_h));
+    assert!(panel.is_resize_border_hovered(648.5, 200.0, panel_x, win_h));
+    assert!(!panel.is_resize_border_hovered(635.0, 200.0, panel_x, win_h));
+    assert!(!panel.is_resize_border_hovered(655.0, 200.0, panel_x, win_h));
+    assert!(!panel.is_resize_border_hovered(644.0, -5.0, panel_x, win_h));
+
+    // Clamping to valid bounds [MIN_WIDTH..=(win_w - MIN_MAIN_PANEL_WIDTH)]
+    assert!(panel.set_width_clamped(500.0, win_w));
+    assert_eq!(panel.width, 500.0);
+
+    // Below minimum width clamps to MIN_WIDTH (220.0)
+    assert!(panel.set_width_clamped(100.0, win_w));
+    assert_eq!(panel.width, directedtype::inspector::InspectPanelComponent::MIN_WIDTH);
+
+    // Above maximum width clamps to win_w - 100.0 (924.0)
+    assert!(panel.set_width_clamped(1000.0, win_w));
+    assert_eq!(panel.width, 924.0);
+}
+
+#[test]
+fn test_inspector_panel_resize_updates_main_panel_layout_and_scroll() {
+    let source = r#"
+\Rect("main_bg"; x: 0, y: 0, width: window.width, height: window.height, color: #f8fafc)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_window(&doc, 1024.0, 768.0)
+        .expect("compile ok");
+
+    let mut app = directedtype::render::ViewerApp::new_with_compiled(
+        compiled,
+        directedtype::render::ViewerConfig {
+            width: 1024,
+            height: 768,
+            show_nav_bar: false,
+            ..Default::default()
+        },
+    );
+
+    app.set_inspect_mode(true);
+    assert_eq!(app.inspector_panel_width(), 380.0);
+    assert_eq!(app.viewport_size(), (644.0, 768.0));
+    assert_eq!(app.content_width(), 644.0);
+
+    // Dragging the inspector left border to widen the panel to 524px shrinks the main panel to 500px
+    app.set_inspector_panel_width(524.0);
+    assert_eq!(app.inspector_panel_width(), 524.0);
+    assert_eq!(app.viewport_size(), (500.0, 768.0));
+    assert_eq!(app.content_width(), 500.0);
+
+    // Dragging the inspector left border to narrow the panel to 250px widens the main panel to 774px
+    app.set_inspector_panel_width(250.0);
+    assert_eq!(app.inspector_panel_width(), 250.0);
+    assert_eq!(app.viewport_size(), (774.0, 768.0));
+    assert_eq!(app.content_width(), 774.0);
+}
+
+

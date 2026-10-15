@@ -338,12 +338,16 @@ impl ViewerApp {
             return;
         }
         self.inspect_mode = enabled;
+        let (win_w, win_h) = self.logical_window_size();
         if !self.inspect_mode {
             self.hovered_node = None;
             self.inspector_state.set_hovered_id(None);
             self.inspector_state.inspect_cursor_active = false;
+            self.inspector_state.resize_border_hovered = false;
+            self.inspector_state.is_resizing_panel = false;
+        } else {
+            self.panel_component.set_width_clamped(self.panel_component.width, win_w);
         }
-        let (win_w, win_h) = self.logical_window_size();
         self.update_layout_for_size(win_w, win_h);
         self.clamp_scroll();
         if let Some(w) = &self.window {
@@ -354,6 +358,39 @@ impl ViewerApp {
     /// Returns whether inspect mode is currently active.
     pub fn inspect_mode(&self) -> bool {
         self.inspect_mode
+    }
+
+    /// Returns the current width of the DOM inspector panel in logical pixels.
+    pub fn inspector_panel_width(&self) -> f64 {
+        self.panel_component.width
+    }
+
+    /// Sets the width of the DOM inspector panel in logical pixels, clamped to valid bounds,
+    /// and updates the main panel layout and scroll offsets if inspect mode is active.
+    pub fn set_inspector_panel_width(&mut self, width: f64) {
+        let (win_w, win_h) = self.logical_window_size();
+        if !self.panel_component.set_width_clamped(width, win_w) {
+            return;
+        }
+        // Clamp inspector horizontal scroll offsets to the new panel width
+        let layout = current_layout(&self.compiled, &self.static_layout);
+        let tree_items = crate::inspector::build_tree_items_from_layout(layout, &self.inspector_state);
+        let max_tree_x = self.panel_component.max_tree_scroll_x(&tree_items);
+        self.inspector_state.scroll_offset_x = self.inspector_state.scroll_offset_x.clamp(0.0, max_tree_x);
+        let max_detail_x = self.panel_component.max_detail_scroll_x(
+            self.selected_node,
+            layout,
+            Some(&self.inspector_state),
+        );
+        self.inspector_state.detail_scroll_offset_x = self.inspector_state.detail_scroll_offset_x.clamp(0.0, max_detail_x);
+
+        if self.inspect_mode {
+            self.update_layout_for_size(win_w, win_h);
+            self.clamp_scroll();
+            if let Some(w) = &self.window {
+                w.request_redraw();
+            }
+        }
     }
 
     /// Returns the currently selected node in inspector mode, if any.
@@ -1867,6 +1904,8 @@ impl ViewerApp {
     fn update_layout_for_size(&mut self, logical_w: f64, logical_h: f64) {
         let nav_bar_h = self.nav_bar_height();
         let doc_w = if self.inspect_mode {
+            self.panel_component
+                .set_width_clamped(self.panel_component.width, logical_w);
             (logical_w - self.panel_component.width).max(100.0)
         } else {
             logical_w
@@ -2521,7 +2560,23 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     (self.config.width as f64, self.config.height as f64)
                 };
 
+                if self.inspect_mode && self.inspector_state.is_resizing_panel {
+                    let target_width = win_w - point.x;
+                    self.set_inspector_panel_width(target_width);
+                    if let Some(w) = &self.window {
+                        w.set_cursor(winit::window::CursorIcon::EwResize);
+                        w.request_redraw();
+                    }
+                    return;
+                }
+
                 if point.y < nav_bar_h {
+                    if self.inspector_state.resize_border_hovered {
+                        self.inspector_state.resize_border_hovered = false;
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
                     if let Some(bar) = &mut self.browser_bar {
                         if bar.handle_mouse_move(point.x, point.y, win_w) {
                             if let Some(w) = &self.window {
@@ -2703,16 +2758,63 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
 
                     let panel_x = win_w - self.panel_component.width;
+                    let panel_y = point.y - nav_bar_h;
+                    let canvas_h = (win_h - nav_bar_h).max(1.0);
+                    let border_hovered = self
+                        .panel_component
+                        .is_resize_border_hovered(point.x, panel_y, panel_x, canvas_h);
+                    if self.inspector_state.resize_border_hovered != border_hovered {
+                        self.inspector_state.resize_border_hovered = border_hovered;
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
+
+                    if border_hovered {
+                        let mut needs_redraw = false;
+                        if self.inspector_state.inspect_cursor_hovered {
+                            self.inspector_state.inspect_cursor_hovered = false;
+                            needs_redraw = true;
+                        }
+                        if self.inspector_state.set_hovered_id(None) {
+                            needs_redraw = true;
+                        }
+                        if let Some(w) = &self.window {
+                            w.set_cursor(winit::window::CursorIcon::EwResize);
+                            if needs_redraw {
+                                w.request_redraw();
+                            }
+                        }
+                        if let Some(old_id) = self.hovered_node.take() {
+                            let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+                            let leave_event = Event::new(
+                                EventKind::PointerLeave,
+                                doc_point,
+                                Point::new(0.0, 0.0),
+                                self.modifiers,
+                                old_id,
+                            );
+                            let bubble = self.layout().bubble_path_for_node(old_id);
+                            self.dispatch_event_with_bubble(leave_event, &bubble);
+                        }
+                        return;
+                    }
 
                     if point.x >= panel_x {
-                        let panel_y = point.y - nav_bar_h;
-                        let canvas_h = (win_h - nav_bar_h).max(1.0);
                         let btn_hovered = self.panel_component.is_cursor_btn_hovered(point.x, panel_y, panel_x);
                         let mut needs_redraw = false;
 
                         if self.inspector_state.inspect_cursor_hovered != btn_hovered {
                             self.inspector_state.inspect_cursor_hovered = btn_hovered;
                             needs_redraw = true;
+                        }
+
+                        if let Some(w) = &self.window {
+                            if btn_hovered {
+                                w.set_cursor(winit::window::CursorIcon::Pointer);
+                            } else {
+                                w.set_cursor(winit::window::CursorIcon::Default);
+                            }
                         }
 
                         let tree_items = crate::inspector::build_tree_items_from_layout(
@@ -2895,6 +2997,25 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         }
                     }
 
+                    if state == ElementState::Released && self.inspector_state.is_resizing_panel {
+                        self.inspector_state.is_resizing_panel = false;
+                        let panel_x = win_w - self.panel_component.width;
+                        let panel_y = point.y - nav_bar_h;
+                        let canvas_h = (win_h - nav_bar_h).max(1.0);
+                        let hovered = self.inspect_mode
+                            && self
+                                .panel_component
+                                .is_resize_border_hovered(point.x, panel_y, panel_x, canvas_h);
+                        self.inspector_state.resize_border_hovered = hovered;
+                        if let Some(w) = &self.window {
+                            if !hovered {
+                                w.set_cursor(winit::window::CursorIcon::Default);
+                            }
+                            w.request_redraw();
+                        }
+                        return;
+                    }
+
                     // Check click in Navigation Bar
                     if point.y < nav_bar_h {
                         if state == ElementState::Pressed {
@@ -2945,10 +3066,26 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                     if self.inspect_mode {
                         let panel_x = win_w - self.panel_component.width;
+                        let panel_y = point.y - nav_bar_h;
+                        let canvas_h = (win_h - nav_bar_h).max(1.0);
+
+                        if state == ElementState::Pressed
+                            && btn == MouseButton::Left
+                            && self
+                                .panel_component
+                                .is_resize_border_hovered(point.x, panel_y, panel_x, canvas_h)
+                        {
+                            self.inspector_state.is_resizing_panel = true;
+                            self.inspector_state.resize_border_hovered = true;
+                            if let Some(w) = &self.window {
+                                w.set_cursor(winit::window::CursorIcon::EwResize);
+                                w.request_redraw();
+                            }
+                            return;
+                        }
+
                         if point.x >= panel_x {
                             if state == ElementState::Pressed {
-                                let panel_y = point.y - nav_bar_h;
-                                let canvas_h = (win_h - nav_bar_h).max(1.0);
                                 let layout = current_layout(&self.compiled, &self.static_layout);
                                 let tree_items = crate::inspector::build_tree_items_from_layout(
                                     layout,
@@ -3263,6 +3400,8 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 }
                 self.inspector_state.set_hovered_id(None);
                 self.inspector_state.inspect_cursor_hovered = false;
+                self.inspector_state.resize_border_hovered = false;
+                self.inspector_state.is_resizing_panel = false;
                 if self.inspect_mode {
                     if let Some(w) = &self.window {
                         w.request_redraw();
@@ -3277,6 +3416,8 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     self.is_dragging_scrollbar = false;
                     self.is_dragging_h_scrollbar = false;
                     self.inspector_scrollbar_drag = None;
+                    self.inspector_state.is_resizing_panel = false;
+                    self.inspector_state.resize_border_hovered = false;
                 }
             }
             WindowEvent::ModifiersChanged(new_mods) => {
