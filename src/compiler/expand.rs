@@ -3973,7 +3973,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 rewritten_args.push(rewrite_expr(arg, ctx)?);
             }
 
-            if had_children && rewritten_args.is_empty() {
+            if had_children && rewritten_args.is_empty() && call.callee.as_str() != "only" {
                 return Ok(Expr::Literal(Literal::Number(0.0, call.span)));
             }
 

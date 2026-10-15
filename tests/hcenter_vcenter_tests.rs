@@ -273,3 +273,96 @@ fn test_nesting_vcenter_and_hcenter() {
     assert_eq!(rect.rect.width, 300.0);
     assert_eq!(rect.rect.height, 200.0);
 }
+
+#[test]
+fn test_hcenter_width_capped_by_child_width() {
+    let input = r#"
+    \use "components/HCenter.dt"
+
+    \let center = \HCenter {
+        \Rect(width: 480, height: 100, color: #3b82f6)
+    };
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    // Window width is 300, smaller than child width (480)
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        300.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let hcenter_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "HCenter")
+        .expect("hcenter found");
+
+    let rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Rect")
+        .expect("rect found");
+
+    // HCenter width must be capped on the lower end by child width: 480
+    assert_eq!(hcenter_node.rect.width, 480.0);
+    assert_eq!(hcenter_node.rect.x, 0.0);
+
+    // Child is anchored at left since available width < child width
+    assert_eq!(rect.rect.x, 0.0);
+    assert_eq!(rect.rect.width, 480.0);
+}
+
+#[test]
+fn test_vcenter_height_capped_by_child_height() {
+    let input = r#"
+    \use "components/VCenter.dt"
+
+    \let center = \VCenter {
+        \Rect(width: 200, height: 500, color: #10b981)
+    };
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    // Window height is 300, smaller than child height (500)
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        300.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let vcenter_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "VCenter")
+        .expect("vcenter found");
+
+    let rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Rect")
+        .expect("rect found");
+
+    // VCenter height must be capped on the lower end by child height: 500
+    assert_eq!(vcenter_node.rect.height, 500.0);
+    assert_eq!(vcenter_node.rect.y, 0.0);
+
+    // Child is anchored at top since available height < child height
+    assert_eq!(rect.rect.y, 0.0);
+    assert_eq!(rect.rect.height, 500.0);
+}
+

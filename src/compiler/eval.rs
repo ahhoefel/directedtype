@@ -345,6 +345,19 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let sum_val: f64 = evaluated_args.iter().filter_map(|v| v.as_f64()).sum();
                     Ok(Value::Number(sum_val))
                 }
+                "only" => {
+                    if evaluated_args.len() == 1 {
+                        Ok(evaluated_args[0].clone())
+                    } else {
+                        Err(CompileError::AssertionFailed {
+                            message: format!(
+                                "only() expected exactly one child or argument, found {}",
+                                evaluated_args.len()
+                            ),
+                            span: c.span,
+                        })
+                    }
+                }
                 "clamp" => {
                     if evaluated_args.len() >= 3 {
                         let val = evaluated_args[0].as_f64().unwrap_or(0.0);

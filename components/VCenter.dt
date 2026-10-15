@@ -1,6 +1,7 @@
 // DirectedType Standard Component Library: VCenter
 // Declarative container that centers its single child vertically within its available height.
 // Anchors the child with minimum top alignment when available height is smaller than the child.
+// Caps height on the lower end by the height of its contents.
 
 // 1. Explicit Height VCenter
 \Component VCenter(
@@ -27,7 +28,8 @@
 ) {
     \assert num_children == 1 as "Should have only one child.";
 
-    \let resolved_height = parent.height - (2 * (y - parent.top));
+    \let available_height = parent.height - (2 * (y - parent.top));
+    \let resolved_height = max(available_height, only(children.height));
     \let resolved_width = parent.width - (2 * (x - parent.left));
 
     \alias width = resolved_width;
@@ -37,7 +39,7 @@
 
     \Children {
         x: x,
-        y: y + max(0, (resolved_height - child.height) / 2)
+        y: y + max(0, (available_height - child.height) / 2)
     }
 }
 
@@ -48,12 +50,13 @@
     \assert num_children == 1 as "Should have only one child.";
 
     \let resolved_width = parent.width - (2 * (x - parent.left));
+    \let resolved_height = max(parent.height, only(children.height));
 
     \alias width = resolved_width;
     \alias right = x + resolved_width;
-    \alias height = parent.height;
+    \alias height = resolved_height;
     \alias y = parent.top;
-    \alias bottom = parent.bottom;
+    \alias bottom = parent.top + resolved_height;
 
     \Children {
         x: x,
@@ -65,12 +68,14 @@
 \Component VCenter {
     \assert num_children == 1 as "Should have only one child.";
 
+    \let resolved_height = max(parent.height, only(children.height));
+
     \alias width = parent.width;
-    \alias height = parent.height;
+    \alias height = resolved_height;
     \alias x = parent.left;
     \alias y = parent.top;
     \alias right = parent.right;
-    \alias bottom = parent.bottom;
+    \alias bottom = parent.top + resolved_height;
 
     \Children {
         x: parent.left,
