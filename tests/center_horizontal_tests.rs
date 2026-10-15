@@ -6,9 +6,9 @@ use std::path::Path;
 #[test]
 fn test_center_horizontal_fluid_in_window() {
     let input = r#"
-    \use "components/CenterHorizontal.dt"
+    \use "components/HCenter.dt"
 
-    \CenterHorizontal {
+    \HCenter {
         \Rect(width: 400, height: 100, color: #3b82f6)
     }
     "#;
@@ -44,10 +44,10 @@ fn test_center_horizontal_fluid_in_window() {
 fn test_center_horizontal_inside_padding() {
     let input = r#"
     \use "components/Padding.dt"
-    \use "components/CenterHorizontal.dt"
+    \use "components/HCenter.dt"
 
     \Padding(padding_x: 40, padding_y: 50, x: 0, y: 0) {
-        \CenterHorizontal {
+        \HCenter {
             \Rect(width: 480, height: 200, color: #3b82f6)
         }
     }
@@ -73,7 +73,7 @@ fn test_center_horizontal_inside_padding() {
         .expect("rect found");
 
     // Padding inner_width = 800 - 80 = 720
-    // CenterHorizontal centers: 40 + (720 - 480) / 2 = 40 + 120 = 160
+    // HCenter centers: 40 + (720 - 480) / 2 = 40 + 120 = 160
     assert_eq!(rect.rect.x, 160.0);
     // Fixed to top padding: y = 50
     assert_eq!(rect.rect.y, 50.0);
@@ -96,10 +96,10 @@ fn test_center_horizontal_inside_padding() {
 fn test_center_horizontal_clamps_when_narrower_than_child() {
     let input = r#"
     \use "components/Padding.dt"
-    \use "components/CenterHorizontal.dt"
+    \use "components/HCenter.dt"
 
     \Padding(padding_x: 40, padding_y: 40, x: 0, y: 0) {
-        \CenterHorizontal {
+        \HCenter {
             \Rect(width: 480, height: 100, color: #3b82f6)
         }
     }
@@ -133,9 +133,9 @@ fn test_center_horizontal_clamps_when_narrower_than_child() {
 #[test]
 fn test_center_horizontal_multiple_children_fails_assertion() {
     let input = r#"
-    \use "components/CenterHorizontal.dt"
+    \use "components/HCenter.dt"
 
-    \CenterHorizontal {
+    \HCenter {
         \Rect(width: 100, height: 50, color: #ff0000)
         \Rect(width: 100, height: 50, color: #00ff00)
     }
@@ -163,9 +163,9 @@ fn test_center_horizontal_multiple_children_fails_assertion() {
 #[test]
 fn test_center_horizontal_zero_children_fails_assertion() {
     let input = r#"
-    \use "components/CenterHorizontal.dt"
+    \use "components/HCenter.dt"
 
-    \CenterHorizontal {}
+    \HCenter {}
     "#;
 
     let doc = parse(input).expect("parse ok");

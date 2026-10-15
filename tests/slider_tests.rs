@@ -358,3 +358,62 @@ fn test_slider_demo_visualizer_rectangle() {
     }
 }
 
+#[test]
+fn test_slider_content_shrink_auto_scrolls_up() {
+    let source = std::fs::read_to_string("examples/slider_demo.dt").expect("read slider_demo.dt");
+    let doc = parse(&source).expect("parse slider_demo.dt");
+    let mut registry = ComponentRegistry::standard();
+    registry.register("AudioMixer", || Box::new(AudioMixerTestCompanion::default()));
+
+    let compiled = compile_document_with_registry(
+        &doc,
+        800.0,
+        400.0, // Short window so content overflows and scrolls
+        std::path::Path::new("examples"),
+        &FsResolver,
+        &registry,
+    )
+    .expect("compile slider_demo.dt ok");
+
+    let mut app = ViewerApp::new_with_compiled(
+        compiled,
+        ViewerConfig {
+            width: 800,
+            height: 400,
+            show_nav_bar: false,
+            ..Default::default()
+        },
+    );
+
+    let mixer_node = app
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| n.name == "AudioMixer")
+        .expect("AudioMixer node found")
+        .id;
+
+    let initial_content_h = app.content_height();
+    assert!(initial_content_h > 400.0, "Content must exceed viewport height");
+
+    // Scroll to the bottom:
+    app.set_scroll_y(2000.0); // Clamps to max_scroll_y
+    let scroll_at_bottom = app.scroll_y();
+    assert_eq!(scroll_at_bottom, initial_content_h - 400.0);
+
+    // Now mutate treble from 60 to 0 -> visualizer shrinks, card shrinks, background rect shrinks!
+    app.compiled_mut()
+        .unwrap()
+        .dispatch_callback(mixer_node, "set_treble", Value::Number(0.0))
+        .expect("dispatch set_treble ok");
+    app.clamp_scroll();
+
+    let new_content_h = app.content_height();
+    assert!(new_content_h < initial_content_h, "Content height should have shrunk");
+
+    // Viewport must automatically scroll up so viewport bottom does not exceed content bottom:
+    assert_eq!(app.scroll_y(), new_content_h - 400.0);
+    assert_eq!(app.scroll_y() + 400.0, new_content_h);
+}
+
+

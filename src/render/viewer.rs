@@ -392,6 +392,7 @@ impl ViewerApp {
     pub fn set_scroll_y(&mut self, y: f64) {
         self.pending_scroll = None;
         self.scroll_y = y.max(0.0);
+        self.clamp_scroll();
         if let Some(w) = &self.window {
             w.request_redraw();
         }
@@ -406,6 +407,7 @@ impl ViewerApp {
     pub fn set_scroll_x(&mut self, x: f64) {
         self.pending_scroll = None;
         self.scroll_x = x.max(0.0);
+        self.clamp_scroll();
         if let Some(w) = &self.window {
             w.request_redraw();
         }
@@ -421,6 +423,7 @@ impl ViewerApp {
         self.pending_scroll = None;
         self.scroll_x = x.max(0.0);
         self.scroll_y = y.max(0.0);
+        self.clamp_scroll();
         if let Some(w) = &self.window {
             w.request_redraw();
         }
@@ -745,18 +748,56 @@ impl ViewerApp {
         (self.content_height() - viewport_h).max(0.0)
     }
 
+    /// Returns the logical viewport dimensions available for document content: `(width, height)`.
+    pub fn viewport_size(&self) -> (f64, f64) {
+        let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
+        let nav_bar_h = self.nav_bar_height();
+        if let Some(w) = &self.window {
+            let size = w.inner_size();
+            let w_logical = if size.width > 0 {
+                size.width as f64 / scale
+            } else {
+                self.config.width as f64
+            };
+            let h_logical = if size.height > 0 {
+                (size.height as f64 / scale - nav_bar_h).max(1.0)
+            } else {
+                (self.config.height as f64 - nav_bar_h).max(1.0)
+            };
+            (w_logical, h_logical)
+        } else if let Some(surface) = &self.surface {
+            let w_logical = surface.config.width as f64 / scale;
+            let h_logical = (surface.config.height as f64 / scale - nav_bar_h).max(1.0);
+            (w_logical, h_logical)
+        } else {
+            (
+                self.config.width as f64,
+                (self.config.height as f64 - nav_bar_h).max(1.0),
+            )
+        }
+    }
+
+    /// Clamps the vertical and horizontal scroll positions so that the viewport
+    /// does not scroll past the boundaries of the document content.
+    pub fn clamp_scroll(&mut self) {
+        let (vp_w, vp_h) = self.viewport_size();
+        let content_h = self.content_height();
+        if content_h > 0.0 {
+            let max_scroll_y = self.max_scroll_y(vp_h);
+            self.scroll_y = self.scroll_y.clamp(0.0, max_scroll_y);
+        }
+        let content_w = self.content_width();
+        if content_w > 0.0 {
+            let max_scroll_x = (content_w - vp_w).max(0.0);
+            self.scroll_x = self.scroll_x.clamp(0.0, max_scroll_x);
+        }
+    }
+
     /// Scrolls vertically to a target Y position, clamping to valid scroll range.
     pub fn scroll_to_y(&mut self, target_y: f64) {
         self.pending_scroll = None;
-        let scale = self.window.as_ref().map(|w| w.scale_factor()).unwrap_or(1.0);
-        let win_h = if let Some(w) = &self.window {
-            let size = w.inner_size();
-            size.height as f64 / scale
-        } else {
-            self.config.height as f64
-        };
-        let nav_bar_h = self.nav_bar_height();
-        let max_scroll = self.max_scroll_y((win_h - nav_bar_h).max(1.0));
+        let (_vp_w, vp_h) = self.viewport_size();
+        let max_scroll = self.max_scroll_y(vp_h);
         self.scroll_y = target_y.clamp(0.0, max_scroll);
         if let Some(w) = &self.window {
             w.request_redraw();
@@ -1157,13 +1198,18 @@ impl ViewerApp {
                 method,
                 payload,
             } => {
+                let mut need_redraw = false;
                 if let Some(compiled) = &mut self.compiled {
                     if let Ok(changed) = compiled.dispatch_callback(target, &method, payload) {
                         if !changed.is_empty() {
-                            if let Some(window) = &self.window {
-                                window.request_redraw();
-                            }
+                            need_redraw = true;
                         }
+                    }
+                }
+                if need_redraw {
+                    self.clamp_scroll();
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
                     }
                 }
             }
@@ -1185,16 +1231,21 @@ impl ViewerApp {
 
         let mut actions = Vec::new();
         let mut handled = false;
+        let mut need_redraw = false;
         if let Some(compiled) = &mut self.compiled {
             if let Ok(changed_vars) = compiled.dispatch_event(&mut event) {
                 if !changed_vars.is_empty() {
                     handled = true;
-                    if let Some(window) = &self.window {
-                        window.request_redraw();
-                    }
+                    need_redraw = true;
                 }
             }
             actions = compiled.take_actions();
+        }
+        if need_redraw {
+            self.clamp_scroll();
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
         }
 
         if let Some(handler) = &mut self.event_handler {
@@ -1794,6 +1845,7 @@ impl ViewerApp {
     /// Synchronously renders a frame to the current swapchain texture and presents it.
     pub fn render_frame(&mut self) {
         self.flush_pending_scroll();
+        self.clamp_scroll();
         let nav_bar_h = self.nav_bar_height();
         let (surface, renderer, window) = match (
             &mut self.surface,
@@ -2201,8 +2253,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         let logical_w = size.width as f64 / scale;
                         let logical_h = size.height as f64 / scale;
                         self.update_layout_for_size(logical_w, logical_h);
-                        let max_scroll = self.max_scroll_y(logical_h);
-                        self.scroll_y = self.scroll_y.clamp(0.0, max_scroll);
+                        self.clamp_scroll();
                     }
                     // Immediately render frame synchronously on resize!
                     // This prevents macOS CAMetalLayer from stretching the previous frame's texture.
@@ -2223,8 +2274,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         let logical_w = size.width as f64 / scale;
                         let logical_h = size.height as f64 / scale;
                         self.update_layout_for_size(logical_w, logical_h);
-                        let max_scroll = self.max_scroll_y(logical_h);
-                        self.scroll_y = self.scroll_y.clamp(0.0, max_scroll);
+                        self.clamp_scroll();
                         self.render_frame();
                     }
                 }
