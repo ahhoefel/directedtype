@@ -154,8 +154,8 @@ impl InspectPanelComponent {
         if let Some((sel_nid, ref sel_prop)) = state.and_then(|s| s.selected_property.as_ref()) {
             if let Some(trace) = crate::inspector::build_property_dag_trace(layout, *sel_nid, sel_prop) {
                 let mut h = 10.0 + 30.0 + 96.0 + 16.0;
-                h += 18.0 + if trace.upstream_dependencies.is_empty() { 45.0 + 14.0 } else { trace.upstream_dependencies.len() as f64 * 38.0 + 10.0 };
-                h += 18.0 + if trace.downstream_dependents.is_empty() { 38.0 + 14.0 } else { trace.downstream_dependents.len() as f64 * 36.0 + 10.0 };
+                h += 18.0 + trace.upstream_dependencies.len().max(1) as f64 * 18.0 + 10.0;
+                h += 18.0 + trace.downstream_dependents.len().max(1) as f64 * 18.0 + 10.0;
                 h += 50.0;
                 return h;
             }
@@ -229,19 +229,21 @@ impl InspectPanelComponent {
                     max_w = bc_w;
                 }
                 for dep in &trace.upstream_dependencies {
-                    let w = 20.0 + dep.node_label.len() as f64 * 8.0 + dep.port_name.len() as f64 * 8.0 + dep.value_str.len() as f64 * 8.0 + 90.0;
+                    let has_formula = !dep.equation_str.is_empty() && dep.equation_str != dep.value_str;
+                    let mut w = 24.0 + (dep.node_label.len() + 1 + dep.port_name.len()) as f64 * 8.0 + dep.value_str.len() as f64 * 8.0 + 40.0;
+                    if has_formula {
+                        w += (4 + dep.equation_str.len()) as f64 * 7.5;
+                    }
                     if w > max_w {
                         max_w = w;
                     }
-                    if !dep.equation_str.is_empty() {
-                        let eq_w = 20.0 + dep.equation_str.len() as f64 * 7.5 + 40.0;
-                        if eq_w > max_w {
-                            max_w = eq_w;
-                        }
-                    }
                 }
                 for dep in &trace.downstream_dependents {
-                    let w = 20.0 + dep.node_label.len() as f64 * 8.0 + dep.port_name.len() as f64 * 8.0 + dep.value_str.len() as f64 * 8.0 + 90.0;
+                    let has_formula = !dep.equation_str.is_empty() && dep.equation_str != dep.value_str;
+                    let mut w = 24.0 + (dep.node_label.len() + 1 + dep.port_name.len()) as f64 * 8.0 + dep.value_str.len() as f64 * 8.0 + 40.0;
+                    if has_formula {
+                        w += (4 + dep.equation_str.len()) as f64 * 7.5;
+                    }
                     if w > max_w {
                         max_w = w;
                     }
@@ -474,16 +476,14 @@ impl InspectPanelComponent {
                             // Upstream dependencies
                             cur_y += 18.0; // header
                             if trace.upstream_dependencies.is_empty() {
-                                cur_y += 45.0 + 14.0;
+                                cur_y += 18.0 + 10.0;
                             } else {
                                 for dep in &trace.upstream_dependencies {
-                                    let row_h = 34.0;
-                                    let dep_x = base_x + 10.0;
-                                    let dep_w = self.width - 20.0;
-                                    if py >= cur_y && py < cur_y + row_h && px >= dep_x && px <= dep_x + dep_w {
+                                    let row_h = 18.0;
+                                    if py >= cur_y && py < cur_y + row_h {
                                         return PanelHitResult::SelectProperty(dep.node_id, dep.port_name.clone());
                                     }
-                                    cur_y += row_h + 4.0;
+                                    cur_y += row_h;
                                 }
                                 cur_y += 10.0;
                             }
@@ -494,13 +494,11 @@ impl InspectPanelComponent {
                                 // Leaf port
                             } else {
                                 for dep in &trace.downstream_dependents {
-                                    let row_h = 32.0;
-                                    let dep_x = base_x + 10.0;
-                                    let dep_w = self.width - 20.0;
-                                    if py >= cur_y && py < cur_y + row_h && px >= dep_x && px <= dep_x + dep_w {
+                                    let row_h = 18.0;
+                                    if py >= cur_y && py < cur_y + row_h {
                                         return PanelHitResult::SelectProperty(dep.node_id, dep.port_name.clone());
                                     }
-                                    cur_y += row_h + 4.0;
+                                    cur_y += row_h;
                                 }
                             }
                         }
@@ -2147,72 +2145,133 @@ impl InspectPanelComponent {
         cur_y += 18.0;
 
         if trace.upstream_dependencies.is_empty() {
-            let empty_rrect = RoundedRect::new(base_x + 10.0, cur_y, base_x + 10.0 + card_w, cur_y + 45.0, 4.0);
-            scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(24, 32, 47)), None, &empty_rrect);
-            let empty_stroke = Stroke::new(1.0);
-            scene.stroke(&empty_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(45, 55, 72)), None, &empty_rrect);
-
-            self.draw_text_snippet(
-                scene,
-                font_cx,
-                layout_cx,
-                "• Root Value: No upstream dependencies in layout DAG",
-                9.5,
-                FontWeight::BOLD,
-                Color::from_rgb8(251, 191, 36), // amber 400
-                false,
-                base_x + 20.0,
-                cur_y + 8.0,
+            let prop_x = base_x + 12.0;
+            let bullet_circle = Circle::new((prop_x + 4.0, cur_y + 8.65), 2.0);
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                Brush::Solid(Color::from_rgb8(100, 116, 139)), // slate 500
+                None,
+                &bullet_circle,
             );
-            let subtext = if trace.origin_kind == crate::inspector::PortOriginKind::InferredDefault {
-                "Value was synthesized by the layout compiler fallback rules."
-            } else {
-                "Value originates directly at this port in the layout graph."
-            };
             self.draw_text_snippet(
                 scene,
                 font_cx,
                 layout_cx,
-                subtext,
-                8.5,
+                "None (root value)",
+                10.0,
                 FontWeight::NORMAL,
-                Color::from_rgb8(148, 163, 184),
+                Color::from_rgb8(148, 163, 184), // slate 400
                 false,
-                base_x + 20.0,
-                cur_y + 24.0,
+                prop_x + 12.0,
+                cur_y + 1.5,
             );
-            cur_y += 45.0 + 14.0;
+            cur_y += 18.0 + 10.0;
         } else {
             for dep in &trace.upstream_dependencies {
-                let dep_x = base_x + 10.0;
-                let dep_w = card_w;
-                let dep_h = 34.0;
-                let dep_rrect = RoundedRect::new(dep_x, cur_y, dep_x + dep_w, cur_y + dep_h, 4.0);
-                scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(24, 32, 47)), None, &dep_rrect);
-                let dep_stroke = Stroke::new(1.0);
-                scene.stroke(&dep_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(51, 65, 85)), None, &dep_rrect);
+                let row_h = 18.0;
+                let prop_x = base_x + 12.0;
+                let has_formula = !dep.equation_str.is_empty() && dep.equation_str != dep.value_str;
 
-                // Row 1: [↑] dep_label.port = value [Trace Upstream →]
-                let mut row1_x = dep_x + 8.0;
-                let arrow_adv = self.draw_text_snippet(scene, font_cx, layout_cx, "↑ ", 10.0, FontWeight::BOLD, Color::from_rgb8(56, 189, 248), false, row1_x, cur_y + 3.0);
-                row1_x += arrow_adv;
+                self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    "↑",
+                    10.5,
+                    FontWeight::BOLD,
+                    Color::from_rgb8(56, 189, 248), // cyan 400
+                    true,
+                    prop_x,
+                    cur_y + 1.5,
+                );
 
                 let name_str = format!("{}.{}", dep.node_label, dep.port_name);
-                let name_adv = self.draw_text_snippet(scene, font_cx, layout_cx, &name_str, 10.0, FontWeight::BOLD, Color::from_rgb8(56, 189, 248), true, row1_x, cur_y + 3.0);
-                row1_x += name_adv;
+                let name_adv = self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    &name_str,
+                    10.5,
+                    FontWeight::BOLD,
+                    Color::from_rgb8(56, 189, 248), // cyan 400
+                    true,
+                    prop_x + 12.0,
+                    cur_y + 1.5,
+                );
 
-                let val_str = format!(" = {}", dep.value_str);
-                self.draw_text_snippet(scene, font_cx, layout_cx, &val_str, 10.0, FontWeight::BOLD, Color::from_rgb8(251, 191, 36), true, row1_x, cur_y + 3.0);
+                let sep_adv = self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    ": ",
+                    10.5,
+                    FontWeight::NORMAL,
+                    Color::from_rgb8(100, 116, 139), // slate 500
+                    true,
+                    prop_x + 12.0 + name_adv,
+                    cur_y + 1.5,
+                );
 
-                self.draw_text_snippet(scene, font_cx, layout_cx, "[Trace →]", 8.5, FontWeight::NORMAL, Color::from_rgb8(100, 116, 139), false, dep_x + dep_w - 55.0, cur_y + 4.5);
+                let mut val_x = prop_x + 12.0 + name_adv + sep_adv;
 
-                // Row 2: Formula
-                if !dep.equation_str.is_empty() {
-                    let eq_str = format!("  ↳ {}", dep.equation_str);
-                    self.draw_text_snippet(scene, font_cx, layout_cx, &eq_str, 8.5, FontWeight::NORMAL, Color::from_rgb8(148, 163, 184), true, dep_x + 8.0, cur_y + 18.0);
+                if let Some(swatch_col) = parse_hex_color(&dep.value_str) {
+                    let swatch_rrect = RoundedRect::new(val_x, cur_y + 2.5, val_x + 11.0, cur_y + 13.5, 2.0);
+                    scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(swatch_col), None, &swatch_rrect);
+                    let swatch_stroke = Stroke::new(1.0);
+                    scene.stroke(&swatch_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(71, 85, 105)), None, &swatch_rrect);
+                    val_x += 16.0;
                 }
 
-                cur_y += dep_h + 4.0;
+                let val_col = if parse_hex_color(&dep.value_str).is_some() {
+                    Color::from_rgb8(241, 245, 249) // white
+                } else if dep.value_str.starts_with('"') {
+                    Color::from_rgb8(251, 191, 36) // amber for strings
+                } else {
+                    Color::from_rgb8(52, 211, 153) // emerald for numbers/bools
+                };
+
+                let val_adv = self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    &dep.value_str,
+                    10.5,
+                    FontWeight::BOLD,
+                    val_col,
+                    true,
+                    val_x,
+                    cur_y + 1.5,
+                );
+
+                if has_formula {
+                    let arrow_adv = self.draw_text_snippet(
+                        scene,
+                        font_cx,
+                        layout_cx,
+                        " ← ",
+                        10.5,
+                        FontWeight::NORMAL,
+                        Color::from_rgb8(100, 116, 139), // slate 500
+                        true,
+                        val_x + val_adv,
+                        cur_y + 1.5,
+                    );
+                    self.draw_text_snippet(
+                        scene,
+                        font_cx,
+                        layout_cx,
+                        &dep.equation_str,
+                        10.5,
+                        FontWeight::NORMAL,
+                        Color::from_rgb8(203, 213, 225), // slate 300
+                        true,
+                        val_x + val_adv + arrow_adv,
+                        cur_y + 1.5,
+                    );
+                }
+
+                cur_y += row_h;
             }
             cur_y += 10.0;
         }
@@ -2246,48 +2305,133 @@ impl InspectPanelComponent {
         cur_y += 18.0;
 
         if trace.downstream_dependents.is_empty() {
-            let empty_rrect = RoundedRect::new(base_x + 10.0, cur_y, base_x + 10.0 + card_w, cur_y + 38.0, 4.0);
-            scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(24, 32, 47)), None, &empty_rrect);
-            let empty_stroke = Stroke::new(1.0);
-            scene.stroke(&empty_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(45, 55, 72)), None, &empty_rrect);
-
+            let prop_x = base_x + 12.0;
+            let bullet_circle = Circle::new((prop_x + 4.0, cur_y + 8.65), 2.0);
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                Brush::Solid(Color::from_rgb8(100, 116, 139)), // slate 500
+                None,
+                &bullet_circle,
+            );
             self.draw_text_snippet(
                 scene,
                 font_cx,
                 layout_cx,
-                "• Leaf Port: No downstream variables depend on this port",
-                9.5,
+                "None (leaf port)",
+                10.0,
                 FontWeight::NORMAL,
-                Color::from_rgb8(148, 163, 184),
+                Color::from_rgb8(148, 163, 184), // slate 400
                 false,
-                base_x + 20.0,
-                cur_y + 11.0,
+                prop_x + 12.0,
+                cur_y + 1.5,
             );
-            cur_y += 38.0 + 14.0;
+            cur_y += 18.0 + 10.0;
         } else {
             for dep in &trace.downstream_dependents {
-                let dep_x = base_x + 10.0;
-                let dep_w = card_w;
-                let dep_h = 32.0;
-                let dep_rrect = RoundedRect::new(dep_x, cur_y, dep_x + dep_w, cur_y + dep_h, 4.0);
-                scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(24, 32, 47)), None, &dep_rrect);
-                let dep_stroke = Stroke::new(1.0);
-                scene.stroke(&dep_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(51, 65, 85)), None, &dep_rrect);
+                let row_h = 18.0;
+                let prop_x = base_x + 12.0;
+                let has_formula = !dep.equation_str.is_empty() && dep.equation_str != dep.value_str;
 
-                let mut row_x = dep_x + 8.0;
-                let arrow_adv = self.draw_text_snippet(scene, font_cx, layout_cx, "↓ ", 10.0, FontWeight::BOLD, Color::from_rgb8(192, 132, 252), false, row_x, cur_y + 8.0);
-                row_x += arrow_adv;
+                self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    "↓",
+                    10.5,
+                    FontWeight::BOLD,
+                    Color::from_rgb8(192, 132, 252), // purple 400
+                    true,
+                    prop_x,
+                    cur_y + 1.5,
+                );
 
                 let name_str = format!("{}.{}", dep.node_label, dep.port_name);
-                let name_adv = self.draw_text_snippet(scene, font_cx, layout_cx, &name_str, 10.0, FontWeight::BOLD, Color::from_rgb8(192, 132, 252), true, row_x, cur_y + 8.0);
-                row_x += name_adv;
+                let name_adv = self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    &name_str,
+                    10.5,
+                    FontWeight::BOLD,
+                    Color::from_rgb8(56, 189, 248), // cyan 400
+                    true,
+                    prop_x + 12.0,
+                    cur_y + 1.5,
+                );
 
-                let val_str = format!(" = {}", dep.value_str);
-                self.draw_text_snippet(scene, font_cx, layout_cx, &val_str, 10.0, FontWeight::BOLD, Color::from_rgb8(251, 191, 36), true, row_x, cur_y + 8.0);
+                let sep_adv = self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    ": ",
+                    10.5,
+                    FontWeight::NORMAL,
+                    Color::from_rgb8(100, 116, 139), // slate 500
+                    true,
+                    prop_x + 12.0 + name_adv,
+                    cur_y + 1.5,
+                );
 
-                self.draw_text_snippet(scene, font_cx, layout_cx, "[Inspect →]", 8.5, FontWeight::NORMAL, Color::from_rgb8(100, 116, 139), false, dep_x + dep_w - 60.0, cur_y + 9.5);
+                let mut val_x = prop_x + 12.0 + name_adv + sep_adv;
 
-                cur_y += dep_h + 4.0;
+                if let Some(swatch_col) = parse_hex_color(&dep.value_str) {
+                    let swatch_rrect = RoundedRect::new(val_x, cur_y + 2.5, val_x + 11.0, cur_y + 13.5, 2.0);
+                    scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(swatch_col), None, &swatch_rrect);
+                    let swatch_stroke = Stroke::new(1.0);
+                    scene.stroke(&swatch_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(71, 85, 105)), None, &swatch_rrect);
+                    val_x += 16.0;
+                }
+
+                let val_col = if parse_hex_color(&dep.value_str).is_some() {
+                    Color::from_rgb8(241, 245, 249) // white
+                } else if dep.value_str.starts_with('"') {
+                    Color::from_rgb8(251, 191, 36) // amber for strings
+                } else {
+                    Color::from_rgb8(52, 211, 153) // emerald for numbers/bools
+                };
+
+                let val_adv = self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    &dep.value_str,
+                    10.5,
+                    FontWeight::BOLD,
+                    val_col,
+                    true,
+                    val_x,
+                    cur_y + 1.5,
+                );
+
+                if has_formula {
+                    let arrow_adv = self.draw_text_snippet(
+                        scene,
+                        font_cx,
+                        layout_cx,
+                        " ← ",
+                        10.5,
+                        FontWeight::NORMAL,
+                        Color::from_rgb8(100, 116, 139), // slate 500
+                        true,
+                        val_x + val_adv,
+                        cur_y + 1.5,
+                    );
+                    self.draw_text_snippet(
+                        scene,
+                        font_cx,
+                        layout_cx,
+                        &dep.equation_str,
+                        10.5,
+                        FontWeight::NORMAL,
+                        Color::from_rgb8(203, 213, 225), // slate 300
+                        true,
+                        val_x + val_adv + arrow_adv,
+                        cur_y + 1.5,
+                    );
+                }
+
+                cur_y += row_h;
             }
             cur_y += 10.0;
         }

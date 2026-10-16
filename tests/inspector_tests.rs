@@ -1157,7 +1157,7 @@ fn test_panel_hit_testing_property_details_and_back() {
     assert_eq!(back_res, directedtype::inspector::PanelHitResult::BackToComponentDetails);
 
     // 4. Click upstream dependency row (container width)
-    let upstream_row_y = detail_y + 10.0 + 30.0 + 96.0 + 16.0 + 18.0 + 10.0;
+    let upstream_row_y = detail_y + 10.0 + 30.0 + 96.0 + 16.0 + 18.0 + 8.0;
     let dep_res = panel.handle_click(
         50.0,
         upstream_row_y,
@@ -1168,6 +1168,19 @@ fn test_panel_hit_testing_property_details_and_back() {
         Some(&layout),
     );
     assert_eq!(dep_res, directedtype::inspector::PanelHitResult::SelectProperty(container_node.id, "width".to_string()));
+
+    // 5. Click downstream dependent row (box right)
+    let downstream_row_y = detail_y + 10.0 + 30.0 + 96.0 + 16.0 + 18.0 + 18.0 + 10.0 + 18.0 + 8.0;
+    let down_res = panel.handle_click(
+        50.0,
+        downstream_row_y,
+        0.0,
+        600.0,
+        &tree_items,
+        &state,
+        Some(&layout),
+    );
+    assert_eq!(down_res, directedtype::inspector::PanelHitResult::SelectProperty(box_node.id, "right".to_string()));
 }
 
 #[test]

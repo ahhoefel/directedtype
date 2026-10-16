@@ -3433,10 +3433,35 @@ fn test_number_to_string_builtins() {
     assert_eq!(texts[5].as_deref(), Some("120"));
 }
 
+#[test]
+fn test_list_component_custom_bullet_port() {
+    let input = r#"
+    \use { List, Item, BulletType } from "components/List.dt";
+    \use { Align } from "components/Align.dt";
 
+    \env font = \Font(family: "Arial", size: 16);
 
+    \List(x: 10, y: 10, inset: 20, width: 200, gap: 10, item_gap: 10, bullet_type: BulletType.Bullet) {
+        \Item{Default Bullet}
+    }
+    \List(x: 10, y: 60, inset: 20, width: 200, gap: 10, item_gap: 10, bullet_type: BulletType.Bullet, bullet: "↑") {
+        \Item{Upstream}
+    }
+    \List(x: 10, y: 110, inset: 20, width: 200, gap: 10, item_gap: 10, bullet_type: BulletType.Bullet, bullet: "↓") {
+        \Item{Downstream}
+    }
+    "#;
 
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("evaluate ok");
+    let texts: Vec<String> = layout
+        .nodes
+        .iter()
+        .filter(|n| n.name == "Text")
+        .filter_map(|n| n.properties.get("text").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .collect();
 
-
-
-
+    assert!(texts.contains(&"•".to_string()), "Expected default bullet '•', got: {:?}", texts);
+    assert!(texts.contains(&"↑".to_string()), "Expected custom bullet '↑', got: {:?}", texts);
+    assert!(texts.contains(&"↓".to_string()), "Expected custom bullet '↓', got: {:?}", texts);
+}
