@@ -824,7 +824,7 @@ fn test_expandable_reference_properties() {
 
     let divider_y = panel.divider_y(win_h);
     let detail_y = divider_y + panel.divider_height;
-    let section_b_start = detail_y + 134.0;
+    let section_b_start = detail_y + 10.0;
     let mut test_y = section_b_start;
     let mut prop_keys: Vec<String> = text_node.properties.keys().cloned().collect();
     prop_keys.retain(|k| k != "clip");
@@ -1127,11 +1127,11 @@ fn test_panel_hit_testing_property_details_and_back() {
     let divider_y = panel.divider_y(600.0);
     let detail_y = divider_y + panel.divider_height;
 
-    // 1. Click in component details on center box model pill to select 'width'
-    let box_pill_y = detail_y + 10.0 + 14.0 + 35.0; // center of box pill
+    // 1. Click in component details on 'width' property row (3rd row after x, y)
+    let width_row_y = detail_y + 10.0 + 2.0 * 18.0 + 5.0;
     let res = panel.handle_click(
-        panel.width / 2.0 - 20.0,
-        box_pill_y,
+        50.0,
+        width_row_y,
         0.0,
         600.0,
         &tree_items,
@@ -1143,10 +1143,10 @@ fn test_panel_hit_testing_property_details_and_back() {
     // 2. Set state to property details view
     state.select_property(box_node.id, "width");
 
-    // 3. Click [← Back to Component] button
-    let back_btn_y = detail_y + 10.0 + 10.0;
+    // 3. Click right-aligned [←] button in the property title bar
+    let back_btn_y = divider_y + panel.divider_height / 2.0;
     let back_res = panel.handle_click(
-        40.0,
+        panel.width - 18.0,
         back_btn_y,
         0.0,
         600.0,
@@ -1157,7 +1157,7 @@ fn test_panel_hit_testing_property_details_and_back() {
     assert_eq!(back_res, directedtype::inspector::PanelHitResult::BackToComponentDetails);
 
     // 4. Click upstream dependency row (container width)
-    let upstream_row_y = detail_y + 10.0 + 30.0 + 96.0 + 16.0 + 18.0 + 8.0;
+    let upstream_row_y = detail_y + 10.0 + 48.0 + 14.0 + 18.0 + 8.0;
     let dep_res = panel.handle_click(
         50.0,
         upstream_row_y,
@@ -1170,7 +1170,7 @@ fn test_panel_hit_testing_property_details_and_back() {
     assert_eq!(dep_res, directedtype::inspector::PanelHitResult::SelectProperty(container_node.id, "width".to_string()));
 
     // 5. Click downstream dependent row (box right)
-    let downstream_row_y = detail_y + 10.0 + 30.0 + 96.0 + 16.0 + 18.0 + 18.0 + 10.0 + 18.0 + 8.0;
+    let downstream_row_y = detail_y + 10.0 + 48.0 + 14.0 + 18.0 + 18.0 + 10.0 + 18.0 + 8.0;
     let down_res = panel.handle_click(
         50.0,
         downstream_row_y,

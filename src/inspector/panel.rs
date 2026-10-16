@@ -153,7 +153,7 @@ impl InspectPanelComponent {
     ) -> f64 {
         if let Some((sel_nid, ref sel_prop)) = state.and_then(|s| s.selected_property.as_ref()) {
             if let Some(trace) = crate::inspector::build_property_dag_trace(layout, *sel_nid, sel_prop) {
-                let mut h = 10.0 + 30.0 + 96.0 + 16.0;
+                let mut h = 10.0 + 48.0 + 14.0;
                 h += 18.0 + trace.upstream_dependencies.len().max(1) as f64 * 18.0 + 10.0;
                 h += 18.0 + trace.downstream_dependents.len().max(1) as f64 * 18.0 + 10.0;
                 h += 50.0;
@@ -162,11 +162,10 @@ impl InspectPanelComponent {
         }
 
         if let Some(node) = selected_id.and_then(|id| layout.get_node(id)) {
-            let mut h = 10.0 + 14.0 + 76.0 + 16.0;
+            let mut h = 10.0;
             if !node.state_vars.is_empty() {
                 h += 18.0 + node.state_vars.len() as f64 * 24.0 + 10.0;
             }
-            h += 18.0;
             let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
             prop_keys.retain(|k| k != "clip");
             for geom in ["x", "y", "width", "height", "z"] {
@@ -224,9 +223,11 @@ impl InspectPanelComponent {
 
         if let Some((sel_nid, ref sel_prop)) = state.and_then(|s| s.selected_property.as_ref()) {
             if let Some(trace) = crate::inspector::build_property_dag_trace(layout, *sel_nid, sel_prop) {
-                let bc_w = 10.0 + 145.0 + 15.0 + (trace.target_label.len() + trace.port_name.len()) as f64 * 8.0 + 40.0;
-                if bc_w > max_w {
-                    max_w = bc_w;
+                let line1_w = 24.0
+                    + (trace.target_label.len() + 3 + trace.port_name.len() + 3 + trace.evaluated_value_str.len()) as f64 * 8.0
+                    + 120.0;
+                if line1_w > max_w {
+                    max_w = line1_w;
                 }
                 for dep in &trace.upstream_dependencies {
                     let has_formula = !dep.equation_str.is_empty() && dep.equation_str != dep.value_str;
@@ -248,13 +249,9 @@ impl InspectPanelComponent {
                         max_w = w;
                     }
                 }
-                let eq_hero_w = 20.0 + trace.equation_str.len() as f64 * 8.0 + 80.0;
+                let eq_hero_w = 24.0 + trace.equation_str.len() as f64 * 8.0 + 40.0;
                 if eq_hero_w > max_w {
                     max_w = eq_hero_w;
-                }
-                let desc_w = 20.0 + trace.origin_description.len() as f64 * 7.0 + 40.0;
-                if desc_w > max_w {
-                    max_w = desc_w;
                 }
                 return max_w;
             }
@@ -447,6 +444,15 @@ impl InspectPanelComponent {
             }
         } else {
             let detail_y = divider_y + self.divider_height;
+            if py >= divider_y && py < detail_y {
+                if state.selected_property.is_some()
+                    && px >= panel_x + self.width - 34.0
+                    && px <= panel_x + self.width - 6.0
+                {
+                    return PanelHitResult::BackToComponentDetails;
+                }
+                return PanelHitResult::None;
+            }
             if py >= detail_y {
                 if let Some(layout) = layout {
                     let total_detail_h = self.total_detail_content_height(state.selected_id, layout, Some(state));
@@ -461,17 +467,10 @@ impl InspectPanelComponent {
 
                     if let Some((sel_nid, ref sel_prop)) = state.selected_property {
                         let base_y = detail_y - state.detail_scroll_offset;
-                        let base_x = panel_x - state.detail_scroll_offset_x;
                         let mut cur_y = base_y + 10.0;
 
-                        // Check [← Back to Component] button
-                        if py >= cur_y && py <= cur_y + 24.0 && px >= base_x + 10.0 && px <= base_x + 155.0 {
-                            return PanelHitResult::BackToComponentDetails;
-                        }
-
                         if let Some(trace) = crate::inspector::build_property_dag_trace(layout, sel_nid, sel_prop) {
-                            cur_y += 30.0; // toolbar
-                            cur_y += 96.0 + 16.0; // hero card
+                            cur_y += 48.0 + 14.0; // port card
 
                             // Upstream dependencies
                             cur_y += 18.0; // header
@@ -508,37 +507,7 @@ impl InspectPanelComponent {
 
                     if let Some(node) = state.selected_id.and_then(|id| layout.get_node(id)) {
                         let base_y = detail_y - state.detail_scroll_offset;
-                        let base_x = panel_x - state.detail_scroll_offset_x;
                         let mut cur_y = base_y + 10.0;
-                        cur_y += 14.0; // Section A label
-
-                        let card_x = base_x + 10.0;
-                        let card_w = self.width - 20.0;
-                        let coord_y = cur_y + 7.0;
-                        if py >= coord_y - 2.0 && py <= coord_y + 16.0 {
-                            if px >= card_x + 8.0 && px < card_x + 80.0 {
-                                return PanelHitResult::SelectProperty(node.id, "x".to_string());
-                            } else if px >= card_x + 80.0 && px < card_x + 155.0 {
-                                return PanelHitResult::SelectProperty(node.id, "y".to_string());
-                            } else if px >= card_x + 155.0 && px < card_x + 225.0 {
-                                return PanelHitResult::SelectProperty(node.id, "z".to_string());
-                            } else if px >= card_x + 225.0 && px <= card_x + card_w {
-                                return PanelHitResult::SelectProperty(node.id, "clip".to_string());
-                            }
-                        }
-
-                        // Center box model pill: cur_y + 28.0 .. cur_y + 62.0
-                        let box_y = cur_y + 28.0;
-                        if py >= box_y && py <= box_y + 34.0 && px >= card_x + 10.0 && px <= card_x + card_w - 10.0 {
-                            let mid_x = card_x + card_w / 2.0;
-                            if px < mid_x {
-                                return PanelHitResult::SelectProperty(node.id, "width".to_string());
-                            } else {
-                                return PanelHitResult::SelectProperty(node.id, "height".to_string());
-                            }
-                        }
-
-                        cur_y += 76.0 + 16.0; // Section A card
 
                         if !node.state_vars.is_empty() {
                             cur_y += 18.0;
@@ -553,8 +522,6 @@ impl InspectPanelComponent {
                             }
                             cur_y += 10.0;
                         }
-
-                        cur_y += 18.0; // Section B header
 
                         let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
                         prop_keys.retain(|k| k != "clip");
@@ -1026,64 +993,54 @@ impl InspectPanelComponent {
         );
 
         let is_property_view = state.selected_property.is_some();
-        let section_title = if is_property_view {
-            "PROPERTY DETAILS (DAG TRACE)"
-        } else {
-            "COMPONENT DETAILS"
-        };
-        self.draw_text_snippet_centered(
-            scene,
-            font_cx,
-            layout_cx,
-            section_title,
-            9.5,
-            FontWeight::BOLD,
-            if is_property_view {
-                Color::from_rgb8(251, 191, 36) // amber 400
-            } else {
-                Color::from_rgb8(226, 232, 240) // slate 200
-            },
-            false,
-            panel_x + 10.0,
-            divider_y,
-            self.divider_height,
-        );
-
         let selected_node = state.selected_id.and_then(|id| layout.get_node(id));
 
-        // Right pill in divider: selected component name & ID or property label
-        if let Some((sel_nid, ref sel_prop)) = state.selected_property {
-            let label = format!("{}.{}", layout.node_display_label(sel_nid), sel_prop);
+        if is_property_view {
             self.draw_text_snippet_centered(
                 scene,
                 font_cx,
                 layout_cx,
-                &label,
+                "PROPERTY",
                 9.5,
                 FontWeight::BOLD,
-                Color::from_rgb8(56, 189, 248), // cyan 400
-                true,
-                panel_x + 200.0,
+                Color::from_rgb8(226, 232, 240), // slate 200
+                false,
+                panel_x + 10.0,
                 divider_y,
                 self.divider_height,
             );
-        } else if let Some(node) = selected_node {
-            let id_str = node.properties.get("id").and_then(|v| v.as_str());
-            let badge_str = if let Some(id) = id_str {
-                format!("\\{}#{}", node.name, id)
-            } else {
-                format!("\\{}", node.name)
-            };
+
+            // Right-aligned back button with arrow only in the property title bar
+            let btn_w = 22.0;
+            let btn_h = 20.0;
+            let btn_x = panel_x + panel_w - btn_w - 8.0;
+            let btn_y = divider_y + 4.0;
+            let btn_rrect = RoundedRect::new(btn_x, btn_y, btn_x + btn_w, btn_y + btn_h, 4.0);
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                Brush::Solid(Color::from_rgb8(15, 23, 42)), // slate 900
+                None,
+                &btn_rrect,
+            );
+            let btn_stroke = Stroke::new(1.0);
+            scene.stroke(
+                &btn_stroke,
+                Affine::IDENTITY,
+                Brush::Solid(Color::from_rgb8(71, 85, 105)), // slate 600
+                None,
+                &btn_rrect,
+            );
             self.draw_text_snippet_centered(
                 scene,
                 font_cx,
                 layout_cx,
-                &badge_str,
-                10.0,
+                "←",
+                11.0,
                 FontWeight::BOLD,
-                Color::from_rgb8(56, 189, 248), // cyan 400
-                true,
-                panel_x + 160.0,
+                Color::from_rgb8(241, 245, 249),
+                false,
+                btn_x + 5.0,
                 divider_y,
                 self.divider_height,
             );
@@ -1092,18 +1049,54 @@ impl InspectPanelComponent {
                 scene,
                 font_cx,
                 layout_cx,
-                "(no selection)",
+                "COMPONENT DETAILS",
                 9.5,
-                FontWeight::NORMAL,
-                Color::from_rgb8(100, 116, 139), // slate 500
+                FontWeight::BOLD,
+                Color::from_rgb8(226, 232, 240), // slate 200
                 false,
-                panel_x + 160.0,
+                panel_x + 10.0,
                 divider_y,
                 self.divider_height,
             );
+
+            if let Some(node) = selected_node {
+                let id_str = node.properties.get("id").and_then(|v| v.as_str());
+                let badge_str = if let Some(id) = id_str {
+                    format!("\\{}#{}", node.name, id)
+                } else {
+                    format!("\\{}", node.name)
+                };
+                self.draw_text_snippet_centered(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    &badge_str,
+                    10.0,
+                    FontWeight::BOLD,
+                    Color::from_rgb8(56, 189, 248), // cyan 400
+                    true,
+                    panel_x + 160.0,
+                    divider_y,
+                    self.divider_height,
+                );
+            } else {
+                self.draw_text_snippet_centered(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    "(no selection)",
+                    9.5,
+                    FontWeight::NORMAL,
+                    Color::from_rgb8(100, 116, 139), // slate 500
+                    false,
+                    panel_x + 160.0,
+                    divider_y,
+                    self.divider_height,
+                );
+            }
         }
 
-        // 6. Bottom Section: Component Details Area (Dimensions, Properties, Formulas & Evaluations)
+        // 6. Bottom Section: Component Details Area (Properties, Formulas & Evaluations)
         let detail_y = divider_y + self.divider_height;
         let detail_h = (win_h - detail_y).max(0.0);
         let detail_clip = Rect::new(panel_x, detail_y, panel_x + panel_w, win_h);
@@ -1131,99 +1124,9 @@ impl InspectPanelComponent {
             let base_y = detail_y - state.detail_scroll_offset;
             let base_x = panel_x - state.detail_scroll_offset_x;
             let card_w = (panel_w - 20.0).max(total_detail_content_w - 20.0);
-            let dim_card_w = (panel_w - 20.0).max(200.0);
             let mut cur_y = base_y + 10.0;
 
-            // --- Section A: Dimensions & Box Model ---
-            self.draw_text_snippet(
-                scene,
-                font_cx,
-                layout_cx,
-                "DIMENSIONS & BOUNDS",
-                9.0,
-                FontWeight::BOLD,
-                Color::from_rgb8(148, 163, 184), // slate 400
-                false,
-                base_x + 12.0,
-                cur_y,
-            );
-            cur_y += 14.0;
-
-            let card_x = base_x + 10.0;
-            let card_h = 76.0;
-            let card_rrect = RoundedRect::new(card_x, cur_y, card_x + dim_card_w, cur_y + card_h, 6.0);
-            scene.fill(
-                Fill::NonZero,
-                Affine::IDENTITY,
-                Brush::Solid(Color::from_rgb8(24, 32, 47)), // slate 900+
-                None,
-                &card_rrect,
-            );
-            let card_stroke = Stroke::new(1.0);
-            scene.stroke(
-                &card_stroke,
-                Affine::IDENTITY,
-                Brush::Solid(Color::from_rgb8(51, 65, 85)), // slate 700
-                None,
-                &card_rrect,
-            );
-
-            // Coordinates Row
-            let coord_y = cur_y + 7.0;
-            let x_str = format!("x: {:.1}", node.rect.x);
-            self.draw_text_snippet(scene, font_cx, layout_cx, &x_str, 10.0, FontWeight::BOLD, Color::from_rgb8(251, 191, 36), true, card_x + 12.0, coord_y);
-
-            let y_str = format!("y: {:.1}", node.rect.y);
-            self.draw_text_snippet(scene, font_cx, layout_cx, &y_str, 10.0, FontWeight::BOLD, Color::from_rgb8(251, 191, 36), true, card_x + 88.0, coord_y);
-
-            let z_str = format!("z: {:.0}", node.z);
-            self.draw_text_snippet(scene, font_cx, layout_cx, &z_str, 10.0, FontWeight::NORMAL, Color::from_rgb8(203, 213, 225), true, card_x + 164.0, coord_y);
-
-            let clip_str = if let Some(cid) = node.clip {
-                format!("clip: Box#{}", cid.0)
-            } else {
-                "clip: none".to_string()
-            };
-            self.draw_text_snippet(scene, font_cx, layout_cx, &clip_str, 9.5, FontWeight::NORMAL, Color::from_rgb8(148, 163, 184), true, card_x + 230.0, coord_y + 0.5);
-
-            // Center Box Model Pill
-            let box_x = card_x + 10.0;
-            let box_y = cur_y + 28.0;
-            let box_w = (dim_card_w - 20.0).max(100.0);
-            let box_h = 34.0;
-            let box_rrect = RoundedRect::new(box_x, box_y, box_x + box_w, box_y + box_h, 4.0);
-            scene.fill(
-                Fill::NonZero,
-                Affine::IDENTITY,
-                Brush::Solid(Color::from_rgba8(2, 132, 199, 35)), // sky 950 tint
-                None,
-                &box_rrect,
-            );
-            let box_stroke = Stroke::new(1.0);
-            scene.stroke(
-                &box_stroke,
-                Affine::IDENTITY,
-                Brush::Solid(Color::from_rgb8(2, 132, 199)), // sky 600
-                None,
-                &box_rrect,
-            );
-            let dim_str = format!("{:.1} × {:.1} px", node.rect.width, node.rect.height);
-            self.draw_text_snippet(
-                scene,
-                font_cx,
-                layout_cx,
-                &dim_str,
-                11.5,
-                FontWeight::BOLD,
-                Color::from_rgb8(248, 250, 252), // white
-                true,
-                box_x + (box_w - 110.0).max(10.0) / 2.0,
-                box_y + 8.5,
-            );
-
-            cur_y += card_h + 16.0;
-
-            // --- Section B: Component Reactive State ---
+            // --- Component Reactive State ---
             if !node.state_vars.is_empty() {
                 self.draw_text_snippet(
                     scene,
@@ -1372,7 +1275,7 @@ impl InspectPanelComponent {
                             Affine::IDENTITY,
                             Brush::Solid(Color::from_rgb8(24, 32, 47)),
                             None,
-                            &Line::new((state_x, sep_y), (card_x + card_w, sep_y)),
+                            &Line::new((state_x, sep_y), (base_x + 10.0 + card_w, sep_y)),
                         );
                     }
 
@@ -1381,21 +1284,6 @@ impl InspectPanelComponent {
 
                 cur_y += 10.0;
             }
-
-            // --- Section C: Properties, Formulas & Evaluations ---
-            self.draw_text_snippet(
-                scene,
-                font_cx,
-                layout_cx,
-                "PROPERTIES & FORMULAS",
-                9.0,
-                FontWeight::BOLD,
-                Color::from_rgb8(148, 163, 184), // slate 400
-                false,
-                base_x + 12.0,
-                cur_y,
-            );
-            cur_y += 18.0;
 
             // Collect and order properties:
             // 1. Spatial: x, y, width, height, z
@@ -1881,58 +1769,9 @@ impl InspectPanelComponent {
         let card_w = (panel_w - 20.0).max(content_w - 20.0);
         let mut cur_y = base_y + 10.0;
 
-        // 1. Navigation Toolbar: [← Back to Component] + Breadcrumbs
-        let btn_x = base_x + 10.0;
-        let btn_w = 145.0;
-        let btn_h = 22.0;
-        let btn_rrect = RoundedRect::new(btn_x, cur_y, btn_x + btn_w, cur_y + btn_h, 4.0);
-        scene.fill(
-            Fill::NonZero,
-            Affine::IDENTITY,
-            Brush::Solid(Color::from_rgb8(30, 41, 59)), // slate 800
-            None,
-            &btn_rrect,
-        );
-        let btn_stroke = Stroke::new(1.0);
-        scene.stroke(
-            &btn_stroke,
-            Affine::IDENTITY,
-            Brush::Solid(Color::from_rgb8(71, 85, 105)), // slate 600
-            None,
-            &btn_rrect,
-        );
-        self.draw_text_snippet(
-            scene,
-            font_cx,
-            layout_cx,
-            "← Back to Component",
-            10.0,
-            FontWeight::BOLD,
-            Color::from_rgb8(241, 245, 249),
-            false,
-            btn_x + 8.0,
-            cur_y + 4.0,
-        );
-
-        let bc_text = format!("{} > {}", trace.target_label, trace.port_name);
-        self.draw_text_snippet(
-            scene,
-            font_cx,
-            layout_cx,
-            &bc_text,
-            10.0,
-            FontWeight::BOLD,
-            Color::from_rgb8(56, 189, 248), // cyan 400
-            true,
-            btn_x + btn_w + 10.0,
-            cur_y + 4.0,
-        );
-
-        cur_y += 30.0;
-
-        // 2. Inspected Property Hero Card
+        // 1. Inspected Property Port Card
         let card_x = base_x + 10.0;
-        let card_h = 96.0;
+        let card_h = 48.0;
         let card_rrect = RoundedRect::new(card_x, cur_y, card_x + card_w, cur_y + card_h, 6.0);
         scene.fill(
             Fill::NonZero,
@@ -1950,103 +1789,70 @@ impl InspectPanelComponent {
             &card_rrect,
         );
 
-        // Line 1: Port Name + Origin Badge
+        // Line 1: "<Component> . <portname> : <value>"
         let mut line1_x = card_x + 12.0;
-        let label_adv = self.draw_text_snippet(
+        let comp_adv = self.draw_text_snippet(
             scene,
             font_cx,
             layout_cx,
-            "PORT: ",
-            9.5,
+            &trace.target_label,
+            10.5,
             FontWeight::BOLD,
-            Color::from_rgb8(148, 163, 184), // slate 400
-            false,
+            Color::from_rgb8(56, 189, 248), // cyan 400
+            true,
             line1_x,
             cur_y + 7.0,
         );
-        line1_x += label_adv;
+        line1_x += comp_adv;
+
+        let dot_adv = self.draw_text_snippet(
+            scene,
+            font_cx,
+            layout_cx,
+            " . ",
+            10.5,
+            FontWeight::NORMAL,
+            Color::from_rgb8(148, 163, 184), // slate 400
+            true,
+            line1_x,
+            cur_y + 7.0,
+        );
+        line1_x += dot_adv;
 
         let port_adv = self.draw_text_snippet(
             scene,
             font_cx,
             layout_cx,
             &trace.port_name,
-            11.0,
+            10.5,
             FontWeight::BOLD,
             Color::from_rgb8(56, 189, 248), // cyan 400
             true,
             line1_x,
-            cur_y + 6.0,
+            cur_y + 7.0,
         );
-        let _ = (line1_x, port_adv);
+        line1_x += port_adv;
 
-        // Origin Badge
-        let (badge_text, badge_bg, badge_fg) = match trace.origin_kind {
-            crate::inspector::PortOriginKind::InferredDefault => (
-                "Inferred Default",
-                Color::from_rgba8(245, 158, 11, 35),
-                Color::from_rgb8(251, 191, 36),
-            ),
-            crate::inspector::PortOriginKind::Literal => (
-                "Explicit Literal",
-                Color::from_rgba8(16, 185, 129, 35),
-                Color::from_rgb8(52, 211, 153),
-            ),
-            crate::inspector::PortOriginKind::Expression => (
-                "DAG Expression",
-                Color::from_rgba8(14, 165, 233, 35),
-                Color::from_rgb8(56, 189, 248),
-            ),
-            crate::inspector::PortOriginKind::StateVariable => (
-                "Component State",
-                Color::from_rgba8(168, 85, 247, 35),
-                Color::from_rgb8(192, 132, 252),
-            ),
-            crate::inspector::PortOriginKind::DynamicFunction => (
-                "Engine Function",
-                Color::from_rgba8(99, 102, 241, 35),
-                Color::from_rgb8(129, 140, 248),
-            ),
-        };
-
-        let badge_x = card_x + card_w - 110.0;
-        let badge_rrect = RoundedRect::new(badge_x, cur_y + 6.0, badge_x + 98.0, cur_y + 20.0, 3.0);
-        scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(badge_bg), None, &badge_rrect);
-        self.draw_text_snippet(
+        let colon_adv = self.draw_text_snippet(
             scene,
             font_cx,
             layout_cx,
-            badge_text,
-            8.5,
-            FontWeight::BOLD,
-            badge_fg,
-            false,
-            badge_x + 6.0,
-            cur_y + 8.5,
-        );
-
-        // Line 2: Evaluated Value (+ color swatch if applicable)
-        let mut val_x = card_x + 12.0;
-        let val_lbl_adv = self.draw_text_snippet(
-            scene,
-            font_cx,
-            layout_cx,
-            "Value: ",
-            10.0,
+            " : ",
+            10.5,
             FontWeight::NORMAL,
-            Color::from_rgb8(148, 163, 184),
-            false,
-            val_x,
-            cur_y + 26.0,
+            Color::from_rgb8(148, 163, 184), // slate 400
+            true,
+            line1_x,
+            cur_y + 7.0,
         );
-        val_x += val_lbl_adv;
+        line1_x += colon_adv;
 
         if let Some(swatch_col) = parse_hex_color(&trace.evaluated_value_str) {
-            let swatch_rrect = RoundedRect::new(val_x, cur_y + 26.0, val_x + 12.0, cur_y + 38.0, 2.0);
+            let swatch_rrect = RoundedRect::new(line1_x, cur_y + 8.0, line1_x + 11.0, cur_y + 19.0, 2.0);
             scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(swatch_col), None, &swatch_rrect);
             let swatch_stroke = Stroke::new(1.0);
             scene.stroke(&swatch_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(71, 85, 105)), None, &swatch_rrect);
-            val_x += 16.0;
+            line1_x += 16.0;
         }
 
         let val_col = if parse_hex_color(&trace.evaluated_value_str).is_some() {
@@ -2057,64 +1863,34 @@ impl InspectPanelComponent {
             Color::from_rgb8(52, 211, 153)
         };
 
-        let val_adv = self.draw_text_snippet(
+        self.draw_text_snippet(
             scene,
             font_cx,
             layout_cx,
             &trace.evaluated_value_str,
-            12.0,
+            10.5,
             FontWeight::BOLD,
             val_col,
             true,
-            val_x,
-            cur_y + 25.0,
+            line1_x,
+            cur_y + 7.0,
         );
-        val_x += val_adv;
 
-        let type_annot = format!(" ({})", trace.value_type);
+        // Line 2: Formula (no "Formula:" prefix)
         self.draw_text_snippet(
             scene,
             font_cx,
             layout_cx,
-            &type_annot,
-            9.0,
+            &trace.equation_str,
+            10.0,
             FontWeight::NORMAL,
-            Color::from_rgb8(100, 116, 139),
-            false,
-            val_x + 4.0,
-            cur_y + 27.5,
-        );
-
-        // Line 3: Equation / Formula
-        let eq_display = format!("↳ Formula: {}", trace.equation_str);
-        self.draw_text_snippet(
-            scene,
-            font_cx,
-            layout_cx,
-            &eq_display,
-            9.5,
-            FontWeight::NORMAL,
-            Color::from_rgb8(203, 213, 225),
+            Color::from_rgb8(203, 213, 225), // slate 300
             true,
             card_x + 12.0,
-            cur_y + 46.0,
+            cur_y + 26.0,
         );
 
-        // Line 4: Origin Description
-        self.draw_text_snippet(
-            scene,
-            font_cx,
-            layout_cx,
-            &trace.origin_description,
-            8.5,
-            FontWeight::NORMAL,
-            Color::from_rgb8(148, 163, 184),
-            false,
-            card_x + 12.0,
-            cur_y + 68.0,
-        );
-
-        cur_y += card_h + 16.0;
+        cur_y += card_h + 14.0;
 
         // 3. Section: Upstream DAG Dependencies
         self.draw_text_snippet(
