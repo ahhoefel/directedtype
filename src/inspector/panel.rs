@@ -156,7 +156,6 @@ impl InspectPanelComponent {
                 let mut h = 10.0 + 48.0 + 14.0;
                 h += 18.0 + trace.upstream_dependencies.len().max(1) as f64 * 18.0 + 10.0;
                 h += 18.0 + trace.downstream_dependents.len().max(1) as f64 * 18.0 + 10.0;
-                h += 50.0;
                 return h;
             }
         }
@@ -805,7 +804,39 @@ impl InspectPanelComponent {
                     row_y + 3.75,
                 );
             }
-            // Note: spatial dimensions [W x H] are intentionally removed from the DOM tree rows!
+
+            // 4. Right-aligned node number (fixed horizontally on the right edge)
+            if let Some(nid) = item.node_id {
+                let nid_str = format!("{}", nid.0);
+                let nid_col = if item.is_selected {
+                    Color::from_rgb8(203, 213, 225) // slate 300
+                } else {
+                    Color::from_rgb8(100, 116, 139) // slate 500
+                };
+                let right_x = panel_x + panel_w - 10.0;
+                self.draw_text_snippet_right_aligned(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    &nid_str,
+                    9.5,
+                    FontWeight::NORMAL,
+                    nid_col,
+                    true,
+                    right_x,
+                    row_y + 3.5,
+                    if item.is_selected {
+                        Some((Color::from_rgb8(15, 23, 42), Color::from_rgba8(2, 132, 199, 90)))
+                    } else if item.is_hovered {
+                        Some((Color::from_rgb8(15, 23, 42), Color::from_rgba8(30, 41, 59, 180)))
+                    } else {
+                        Some((Color::from_rgb8(15, 23, 42), Color::TRANSPARENT))
+                    },
+                    row_y,
+                    self.row_height,
+                    panel_x + panel_w,
+                );
+            }
         }
 
         scene.pop_layer();
@@ -1894,30 +1925,17 @@ impl InspectPanelComponent {
 
         cur_y += card_h + 14.0;
 
-        // 3. Section: Upstream DAG Dependencies
+        // 3. Section: Upstream
         self.draw_text_snippet(
             scene,
             font_cx,
             layout_cx,
-            "UPSTREAM DEPENDENCIES (reads from)",
+            "UPSTREAM",
             9.0,
             FontWeight::BOLD,
             Color::from_rgb8(148, 163, 184),
             false,
             base_x + 12.0,
-            cur_y,
-        );
-        let in_count = format!("({} input{})", trace.upstream_dependencies.len(), if trace.upstream_dependencies.len() == 1 { "" } else { "s" });
-        self.draw_text_snippet(
-            scene,
-            font_cx,
-            layout_cx,
-            &in_count,
-            9.0,
-            FontWeight::NORMAL,
-            Color::from_rgb8(100, 116, 139),
-            false,
-            base_x + 230.0,
             cur_y,
         );
         cur_y += 18.0;
@@ -2054,30 +2072,17 @@ impl InspectPanelComponent {
             cur_y += 10.0;
         }
 
-        // 4. Section: Downstream DAG Dependents
+        // 4. Section: Downstream
         self.draw_text_snippet(
             scene,
             font_cx,
             layout_cx,
-            "DOWNSTREAM DEPENDENTS (feeds into)",
+            "DOWNSTREAM",
             9.0,
             FontWeight::BOLD,
             Color::from_rgb8(148, 163, 184),
             false,
             base_x + 12.0,
-            cur_y,
-        );
-        let out_count = format!("({} dependent{})", trace.downstream_dependents.len(), if trace.downstream_dependents.len() == 1 { "" } else { "s" });
-        self.draw_text_snippet(
-            scene,
-            font_cx,
-            layout_cx,
-            &out_count,
-            9.0,
-            FontWeight::NORMAL,
-            Color::from_rgb8(100, 116, 139),
-            false,
-            base_x + 230.0,
             cur_y,
         );
         cur_y += 18.0;
@@ -2104,7 +2109,6 @@ impl InspectPanelComponent {
                 prop_x + 12.0,
                 cur_y + 1.5,
             );
-            cur_y += 18.0 + 10.0;
         } else {
             for dep in &trace.downstream_dependents {
                 let row_h = 18.0;
@@ -2211,20 +2215,7 @@ impl InspectPanelComponent {
 
                 cur_y += row_h;
             }
-            cur_y += 10.0;
         }
-
-        // 5. Section: DAG Identifiers & Metrics
-        let stats_rrect = RoundedRect::new(base_x + 10.0, cur_y, base_x + 10.0 + card_w, cur_y + 44.0, 4.0);
-        scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(17, 24, 39)), None, &stats_rrect);
-        let stats_stroke = Stroke::new(1.0);
-        scene.stroke(&stats_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(30, 41, 59)), None, &stats_rrect);
-
-        let var_id_str = format!("DAG VarId: {}", trace.canonical_var);
-        self.draw_text_snippet(scene, font_cx, layout_cx, &var_id_str, 9.0, FontWeight::NORMAL, Color::from_rgb8(148, 163, 184), true, base_x + 18.0, cur_y + 7.0);
-
-        let metrics_str = format!("In-degree: {} | Out-degree: {}", trace.upstream_dependencies.len(), trace.downstream_dependents.len());
-        self.draw_text_snippet(scene, font_cx, layout_cx, &metrics_str, 9.0, FontWeight::NORMAL, Color::from_rgb8(100, 116, 139), true, base_x + 18.0, cur_y + 24.0);
     }
 
     /// Internal helper to render a single-line text snippet, returning its advance width.
@@ -2285,6 +2276,81 @@ impl InspectPanelComponent {
         }
 
         layout.full_width() as f64
+    }
+
+    /// Internal helper to render a right-aligned single-line text snippet ending at `right_x`.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_text_snippet_right_aligned(
+        &self,
+        scene: &mut Scene,
+        font_cx: &mut FontContext,
+        layout_cx: &mut LayoutContext<()>,
+        text: &str,
+        font_size: f32,
+        font_weight: FontWeight,
+        color: Color,
+        is_monospace: bool,
+        right_x: f64,
+        y: f64,
+        bg_mask: Option<(Color, Color)>,
+        row_y: f64,
+        row_h: f64,
+        panel_right: f64,
+    ) -> f64 {
+        if text.is_empty() {
+            return 0.0;
+        }
+
+        let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
+        builder.push_default(StyleProperty::FontSize(font_size));
+        if (font_weight.value() - 400.0).abs() > 1.0 {
+            builder.push_default(StyleProperty::FontWeight(font_weight));
+        }
+        if is_monospace {
+            #[cfg(target_os = "macos")]
+            builder.push_default(StyleProperty::FontFamily(FontFamily::named("Menlo")));
+            #[cfg(not(target_os = "macos"))]
+            builder.push_default(StyleProperty::FontFamily(FontFamily::Generic(GenericFamily::Monospace)));
+        }
+
+        let mut layout = builder.build(text);
+        layout.break_all_lines(None);
+        layout.align(Alignment::Start, parley::layout::AlignmentOptions::default());
+
+        let width = layout.full_width() as f64;
+        let x = right_x - width;
+
+        if let Some((base_bg, tint_bg)) = bg_mask {
+            let mask_rect = Rect::new(x - 6.0, row_y, panel_right, row_y + row_h);
+            scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(base_bg), None, &mask_rect);
+            if tint_bg != Color::TRANSPARENT {
+                scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(tint_bg), None, &mask_rect);
+            }
+        }
+
+        let text_affine = Affine::translate((x, y));
+        for line in layout.lines() {
+            for item in line.items() {
+                if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                    let run = glyph_run.run();
+                    let font = run.font();
+                    let glyphs = glyph_run.positioned_glyphs().map(|g| vello::Glyph {
+                        id: g.id,
+                        x: g.x,
+                        y: g.y,
+                    });
+
+                    scene
+                        .draw_glyphs(font)
+                        .font_size(run.font_size())
+                        .transform(text_affine)
+                        .brush(Brush::Solid(color))
+                        .draw(Fill::NonZero, glyphs);
+                }
+            }
+        }
+
+        width
     }
 
     /// Internal helper to render a single-line text snippet vertically centered by cap-height

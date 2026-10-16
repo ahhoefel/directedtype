@@ -413,8 +413,8 @@ fn test_render_inspector_panel_snapshot() {
     );
 
     let mut renderer = HeadlessRenderer::new().expect("Failed renderer");
-    let img = renderer.render_scene(&scene, 360, 600).expect("Render scene ok");
-    assert_eq!(img.width(), 360);
+    let img = renderer.render_scene(&scene, 380, 600).expect("Render scene ok");
+    assert_eq!(img.width(), 380);
     assert_eq!(img.height(), 600);
     save_golden_or_preview(&img, "inspector_panel.png");
 }
@@ -484,8 +484,8 @@ fn test_render_inspector_with_counter_component_state() {
     );
 
     let mut renderer = HeadlessRenderer::new().expect("init renderer");
-    let img = renderer.render_scene(&scene, 360, 600).expect("render scene ok");
-    assert_eq!(img.width(), 360);
+    let img = renderer.render_scene(&scene, 380, 600).expect("render scene ok");
+    assert_eq!(img.width(), 380);
     assert_eq!(img.height(), 600);
     save_golden_or_preview(&img, "inspector_counter.png");
 }
