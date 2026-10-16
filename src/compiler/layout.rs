@@ -145,9 +145,15 @@ pub struct ResolvedNode {
     pub handle: Option<NodeHandle>,
     pub font: Option<NodeId>,
     pub var_name: Option<String>,
+    pub overload_params: Vec<String>,
 }
 
 impl ResolvedNode {
+    /// Formats the overload signature used to construct this component (e.g. `\VStack(width, height)`).
+    pub fn overload_signature(&self) -> String {
+        format!("\\{}({})", self.name, self.overload_params.join(", "))
+    }
+
     pub fn is_paint_primitive(&self) -> bool {
         self.name == "Rect"
             || self.name == "Text"
@@ -713,6 +719,7 @@ pub fn resolve_layout(
             handle: node.handle,
             font,
             var_name: node.var_name.clone(),
+            overload_params: node.overload_params.clone(),
         });
     }
 

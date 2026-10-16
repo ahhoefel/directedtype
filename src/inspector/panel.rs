@@ -162,7 +162,7 @@ impl InspectPanelComponent {
         }
 
         if let Some(node) = selected_id.and_then(|id| layout.get_node(id)) {
-            let mut h = 10.0;
+            let mut h = 10.0 + 18.0;
             if !node.state_vars.is_empty() {
                 h += 18.0 + node.state_vars.len() as f64 * 24.0 + 10.0;
             }
@@ -258,6 +258,10 @@ impl InspectPanelComponent {
         }
 
         if let Some(node) = selected_id.and_then(|id| layout.get_node(id)) {
+            let sig_w = 24.0 + node.overload_signature().len() as f64 * 8.0 + 20.0;
+            if sig_w > max_w {
+                max_w = sig_w;
+            }
             for (s_name, _) in &node.state_vars {
                 let val_str = layout.get_value(node.id, s_name).map(|v| format!("{v}")).unwrap_or_default();
                 let w = 24.0 + s_name.len() as f64 * 8.0 + val_str.len() as f64 * 8.0 + 50.0;
@@ -507,7 +511,7 @@ impl InspectPanelComponent {
 
                     if let Some(node) = state.selected_id.and_then(|id| layout.get_node(id)) {
                         let base_y = detail_y - state.detail_scroll_offset;
-                        let mut cur_y = base_y + 10.0;
+                        let mut cur_y = base_y + 10.0 + 18.0;
 
                         if !node.state_vars.is_empty() {
                             cur_y += 18.0;
@@ -1059,27 +1063,7 @@ impl InspectPanelComponent {
                 self.divider_height,
             );
 
-            if let Some(node) = selected_node {
-                let id_str = node.properties.get("id").and_then(|v| v.as_str());
-                let badge_str = if let Some(id) = id_str {
-                    format!("\\{}#{}", node.name, id)
-                } else {
-                    format!("\\{}", node.name)
-                };
-                self.draw_text_snippet_centered(
-                    scene,
-                    font_cx,
-                    layout_cx,
-                    &badge_str,
-                    10.0,
-                    FontWeight::BOLD,
-                    Color::from_rgb8(56, 189, 248), // cyan 400
-                    true,
-                    panel_x + 160.0,
-                    divider_y,
-                    self.divider_height,
-                );
-            } else {
+            if selected_node.is_none() {
                 self.draw_text_snippet_centered(
                     scene,
                     font_cx,
@@ -1125,6 +1109,24 @@ impl InspectPanelComponent {
             let base_x = panel_x - state.detail_scroll_offset_x;
             let card_w = (panel_w - 20.0).max(total_detail_content_w - 20.0);
             let mut cur_y = base_y + 10.0;
+
+            // --- Component Overload Signature ---
+            let sig_str = node.overload_signature();
+            if cur_y + 18.0 >= detail_y && cur_y <= win_h {
+                self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    &sig_str,
+                    10.5,
+                    FontWeight::BOLD,
+                    Color::from_rgb8(56, 189, 248), // cyan 400
+                    true,
+                    base_x + 12.0,
+                    cur_y + 1.0,
+                );
+            }
+            cur_y += 18.0;
 
             // --- Component Reactive State ---
             if !node.state_vars.is_empty() {

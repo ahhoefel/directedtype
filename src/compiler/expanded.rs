@@ -62,6 +62,7 @@ pub struct ExpandedNode {
     pub var_name: Option<String>,
     pub enclosing_component: Option<NodeId>,
     pub ambient_ports: HashSet<String>,
+    pub overload_params: Vec<String>,
 }
 
 impl ExpandedNode {
@@ -88,6 +89,7 @@ impl ExpandedNode {
             var_name: None,
             enclosing_component: None,
             ambient_ports: HashSet::new(),
+            overload_params: Vec::new(),
         }
     }
 

@@ -2006,6 +2006,12 @@ fn expand_component_instance(
     }
 
     let node = doc.get_node_mut(ctx.comp_node_id).unwrap();
+    node.overload_params = comp_def
+        .params
+        .iter()
+        .filter(|p| p.default_edge.is_none())
+        .map(|p| p.name.as_str().to_string())
+        .collect();
     node.children = all_children_ids;
     node.authored_ports = comp_authored_ports;
     node.private_ports = declared_lets
@@ -2819,6 +2825,7 @@ fn expand_primitive_element(
         ports.entry("z".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
 
         let node = doc.get_node_mut(node_id).unwrap();
+        node.overload_params = vec!["size".to_string()];
         node.children = child_ids;
         node.ports = ports;
         node.authored_ports = authored_ports;
@@ -3506,7 +3513,48 @@ fn expand_primitive_element(
         );
     }
 
+    let overload_params = match elem.name.as_str() {
+        "Clip" => vec!["box".to_string()],
+        "Anchor" | "AnchorScope" => vec!["name".to_string()],
+        "Rect" => {
+            let color_port = if ports.contains_key("bg_color") && !ports.contains_key("color") {
+                "bg_color"
+            } else {
+                "color"
+            };
+            vec![
+                "x".to_string(),
+                "y".to_string(),
+                "width".to_string(),
+                "height".to_string(),
+                color_port.to_string(),
+            ]
+        }
+        "Text" => {
+            if is_inline_span {
+                Vec::new()
+            } else {
+                let mut params = vec!["x".to_string()];
+                let used_baseline = elem.ports.iter().any(|p| p.name.as_str() == "baseline")
+                    && !elem.ports.iter().any(|p| p.name.as_str() == "y");
+                params.push(if used_baseline { "baseline" } else { "y" }.to_string());
+                let used_font = font_node_id.is_some()
+                    || elem.ports.iter().any(|p| p.name.as_str() == "font");
+                params.push(if used_font { "font" } else { "size" }.to_string());
+                params
+            }
+        }
+        _ => {
+            if ports.contains_key("size") && !elem.ports.iter().any(|p| p.name.as_str() == "height") {
+                vec!["x".to_string(), "y".to_string(), "width".to_string(), "size".to_string()]
+            } else {
+                vec!["x".to_string(), "y".to_string(), "width".to_string(), "height".to_string()]
+            }
+        }
+    };
+
     let node = doc.get_node_mut(node_id).unwrap();
+    node.overload_params = overload_params;
     node.children = child_ids;
     node.ports = ports;
     node.authored_ports = authored_ports;

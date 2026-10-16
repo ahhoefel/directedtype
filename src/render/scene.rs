@@ -972,6 +972,7 @@ mod tests {
             handle: None,
             font: None,
             var_name: None,
+            overload_params: Vec::new(),
         };
 
         let mut layout = ResolvedLayout {
@@ -1038,6 +1039,7 @@ mod tests {
             handle: None,
             font: None,
             var_name: None,
+            overload_params: Vec::new(),
         };
 
         let clip_node = ResolvedNode {
@@ -1065,6 +1067,7 @@ mod tests {
             handle: None,
             font: None,
             var_name: None,
+            overload_params: Vec::new(),
         };
 
         let child_node = ResolvedNode {
@@ -1091,6 +1094,7 @@ mod tests {
             handle: None,
             font: None,
             var_name: None,
+            overload_params: Vec::new(),
         };
 
         let mut values = HashMap::new();

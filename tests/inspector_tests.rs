@@ -824,7 +824,7 @@ fn test_expandable_reference_properties() {
 
     let divider_y = panel.divider_y(win_h);
     let detail_y = divider_y + panel.divider_height;
-    let section_b_start = detail_y + 10.0;
+    let section_b_start = detail_y + 10.0 + 18.0;
     let mut test_y = section_b_start;
     let mut prop_keys: Vec<String> = text_node.properties.keys().cloned().collect();
     prop_keys.retain(|k| k != "clip");
@@ -1127,8 +1127,8 @@ fn test_panel_hit_testing_property_details_and_back() {
     let divider_y = panel.divider_y(600.0);
     let detail_y = divider_y + panel.divider_height;
 
-    // 1. Click in component details on 'width' property row (3rd row after x, y)
-    let width_row_y = detail_y + 10.0 + 2.0 * 18.0 + 5.0;
+    // 1. Click in component details on 'width' property row (3rd row after x, y, below 18px overload signature)
+    let width_row_y = detail_y + 10.0 + 18.0 + 2.0 * 18.0 + 5.0;
     let res = panel.handle_click(
         50.0,
         width_row_y,
@@ -1554,5 +1554,31 @@ fn test_inspector_panel_resize_updates_main_panel_layout_and_scroll() {
     assert_eq!(app.viewport_size(), (774.0, 768.0));
     assert_eq!(app.content_width(), 774.0);
 }
+
+#[test]
+fn test_component_overload_signature_in_resolved_node() {
+    let source = r#"
+\use "components/VStack.dt"
+
+\VStack("fixed_both"; width: 300, height: 200) {
+    \Rect(width: 100, height: 40, color: #3b82f6)
+}
+\VStack("fixed_width"; x: 0, y: 220, width: 300) {
+    \Rect(width: 100, height: 40, color: #10b981)
+}
+\VStack("shrink_wrap"; x: 0, y: 300, shrink: true) {
+    \Rect(width: 100, height: 40, color: #f59e0b)
+}
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0).expect("eval layout ok");
+
+    let vstacks: Vec<_> = layout.nodes.iter().filter(|n| n.name == "VStack").collect();
+    assert_eq!(vstacks.len(), 3);
+    assert_eq!(vstacks[0].overload_signature(), r#"\VStack(width, height)"#);
+    assert_eq!(vstacks[1].overload_signature(), r#"\VStack(width)"#);
+    assert_eq!(vstacks[2].overload_signature(), r#"\VStack(shrink)"#);
+}
+
 
 
