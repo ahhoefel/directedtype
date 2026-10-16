@@ -20,6 +20,8 @@ pub enum PanelHitResult {
     None,
     /// Clicked the spatial element picker button (`[↖]`).
     ToggleInspectCursor,
+    /// Clicked the close (`[×]`) button in the DOM Elements title bar.
+    CloseInspector,
     /// Clicked the expand/collapse chevron for a tree node.
     ToggleExpand(NodeId),
     /// Clicked a tree row to select a node.
@@ -50,7 +52,7 @@ pub enum InspectorScrollbarKind {
 pub struct InspectPanelComponent {
     /// Width of the side panel in logical pixels (default: 380px).
     pub width: f64,
-    /// Height of the top header toolbar (default: 36px).
+    /// Height of the top header toolbar (default: 26px).
     pub header_height: f64,
     /// Height of each tree item row (default: 18px).
     pub row_height: f64,
@@ -64,7 +66,7 @@ impl Default for InspectPanelComponent {
     fn default() -> Self {
         Self {
             width: 380.0,
-            header_height: 36.0,
+            header_height: 26.0,
             row_height: 18.0,
             indent_step: 14.0,
             divider_height: 26.0,
@@ -426,9 +428,16 @@ impl InspectPanelComponent {
         None
     }
 
-    /// Returns true if `(px, py)` is inside the header pick tool (`[↖]`) button.
+    /// Returns true if `(px, py)` is inside the header pick tool (`[↖]`) button (placed to the right of `"DOM ELEMENTS"`).
     pub fn is_cursor_btn_hovered(&self, px: f64, py: f64, panel_x: f64) -> bool {
-        px >= panel_x + 4.0 && px <= panel_x + 36.0 && py >= 2.0 && py <= self.header_height - 2.0
+        px >= panel_x + 90.0 && px <= panel_x + 116.0 && py >= 2.0 && py <= self.header_height - 2.0
+    }
+
+    /// Returns true if `(px, py)` is inside the right-aligned header close (`[×]`) button.
+    pub fn is_close_btn_hovered(&self, px: f64, py: f64, panel_x: f64) -> bool {
+        let btn_w = 22.0;
+        let close_btn_x = panel_x + self.width - btn_w - 8.0;
+        px >= close_btn_x && px <= close_btn_x + btn_w && py >= 2.0 && py <= self.header_height - 2.0
     }
 
     /// Determines the action triggered by clicking at `(px, py)` in logical window space.
@@ -451,6 +460,9 @@ impl InspectPanelComponent {
         if py < self.header_height {
             if self.is_cursor_btn_hovered(px, py, panel_x) {
                 return PanelHitResult::ToggleInspectCursor;
+            }
+            if self.is_close_btn_hovered(px, py, panel_x) {
+                return PanelHitResult::CloseInspector;
             }
             return PanelHitResult::None;
         }
@@ -986,89 +998,92 @@ impl InspectPanelComponent {
             &Line::new((panel_x, self.header_height), (panel_x + panel_w, self.header_height)),
         );
 
-        // Pick Tool Button (`[↖]`)
-        let btn_x = panel_x + 8.0;
-        let btn_y = 6.0;
-        let btn_w = 24.0;
-        let btn_h = 24.0;
+        // Header Title ("DOM ELEMENTS", matching "COMPONENT DETAILS")
+        self.draw_text_snippet_centered(
+            scene,
+            font_cx,
+            layout_cx,
+            "DOM ELEMENTS",
+            9.5,
+            FontWeight::BOLD,
+            Color::from_rgb8(226, 232, 240), // slate 200
+            false,
+            panel_x + 10.0,
+            0.0,
+            self.header_height,
+        );
+
+        // Pick Tool Button (`[↖]`) to the right of the title
+        let btn_x = panel_x + 92.0;
+        let btn_y = 3.0;
+        let btn_w = 22.0;
+        let btn_h = 20.0;
         let btn_rrect = RoundedRect::new(btn_x, btn_y, btn_x + btn_w, btn_y + btn_h, 4.0);
         let (btn_bg, btn_stroke, icon_col) = if state.inspect_cursor_active {
             (
-                Color::from_rgb8(2, 132, 199),  // sky 600
-                Color::from_rgb8(56, 189, 248), // sky 400
+                Color::from_rgb8(2, 132, 199),   // sky 600
+                Color::from_rgb8(56, 189, 248),  // sky 400
                 Color::WHITE,
             )
         } else if state.inspect_cursor_hovered {
             (
-                Color::from_rgb8(71, 85, 105),  // slate 600
+                Color::from_rgb8(71, 85, 105),   // slate 600
                 Color::from_rgb8(100, 116, 139), // slate 500
                 Color::from_rgb8(241, 245, 249), // slate 100
             )
         } else {
             (
-                Color::from_rgb8(51, 65, 85),   // slate 700
-                Color::from_rgb8(71, 85, 105),  // slate 600
-                Color::from_rgb8(148, 163, 184), // slate 400
+                Color::from_rgb8(15, 23, 42),    // slate 900
+                Color::from_rgb8(71, 85, 105),   // slate 600
+                Color::from_rgb8(241, 245, 249), // slate 100
             )
         };
         scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(btn_bg), None, &btn_rrect);
         let btn_stroke_obj = Stroke::new(1.0);
         scene.stroke(&btn_stroke_obj, Affine::IDENTITY, Brush::Solid(btn_stroke), None, &btn_rrect);
-        self.draw_text_snippet(
+        self.draw_text_snippet_centered(
             scene,
             font_cx,
             layout_cx,
             "↖",
-            12.0,
+            10.5,
             FontWeight::BOLD,
             icon_col,
             false,
-            btn_x + 6.0,
-            btn_y + 4.0,
+            btn_x + 5.5,
+            0.0,
+            self.header_height,
         );
 
-        // Header Title
-        self.draw_text_snippet(
+        // Right-aligned clickable close button (`[×]`)
+        let close_btn_x = panel_x + panel_w - btn_w - 8.0;
+        let close_rrect = RoundedRect::new(close_btn_x, btn_y, close_btn_x + btn_w, btn_y + btn_h, 4.0);
+        scene.fill(
+            Fill::NonZero,
+            Affine::IDENTITY,
+            Brush::Solid(Color::from_rgb8(15, 23, 42)), // slate 900
+            None,
+            &close_rrect,
+        );
+        scene.stroke(
+            &btn_stroke_obj,
+            Affine::IDENTITY,
+            Brush::Solid(Color::from_rgb8(71, 85, 105)), // slate 600
+            None,
+            &close_rrect,
+        );
+        self.draw_text_snippet_centered(
             scene,
             font_cx,
             layout_cx,
-            "DOM Elements",
-            12.0,
+            "×",
+            11.5,
             FontWeight::BOLD,
-            Color::from_rgb8(241, 245, 249), // slate 100
+            Color::from_rgb8(241, 245, 249),
             false,
-            panel_x + 38.0,
-            9.5,
-        );
-
-        // Node count badge pill
-        let count_str = format!("{} nodes", items.len());
-        let count_x = panel_x + 138.0;
-        self.draw_text_snippet(
-            scene,
-            font_cx,
-            layout_cx,
-            &count_str,
-            10.0,
-            FontWeight::NORMAL,
-            Color::from_rgb8(148, 163, 184), // slate 400
-            false,
-            count_x,
-            11.0,
-        );
-
-        // Keyboard close hint
-        self.draw_text_snippet(
-            scene,
-            font_cx,
-            layout_cx,
-            "[i] close",
-            10.0,
-            FontWeight::NORMAL,
-            Color::from_rgb8(100, 116, 139), // slate 500
-            false,
-            panel_x + panel_w - 55.0,
-            11.0,
+            close_btn_x + 6.5,
+            0.0,
+            self.header_height,
         );
 
         // 5. Horizontal Section Divider Bar

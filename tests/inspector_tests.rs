@@ -376,10 +376,10 @@ fn test_inspect_panel_component_rendering_and_hit_testing() {
         &mut layout_cx,
     );
 
-    // 2. Hit testing: Header pick button [↖]
+    // 2. Hit testing: Header pick button [↖] (placed to the right of "DOM ELEMENTS")
     let btn_click = panel.handle_click(
-        panel_x + 12.0,
-        15.0,
+        panel_x + 100.0,
+        13.0,
         panel_x,
         win_h,
         &tree_items,
@@ -387,6 +387,18 @@ fn test_inspect_panel_component_rendering_and_hit_testing() {
         Some(&layout),
     );
     assert_eq!(btn_click, directedtype::inspector::PanelHitResult::ToggleInspectCursor);
+
+    // 2b. Hit testing: Header close button [×] (right-aligned)
+    let close_click = panel.handle_click(
+        panel_x + panel.width - 18.0,
+        13.0,
+        panel_x,
+        win_h,
+        &tree_items,
+        &state,
+        Some(&layout),
+    );
+    assert_eq!(close_click, directedtype::inspector::PanelHitResult::CloseInspector);
 
     // 3. Hit testing: Chevron click on first item (has children)
     let chevron_click = panel.handle_click(
@@ -450,7 +462,7 @@ fn test_inspect_cursor_toggle_and_selection_gating() {
     let panel = directedtype::inspector::InspectPanelComponent::default();
     let win_w = 800.0;
     let win_h = 600.0;
-    let panel_x = win_w - panel.width; // 440.0
+    let panel_x = win_w - panel.width; // 420.0
 
     let mut state = directedtype::inspector::InspectorState::new();
 
@@ -459,15 +471,15 @@ fn test_inspect_cursor_toggle_and_selection_gating() {
     assert!(!state.inspect_cursor_hovered);
 
     // 2. Cursor icon button hover hit testing
-    assert!(panel.is_cursor_btn_hovered(panel_x + 12.0, 15.0, panel_x));
-    assert!(!panel.is_cursor_btn_hovered(panel_x + 60.0, 15.0, panel_x)); // outside button
-    assert!(!panel.is_cursor_btn_hovered(100.0, 15.0, panel_x));          // canvas area
+    assert!(panel.is_cursor_btn_hovered(panel_x + 100.0, 13.0, panel_x));
+    assert!(!panel.is_cursor_btn_hovered(panel_x + 20.0, 13.0, panel_x));  // on title text, outside button
+    assert!(!panel.is_cursor_btn_hovered(100.0, 13.0, panel_x));           // canvas area
 
     // 3. Clicking cursor button toggles inspect_cursor_active
     let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
     let hit_action = panel.handle_click(
-        panel_x + 12.0,
-        15.0,
+        panel_x + 100.0,
+        13.0,
         panel_x,
         win_h,
         &tree_items,

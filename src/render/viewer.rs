@@ -3159,6 +3159,9 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                             w.request_redraw();
                                         }
                                     }
+                                    crate::inspector::PanelHitResult::CloseInspector => {
+                                        self.set_inspect_mode(false);
+                                    }
                                     crate::inspector::PanelHitResult::SelectProperty(node_id, prop_key) => {
                                         if !node_id.is_window() && self.inspector_state.selected_id != Some(node_id) {
                                             self.selected_node = Some(node_id);
