@@ -1143,10 +1143,10 @@ fn test_panel_hit_testing_property_details_and_back() {
     // 2. Set state to property details view
     state.select_property(box_node.id, "width");
 
-    // 3. Click right-aligned [←] button in the property title bar
+    // 3. Click [←] button in the property title bar (at panel.width - 56.0 .. panel.width - 34.0)
     let back_btn_y = divider_y + panel.divider_height / 2.0;
     let back_res = panel.handle_click(
-        panel.width - 18.0,
+        panel.width - 45.0,
         back_btn_y,
         0.0,
         600.0,
@@ -1167,7 +1167,14 @@ fn test_panel_hit_testing_property_details_and_back() {
         &state,
         Some(&layout),
     );
-    assert_eq!(dep_res, directedtype::inspector::PanelHitResult::SelectProperty(container_node.id, "width".to_string()));
+    assert_eq!(
+        dep_res,
+        directedtype::inspector::PanelHitResult::PushProperty(
+            container_node.id,
+            "width".to_string(),
+            directedtype::inspector::PropertyTraceDirection::Upstream,
+        )
+    );
 
     // 5. Click downstream dependent row (box right)
     let downstream_row_y = detail_y + 10.0 + 48.0 + 14.0 + 18.0 + 18.0 + 10.0 + 18.0 + 8.0;
@@ -1180,7 +1187,118 @@ fn test_panel_hit_testing_property_details_and_back() {
         &state,
         Some(&layout),
     );
-    assert_eq!(down_res, directedtype::inspector::PanelHitResult::SelectProperty(box_node.id, "right".to_string()));
+    assert_eq!(
+        down_res,
+        directedtype::inspector::PanelHitResult::PushProperty(
+            box_node.id,
+            "right".to_string(),
+            directedtype::inspector::PropertyTraceDirection::Downstream,
+        )
+    );
+}
+
+#[test]
+fn test_property_stack_and_history_navigation() {
+    use directedtype::inspector::{InspectPanelComponent, InspectorState, PanelHitResult, PropertyTraceDirection};
+
+    let source = r#"
+\Component Outer(x = 0, y = 0, w = 500) {
+    \Inner("inner"; x: x, y: y, width: w - 40)
+}
+\Component Inner(x = 0, y = 0, width = 460) {
+    \Rect("leaf"; x: x, y: y, width: width - 20, height: 60, color: #3b82f6)
+}
+\Outer("outer"; x: 0, y: 0, w: 500)
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+    let leaf_node = layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect found");
+    let inner_node = layout.nodes.iter().find(|n| n.name == "Inner").expect("Inner found");
+    let outer_node = layout.nodes.iter().find(|n| n.name == "Outer").expect("Outer found");
+
+    let panel = InspectPanelComponent::default();
+    let mut state = InspectorState::new();
+    state.selected_id = Some(leaf_node.id);
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    let divider_y = panel.divider_y(600.0);
+    let detail_y = divider_y + panel.divider_height;
+    let btn_y = divider_y + panel.divider_height / 2.0;
+    let back_x = panel.width - 45.0;
+    let fwd_x = panel.width - 18.0;
+
+    // 1. Start at property A (leaf.width)
+    state.select_property(leaf_node.id, "width");
+    assert_eq!(state.active_property_stack(), &[(leaf_node.id, "width".to_string())]);
+    assert!(state.can_go_back());
+    assert!(!state.can_go_forward());
+
+    // 2. Click upstream property B (inner.width) -> pushes onto stack [A, B]
+    let upstream_b_y = detail_y + 10.0 + (48.0 + 14.0) + 18.0 + 5.0;
+    let hit_b = panel.handle_click(50.0, upstream_b_y, 0.0, 600.0, &tree_items, &state, Some(&layout));
+    assert_eq!(hit_b, PanelHitResult::PushProperty(inner_node.id, "width".to_string(), PropertyTraceDirection::Upstream));
+    state.push_property(inner_node.id, "width", PropertyTraceDirection::Upstream);
+
+    assert_eq!(
+        state.active_property_stack(),
+        &[
+            (leaf_node.id, "width".to_string()),
+            (inner_node.id, "width".to_string()),
+        ]
+    );
+    assert_eq!(state.property_trace_direction, Some(PropertyTraceDirection::Upstream));
+
+    // 3. Now 2 cards are stacked (A and B), followed ONLY by UPSTREAM of B (outer.w)
+    // Card A: 48 + 8 = 56; Card B: 48 + 14 = 62 -> total cards = 118.0
+    let upstream_c_y = detail_y + 10.0 + (48.0 + 8.0) + (48.0 + 14.0) + 18.0 + 5.0;
+    let hit_c = panel.handle_click(50.0, upstream_c_y, 0.0, 600.0, &tree_items, &state, Some(&layout));
+    assert_eq!(hit_c, PanelHitResult::PushProperty(outer_node.id, "w".to_string(), PropertyTraceDirection::Upstream));
+    state.push_property(outer_node.id, "w", PropertyTraceDirection::Upstream);
+
+    assert_eq!(
+        state.active_property_stack(),
+        &[
+            (leaf_node.id, "width".to_string()),
+            (inner_node.id, "width".to_string()),
+            (outer_node.id, "w".to_string()),
+        ]
+    );
+
+    // 4. Navigate Back from [A, B, C] -> [A, B]
+    let hit_back_1 = panel.handle_click(back_x, btn_y, 0.0, 600.0, &tree_items, &state, Some(&layout));
+    assert_eq!(hit_back_1, PanelHitResult::BackToComponentDetails);
+    assert!(state.navigate_property_back());
+    assert_eq!(state.active_property_stack().len(), 2);
+    assert!(state.can_go_forward());
+
+    // 5. Navigate Back from [A, B] -> [A]
+    assert!(state.navigate_property_back());
+    assert_eq!(state.active_property_stack().len(), 1);
+    assert!(state.can_go_forward());
+
+    // 6. Navigate Back from [A] -> Component Details (stack empty, selected_property is None)
+    assert!(state.navigate_property_back());
+    assert_eq!(state.active_property_stack().len(), 0);
+    assert_eq!(state.selected_property, None);
+    assert!(!state.can_go_back());
+    assert!(state.can_go_forward());
+
+    // 7. In Component Details, Forward button [→] is active and returns to [A]
+    let hit_fwd_1 = panel.handle_click(fwd_x, btn_y, 0.0, 600.0, &tree_items, &state, Some(&layout));
+    assert_eq!(hit_fwd_1, PanelHitResult::ForwardPropertyHistory);
+    assert!(state.navigate_property_forward());
+    assert_eq!(state.active_property_stack(), &[(leaf_node.id, "width".to_string())]);
+    assert_eq!(state.selected_property, Some((leaf_node.id, "width".to_string())));
+
+    // 8. Subsequent Forwards push B and C back onto the stack
+    let hit_fwd_2 = panel.handle_click(fwd_x, btn_y, 0.0, 600.0, &tree_items, &state, Some(&layout));
+    assert_eq!(hit_fwd_2, PanelHitResult::ForwardPropertyHistory);
+    assert!(state.navigate_property_forward());
+    assert_eq!(state.active_property_stack().len(), 2);
+
+    assert!(state.navigate_property_forward());
+    assert_eq!(state.active_property_stack().len(), 3);
+    assert!(!state.can_go_forward());
 }
 
 #[test]

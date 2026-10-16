@@ -3170,8 +3170,20 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                             w.request_redraw();
                                         }
                                     }
+                                    crate::inspector::PanelHitResult::PushProperty(node_id, prop_key, direction) => {
+                                        self.inspector_state.push_property(node_id, &prop_key, direction);
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                    }
                                     crate::inspector::PanelHitResult::BackToComponentDetails => {
-                                        self.inspector_state.clear_selected_property();
+                                        self.inspector_state.navigate_property_back();
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                    }
+                                    crate::inspector::PanelHitResult::ForwardPropertyHistory => {
+                                        self.inspector_state.navigate_property_forward();
                                         if let Some(w) = &self.window {
                                             w.request_redraw();
                                         }

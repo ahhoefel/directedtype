@@ -14,6 +14,13 @@ pub enum InspectorTab {
     Console,
 }
 
+/// Direction of property dependency navigation when pushing onto the property stack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PropertyTraceDirection {
+    Upstream,
+    Downstream,
+}
+
 /// Interactive state machine for the DevTools DOM Inspector.
 #[derive(Debug, Clone, Default)]
 pub struct InspectorState {
@@ -63,6 +70,15 @@ pub struct InspectorState {
     /// Currently selected property / port for DAG inspection: `Some((NodeId, PortName))`.
     pub selected_property: Option<(NodeId, String)>,
 
+    /// Ordered history stack of inspected properties `[(NodeId, PortName), ...]`.
+    pub property_history: Vec<(NodeId, String)>,
+
+    /// Number of active items in `property_history` currently displayed on the stack (`0` = Component Details).
+    pub property_history_len: usize,
+
+    /// Direction (`Upstream` or `Downstream`) of the property stack when depth >= 2.
+    pub property_trace_direction: Option<PropertyTraceDirection>,
+
     /// Whether the left resize border of the inspector panel is hovered by the mouse.
     pub resize_border_hovered: bool,
 
@@ -110,6 +126,9 @@ impl InspectorState {
         if self.selected_id != id {
             self.selected_id = id;
             self.selected_property = None;
+            self.property_history.clear();
+            self.property_history_len = 0;
+            self.property_trace_direction = None;
             self.detail_scroll_offset = 0.0;
             self.detail_scroll_offset_x = 0.0;
             true
@@ -195,6 +214,9 @@ impl InspectorState {
         self.selected_id = None;
         self.hovered_id = None;
         self.selected_property = None;
+        self.property_history.clear();
+        self.property_history_len = 0;
+        self.property_trace_direction = None;
         self.detail_scroll_offset = 0.0;
         self.detail_scroll_offset_x = 0.0;
     }
@@ -224,16 +246,100 @@ impl InspectorState {
         }
     }
 
-    /// Selects a specific property / port for detailed DAG trace inspection.
+    /// Returns the active stack of properties currently displayed in the property panel.
+    pub fn active_property_stack(&self) -> Vec<(NodeId, String)> {
+        if self.property_history_len > 0 && self.property_history_len <= self.property_history.len() {
+            self.property_history[..self.property_history_len].to_vec()
+        } else if let Some(ref prop) = self.selected_property {
+            vec![prop.clone()]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Returns true if the property navigation history can step backward.
+    pub fn can_go_back(&self) -> bool {
+        self.property_history_len > 0 || self.selected_property.is_some()
+    }
+
+    /// Returns true if the property navigation history can step forward.
+    pub fn can_go_forward(&self) -> bool {
+        self.property_history_len < self.property_history.len()
+    }
+
+    /// Selects a specific property / port from the component details view, starting a new property stack.
     pub fn select_property(&mut self, node_id: NodeId, prop: &str) {
-        self.selected_property = Some((node_id, prop.to_string()));
+        let entry = (node_id, prop.to_string());
+        self.selected_property = Some(entry.clone());
+        self.property_history = vec![entry];
+        self.property_history_len = 1;
+        self.property_trace_direction = None;
         self.detail_scroll_offset = 0.0;
         self.detail_scroll_offset_x = 0.0;
+    }
+
+    /// Pushes an upstream or downstream property onto the active property stack.
+    pub fn push_property(&mut self, node_id: NodeId, prop: &str, direction: PropertyTraceDirection) {
+        if self.property_history_len == 0 && self.selected_property.is_some() {
+            if let Some(ref cur) = self.selected_property {
+                self.property_history = vec![cur.clone()];
+                self.property_history_len = 1;
+            }
+        } else {
+            self.property_history.truncate(self.property_history_len);
+        }
+        let entry = (node_id, prop.to_string());
+        self.property_history.push(entry.clone());
+        self.property_history_len = self.property_history.len();
+        self.property_trace_direction = Some(direction);
+        self.selected_property = Some(entry);
+        self.detail_scroll_offset = 0.0;
+        self.detail_scroll_offset_x = 0.0;
+    }
+
+    /// Steps backward in the property navigation stack (returning to component details when reaching 0).
+    pub fn navigate_property_back(&mut self) -> bool {
+        if self.property_history_len == 0 && self.selected_property.is_some() {
+            if let Some(cur) = self.selected_property.take() {
+                self.property_history = vec![cur];
+                self.property_history_len = 0;
+                self.detail_scroll_offset = 0.0;
+                self.detail_scroll_offset_x = 0.0;
+                return true;
+            }
+        }
+        if self.property_history_len > 0 {
+            self.property_history_len -= 1;
+            self.selected_property = if self.property_history_len == 0 {
+                None
+            } else {
+                self.property_history.get(self.property_history_len - 1).cloned()
+            };
+            self.detail_scroll_offset = 0.0;
+            self.detail_scroll_offset_x = 0.0;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Steps forward in the property navigation history, pushing back onto the active property stack.
+    pub fn navigate_property_forward(&mut self) -> bool {
+        if self.property_history_len < self.property_history.len() {
+            self.property_history_len += 1;
+            self.selected_property = self.property_history.get(self.property_history_len - 1).cloned();
+            self.detail_scroll_offset = 0.0;
+            self.detail_scroll_offset_x = 0.0;
+            true
+        } else {
+            false
+        }
     }
 
     /// Clears the selected property and returns to the general component details view.
     pub fn clear_selected_property(&mut self) {
         self.selected_property = None;
+        self.property_history_len = 0;
         self.detail_scroll_offset = 0.0;
         self.detail_scroll_offset_x = 0.0;
     }
