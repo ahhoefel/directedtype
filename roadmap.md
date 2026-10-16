@@ -2,14 +2,11 @@
 
 ## Active & Upcoming Priorities
 
-### 1. DOM Inspector UI & Usability
-* **Component Breadcrumbs & Selection Sync**: Add breadcrumb navigation and visual indicators linking the selected node in the visual tree to its entry in the property DAG panel.
-
-### 2. Diagnostics & Language Ergonomics
+### 1. Diagnostics & Language Ergonomics
 * **Human-Readable Node & Error Diagnostics**: Replace raw numbered node IDs (`NodeId(1)`) with hierarchical, human-readable DOM/DAG component path references (e.g. `Window/VStack/Card#header/Text`). Add source spans and clear diagnostic explanations to all compiler and runtime errors.
 * **Compile-Time DAG Flow Checks & Cycle Diagnostics**: Find ways to compile-time check DAG flow compatibility. For example, does wrapping a top-down sized component with `\PadOut` produce a clear error? Identify component combinations that conflict or need clearer diagnostics explaining why certain component pairs cannot compose.
 
-### 3. Component Library & Primitives
+### 2. Component Library & Primitives
 * **Standard Component Library**: Expand standard components beyond `Button`, `Card`, `Link`, `HCenter`, `VCenter`, `PadIn`, `PadOut`, `VStack`, `VStackStretch`, `HStack`, `HStackStretch`, `ScrollView`, `Slider`, and `NavBar` to include `TextInput`, `Checkbox`, `Toggle`, `Tabs`, `Dialog/Modal`, and menus.
 * **Graphical Primitives**: Add vector paths, strokes, complex borders, gradients, and custom canvas-like layout compositions.
 * **Showcase Applications**: Build multi-pane documentation readers, split editors, and rich interactive applications demonstrating single-pass reactive DAG layout and event flows.
@@ -18,6 +15,7 @@
 
 ## Completed Milestones
 
+* **DOM Inspector UI Refinement & Stacked Property DAG Navigation**: Streamlined the DOM Elements, Component Details, and Property panels with unified title bars (`DOM ELEMENTS`, `COMPONENT DETAILS`, `PROPERTY`), right-aligned DOM node indices, constructor overload signatures (e.g. `\VStack(width, height)`), directional `↑`/`↓` dependency indicators, stacked property trace cards when traversing `UPSTREAM` or `DOWNSTREAM` chains, and full Back (`←`) / Forward (`→`) history navigation across Component and Property views.
 * **Resizable Docked DOM Inspector & Side-by-Side Viewport Reflow**: Docked the DOM inspector alongside (rather than overlapping) the main document viewport so `window.width` and horizontal scrollbars reflect the visible canvas area, added incremental `CompiledDocument::resize_window` DAG re-evaluation, and implemented a draggable left border on the inspector panel with hover/active highlights (`CursorIcon::EwResize`), width clamping, and live main-panel layout reflow.
 * **Scrollable Tree & Property Panels in DOM Inspector**: Full 2D scrollability (vertical and horizontal) in both the top DOM tree view and bottom component/property details panel. Deep trees, long formula strings, DAG traces, and expanded object references can be inspected without clipping. Supports wheel and trackpad scroll gestures (`delta_x` and `delta_y`), interactive draggable dual scrollbars with hit-testing and track guards preventing phantom row clicks, and automatic selection reset behavior.
 * **Elimination of `auto` Sentinel (`\VStackStretch` / `\HStackStretch`)**: Completely eradicated `auto` keywords and sentinels from the grammar, compiler, and component library. Replaced `is_stretch ? width : auto` and compiler `is_auto_expr` with dedicated `\VStackStretch` and `\HStackStretch` components that unconditionally push cross-axis constraints to children.
