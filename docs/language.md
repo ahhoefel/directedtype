@@ -32,18 +32,18 @@ DirectedType (`.dt`) is a declarative UI and typography layout language. Rather 
 
 ## 1. Core Concepts & Execution Model
 
-### Everything is a Port Equation
-Every element in a `.dt` file is a node in the document tree, and every property on a node (`x`, `y`, `width`, `height`, `color`, custom parameters, etc.) is a **port** holding a symbolic expression.
+### Every Property an Equation
+Every element in a DirectedType file (`.dt`) is a node in the document tree, and every property on a node (`x`, `y`, `width`, `height`, `color`, custom parameters, etc.) is a symbolic expression in terms of other properties and values.
 
 ```dt
 \let header = \Text(x: 24, y: 20, size: 28) { "Chapter 1" };
 \Text(x: header.left, y: header.bottom + 12, size: 16) {
-    "Layout is expressed directly as relationships between ports."
+    "Layout is expressed directly as relationships between properties."
 }
 ```
 
-### Single-Pass Topological Evaluation
-1. **Expansion**: Component macros (`\Component`) are expanded into a flat hierarchy of nodes, and lexical/environmental references (`parent`, `prev`, `self`, `children`, `env`) are rewritten into canonical node-port identifiers (`VarId(NodeId, "port")`).
+### Single-Pass Evaluation
+1. **Expansion**: Component macros (`\Component`) are expanded into a hierarchy of nodes, and lexical/environmental references (`parent`, `prev`, `self`, `children`, `env`) are rewritten into canonical node-property identifiers (`VarId(NodeId, "property")`).
 2. **Dependency Graph & Cycle Detection**: The compiler builds a directed dependency graph across all node ports. If any circular dependency exists (e.g., a parent's `width` depends on `children.width` while a child's `width` simultaneously reads `parent.width`), compilation fails immediately with a cycle diagnostic.
 3. **Topological Sort**: All port equations are evaluated in topological order in a single linear pass. When reactive state (`\state`) or `window` dimensions change at runtime, only downstream dependent ports are re-evaluated.
 
@@ -146,22 +146,19 @@ Because layout is a static DAG rather than an imperative loop, sequential flow l
 * For the **first child** (`index == 0`), `prev` does not exist, so `prev ? ... : ...` statically expands to the `else` branch (`parent.top`).
 * For **subsequent children** (`index > 0`), `prev` resolves to the `NodeId` of child `index - 1`, so the expression expands to `child_{i-1}.bottom + gap`.
 
-### 3.4 Universal Node Ports
+### 3.4 Spatial Ports & Automatic Boundary Aliases
 
-Every spatial node (both native primitives and user components) exposes these standard ports:
+Native spatial primitives (`\Rect`, `\Text`, `\Circle`, `\Box`, `\Clip`, `\Anchor`, `\AnchorScope`) expose `x`, `y`, `width`, `height`, `z`, `clip`, and the boundary aliases `left`, `top`, `right`, and `bottom` (whereas `\Font` is a non-spatial typographic resource node).
 
-| Port | Type | Default Equation | Description |
+Custom `\Component` definitions do **not** automatically receive `x`, `y`, `width`, `height`, or `z` ports unless declared as parameters or `\alias` bindings—allowing pure data/style structs (such as `\CardStyle` or `\ButtonStyle`) to remain free of spatial ports. When a component **does** declare spatial input ports (and does not already define a matching `\alias`), the compiler automatically synthesizes the corresponding boundary alias ports:
+
+| Synthesized Port | Type | Default Equation | Condition for Synthesis on `\Component` |
 | :--- | :--- | :--- | :--- |
-| `x` | `Number` | `parent.left` (or `0` at root) | Horizontal origin (left edge) in document coordinates. |
-| `y` | `Number` | `parent.top` (or `0` at root) | Vertical origin (top edge) in document coordinates. |
-| `width` | `Number` | Primitive/component-specific | Horizontal extent of the node. |
-| `height` | `Number` | Primitive/component-specific | Vertical extent of the node. |
-| `left` | `Number` | `x` | Alias for the left boundary (`self.x`). |
-| `top` | `Number` | `y` | Alias for the top boundary (`self.y`). |
-| `right` | `Number` | `x + width` | Right boundary coordinate (`self.x + self.width`). |
-| `bottom` | `Number` | `y + height` | Bottom boundary coordinate (`self.y + self.height`). |
-| `z` | `Number` | `0` | Stacking order for Painter's Algorithm sorting and hit-testing. |
-| `clip` | `Node` (`\Clip`) | `env.clip` or `parent.clip` or `window.clip` | Active hardware clipping and scroll layer for this node. |
+| `left` | `Number` | `x` | `x` is present and `left` is not already defined. |
+| `top` | `Number` | `y` | `y` is present and `top` is not already defined. |
+| `right` | `Number` | `x + width` (or `left + width`) | (`x` or `left`) and `width` are present, and `right` is not already defined. |
+| `bottom` | `Number` | `y + height` (or `top + height`) | (`y` or `top`) and `height` are present, and `bottom` is not already defined. |
+| `clip` | `Node` (`\Clip`) | `env.clip` or `parent.clip` or `window.clip` | Present on all spatial primitives and components for hardware clip propagation. |
 
 ---
 
@@ -197,7 +194,7 @@ Inside a container or `\Component`, `children.<port>` expands to the list of `<p
 | `round(val)` | `Number` | Rounds `val` to the nearest integer (`f64::round`). |
 | `floor(val)` | `Number` | Rounds `val` down toward $-\infty$ (`f64::floor`). |
 | `ceil(val)` | `Number` | Rounds `val` up toward $+\infty$ (`f64::ceil`). |
-| `abs(val)` | `Number` | Returns the absolute value $|val|$ (`f64::abs`). |
+| `abs(val)` | `Number` | Returns the absolute value $\|val\|$ (`f64::abs`). |
 
 ### 4.3 Number Formatting Functions & Methods
 
