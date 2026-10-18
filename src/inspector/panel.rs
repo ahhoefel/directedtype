@@ -192,14 +192,15 @@ impl InspectPanelComponent {
         if let Some(node) = selected_id.and_then(|id| layout.get_node(id)) {
             let mut h = 10.0 + 18.0;
             if !node.state_vars.is_empty() {
-                h += 18.0 + node.state_vars.len() as f64 * 24.0 + 10.0;
+                h += 10.0 + 13.0 + node.state_vars.len() as f64 * 18.0;
+            }
+            if !node.env_vars.is_empty() {
+                h += 10.0 + 13.0 + node.env_vars.len() as f64 * 18.0;
             }
             let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
             prop_keys.retain(|k| k != "clip");
-            for geom in ["x", "y", "width", "height", "z"] {
-                if !prop_keys.contains(&geom.to_string()) {
-                    prop_keys.push(geom.to_string());
-                }
+            if !prop_keys.is_empty() {
+                h += 10.0 + 13.0;
             }
             for key in &prop_keys {
                 h += 18.0;
@@ -314,13 +315,15 @@ impl InspectPanelComponent {
                     max_w = w;
                 }
             }
-            let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
-            prop_keys.retain(|k| k != "clip");
-            for geom in ["x", "y", "width", "height", "z"] {
-                if !prop_keys.contains(&geom.to_string()) {
-                    prop_keys.push(geom.to_string());
+            for (e_name, _) in &node.env_vars {
+                let val_str = layout.get_value(node.id, e_name).map(|v| format!("{v}")).unwrap_or_default();
+                let w = 24.0 + e_name.len() as f64 * 8.0 + val_str.len() as f64 * 8.0 + 50.0;
+                if w > max_w {
+                    max_w = w;
                 }
             }
+            let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
+            prop_keys.retain(|k| k != "clip");
             for key in &prop_keys {
                 let eval_str = if let Some(val) = node.properties.get(key) {
                     format!("{val}")
@@ -596,26 +599,33 @@ impl InspectPanelComponent {
                         let mut cur_y = base_y + 10.0 + 18.0;
 
                         if !node.state_vars.is_empty() {
-                            cur_y += 18.0;
+                            cur_y += 10.0 + 13.0;
                             let mut state_names: Vec<String> = node.state_vars.keys().cloned().collect();
                             state_names.sort();
                             for s_name in &state_names {
-                                let row_h = 24.0;
+                                let row_h = 18.0;
                                 if py >= cur_y && py < cur_y + row_h {
                                     return PanelHitResult::SelectProperty(node.id, s_name.clone());
                                 }
                                 cur_y += row_h;
                             }
-                            cur_y += 10.0;
+                        }
+
+                        if !node.env_vars.is_empty() {
+                            cur_y += 10.0 + 13.0;
+                            let mut env_names: Vec<String> = node.env_vars.keys().cloned().collect();
+                            env_names.sort();
+                            for e_name in &env_names {
+                                let row_h = 18.0;
+                                if py >= cur_y && py < cur_y + row_h {
+                                    return PanelHitResult::SelectProperty(node.id, e_name.clone());
+                                }
+                                cur_y += row_h;
+                            }
                         }
 
                         let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
                         prop_keys.retain(|k| k != "clip");
-                        for geom in ["x", "y", "width", "height", "z"] {
-                            if !prop_keys.contains(&geom.to_string()) {
-                                prop_keys.push(geom.to_string());
-                            }
-                        }
                         prop_keys.sort_by(|a, b| {
                             let rank = |k: &str| match k {
                                 "x" => 1,
@@ -635,6 +645,10 @@ impl InspectPanelComponent {
                             };
                             rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
                         });
+
+                        if !prop_keys.is_empty() {
+                            cur_y += 10.0 + 13.0;
+                        }
 
                         for key in &prop_keys {
                             let val = node.properties.get(key);
@@ -1295,7 +1309,7 @@ impl InspectPanelComponent {
         } else if let Some(node) = selected_node {
             let base_y = detail_y - state.detail_scroll_offset;
             let base_x = panel_x - state.detail_scroll_offset_x;
-            let card_w = (panel_w - 20.0).max(total_detail_content_w - 20.0);
+            let _card_w = (panel_w - 20.0).max(total_detail_content_w - 20.0);
             let mut cur_y = base_y + 10.0;
 
             // --- Component Overload Signature ---
@@ -1318,6 +1332,7 @@ impl InspectPanelComponent {
 
             // --- Component Reactive State ---
             if !node.state_vars.is_empty() {
+                cur_y += 10.0;
                 self.draw_text_snippet(
                     scene,
                     font_cx,
@@ -1330,7 +1345,7 @@ impl InspectPanelComponent {
                     base_x + 12.0,
                     cur_y,
                 );
-                cur_y += 18.0;
+                cur_y += 13.0;
 
                 let mut state_names: Vec<String> = node.state_vars.keys().cloned().collect();
                 state_names.sort();
@@ -1339,7 +1354,7 @@ impl InspectPanelComponent {
                     let type_annot = node.state_vars.get(s_name).cloned().flatten();
                     let val_opt = layout.get_value(node.id, s_name);
 
-                    let row_h = 24.0;
+                    let row_h = 18.0;
                     if cur_y + row_h >= detail_y && cur_y <= win_h {
                         let state_x = base_x + 12.0;
 
@@ -1456,23 +1471,157 @@ impl InspectPanelComponent {
                                 cur_y + 2.5,
                             );
                         }
-
-                        // Subtle separator line under each state row
-                        let sep_y = cur_y + row_h - 1.0;
-                        let sep_stroke = Stroke::new(1.0);
-                        scene.stroke(
-                            &sep_stroke,
-                            Affine::IDENTITY,
-                            Brush::Solid(Color::from_rgb8(24, 32, 47)),
-                            None,
-                            &Line::new((state_x, sep_y), (base_x + 10.0 + card_w, sep_y)),
-                        );
                     }
 
                     cur_y += row_h;
                 }
+            }
 
+            // --- Component Environmental Variables ---
+            if !node.env_vars.is_empty() {
                 cur_y += 10.0;
+                self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    "ENVIRONMENT",
+                    9.0,
+                    FontWeight::BOLD,
+                    Color::from_rgb8(45, 212, 191), // teal 400
+                    false,
+                    base_x + 12.0,
+                    cur_y,
+                );
+                cur_y += 13.0;
+
+                let mut env_names: Vec<String> = node.env_vars.keys().cloned().collect();
+                env_names.sort();
+
+                for e_name in &env_names {
+                    let type_annot = node.env_vars.get(e_name).cloned().flatten();
+                    let val_opt = layout.get_value(node.id, e_name);
+
+                    let row_h = 18.0;
+                    if cur_y + row_h >= detail_y && cur_y <= win_h {
+                        let env_x = base_x + 12.0;
+
+                        // Live env indicator dot (teal halo + vibrant dot)
+                        let dot_cx = env_x + 4.0;
+                        let dot_cy = cur_y + 8.65;
+                        let halo = Circle::new((dot_cx, dot_cy), 3.5);
+                        scene.fill(
+                            Fill::NonZero,
+                            Affine::IDENTITY,
+                            Brush::Solid(Color::from_rgba8(20, 184, 166, 40)), // teal 500 alpha 40
+                            None,
+                            &halo,
+                        );
+                        let dot = Circle::new((dot_cx, dot_cy), 2.0);
+                        scene.fill(
+                            Fill::NonZero,
+                            Affine::IDENTITY,
+                            Brush::Solid(Color::from_rgb8(45, 212, 191)), // teal 400
+                            None,
+                            &dot,
+                        );
+
+                        // Variable Name
+                        let name_adv = self.draw_text_snippet(
+                            scene,
+                            font_cx,
+                            layout_cx,
+                            e_name,
+                            10.5,
+                            FontWeight::BOLD,
+                            Color::from_rgb8(94, 234, 212), // teal 300
+                            true,
+                            env_x + 12.0,
+                            cur_y + 1.5,
+                        );
+
+                        // Separator ": "
+                        let sep_adv = self.draw_text_snippet(
+                            scene,
+                            font_cx,
+                            layout_cx,
+                            ": ",
+                            10.5,
+                            FontWeight::NORMAL,
+                            Color::from_rgb8(100, 116, 139), // slate 500
+                            true,
+                            env_x + 12.0 + name_adv,
+                            cur_y + 1.5,
+                        );
+
+                        let mut val_x = env_x + 12.0 + name_adv + sep_adv;
+
+                        let eval_str = if let Some(v) = val_opt {
+                            format!("{v}")
+                        } else {
+                            "-".to_string()
+                        };
+
+                        if let Some(swatch_col) = parse_hex_color(&eval_str) {
+                            let swatch_rrect =
+                                RoundedRect::new(val_x, cur_y + 2.5, val_x + 11.0, cur_y + 13.5, 2.0);
+                            scene.fill(
+                                Fill::NonZero,
+                                Affine::IDENTITY,
+                                Brush::Solid(swatch_col),
+                                None,
+                                &swatch_rrect,
+                            );
+                            let swatch_stroke = Stroke::new(1.0);
+                            scene.stroke(
+                                &swatch_stroke,
+                                Affine::IDENTITY,
+                                Brush::Solid(Color::from_rgb8(71, 85, 105)),
+                                None,
+                                &swatch_rrect,
+                            );
+                            val_x += 16.0;
+                        }
+
+                        let val_col = match val_opt {
+                            Some(Value::Bool(true)) => Color::from_rgb8(52, 211, 153), // emerald 400
+                            Some(Value::Bool(false)) => Color::from_rgb8(248, 113, 113), // red 400
+                            Some(Value::Number(_)) => Color::from_rgb8(251, 191, 36), // amber 400
+                            Some(Value::String(_)) => Color::from_rgb8(251, 191, 36), // amber
+                            _ => Color::from_rgb8(241, 245, 249),
+                        };
+
+                        let val_adv = self.draw_text_snippet(
+                            scene,
+                            font_cx,
+                            layout_cx,
+                            &eval_str,
+                            10.5,
+                            FontWeight::BOLD,
+                            val_col,
+                            true,
+                            val_x,
+                            cur_y + 1.5,
+                        );
+
+                        if let Some(t_name) = &type_annot {
+                            let annot_str = format!(" ({t_name})");
+                            self.draw_text_snippet(
+                                scene,
+                                font_cx,
+                                layout_cx,
+                                &annot_str,
+                                9.0,
+                                FontWeight::NORMAL,
+                                Color::from_rgb8(148, 163, 184), // slate 400
+                                false,
+                                val_x + val_adv + 4.0,
+                                cur_y + 2.5,
+                            );
+                        }
+                    }
+
+                    cur_y += row_h;
+                }
             }
 
             // Collect and order properties:
@@ -1481,11 +1630,6 @@ impl InspectPanelComponent {
             // 3. Other parameters & custom equations
             let mut prop_keys: Vec<String> = node.properties.keys().cloned().collect();
             prop_keys.retain(|k| k != "clip");
-            for geom in ["x", "y", "width", "height", "z"] {
-                if !prop_keys.contains(&geom.to_string()) {
-                    prop_keys.push(geom.to_string());
-                }
-            }
             prop_keys.sort_by(|a, b| {
                 let rank = |k: &str| match k {
                     "x" => 1,
@@ -1505,6 +1649,26 @@ impl InspectPanelComponent {
                 };
                 rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
             });
+
+            // --- Component Properties ---
+            if !prop_keys.is_empty() {
+                cur_y += 10.0;
+                if cur_y + 13.0 >= detail_y && cur_y <= win_h {
+                    self.draw_text_snippet(
+                        scene,
+                        font_cx,
+                        layout_cx,
+                        "PROPERTIES",
+                        9.0,
+                        FontWeight::BOLD,
+                        Color::from_rgb8(56, 189, 248), // cyan 400
+                        false,
+                        base_x + 12.0,
+                        cur_y,
+                    );
+                }
+                cur_y += 13.0;
+            }
 
             for key in &prop_keys {
                 let val_opt = node.properties.get(key);

@@ -837,7 +837,7 @@ fn test_expandable_reference_properties() {
     let divider_y = panel.divider_y(win_h);
     let detail_y = divider_y + panel.divider_height;
     let section_b_start = detail_y + 10.0 + 18.0;
-    let mut test_y = section_b_start;
+    let mut test_y = section_b_start + 10.0 + 13.0;
     let mut prop_keys: Vec<String> = text_node.properties.keys().cloned().collect();
     prop_keys.retain(|k| k != "clip");
     for geom in ["x", "y", "width", "height", "z"] {
@@ -1127,8 +1127,8 @@ fn test_panel_hit_testing_property_details_and_back() {
     let divider_y = panel.divider_y(600.0);
     let detail_y = divider_y + panel.divider_height;
 
-    // 1. Click in component details on 'width' property row (3rd row after x, y, below 18px overload signature)
-    let width_row_y = detail_y + 10.0 + 18.0 + 2.0 * 18.0 + 5.0;
+    // 1. Click in component details on 'width' property row (3rd row after x, y, below 18px overload signature and PROPERTIES header)
+    let width_row_y = detail_y + 10.0 + 18.0 + 10.0 + 13.0 + 2.0 * 18.0 + 5.0;
     let res = panel.handle_click(
         50.0,
         width_row_y,
@@ -1698,6 +1698,95 @@ fn test_component_overload_signature_in_resolved_node() {
     assert_eq!(vstacks[2].overload_signature(), r#"\VStack(shrink)"#);
 }
 
+#[test]
+fn test_inspect_component_env_properties() {
+    let source = r#"
+\Enum Theme {
+    Dark,
+    Light
+}
+
+\Component ThemeProvider(theme: Theme = Theme.Dark, width: Number = parent.width) {
+    \env text_color = (self.theme == Theme.Dark) ? #f8fafc : #0f172a
+    \env card_bg = (self.theme == Theme.Dark) ? #1e293b : #e2e8f0
+    \env accent_color = #3b82f6
+    \env content_width = self.width - 40
+    \Children
+}
+
+\ThemeProvider(theme: Theme.Dark, width: 400) {
+    \Rect(x: 0, y: 0, width: 100, height: 100, color: env.text_color)
+}
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+
+    let theme_node = layout.nodes.iter().find(|n| n.name == "ThemeProvider").expect("ThemeProvider found");
+    let info = InspectTargetInfo::from_layout(&layout, theme_node.id).expect("target info ok");
+
+    assert_eq!(info.env_vars.len(), 4);
+    let accent_env = info.env_vars.iter().find(|e| e.0 == "accent_color").expect("accent_color found");
+    assert_eq!(accent_env.2, Some(directedtype::compiler::Value::Color("#3b82f6".to_string())));
+
+    let card_bg_env = info.env_vars.iter().find(|e| e.0 == "card_bg").expect("card_bg found");
+    assert_eq!(card_bg_env.2, Some(directedtype::compiler::Value::Color("#1e293b".to_string())));
+
+    let text_col_env = info.env_vars.iter().find(|e| e.0 == "text_color").expect("text_color found");
+    assert_eq!(text_col_env.2, Some(directedtype::compiler::Value::Color("#f8fafc".to_string())));
+
+    let content_w_env = info.env_vars.iter().find(|e| e.0 == "content_width").expect("content_width found");
+    assert_eq!(content_w_env.2, Some(directedtype::compiler::Value::Number(360.0)));
+
+    // Test DAG property trace
+    let trace_text = directedtype::inspector::build_property_dag_trace(&layout, theme_node.id, "text_color")
+        .expect("DAG trace for text_color exists");
+    assert_eq!(trace_text.origin_kind, directedtype::inspector::PortOriginKind::EnvironmentVariable);
+    assert_eq!(trace_text.evaluated_value_str, "#f8fafc");
+
+    let trace_cw = directedtype::inspector::build_property_dag_trace(&layout, theme_node.id, "content_width")
+        .expect("DAG trace for content_width exists");
+    assert_eq!(trace_cw.origin_kind, directedtype::inspector::PortOriginKind::EnvironmentVariable);
+    assert_eq!(trace_cw.evaluated_value_str, "360");
+    assert!(trace_cw.upstream_dependencies.iter().any(|d| d.node_id == theme_node.id && d.port_name == "width"));
+
+    // Test DOM target info
+    let mut dom = directedtype::dom::Dom::from_document(&doc).expect("dom ok");
+    dom.commit().expect("dom commit ok");
+    let theme_handle = dom.roots()[0];
+    let dom_info = InspectTargetInfo::from_dom(&dom, theme_handle).expect("dom info ok");
+    assert_eq!(dom_info.env_vars.len(), 4);
+
+    // Test Inspector Panel hit testing on env property
+    let mut state = directedtype::inspector::InspectorState::new();
+    state.selected_id = Some(theme_node.id);
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    // Render panel to scene
+    let mut scene = vello::Scene::new();
+    let mut font_cx = parley::FontContext::new();
+    let mut layout_cx = parley::LayoutContext::new();
+    panel.render_to_scene(
+        &mut scene,
+        0.0,
+        600.0,
+        &tree_items,
+        &state,
+        &layout,
+        &mut font_cx,
+        &mut layout_cx,
+    );
+
+    // Hit-test on the env property area (detail_y ~ 290.88, header at 300.88, COMPONENT ENV title at 318.88, first env item at ~336.88)
+    let hit = panel.handle_click(50.0, 345.0, 0.0, 600.0, &tree_items, &state, Some(&layout));
+    match hit {
+        directedtype::inspector::PanelHitResult::SelectProperty(nid, prop) => {
+            assert_eq!(nid, theme_node.id);
+            assert!(prop == "accent_color" || prop == "card_bg" || prop == "text_color");
+        }
+        other => panic!("Expected SelectProperty hit result, got {:?}", other),
+    }
+}
 
 
 

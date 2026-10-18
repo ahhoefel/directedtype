@@ -20,6 +20,7 @@ pub struct InspectTargetInfo {
     pub declared_ports: Vec<(String, Expr)>,
     pub computed_values: Vec<(String, Value)>,
     pub state_vars: Vec<(String, Option<String>, Option<Value>)>,
+    pub env_vars: Vec<(String, Option<String>, Option<Value>)>,
 }
 
 impl InspectTargetInfo {
@@ -43,6 +44,7 @@ impl InspectTargetInfo {
         let node_id = dom.node_handle_to_id(handle);
         let mut computed_values = Vec::new();
         let mut state_vars = Vec::new();
+        let mut env_vars = Vec::new();
         let mut z = 0.0;
         let mut clip_handle = None;
         let mut clip_rect = None;
@@ -67,6 +69,14 @@ impl InspectTargetInfo {
                         state_vars.push((s_name.clone(), type_annot, val));
                     }
 
+                    let mut sorted_envs: Vec<_> = resolved.env_vars.keys().collect();
+                    sorted_envs.sort();
+                    for &e_name in &sorted_envs {
+                        let type_annot = resolved.env_vars.get(e_name).cloned().flatten();
+                        let val = layout.get_value(nid, e_name.as_str()).cloned();
+                        env_vars.push((e_name.clone(), type_annot, val));
+                    }
+
                     if let Some(clip_id) = resolved.clip {
                         clip_handle = dom.node_id_to_handle(clip_id);
                         clip_rect = layout.get_node(clip_id).map(|n| n.rect);
@@ -88,6 +98,7 @@ impl InspectTargetInfo {
             declared_ports,
             computed_values,
             state_vars,
+            env_vars,
         })
     }
 
@@ -117,6 +128,15 @@ impl InspectTargetInfo {
             state_vars.push((s_name.clone(), type_annot, val));
         }
 
+        let mut env_vars = Vec::new();
+        let mut sorted_envs: Vec<_> = node.env_vars.keys().collect();
+        sorted_envs.sort();
+        for &e_name in &sorted_envs {
+            let type_annot = node.env_vars.get(e_name).cloned().flatten();
+            let val = layout.get_value(id, e_name.as_str()).cloned();
+            env_vars.push((e_name.clone(), type_annot, val));
+        }
+
         let clip_rect = node.clip.and_then(|cid| layout.get_node(cid)).map(|n| n.rect);
 
         Some(Self {
@@ -132,6 +152,7 @@ impl InspectTargetInfo {
             declared_ports: Vec::new(),
             computed_values,
             state_vars,
+            env_vars,
         })
     }
 
@@ -202,6 +223,8 @@ pub enum PortOriginKind {
     Expression,
     /// Reactive component internal state variable (e.g. `state focused: Boolean = false`).
     StateVariable,
+    /// Local environment property declared in component definition (e.g. `\env text_color = ...`).
+    EnvironmentVariable,
     /// Dynamic engine function call (e.g. `text_width(...)`).
     DynamicFunction,
 }
@@ -357,6 +380,7 @@ pub fn build_property_dag_trace(
     };
 
     let is_state = target_node_opt.is_some_and(|n| n.state_vars.contains_key(port));
+    let is_env = target_node_opt.is_some_and(|n| n.env_vars.contains_key(port));
     let is_authored = target_node_opt.is_some_and(|n| n.formulas.contains_key(port));
 
     let equation_str = if let Some(graph) = &layout.graph {
@@ -474,6 +498,11 @@ pub fn build_property_dag_trace(
         (
             PortOriginKind::StateVariable,
             "Internal reactive component state variable declared in component definition.".to_string(),
+        )
+    } else if is_env {
+        (
+            PortOriginKind::EnvironmentVariable,
+            "Local environment property declared in component definition.".to_string(),
         )
     } else if !upstream_dependencies.is_empty() {
         if equation_str.starts_with("text_width(") || equation_str.starts_with("text_height(") {

@@ -2131,6 +2131,10 @@ fn expand_component_instance(
         let type_name = s.type_annotation.as_ref().map(|t| t.name.as_str().to_string());
         node.state_vars.insert(state_name.clone(), type_name);
     }
+    for (env_name, e) in &declared_envs {
+        let type_name = e.type_annotation.as_ref().map(|t| t.name.as_str().to_string());
+        node.env_vars.insert(env_name.clone(), type_name);
+    }
     for (port_name, expr) in &rewritten_ports {
         if port_name.starts_with("on_") {
             if let Some(binding) = extract_event_binding(port_name, expr) {
