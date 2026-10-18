@@ -620,7 +620,7 @@ fn test_inspector_bottom_panel_dimensions_and_formulas() {
 #[test]
 fn test_ambient_children_authored_formulas_preserved() {
     let source = r#"
-        \Component Flow(margin: Number: 30, gap: Number: 20) {
+        \Component Flow(x: Number: 0, y: Number: 0, width: Number: parent.width, margin: Number: 30, gap: Number: 20) {
             \Children {
                 x: parent.left + parent.margin,
                 y: prev ? prev.bottom + gap : parent.top,
@@ -1067,26 +1067,14 @@ fn test_dag_property_trace_building() {
 #[test]
 fn test_dag_property_trace_inferred_default() {
     let source = r#"
-\Component Container {
-    \alias width = 400;
-    \alias height = 300;
-    \Children
-}
-\Component Item(h: Number: 40) {
-    \alias width = 100;
-    \alias height = h;
-    \Rect(x: 0, y: 0, width: 100, height: h, color: #ff0000)
-}
-\Container {
-    \Item("child_item"; h: 40)
-}
+\let b = \Box(width: 100, height: 40)
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
     let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
-    let item_node = layout.nodes.iter().find(|n| n.name == "Item").expect("Item found");
+    let box_node = layout.nodes.iter().find(|n| n.name == "Box").expect("Box found");
 
-    // Coordinate 'x' was not explicitly authored on the child Item instance, so it gets the default spatial coordinate (0)
-    let trace = directedtype::inspector::build_property_dag_trace(&layout, item_node.id, "x")
+    // Coordinate 'x' was not explicitly authored on the Box primitive, so it gets the default spatial coordinate (0)
+    let trace = directedtype::inspector::build_property_dag_trace(&layout, box_node.id, "x")
         .expect("trace ok");
 
     assert_eq!(trace.port_name, "x");
@@ -1709,6 +1697,8 @@ fn test_component_overload_signature_in_resolved_node() {
     assert_eq!(vstacks[1].overload_signature(), r#"\VStack(width)"#);
     assert_eq!(vstacks[2].overload_signature(), r#"\VStack(shrink)"#);
 }
+
+
 
 
 

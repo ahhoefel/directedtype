@@ -9,7 +9,7 @@ use pretty_assertions::assert_eq;
 #[test]
 fn test_expand_flow_recurrence_and_graph() {
     let input = r#"
-    \Component Flow(gap: Number: 16) {
+    \Component Flow(x: Number: 0, y: Number: 0, gap: Number: 16) {
       \Children {
         x: parent.left,
         y: prev ? prev.bottom + gap : parent.top
@@ -147,7 +147,7 @@ fn test_expand_flow_recurrence_and_graph() {
 #[test]
 fn test_precedence_explicit_overrides_ambient() {
     let input = r#"
-    \Component Flow(gap: Number: 16) {
+    \Component Flow(x: Number: 0, gap: Number: 16) {
       \Children {
         x: parent.left
       }
@@ -271,7 +271,7 @@ fn test_text_wrapping_default_height() {
 #[test]
 fn test_topological_sort_acyclic() {
     let input = r#"
-    \Component Flow(gap: Number: 16) {
+    \Component Flow(x: Number: 0, y: Number: 0, gap: Number: 16) {
       \Children {
         x: parent.left,
         y: prev ? prev.bottom + gap : parent.top
@@ -409,7 +409,7 @@ fn test_multi_node_cycle_detection() {
 #[test]
 fn test_end_to_end_flow_math_evaluation() {
     let input = r#"
-    \Component Flow(gap: Number: 16) {
+    \Component Flow(x: Number: 0, y: Number: 0, gap: Number: 16) {
       \Children {
         x: parent.left,
         y: prev ? prev.bottom + gap : parent.top
@@ -456,7 +456,7 @@ fn test_end_to_end_flow_math_evaluation() {
 #[test]
 fn test_end_to_end_shaded_box_bottom_up_evaluation() {
     let input = r#"
-    \Component ShadedBox(bg_color: Color, width: max(children.width) + 32) {
+    \Component ShadedBox(x: Number: 0, y: Number: 0, height: Number: 0, bg_color: Color, width: max(children.width) + 32) {
       \Rect(
         x: x,
         y: y,
@@ -620,7 +620,7 @@ fn test_responsive_flow_clamped_formula() {
 #[test]
 fn test_parley_text_height_wrapping_multiline() {
     let input = r#"
-    \Component Flow(gap: Number: 24) {
+    \Component Flow(x: Number: 0, y: Number: 0, gap: Number: 24) {
         \Children {
             x: parent.left,
             y: prev ? prev.bottom + gap : parent.top,
@@ -891,7 +891,7 @@ fn test_lexical_scope_shadowing() {
 #[test]
 fn test_lexical_scope_in_children_directive() {
     let input = r#"
-    \Component FlowWithMargin {
+    \Component FlowWithMargin(x: Number: 0) {
       \let margin = 35
       \Children {
         x: parent.left + margin,
@@ -999,7 +999,7 @@ fn test_visibility_child_cannot_access_parent_private_local_via_bare_ident() {
 #[test]
 fn test_visibility_parent_explicit_push_via_children_directive() {
     let input = r#"
-    \Component CustomCard {
+    \Component CustomCard(x: Number: 0) {
       \let card_padding = 16
       \Children {
         x: parent.left + card_padding,
@@ -1023,7 +1023,7 @@ fn test_visibility_parent_explicit_push_via_children_directive() {
 #[test]
 fn test_visibility_child_retains_caller_lexical_scope() {
     let input = r#"
-    \Component CustomCard {
+    \Component CustomCard(x: Number: 0) {
       \let internal_padding = 10
       \Children {
         x: parent.left + internal_padding,
@@ -1051,7 +1051,7 @@ fn test_visibility_child_retains_caller_lexical_scope() {
 #[test]
 fn test_visibility_parent_private_local_does_not_shadow_caller_local() {
     let input = r#"
-    \Component CustomCard {
+    \Component CustomCard(x: Number: 0) {
       \let my_size = 999
       \Children {
         x: parent.left,
@@ -1077,7 +1077,7 @@ fn test_visibility_parent_private_local_does_not_shadow_caller_local() {
 #[test]
 fn test_visibility_child_explicit_parent_port_bypasses_internal_shadow() {
     let input = r#"
-    \Component CustomCard(clip_offset: Number = 5) {
+    \Component CustomCard(x: Number: 0, clip_offset: Number = 5) {
       \let clip_offset = 100 // internal shadow
       \Children {
         x: parent.left,
@@ -1267,7 +1267,7 @@ fn test_box_and_clip_non_drawing_primitives() {
 #[test]
 fn test_clip_with_box_inline_expansion() {
     let input = r##"
-    \Component ScrollView {
+    \Component ScrollView(x: Number: 0, y: Number: 0, width: Number: 0, height: Number: 0) {
         \let clip = \Clip(up: self.clip, box: \Box(x: self.left + 5, y: self.top + 5, width: self.width - 10, height: self.height - 10))
         \Rect(clip: clip, x: 0, y: 0, width: 300, height: 300, color: #ff0000)
     }
@@ -1389,7 +1389,7 @@ fn test_children_directive_ambient_clip() {
 #[test]
 fn test_dom_tree_formatting() {
     let input = r#"
-    \Component Card(bg: Color: #1e293b, width: 300, height: 150) {
+    \Component Card(x: Number: 0, y: Number: 0, bg: Color: #1e293b, width: 300, height: 150) {
         \Rect(x: parent.left, y: parent.top, width: parent.width, height: parent.height, color: parent.bg)
         \Children {
             x: parent.left + 16,
@@ -2565,7 +2565,7 @@ fn test_raw_text_passed_directly_to_component_children() {
     let input = r#"
     \env font = \Font(size: 16);
 
-    \Component Card(padding_x: Number: 24, padding_y: Number: 18) {
+    \Component Card(x: Number: 0, y: Number: 0, padding_x: Number: 24, padding_y: Number: 18) {
         \Rect(x: 10, y: 10, width: 300, height: 100, color: #1e293b)
         \Children {
             x: parent.left + padding_x,
@@ -2857,7 +2857,7 @@ fn test_overload_env_parameter_satisfaction() {
 #[test]
 fn test_overload_card_in_hstack_no_cycle() {
     let input = r#"
-    \Component HBox() {
+    \Component HBox(x: Number: 0) {
         \alias width = max(children.right);
         \alias right = x + width;
         \Rect(x: 0, y: 0, width: width, height: 60, color: #000000)
@@ -2866,12 +2866,12 @@ fn test_overload_card_in_hstack_no_cycle() {
         }
     }
 
-    \Component Card(width: Number) {
+    \Component Card(x: Number: 0, y: Number: 0, width: Number) {
         \alias right = x + width;
         \Rect(x: x, y: y, width: width, height: 50, color: #111111)
     }
 
-    \Component Card() {
+    \Component Card(x: Number: 0, y: Number: 0) {
         \let resolved_width = parent.width;
         \alias right = x + resolved_width;
         \Rect(x: x, y: y, width: resolved_width, height: 50, color: #222222)
@@ -3465,3 +3465,53 @@ fn test_list_component_custom_bullet_port() {
     assert!(texts.contains(&"↑".to_string()), "Expected custom bullet '↑', got: {:?}", texts);
     assert!(texts.contains(&"↓".to_string()), "Expected custom bullet '↓', got: {:?}", texts);
 }
+
+#[test]
+fn test_component_conditional_spatial_ports() {
+    let input = r#"
+    \Component StyleOnly(color: Color = #112233) {
+        \Children
+    }
+
+    \Component HorizontalOnly(x: Number = 10, width: Number = 100) {
+        \Children
+    }
+
+    \Component CustomRight(x: Number = 10, width: Number = 100) {
+        \alias right = x + width + 5;
+        \Children
+    }
+
+    \StyleOnly()
+    \HorizontalOnly()
+    \CustomRight()
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("evaluate ok");
+
+    let style_node = layout.nodes.iter().find(|n| n.name == "StyleOnly").unwrap();
+    for geom in ["x", "y", "width", "height", "z", "left", "top", "right", "bottom"] {
+        assert!(
+            !style_node.properties.contains_key(geom),
+            "StyleOnly should not have port '{}'",
+            geom
+        );
+    }
+
+    let horiz_node = layout.nodes.iter().find(|n| n.name == "HorizontalOnly").unwrap();
+    assert_eq!(layout.get_value(horiz_node.id, "left"), Some(&Value::Number(10.0)));
+    assert_eq!(layout.get_value(horiz_node.id, "right"), Some(&Value::Number(110.0)));
+    for missing in ["y", "height", "z", "top", "bottom"] {
+        assert!(
+            !horiz_node.properties.contains_key(missing),
+            "HorizontalOnly should not have port '{}'",
+            missing
+        );
+    }
+
+    let custom_node = layout.nodes.iter().find(|n| n.name == "CustomRight").unwrap();
+    assert_eq!(layout.get_value(custom_node.id, "left"), Some(&Value::Number(10.0)));
+    assert_eq!(layout.get_value(custom_node.id, "right"), Some(&Value::Number(115.0)));
+}
+

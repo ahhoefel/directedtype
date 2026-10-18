@@ -310,9 +310,15 @@ pub fn build_scene(
     // 1. Draw canvas background if requested
     if let Some(bg) = options.background {
         if bg.components[3] > 0.0 {
-            // Find bounding box or maximum extents
-            let mut max_w: f64 = 0.0;
-            let mut max_h: f64 = 0.0;
+            // Find bounding box or maximum extents (starting with window bounds if available)
+            let mut max_w: f64 = layout
+                .get_value(NodeId::WINDOW, "width")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let mut max_h: f64 = layout
+                .get_value(NodeId::WINDOW, "height")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             for node in &layout.nodes {
                 max_w = max_w.max(node.rect.x + node.rect.width);
                 max_h = max_h.max(node.rect.y + node.rect.height);
@@ -966,6 +972,7 @@ mod tests {
             scope_id: None,
             properties: HashMap::new(),
             state_vars: HashMap::new(),
+            env_vars: HashMap::new(),
             event_handlers: HashMap::new(),
             formulas: HashMap::new(),
             span: Span::default(),
@@ -1033,6 +1040,7 @@ mod tests {
                 ("height".to_string(), Value::Number(200.0)),
             ]),
             state_vars: HashMap::new(),
+            env_vars: HashMap::new(),
             event_handlers: HashMap::new(),
             formulas: HashMap::new(),
             span: Span::default(),
@@ -1061,6 +1069,7 @@ mod tests {
                 ("scroll_y".to_string(), Value::Number(0.0)),
             ]),
             state_vars: HashMap::new(),
+            env_vars: HashMap::new(),
             event_handlers: HashMap::new(),
             formulas: HashMap::new(),
             span: Span::default(),
@@ -1088,6 +1097,7 @@ mod tests {
                 ("color".to_string(), Value::Color("#3b82f6".to_string())),
             ]),
             state_vars: HashMap::new(),
+            env_vars: HashMap::new(),
             event_handlers: HashMap::new(),
             formulas: HashMap::new(),
             span: Span::default(),

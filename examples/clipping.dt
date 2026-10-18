@@ -3,6 +3,8 @@
 
 // A rounded viewport container that establishes a GPU hardware clip boundary
 \Component ScrollView(
+    x: Number: parent.left,
+    y: Number: parent.top,
     width: Number: 320, 
     height: Number: 190, 
     radius: Number: 16,

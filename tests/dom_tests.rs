@@ -469,7 +469,7 @@ fn test_dom_destroy_node_frees_subtree() {
 #[test]
 fn test_dom_insert_before_dynamic_flow_recurrence() {
     let source = r#"
-        \Component Flow(gap: Number: 20) {
+        \Component Flow(y: Number: 0, gap: Number: 20) {
             \Children {
                 x: 0,
                 y: prev ? prev.bottom + gap : parent.top,

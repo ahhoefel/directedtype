@@ -183,111 +183,128 @@ pub fn build_variable_graph_with_window(
         let is_root = doc.roots.contains(&node.id) || node.parent.is_none_or(|p| p.is_window());
         let mut ports = node.ports.clone();
 
-        // Base Spatial Trait: Every node has x, y, width, height, z
-        if is_root {
-            ports
-                .entry("x".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
-            ports
-                .entry("y".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
-            ports
-                .entry("z".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
-            ports
-                .entry("width".to_string())
-                .or_insert_with(|| {
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::new(
-                            NodeId::WINDOW.canonical_name(),
-                            node.span,
-                        ))),
-                        member: Ident::new("width", node.span),
-                        span: node.span,
-                    })
-                });
-            ports
-                .entry("height".to_string())
-                .or_insert_with(|| {
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::new(
-                            NodeId::WINDOW.canonical_name(),
-                            node.span,
-                        ))),
-                        member: Ident::new("height", node.span),
-                        span: node.span,
-                    })
-                });
-        } else {
-            ports
-                .entry("x".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
-            ports
-                .entry("y".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
-            ports
-                .entry("z".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
-            ports
-                .entry("width".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
-            ports
-                .entry("height".to_string())
-                .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+        if !node.is_component && node.name != "Font" {
+            // Default spatial ports for primitive elements
+            if is_root {
+                ports
+                    .entry("x".to_string())
+                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                ports
+                    .entry("y".to_string())
+                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                ports
+                    .entry("z".to_string())
+                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                ports
+                    .entry("width".to_string())
+                    .or_insert_with(|| {
+                        Expr::MemberAccess(MemberAccessExpr {
+                            target: Box::new(Expr::Ident(Ident::new(
+                                NodeId::WINDOW.canonical_name(),
+                                node.span,
+                            ))),
+                            member: Ident::new("width", node.span),
+                            span: node.span,
+                        })
+                    });
+                ports
+                    .entry("height".to_string())
+                    .or_insert_with(|| {
+                        Expr::MemberAccess(MemberAccessExpr {
+                            target: Box::new(Expr::Ident(Ident::new(
+                                NodeId::WINDOW.canonical_name(),
+                                node.span,
+                            ))),
+                            member: Ident::new("height", node.span),
+                            span: node.span,
+                        })
+                    });
+            } else {
+                ports
+                    .entry("x".to_string())
+                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                ports
+                    .entry("y".to_string())
+                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                ports
+                    .entry("z".to_string())
+                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                ports
+                    .entry("width".to_string())
+                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                ports
+                    .entry("height".to_string())
+                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+            }
         }
 
-        // Default spatial alias ports if not already defined
+        // Default spatial alias ports only when their input ports are present and no alias is defined
         let self_ident = Expr::Ident(Ident::new(node.id.canonical_name(), node.span));
-        ports.entry("left".to_string()).or_insert_with(|| {
-            Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
-                member: Ident::new("x", node.span),
-                span: node.span,
-            })
-        });
-        ports.entry("top".to_string()).or_insert_with(|| {
-            Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
-                member: Ident::new("y", node.span),
-                span: node.span,
-            })
-        });
-        ports.entry("right".to_string()).or_insert_with(|| {
-            let x = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
-                member: Ident::new("x", node.span),
-                span: node.span,
+        let has_x = ports.contains_key("x");
+        let has_y = ports.contains_key("y");
+        let has_w = ports.contains_key("width");
+        let has_h = ports.contains_key("height");
+
+        if has_x {
+            ports.entry("left".to_string()).or_insert_with(|| {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("x", node.span),
+                    span: node.span,
+                })
             });
-            let w = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
-                member: Ident::new("width", node.span),
-                span: node.span,
+        }
+        if has_y {
+            ports.entry("top".to_string()).or_insert_with(|| {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("y", node.span),
+                    span: node.span,
+                })
             });
-            Expr::Binary(BinaryExpr {
-                op: BinaryOp::Add,
-                left: Box::new(x),
-                right: Box::new(w),
-                span: node.span,
-            })
-        });
-        ports.entry("bottom".to_string()).or_insert_with(|| {
-            let y = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
-                member: Ident::new("y", node.span),
-                span: node.span,
+        }
+        if (has_x || ports.contains_key("left")) && has_w {
+            let left_member = if has_x { "x" } else { "left" };
+            ports.entry("right".to_string()).or_insert_with(|| {
+                let x = Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new(left_member, node.span),
+                    span: node.span,
+                });
+                let w = Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("width", node.span),
+                    span: node.span,
+                });
+                Expr::Binary(BinaryExpr {
+                    op: BinaryOp::Add,
+                    left: Box::new(x),
+                    right: Box::new(w),
+                    span: node.span,
+                })
             });
-            let h = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident),
-                member: Ident::new("height", node.span),
-                span: node.span,
+        }
+        if (has_y || ports.contains_key("top")) && has_h {
+            let top_member = if has_y { "y" } else { "top" };
+            ports.entry("bottom".to_string()).or_insert_with(|| {
+                let y = Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new(top_member, node.span),
+                    span: node.span,
+                });
+                let h = Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident),
+                    member: Ident::new("height", node.span),
+                    span: node.span,
+                });
+                Expr::Binary(BinaryExpr {
+                    op: BinaryOp::Add,
+                    left: Box::new(y),
+                    right: Box::new(h),
+                    span: node.span,
+                })
             });
-            Expr::Binary(BinaryExpr {
-                op: BinaryOp::Add,
-                left: Box::new(y),
-                right: Box::new(h),
-                span: node.span,
-            })
-        });
+        }
 
         for (port_name, expr) in ports {
             if port_name.starts_with("on_") {

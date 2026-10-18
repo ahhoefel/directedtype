@@ -919,16 +919,7 @@ fn expand_component_instance(
 ) -> Result<(), CompileError> {
     // 1. Gather parameter definitions and map consumer arguments
     let mut comp_scope_ports = vec![
-        "x".to_string(),
-        "y".to_string(),
-        "width".to_string(),
-        "height".to_string(),
-        "z".to_string(),
         "clip".to_string(),
-        "left".to_string(),
-        "top".to_string(),
-        "right".to_string(),
-        "bottom".to_string(),
     ];
     let mut declared_aliases: HashMap<String, AliasBinding> = HashMap::new();
     let all_aliases = collect_all_component_aliases(comp_def);
@@ -1041,7 +1032,46 @@ fn expand_component_instance(
         }
     }
 
-    // Validate that caller does not attempt to override immutable alias ports or set private state / let
+    let mut declared_envs: HashMap<String, EnvBinding> = HashMap::new();
+    for item in &comp_def.body {
+        if let ComponentBodyItem::Env(e) = item {
+            let env_name = e.name.as_str().to_string();
+            if env_name == "parent" {
+                return Err(CompileError::ReservedPort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: "parent".to_string(),
+                    span: e.name.span,
+                });
+            }
+            if declared_aliases.contains_key(&env_name) {
+                return Err(CompileError::DuplicatePort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: env_name,
+                    span: e.name.span,
+                });
+            }
+            if declared_states.contains_key(&env_name) {
+                return Err(CompileError::DuplicatePort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: env_name,
+                    span: e.name.span,
+                });
+            }
+            if declared_envs.contains_key(&env_name) {
+                return Err(CompileError::DuplicatePort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: env_name,
+                    span: e.name.span,
+                });
+            }
+            if !comp_scope_ports.contains(&env_name) {
+                comp_scope_ports.push(env_name.clone());
+            }
+            declared_envs.insert(env_name, e.clone());
+        }
+    }
+
+    // Validate that caller does not attempt to override immutable alias ports or set private state / let / env
     for port in &instance.ports {
         let name = port.name.as_str();
         let is_purely_ambient = ctx.ambient_authored_ports.is_some_and(|a| a.contains_key(name));
@@ -1059,6 +1089,16 @@ fn expand_component_instance(
             return Err(CompileError::PrivateStatePort {
                 node: comp_def.name.as_str().to_string(),
                 port: name.to_string(),
+                span: port.name.span,
+            });
+        }
+        if declared_envs.contains_key(name) && !comp_def.params.iter().any(|p| p.name.as_str() == name) {
+            return Err(CompileError::Custom {
+                message: format!(
+                    "Node '{}' environmental property '{}' cannot be set as a parameter",
+                    comp_def.name.as_str(),
+                    name
+                ),
                 span: port.name.span,
             });
         }
@@ -1083,6 +1123,13 @@ fn expand_component_instance(
         if !comp_def.params.iter().any(|p| p.name.as_str() == let_name) {
             if let Some(LetValue::Expr(raw_expr)) = &l.value {
                 comp_ports.insert(let_name.clone(), raw_expr.clone());
+            }
+        }
+    }
+    for (env_name, e) in &declared_envs {
+        if let Some(raw_expr) = &e.value {
+            if !matches!(raw_expr, Expr::Node(_)) {
+                comp_ports.insert(env_name.clone(), raw_expr.clone());
             }
         }
     }
@@ -1181,13 +1228,33 @@ fn expand_component_instance(
     // Any remaining explicit ports not defined in signature (e.g. ad-hoc ports)
     for (name, expr) in explicit_ports {
         let is_purely_ambient = ctx.ambient_authored_ports.is_some_and(|a| a.contains_key(&name));
-        if is_purely_ambient && !matches!(name.as_str(), "x" | "y" | "z" | "clip") {
+        if is_purely_ambient && name != "clip" {
             continue;
         }
         if !comp_scope_ports.contains(&name) {
             comp_scope_ports.push(name.clone());
         }
         comp_ports.insert(name, expr);
+    }
+
+    let has_port_or_alias = |k: &str| comp_ports.contains_key(k) || declared_aliases.contains_key(k);
+    if has_port_or_alias("x") && !comp_scope_ports.contains(&"left".to_string()) {
+        comp_scope_ports.push("left".to_string());
+    }
+    if has_port_or_alias("y") && !comp_scope_ports.contains(&"top".to_string()) {
+        comp_scope_ports.push("top".to_string());
+    }
+    if (has_port_or_alias("x") || has_port_or_alias("left"))
+        && has_port_or_alias("width")
+        && !comp_scope_ports.contains(&"right".to_string())
+    {
+        comp_scope_ports.push("right".to_string());
+    }
+    if (has_port_or_alias("y") || has_port_or_alias("top"))
+        && has_port_or_alias("height")
+        && !comp_scope_ports.contains(&"bottom".to_string())
+    {
+        comp_scope_ports.push("bottom".to_string());
     }
 
     // Record component font if resolved
@@ -1603,7 +1670,8 @@ fn expand_component_instance(
                             );
                             let bound_expr = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
                             children_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(bound_expr.clone()));
-                            internal_body_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(bound_expr));
+                            internal_body_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(bound_expr.clone()));
+                            comp_ports.insert(env_binding.name.as_str().to_string(), bound_expr);
                             if elem.name.as_str() == "Font" {
                                 node_fonts.insert(node_id, node_id);
                             }
@@ -1906,6 +1974,11 @@ fn expand_component_instance(
             }
         }
     }
+    for (env_name, e) in &declared_envs {
+        if let Some(raw_expr) = &e.value {
+            comp_authored_ports.insert(env_name.clone(), raw_expr.clone());
+        }
+    }
     for port in &instance.ports {
         if let Some(ambient_expr) = ctx.ambient_authored_ports.and_then(|m| m.get(port.name.as_str())) {
             comp_authored_ports.insert(port.name.as_str().to_string(), ambient_expr.clone());
@@ -1937,7 +2010,7 @@ fn expand_component_instance(
         comp_authored_ports.insert(alias_name.clone(), alias_binding.value.clone());
     }
 
-    // 8. Default spatial aliases if not explicitly declared
+    // 8. Default spatial aliases if their inputs are present and no alias was explicitly declared
     let self_ident = Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span));
     let self_x = Expr::MemberAccess(MemberAccessExpr {
         target: Box::new(self_ident.clone()),
@@ -1960,18 +2033,35 @@ fn expand_component_instance(
         span: instance.span,
     });
 
-    if !rewritten_ports.contains_key("left") {
+    if !rewritten_ports.contains_key("left") && rewritten_ports.contains_key("x") {
         rewritten_ports.insert("left".to_string(), self_x.clone());
         comp_authored_ports.insert("left".to_string(), Expr::Ident(Ident::new("x", instance.span)));
     }
-    if !rewritten_ports.contains_key("top") {
+    if !rewritten_ports.contains_key("top") && rewritten_ports.contains_key("y") {
         rewritten_ports.insert("top".to_string(), self_y.clone());
         comp_authored_ports.insert("top".to_string(), Expr::Ident(Ident::new("y", instance.span)));
     }
-    if !rewritten_ports.contains_key("right") {
+    if !rewritten_ports.contains_key("right")
+        && (rewritten_ports.contains_key("x") || rewritten_ports.contains_key("left"))
+        && rewritten_ports.contains_key("width")
+    {
+        let left_base = if rewritten_ports.contains_key("x") {
+            self_x
+        } else {
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(self_ident.clone()),
+                member: Ident::new("left", instance.span),
+                span: instance.span,
+            })
+        };
+        let left_authored = if rewritten_ports.contains_key("x") {
+            "x"
+        } else {
+            "left"
+        };
         let right_expr = Expr::Binary(BinaryExpr {
             op: BinaryOp::Add,
-            left: Box::new(self_x),
+            left: Box::new(left_base),
             right: Box::new(self_width),
             span: instance.span,
         });
@@ -1980,16 +2070,33 @@ fn expand_component_instance(
             "right".to_string(),
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(Expr::Ident(Ident::new("x", instance.span))),
+                left: Box::new(Expr::Ident(Ident::new(left_authored, instance.span))),
                 right: Box::new(Expr::Ident(Ident::new("width", instance.span))),
                 span: instance.span,
             }),
         );
     }
-    if !rewritten_ports.contains_key("bottom") {
+    if !rewritten_ports.contains_key("bottom")
+        && (rewritten_ports.contains_key("y") || rewritten_ports.contains_key("top"))
+        && rewritten_ports.contains_key("height")
+    {
+        let top_base = if rewritten_ports.contains_key("y") {
+            self_y
+        } else {
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(self_ident),
+                member: Ident::new("top", instance.span),
+                span: instance.span,
+            })
+        };
+        let top_authored = if rewritten_ports.contains_key("y") {
+            "y"
+        } else {
+            "top"
+        };
         let bottom_expr = Expr::Binary(BinaryExpr {
             op: BinaryOp::Add,
-            left: Box::new(self_y),
+            left: Box::new(top_base),
             right: Box::new(self_height),
             span: instance.span,
         });
@@ -1998,7 +2105,7 @@ fn expand_component_instance(
             "bottom".to_string(),
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(Expr::Ident(Ident::new("y", instance.span))),
+                left: Box::new(Expr::Ident(Ident::new(top_authored, instance.span))),
                 right: Box::new(Expr::Ident(Ident::new("height", instance.span))),
                 span: instance.span,
             }),
@@ -2006,6 +2113,7 @@ fn expand_component_instance(
     }
 
     let node = doc.get_node_mut(ctx.comp_node_id).unwrap();
+    node.is_component = true;
     node.overload_params = comp_def
         .params
         .iter()
@@ -2122,6 +2230,40 @@ fn expand_primitive_element(
     let mut full_text = String::new();
     let mut text_spans = Vec::new();
 
+    let mut primitive_scope_ports = if elem.name.as_str() == "Font" {
+        vec![
+            "family".to_string(),
+            "size".to_string(),
+            "weight".to_string(),
+            "line_height".to_string(),
+            "cap_height".to_string(),
+            "x_height".to_string(),
+            "descent".to_string(),
+            "ascent".to_string(),
+        ]
+    } else {
+        vec![
+            "x".to_string(),
+            "y".to_string(),
+            "width".to_string(),
+            "height".to_string(),
+            "z".to_string(),
+            "left".to_string(),
+            "top".to_string(),
+            "right".to_string(),
+            "bottom".to_string(),
+            "clip".to_string(),
+            "name".to_string(),
+            "path".to_string(),
+        ]
+    };
+    for p in &elem.ports {
+        let pname = p.name.as_str().to_string();
+        if !primitive_scope_ports.contains(&pname) {
+            primitive_scope_ports.push(pname);
+        }
+    }
+
     if let Some(slot) = &elem.content {
         for item in &slot.items {
             match item {
@@ -2138,7 +2280,7 @@ fn expand_primitive_element(
                         parent_id: Some(node_id),
                         parent_name: Some(elem.name.as_str()),
                         prev_sibling_id: last_child_id,
-                        parent_ports: ctx.parent_ports,
+                        parent_ports: &primitive_scope_ports,
                         lexical_scope: ctx.lexical_scope,
                         env_scope: ctx.env_scope,
                         enclosing_component_id: ctx.enclosing_component_id,
@@ -2817,13 +2959,6 @@ fn expand_primitive_element(
             })
         });
 
-        // Dummy spatial ports
-        ports.entry("x".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
-        ports.entry("y".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
-        ports.entry("width".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
-        ports.entry("height".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
-        ports.entry("z".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
-
         let node = doc.get_node_mut(node_id).unwrap();
         node.overload_params = vec!["size".to_string()];
         node.children = child_ids;
@@ -3432,7 +3567,7 @@ fn expand_primitive_element(
         }
     }
 
-    // Default spatial alias ports for primitives
+    // Default spatial alias ports for spatial primitives (Font returned early above)
     let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
     if !ports.contains_key("left") {
         ports.insert(
