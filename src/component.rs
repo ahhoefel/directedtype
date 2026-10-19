@@ -5,6 +5,9 @@ use crate::compiler::value::Value;
 use crate::interaction::Event;
 use std::collections::HashMap;
 
+pub mod wasm;
+pub use wasm::WasmComponent;
+
 /// The target entity receiving an event dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventHandlerTarget {
@@ -317,6 +320,16 @@ impl<'a> Context<'a> {
         self.ports.get(name)
     }
 
+    /// Returns a reference to all input ports passed to this component instance.
+    pub fn ports(&self) -> &HashMap<String, Value> {
+        self.ports
+    }
+
+    /// Queues a context action.
+    pub fn push_action(&mut self, action: ContextAction) {
+        self.actions.push(action);
+    }
+
     /// Reads an input port as a floating-point number.
     pub fn get_port_number(&self, name: &str) -> Option<f64> {
         match self.get_port(name)? {
@@ -539,6 +552,36 @@ impl ComponentRegistry {
         self.factories.insert(name_str, Box::new(factory));
     }
 
+    /// Registers a WebAssembly companion component by reading its `.wasm` bytes.
+    pub fn register_wasm(&mut self, name: impl Into<String>, wasm_bytes: Vec<u8>) {
+        let name_str = name.into();
+        self.register(name_str, move || {
+            match WasmComponent::from_bytes(&wasm_bytes) {
+                Ok(c) => Box::new(c),
+                Err(e) => panic!("Failed to instantiate WASM component: {}", e),
+            }
+        });
+    }
+
+    /// Registers a WebAssembly companion component along with its associated companion file path.
+    pub fn register_wasm_companion(
+        &mut self,
+        name: impl Into<String>,
+        companion_path: impl Into<String>,
+        wasm_bytes: Vec<u8>,
+    ) {
+        let name_str = name.into();
+        let path_str = companion_path.into();
+        self.companion_files
+            .insert(name_str.clone(), path_str);
+        self.register(name_str, move || {
+            match WasmComponent::from_bytes(&wasm_bytes) {
+                Ok(c) => Box::new(c),
+                Err(e) => panic!("Failed to instantiate WASM component: {}", e),
+            }
+        });
+    }
+
     /// Instantiates a fresh `Component` instance for the given component name.
     pub fn create_instance(&self, name: &str) -> Option<Box<dyn Component>> {
         self.factories.get(name).map(|f| f())
@@ -552,6 +595,76 @@ impl ComponentRegistry {
     /// Returns the associated companion file path, if registered.
     pub fn get_companion_path(&self, name: &str) -> Option<&str> {
         self.companion_files.get(name).map(|s| s.as_str())
+    }
+
+    /// Discovers and registers any direct `.wasm` companion file adjacent to the given `.dt` path.
+    pub fn auto_discover_wasm<R: crate::compiler::FileResolver>(
+        &mut self,
+        dt_path: &std::path::Path,
+        resolver: &R,
+    ) {
+        if let Some(wasm_path) = resolver.find_companion_wasm(dt_path) {
+            if let Some(stem) = wasm_path.file_stem().and_then(|s| s.to_str()) {
+                if !self.has_component(stem) {
+                    if let Ok(bytes) = resolver.read_bytes(&wasm_path) {
+                        self.register_wasm_companion(stem, wasm_path.display().to_string(), bytes);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Discovers and registers any `.wasm` companion files for components declared or imported in a document.
+    pub fn auto_discover_wasm_for_document<R: crate::compiler::FileResolver>(
+        &mut self,
+        doc: &crate::ast::Document,
+        doc_or_dir_path: &std::path::Path,
+        resolver: &R,
+    ) {
+        let (base_dir, doc_wasm_path) = if doc_or_dir_path.is_dir() {
+            (doc_or_dir_path, None)
+        } else {
+            (
+                doc_or_dir_path.parent().unwrap_or_else(|| std::path::Path::new(".")),
+                resolver.find_companion_wasm(doc_or_dir_path),
+            )
+        };
+
+        for item in &doc.items {
+            match item {
+                crate::ast::Item::Component(comp) => {
+                    let name = comp.name.as_str();
+                    if !self.has_component(name) {
+                        let candidate = base_dir.join(format!("{}.wasm", name));
+                        if let Ok(bytes) = resolver.read_bytes(&candidate) {
+                            self.register_wasm_companion(name, candidate.display().to_string(), bytes);
+                        } else if let Some(ref doc_wasm) = doc_wasm_path {
+                            if let Ok(bytes) = resolver.read_bytes(doc_wasm) {
+                                self.register_wasm_companion(name, doc_wasm.display().to_string(), bytes);
+                            }
+                        }
+                    }
+                }
+                crate::ast::Item::Use(u) => {
+                    let raw_path = std::path::Path::new(&u.path);
+                    let resolved = if raw_path.is_absolute() {
+                        raw_path.to_path_buf()
+                    } else {
+                        base_dir.join(raw_path)
+                    };
+                    if let Some(wasm_path) = resolver.find_companion_wasm(&resolved) {
+                        if let Some(stem) = wasm_path.file_stem().and_then(|s| s.to_str()) {
+                            if !self.has_component(stem) {
+                                if let Ok(bytes) = resolver.read_bytes(&wasm_path) {
+                                    self.register_wasm_companion(stem, wasm_path.display().to_string(), bytes);
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     /// Returns a pre-configured ComponentRegistry containing standard library components.

@@ -8,21 +8,40 @@ use syn::{parse_macro_input, FnArg, ImplItem, ItemImpl, Pat, ReturnType};
 /// Any `pub fn <name>(&mut self, ...)` method defined in the block will automatically
 /// be registered into an auto-generated `impl Component for MyComponent` with dynamic
 /// event dispatching, eliminating the need to write manual string matching or boilerplate error handling.
-///
-/// Supported method signatures:
-/// - `pub fn foo(&mut self)`
-/// - `pub fn foo(&mut self, ctx: &mut Context<'_>)`
-/// - `pub fn foo(&mut self, event: &mut Event)`
-/// - `pub fn foo(&mut self, event: &mut Event, ctx: &mut Context<'_>)`
-/// - `pub fn foo(&mut self, ctx: &mut Context<'_>, event: &mut Event)`
-/// - Return type can be `()` or `Result<(), DispatchError>`.
-///
-/// Lifecycle hooks:
-/// - `pub fn on_mount(&mut self, ctx: &mut Context<'_>)` is automatically wired to `Component::on_mount`.
 #[proc_macro_attribute]
-pub fn component(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn component(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let attr_str = attr.to_string();
+    let is_guest = attr_str.contains("guest");
+    expand_component(item, is_guest)
+}
+
+/// Procedural attribute macro specifically for `directedtype-guest` WebAssembly components.
+#[proc_macro_attribute]
+pub fn guest_component(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    expand_component(item, true)
+}
+
+fn expand_component(item: TokenStream, is_guest: bool) -> TokenStream {
     let input = parse_macro_input!(item as ItemImpl);
     let self_ty = &input.self_ty;
+
+    let (trait_path, ctx_path, error_path, from_payload_path, event_path) = if is_guest {
+        (
+            quote! { directedtype_guest::Component },
+            quote! { directedtype_guest::Context<'_> },
+            quote! { directedtype_guest::DispatchError },
+            quote! { directedtype_guest::FromPayload },
+            quote! { directedtype_guest::Event },
+        )
+    } else {
+        (
+            quote! { directedtype::component::Component },
+            quote! { directedtype::component::Context<'_> },
+            quote! { directedtype::component::DispatchError },
+            quote! { directedtype::component::FromPayload },
+            quote! { directedtype::interaction::Event },
+        )
+    };
 
     let mut match_arms = Vec::new();
     let mut on_mount_impl = None;
@@ -50,7 +69,7 @@ pub fn component(_attr: TokenStream, item: TokenStream) -> TokenStream {
             // Check if it's on_mount
             if method_str == "on_mount" {
                 on_mount_impl = Some(quote! {
-                    fn on_mount(&mut self, ctx: &mut directedtype::component::Context<'_>) {
+                    fn on_mount(&mut self, ctx: &mut #ctx_path) {
                         self.on_mount(ctx);
                     }
                 });
@@ -79,9 +98,9 @@ pub fn component(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     ArgKind::Payload => {
                         let var_name = quote::format_ident!("__dt_arg_{}", i);
                         extract_stmts.push(quote! {
-                            let #var_name = match directedtype::component::FromPayload::from_payload(event.payload.as_ref()) {
+                            let #var_name = match #from_payload_path::from_payload(event.payload.as_ref()) {
                                 Some(v) => v,
-                                None => return Err(directedtype::component::DispatchError::Custom(
+                                None => return Err(#error_path::Custom(
                                     format!("Invalid or missing payload for method '{}'", #method_str)
                                 )),
                             };
@@ -127,18 +146,18 @@ pub fn component(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let expanded = quote! {
         #input
 
-        impl directedtype::component::Component for #self_ty {
+        impl #trait_path for #self_ty {
             #on_mount_tokens
 
             fn dispatch(
                 &mut self,
                 method: &str,
-                event: &mut directedtype::interaction::Event,
-                ctx: &mut directedtype::component::Context<'_>,
-            ) -> Result<(), directedtype::component::DispatchError> {
+                event: &mut #event_path,
+                ctx: &mut #ctx_path,
+            ) -> Result<(), #error_path> {
                 match method {
                     #(#match_arms)*
-                    _ => Err(directedtype::component::DispatchError::MethodNotFound {
+                    _ => Err(#error_path::MethodNotFound {
                         component: stringify!(#self_ty).into(),
                         method: method.into(),
                     }),

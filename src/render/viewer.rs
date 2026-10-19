@@ -1950,6 +1950,8 @@ impl ViewerApp {
         if let Some(compiled) = &mut self.compiled {
             let base_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
             let resolver = FsResolver;
+            self.component_registry.auto_discover_wasm(&path, &resolver);
+            self.component_registry.auto_discover_wasm_for_document(&new_doc, &path, &resolver);
             match CompiledDocument::compile_with_registry(
                 &new_doc,
                 logical_w,
@@ -3711,7 +3713,7 @@ pub fn run_viewer_with_document(
 pub fn run_viewer_with_file_and_registry(
     file_path: PathBuf,
     config: ViewerConfig,
-    registry: ComponentRegistry,
+    mut registry: ComponentRegistry,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let source = std::fs::read_to_string(&file_path)
         .map_err(|e| format!("Failed to read file '{}': {e}", file_path.display()))?;
@@ -3719,6 +3721,8 @@ pub fn run_viewer_with_file_and_registry(
         .map_err(|e| format!("Parse error in '{}': {e}", file_path.display()))?;
     let base_dir = file_path.parent().unwrap_or_else(|| std::path::Path::new("."));
     let resolver = FsResolver;
+    registry.auto_discover_wasm(&file_path, &resolver);
+    registry.auto_discover_wasm_for_document(&doc, &file_path, &resolver);
     let compiled = CompiledDocument::compile_with_registry(
         &doc,
         config.width as f64,

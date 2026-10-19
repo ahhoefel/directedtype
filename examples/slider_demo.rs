@@ -1,8 +1,11 @@
-use directedtype::component::{ComponentRegistry, Context};
-use directedtype::render::{run_viewer_with_file_and_registry, ViewerConfig};
-use directedtype_macros::component;
-use std::path::PathBuf;
+#![allow(non_snake_case)]
 
+use directedtype_guest::prelude::*;
+
+/// Object-Oriented Rust companion struct for the `AudioMixer` DTML component.
+///
+/// Encapsulates audio level state (`master`, `bass`, `treble`) and reactive setter callbacks,
+/// communicating strictly via DirectedType's One-Way Pipeline (reading ports & emitting mutations).
 #[derive(Default, Debug)]
 pub struct AudioMixer {
     pub master: f64,
@@ -24,42 +27,26 @@ impl AudioMixer {
         }
     }
 
-    pub fn set_master(&mut self, val: f64, ctx: &mut Context<'_>) {
+    pub fn set_master(&mut self, val: f64, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         let rounded = val.round();
         self.master = rounded;
         ctx.set_state("master", rounded);
+        Ok(())
     }
 
-    pub fn set_bass(&mut self, val: f64, ctx: &mut Context<'_>) {
+    pub fn set_bass(&mut self, val: f64, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         let rounded = val.round();
         self.bass = rounded;
         ctx.set_state("bass", rounded);
+        Ok(())
     }
 
-    pub fn set_treble(&mut self, val: f64, ctx: &mut Context<'_>) {
+    pub fn set_treble(&mut self, val: f64, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         let rounded = val.round();
         self.treble = rounded;
         ctx.set_state("treble", rounded);
+        Ok(())
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut registry = ComponentRegistry::standard();
-    registry.register("AudioMixer", || Box::new(AudioMixer::default()));
-
-    let config = ViewerConfig {
-        title: "DirectedType - Standard Slider Component & Callbacks Demo".into(),
-        width: 800,
-        height: 600,
-        ..Default::default()
-    };
-
-    let dt_path = PathBuf::from("examples/slider_demo.dt");
-    println!("Launching DirectedType Standard Slider Demo...");
-    println!("  • File: {}", dt_path.display());
-    println!("  • Features: hardware pointer capture, smooth dragging, and typed callbacks");
-    println!("  • Press 'd' to dump DOM tree, 'i' to toggle live inspector, 'q' or Esc to exit");
-
-    run_viewer_with_file_and_registry(dt_path, config, registry)?;
-    Ok(())
-}
+export_component!(AudioMixer);

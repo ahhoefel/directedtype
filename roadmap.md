@@ -5,6 +5,8 @@
 ### 1. Diagnostics & Language Ergonomics
 * **Human-Readable Node & Error Diagnostics**: Replace raw numbered node IDs (`NodeId(1)`) with hierarchical, human-readable DOM/DAG component path references (e.g. `Window/VStack/Card#header/Text`). Add source spans and clear diagnostic explanations to all compiler and runtime errors.
 * **Compile-Time DAG Flow Checks & Cycle Diagnostics**: Find ways to compile-time check DAG flow compatibility. For example, does wrapping a top-down sized component with `\PadOut` produce a clear error? Identify component combinations that conflict or need clearer diagnostics explaining why certain component pairs cannot compose.
+* **Ternary Compile-time Specialization**: Is this necessary? What does it allow? Could we do without it?
+* Remove duplicate : and = default assignment style. Just pick one.
 
 ### 2. Documentation
 * **Language & Component Reference**: Public-facing documentation of the language ([docs/language.md](file:///Users/hoefel/dev/directedtype/docs/language.md))—capturing scope variables, implicit functions, and native primitives like `\Text`—and documentation of the individual standard library components (potentially using generated documentation components).

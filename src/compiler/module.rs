@@ -15,12 +15,25 @@ pub trait FileResolver {
     fn canonicalize(&self, path: &Path) -> Result<PathBuf, String> {
         Ok(normalize_path(path))
     }
+    fn read_bytes(&self, path: &Path) -> Result<Vec<u8>, String> {
+        std::fs::read(path).map_err(|e| e.to_string())
+    }
     /// Checks if a companion Rust file exists for the given DirectedType file.
     fn find_companion_rs(&self, dt_path: &Path) -> Option<PathBuf> {
         if dt_path.extension().and_then(|e| e.to_str()) == Some("dt") {
             let rs_path = dt_path.with_extension("rs");
             if self.read(&rs_path).is_ok() {
                 return Some(rs_path);
+            }
+        }
+        None
+    }
+    /// Checks if a companion WebAssembly file exists for the given DirectedType file.
+    fn find_companion_wasm(&self, dt_path: &Path) -> Option<PathBuf> {
+        if dt_path.extension().and_then(|e| e.to_str()) == Some("dt") {
+            let wasm_path = dt_path.with_extension("wasm");
+            if self.read_bytes(&wasm_path).is_ok() {
+                return Some(wasm_path);
             }
         }
         None
@@ -45,12 +58,14 @@ impl FileResolver for FsResolver {
 #[derive(Debug, Default, Clone)]
 pub struct VirtualResolver {
     files: HashMap<PathBuf, String>,
+    binary_files: HashMap<PathBuf, Vec<u8>>,
 }
 
 impl VirtualResolver {
     pub fn new() -> Self {
         Self {
             files: HashMap::new(),
+            binary_files: HashMap::new(),
         }
     }
 
@@ -60,6 +75,14 @@ impl VirtualResolver {
         let s = content.into();
         self.files.insert(norm, s.clone());
         self.files.insert(p, s);
+    }
+
+    pub fn insert_bytes(&mut self, path: impl Into<PathBuf>, bytes: impl Into<Vec<u8>>) {
+        let p = path.into();
+        let norm = normalize_path(&p);
+        let b = bytes.into();
+        self.binary_files.insert(norm, b.clone());
+        self.binary_files.insert(p, b);
     }
 }
 
@@ -73,6 +96,17 @@ impl FileResolver for VirtualResolver {
             return Ok(content.clone());
         }
         Err(format!("File not found in virtual filesystem: {}", path.display()))
+    }
+
+    fn read_bytes(&self, path: &Path) -> Result<Vec<u8>, String> {
+        let norm = normalize_path(path);
+        if let Some(bytes) = self.binary_files.get(&norm) {
+            return Ok(bytes.clone());
+        }
+        if let Some(bytes) = self.binary_files.get(path) {
+            return Ok(bytes.clone());
+        }
+        Err(format!("Binary file not found in virtual filesystem: {}", path.display()))
     }
 
     fn canonicalize(&self, path: &Path) -> Result<PathBuf, String> {

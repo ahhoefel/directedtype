@@ -1,7 +1,6 @@
-use directedtype::component::{ComponentRegistry, Context, DispatchError};
-use directedtype::render::{run_viewer_with_file_and_registry, ViewerConfig};
-use directedtype_macros::component;
-use std::path::PathBuf;
+#![allow(non_snake_case)]
+
+use directedtype_guest::prelude::*;
 
 /// Object-Oriented Rust companion struct for the `Counter` DTML component.
 ///
@@ -43,26 +42,4 @@ impl Counter {
     }
 }
 
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut registry = ComponentRegistry::standard();
-    registry.register_companion("Counter", "examples/Counter.rs", || {
-        Box::new(Counter::default())
-    });
-
-    let config = ViewerConfig {
-        title: "DirectedType - Reactive Counter Component".into(),
-        width: 800,
-        height: 600,
-        ..Default::default()
-    };
-
-    let dt_path = PathBuf::from("examples/Counter.dt");
-    println!("Launching DirectedType Interactive Counter Example...");
-    println!("  • File: {}", dt_path.display());
-    println!("  • Click '+' to increment, '-' to decrement, and 'Reset' to reset");
-    println!("  • Press 'd' to dump DOM tree to stdout, 'q' or Esc to exit");
-
-    run_viewer_with_file_and_registry(dt_path, config, registry)?;
-    Ok(())
-}
+export_component!(Counter);

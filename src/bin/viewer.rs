@@ -86,7 +86,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let base_dir = file_path.parent().unwrap_or_else(|| std::path::Path::new("."));
     let resolver = directedtype::compiler::FsResolver;
-    let registry = directedtype::component::ComponentRegistry::standard();
+    let mut registry = directedtype::component::ComponentRegistry::standard();
+    registry.auto_discover_wasm(&file_path, &resolver);
+    registry.auto_discover_wasm_for_document(&doc, &file_path, &resolver);
 
     println!("Evaluating DAG layout ({}x{})...", width, height);
     let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(

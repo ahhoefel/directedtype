@@ -1,0 +1,22 @@
+[package]
+name = "directedtype-guest"
+version = "0.1.0"
+edition = "2021"
+description = "Lightweight guest SDK for DirectedType WebAssembly companion components"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+directedtype-macros = { path = "../directedtype-macros" }
+thiserror = "2.0"
+
+[[example]]
+name = "Counter"
+path = "../examples/Counter.rs"
+crate-type = ["cdylib"]
+
+
+[[example]]
+name = "slider_demo"
+path = "../examples/slider_demo.rs"
+crate-type = ["cdylib"]

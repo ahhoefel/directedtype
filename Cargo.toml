@@ -4,14 +4,18 @@ version = "0.1.0"
 edition = "2021"
 description = "A pure functional reactive layout engine based on a Directed Acyclic Graph (DAG) of layout equations"
 license = "MIT OR Apache-2.0"
+autoexamples = false
 
 [workspace]
 members = [
     ".",
     "directedtype-macros",
+    "directedtype-guest",
+    "xtask",
 ]
 
 [dependencies]
+directedtype-guest = { path = "directedtype-guest" }
 directedtype-macros = { path = "directedtype-macros" }
 image = "0.25.10"
 logos = "0.14"
@@ -20,22 +24,13 @@ objc2 = "0.5.2"
 parley = "0.11.1"
 pollster = "1.0.1"
 raw-window-handle = "0.6.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 thiserror = "2.0"
 vello = "0.10.0"
+wasmi = "2.0.0"
 winit = "0.30.13"
 
 [dev-dependencies]
 pretty_assertions = "1.4"
-
-[[example]]
-name = "counter"
-path = "examples/Counter.rs"
-
-[[example]]
-name = "button_demo"
-path = "examples/button_demo.rs"
-
-[[example]]
-name = "vstack_demo"
-path = "examples/vstack_demo.rs"
 
