@@ -15,19 +15,19 @@
 \let link_card_style = \CardStyle(
     bg: #f8fafc,
     border_color: #cbd5e1,
-    border_width: 1,
-    radius: 12,
-    padding_x: 24,
-    padding_y: 20
+    border_width: 1px,
+    radius: 12px,
+    padding_x: 24px,
+    padding_y: 20px
 );
 
 \let callout_card_style = \CardStyle(
     bg: #eff6ff,
     border_color: #93c5fd,
-    border_width: 1,
-    radius: 12,
-    padding_x: 24,
-    padding_y: 20
+    border_width: 1px,
+    radius: 12px,
+    padding_x: 24px,
+    padding_y: 20px
 );
 
 // Custom Brand LinkStyles demonstrating LinkStyle component polymorphism
@@ -91,60 +91,60 @@
     focused_bg: #e0f2fe
 );
 
-\PadOut(padding: 40, x: 0, y: 0) {
+\PadOut(padding: 40px, x: 0, y: 0) {
     \VStackStretch(
-        width: min(max(window.width - 80, 400), 740),
-        gap: 22
+        width: min(max(window.width - 80px, 400px), 740px),
+        gap: 22px
     ) {
         \Anchor("top")
 
         // Title & Header
-        \VStack(gap: 8) {
-            \Text(size: 32, weight: 700, color: #0f172a) {
+        \VStack(gap: 8px) {
+            \Text(size: 32px, weight: 700, color: #0f172a) {
                 Hypertext Links & In-Page Navigation
             }
-            \Text(size: 16, color: #64748b) {
+            \Text(size: 16px, color: #64748b) {
                 Demonstrating inline links, in-page anchor navigation, and window-level scrolling.
             }
         }
 
         // Table of Contents Card (relies on ambient env link_style = link_default)
-        \Card(style: callout_card_style, gap: 10) {
-            \Text(size: 14, weight: 700, color: #1d4ed8) {
+        \Card(style: callout_card_style, gap: 10px) {
+            \Text(size: 14px, weight: 700, color: #1d4ed8) {
                 TABLE OF CONTENTS (IN-PAGE ANCHORS)
             }
-            \VStack(gap: 6) {
-                \Text(size: 15, color: #1e293b) {
+            \VStack(gap: 6px) {
+                \Text(size: 15px, color: #1e293b) {
                     • \Link(url: "#inline-links"){1. Inline Text Hyperlinks}
                 }
-                \Text(size: 15, color: #1e293b) {
+                \Text(size: 15px, color: #1e293b) {
                     • \Link(url: "#custom-styling"){2. Custom Link Styling & Accents}
                 }
-                \Text(size: 15, color: #1e293b) {
+                \Text(size: 15px, color: #1e293b) {
                     • \Link(url: "#quick-nav"){3. External Resource Links}
                 }
-                \Text(size: 15, color: #1e293b) {
+                \Text(size: 15px, color: #1e293b) {
                     • \Link(url: "#deep-section"){4. Deep Document Section (Scroll Test)}
                 }
             }
         }
 
-        \Divider(thickness: 1, color: #e2e8f0)
+        \Divider(thickness: 1px, color: #e2e8f0)
 
         // Section 1
         \Card(
             style: link_card_style,
-            gap: 14,
+            gap: 14px,
             focused_bg: #eff6ff,
             focused_border_color: #3b82f6,
-            focused_border_width: 2
+            focused_border_width: 2px
         ) {
             \Anchor("inline-links") {
-                \Text(size: 14, weight: 700, color: #475569) {
+                \Text(size: 14px, weight: 700, color: #475569) {
                     1. INLINE TEXT WITH EMBEDDED HYPERLINKS
                 }
             }
-            \Text(size: 16, width: parent.width - 48, color: #1e293b) {
+            \Text(size: 16px, width: parent.width - 48px, color: #1e293b) {
                 DirectedType now supports first-class inline components. You can read the documentation at \Link(url: "https://directedtype.org"){directedtype.org} or check out our project repository on \Link(url: "https://github.com"){GitHub}. Notice how spaces between adjacent inline links and plain words are naturally preserved by the cursor stream.
             }
         }
@@ -152,17 +152,17 @@
         // Section 2
         \Card(
             style: callout_card_style,
-            gap: 12,
+            gap: 12px,
             focused_bg: #dbeafe,
             focused_border_color: #2563eb,
-            focused_border_width: 2
+            focused_border_width: 2px
         ) {
             \Anchor("custom-styling") {
-                \Text(size: 14, weight: 700, color: #1d4ed8) {
+                \Text(size: 14px, weight: 700, color: #1d4ed8) {
                     2. CUSTOM LINK STYLING & ACCENTS
                 }
             }
-            \Text(size: 16, width: parent.width - 48, color: #1e293b) {
+            \Text(size: 16px, width: parent.width - 48px, color: #1e293b) {
                 Links can define custom LinkStyle bundles: visit \Link(url: "https://vello.dev", link_style: vello_link_style){Vello 2D Graphics} for GPU compute rendering, \Link(url: "https://parley.dev", link_style: parley_link_style){Parley} for typographic shaping, or \Link(url: "https://crates.io", link_style: crates_link_style){Crates.io} without an initial underline.
             }
         }
@@ -170,48 +170,48 @@
         // Section 3
         \Card(
             style: link_card_style,
-            gap: 10,
+            gap: 10px,
             focused_bg: #f8fafc,
             focused_border_color: #6366f1,
-            focused_border_width: 2
+            focused_border_width: 2px
         ) {
             \Anchor("quick-nav") {
-                \Text(size: 14, weight: 700, color: #334155) {
+                \Text(size: 14px, weight: 700, color: #334155) {
                     3. EXTERNAL RESOURCE LINKS
                 }
             }
-            \Text(size: 15, width: parent.width - 48, color: #334155) {
+            \Text(size: 15px, width: parent.width - 48px, color: #334155) {
                 Explore: \Link(url: "https://google.com"){Google} | \Link(url: "https://rust-lang.org", link_style: rust_link_style){Rust Language} | \Link(url: "https://w3.org", link_style: w3c_link_style){W3C Standards} | \Link(url: "https://github.com/directedtype"){Source Repository}
             }
         }
 
-        \Spacer(height: 120)
+        \Spacer(height: 120px)
 
         // Section 4 (Deep Section to test window scrolling)
         \Card(
             style: link_card_style,
-            gap: 14,
+            gap: 14px,
             focused_bg: #f0fdf4,
             focused_border_color: #059669,
-            focused_border_width: 2
+            focused_border_width: 2px
         ) {
             \Anchor("deep-section") {
-                \Text(size: 14, weight: 700, color: #0f766e) {
+                \Text(size: 14px, weight: 700, color: #0f766e) {
                     4. DEEP DOCUMENT SECTION
                 }
             }
-            \Text(size: 16, width: parent.width - 48, color: #1e293b) {
+            \Text(size: 16px, width: parent.width - 48px, color: #1e293b) {
                 You navigated here via an in-page anchor! Clicking on \Text(weight: 600){#deep-section} scrolled the window directly to this element. Notice the subtle overlay scrollbar indicator on the right edge of the window.
             }
-            \Text(size: 15, color: #2563eb) {
+            \Text(size: 15px, color: #2563eb) {
                 \Link(url: "#top"){↑ Back to top}
             }
         }
 
-        \Divider(thickness: 1, color: #e2e8f0)
+        \Divider(thickness: 1px, color: #e2e8f0)
 
         // Footer Note
-        \Text(size: 13, color: #94a3b8) {
+        \Text(size: 13px, color: #94a3b8) {
             DirectedType Hypertext Navigation: Inline Spans, Anchor Scopes, Window Scrolling, and Trackpad/Wheel Interaction.
         }
     }

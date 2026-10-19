@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 /// A runtime value exchanged between host layout engine and guest components.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
-    Number(f64),
+    Integer(i64),
+    Float(f64),
+    Distance(f64),
     String(String),
     Bool(bool),
     Color(String),
@@ -15,9 +17,25 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            Value::Integer(i) => Some(*i),
+            _ => None,
+        }
+    }
+
     pub fn as_f64(&self) -> Option<f64> {
         match self {
-            Value::Number(n) => Some(*n),
+            Value::Integer(i) => Some(*i as f64),
+            Value::Float(n) | Value::Distance(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    pub fn as_distance(&self) -> Option<f64> {
+        match self {
+            Value::Distance(d) => Some(*d),
+            Value::Integer(0) => Some(0.0),
             _ => None,
         }
     }
@@ -40,7 +58,8 @@ impl Value {
     pub fn is_truthy(&self) -> bool {
         match self {
             Value::Bool(b) => *b,
-            Value::Number(n) => *n != 0.0,
+            Value::Integer(i) => *i != 0,
+            Value::Float(n) | Value::Distance(n) => *n != 0.0,
             Value::String(s) => !s.is_empty(),
             Value::Color(_) => true,
             Value::Node(_) => true,
@@ -51,31 +70,31 @@ impl Value {
 
 impl From<f64> for Value {
     fn from(v: f64) -> Self {
-        Value::Number(v)
+        Value::Float(v)
     }
 }
 
 impl From<f32> for Value {
     fn from(v: f32) -> Self {
-        Value::Number(v as f64)
+        Value::Float(v as f64)
     }
 }
 
 impl From<i32> for Value {
     fn from(v: i32) -> Self {
-        Value::Number(v as f64)
+        Value::Integer(v as i64)
     }
 }
 
 impl From<i64> for Value {
     fn from(v: i64) -> Self {
-        Value::Number(v as f64)
+        Value::Integer(v)
     }
 }
 
 impl From<usize> for Value {
     fn from(v: usize) -> Self {
-        Value::Number(v as f64)
+        Value::Integer(v as i64)
     }
 }
 

@@ -30,13 +30,13 @@ impl Slider {
 impl Slider {
     pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
         self.on_change = ctx.get_callback("on_change");
-        if let Some(min) = ctx.get_port_number("min") {
+        if let Some(min) = ctx.get_port_float("min") {
             self.min = min;
         }
-        if let Some(max) = ctx.get_port_number("max") {
+        if let Some(max) = ctx.get_port_float("max") {
             self.max = max;
         }
-        if let Some(val) = ctx.get_port_number("value") {
+        if let Some(val) = ctx.get_port_float("value") {
             self.value = val.clamp(self.min, self.max);
             ctx.set_state("current_value", self.value);
         }
@@ -63,7 +63,7 @@ impl Slider {
     }
 
     fn handle_drag(&mut self, local_x: f64, ctx: &mut Context<'_>) {
-        let width = ctx.get_port_number("width").unwrap_or(200.0);
+        let width = ctx.get_port_distance("width").unwrap_or(200.0);
         let ratio = if width > 0.0 {
             (local_x / width).clamp(0.0, 1.0)
         } else {

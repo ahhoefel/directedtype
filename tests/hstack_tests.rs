@@ -8,10 +8,10 @@ fn test_hstack_default_top_alignment_and_gap() {
     let input = r#"
     \use "components/HStack.dt"
 
-    \HStack(x: 10, y: 20, gap: 16) {
-        \Rect(width: 100, height: 40, color: #3b82f6)
-        \Rect(width: 150, height: 50, color: #10b981)
-        \Rect(width: 80, height: 30, color: #f59e0b)
+    \HStack(x: 10px, y: 20px, gap: 16px) {
+        \Rect(width: 100px, height: 40px, color: #3b82f6)
+        \Rect(width: 150px, height: 50px, color: #10b981)
+        \Rect(width: 80px, height: 30px, color: #f59e0b)
     }
     "#;
 
@@ -61,9 +61,9 @@ fn test_hstack_center_and_centered_alignment() {
     let input = r#"
     \use "components/HStack.dt"
 
-    \HStack(x: 0, y: 10, align: Align.Center, gap: 10) {
-        \Rect(width: 100, height: 60, color: #3b82f6)
-        \Rect(width: 120, height: 40, color: #10b981)
+    \HStack(x: 0, y: 10px, align: Align.Center, gap: 10px) {
+        \Rect(width: 100px, height: 60px, color: #3b82f6)
+        \Rect(width: 120px, height: 40px, color: #10b981)
     }
     "#;
 
@@ -95,9 +95,9 @@ fn test_hstack_bottom_alignment() {
     let input = r#"
     \use "components/HStack.dt"
 
-    \HStack(x: 0, y: 10, align: Align.Bottom, gap: 10) {
-        \Rect(width: 80, height: 70, color: #ef4444)
-        \Rect(width: 80, height: 30, color: #3b82f6)
+    \HStack(x: 0, y: 10px, align: Align.Bottom, gap: 10px) {
+        \Rect(width: 80px, height: 70px, color: #ef4444)
+        \Rect(width: 80px, height: 30px, color: #3b82f6)
     }
     "#;
 
@@ -134,7 +134,7 @@ fn test_hstack_with_button_and_card_composition() {
     \use "theme/default.dt"
 
     \Card(style: card_dark, x: 0, y: 0) {
-        \HStack(gap: 12) {
+        \HStack(gap: 12px) {
             \Button(style: button_primary, label: "First")
             \Button(style: button_secondary, label: "Second")
             \Button(style: button_outline, label: "Third")
@@ -174,12 +174,12 @@ fn test_hstack_nested_in_vstack() {
     \use "components/VStack.dt"
     \use "components/HStack.dt"
 
-    \VStack(x: 10, y: 10, width: 300, gap: 20) {
-        \HStack(gap: 15) {
-            \Rect(width: 60, height: 30, color: #3b82f6)
-            \Rect(width: 80, height: 30, color: #10b981)
+    \VStack(x: 10px, y: 10px, width: 300px, gap: 20px) {
+        \HStack(gap: 15px) {
+            \Rect(width: 60px, height: 30px, color: #3b82f6)
+            \Rect(width: 80px, height: 30px, color: #10b981)
         }
-        \Rect(width: 200, height: 50, color: #f59e0b)
+        \Rect(width: 200px, height: 50px, color: #f59e0b)
     }
     "#;
 
@@ -223,9 +223,9 @@ fn test_hstack_default_zero_gap() {
     let input = r#"
     \use "components/HStack.dt"
 
-    \HStack(x: 10, y: 20) {
-        \Rect(width: 40, height: 30, color: #3b82f6)
-        \Rect(width: 50, height: 30, color: #10b981)
+    \HStack(x: 10px, y: 20px) {
+        \Rect(width: 40px, height: 30px, color: #3b82f6)
+        \Rect(width: 50px, height: 30px, color: #10b981)
     }
     "#;
 
@@ -254,9 +254,9 @@ fn test_hstack_stretch_alignment() {
     let input = r#"
     \use "components/HStack.dt"
 
-    \HStackStretch(height: 120, x: 10, y: 20, gap: 16) {
-        \Rect(width: 100, color: #3b82f6)
-        \Rect(width: 150, color: #10b981)
+    \HStackStretch(height: 120px, x: 10px, y: 20px, gap: 16px) {
+        \Rect(width: 100px, color: #3b82f6)
+        \Rect(width: 150px, color: #10b981)
     }
     "#;
 
@@ -287,9 +287,9 @@ fn test_hstack_inside_center_no_cycle() {
     \use "components/HStack.dt"
 
     \Center {
-        \HStack(gap: 15) {
-            \Rect(width: 100, height: 60, color: #ef4444)
-            \Rect(width: 80, height: 40, color: #22c55e)
+        \HStack(gap: 15px) {
+            \Rect(width: 100px, height: 60px, color: #ef4444)
+            \Rect(width: 80px, height: 40px, color: #22c55e)
         }
     }
     "#;

@@ -1,4 +1,5 @@
 [alias]
 xtask = "run --package xtask --"
 build-wasm = "run --package xtask -- build-wasm"
+viewer = "run --bin viewer --"
 

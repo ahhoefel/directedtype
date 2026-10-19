@@ -13,8 +13,8 @@ fn test_nested_let_node_in_dom_and_scope() {
 
     \Component Card() {
       \Container {
-        \let header = \Rect(x: 10, y: 10, width: 200, height: 50, color: #111)
-        \let footer = \Rect(x: 10, y: header.bottom + 10, width: 200, height: 30, color: #222)
+        \let header = \Rect(x: 10px, y: 10px, width: 200px, height: 50px, color: #111)
+        \let footer = \Rect(x: 10px, y: header.bottom + 10px, width: 200px, height: 30px, color: #222)
       }
     }
 
@@ -89,8 +89,8 @@ fn test_nested_let_scalar_expr() {
 
     \Component Card() {
       \Box {
-        \let margin = 25
-        \Rect(x: margin, y: margin, width: 100, height: 50, color: #333)
+        \let margin = 25px
+        \Rect(x: margin, y: margin, width: 100px, height: 50px, color: #333)
       }
     }
 
@@ -138,9 +138,9 @@ fn test_declarative_forward_reference_in_component() {
 
     \Component Layout() {
       // First rect references 'banner' which is defined LATER in a nested slot
-      \Rect(x: 0, y: 0, width: banner.width + 20, height: banner.height, color: #444)
+      \Rect(x: 0, y: 0, width: banner.width + 20px, height: banner.height, color: #444)
       \Container {
-        \let banner = \Rect(x: 5, y: 5, width: 150, height: 40, color: #555)
+        \let banner = \Rect(x: 5px, y: 5px, width: 150px, height: 40px, color: #555)
       }
     }
 
@@ -195,7 +195,7 @@ fn test_nested_alias_exposes_public_port() {
 
     \Component Modal() {
       \Wrapper {
-        \let body = \Rect(x: 20, y: 20, width: 300, height: 200, color: #666)
+        \let body = \Rect(x: 20px, y: 20px, width: 300px, height: 200px, color: #666)
         \alias body_width = body.width
         \alias body_height = body.height
       }
@@ -265,14 +265,14 @@ fn test_nested_alias_forward_reference() {
       // Alias defined at top level referring to a let node defined inside a nested slot
       \alias content_h = content.height
 
-      \Rect(x: 0, y: 0, width: 100, height: 100, color: #888) {
-        \let content = \Rect(x: 5, y: 5, width: 90, height: 45, color: #999)
+      \Rect(x: 0, y: 0, width: 100px, height: 100px, color: #888) {
+        \let content = \Rect(x: 5px, y: 5px, width: 90px, height: 45px, color: #999)
       }
     }
 
     \Component App() {
       \let card = \Card()
-      \Rect(x: 0, y: 0, width: 50, height: card.content_h, color: #aaa)
+      \Rect(x: 0, y: 0, width: 50px, height: card.content_h, color: #aaa)
     }
 
     \App
@@ -339,20 +339,20 @@ fn test_nested_env_rejected_by_parser() {
 #[test]
 fn test_shorthand_property_names_in_component_and_children() {
     let input = r#"
-    \Component Wrapper(gap: Number, font_size: Number) {
+    \Component Wrapper(gap: Distance, font_size: Distance) {
       \Children {
         gap,
         font_size
       }
     }
 
-    \Component Consumer(gap: Number, font_size: Number) {
+    \Component Consumer(gap: Distance, font_size: Distance) {
       \Rect(x: 0, y: 0, width: gap, height: font_size, color: #123)
     }
 
     \Component App() {
-      \let gap = 42;
-      \let font_size = 18;
+      \let gap = 42px;
+      \let font_size = 18px;
 
       \Wrapper(gap, font_size) {
         \Consumer()

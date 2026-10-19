@@ -15,43 +15,43 @@
         }
     }
     // Text bounding box (cyan)
-    \Rect(x: t.left, y: t.top, width: t.width, height: t.height, color: #00000000, border_color: #38bdf8, border_width: 1)
+    \Rect(x: t.left, y: t.top, width: t.width, height: t.height, color: #00000000, border_color: #38bdf8, border_width: 1px)
     // Baseline (red)
     \let baseline_y = t.font.baseline;
-    \let guide_outset = 25;
+    \let guide_outset = 25px;
     \let guide_x = t.left - guide_outset;
     \let guide_width = t.width + (2 * guide_outset);
     \let cap_height_y = baseline_y - t.font.cap_height;
     \let x_height_y = baseline_y - t.font.x_height;
     \let descender_y = baseline_y + t.font.descent;
 
-    \Rect(x: guide_x, y: baseline_y, width: guide_width, height: 1, color: #ef4444)
-    \Rect(x: guide_x, y: cap_height_y, width: guide_width, height: 1, color: #22c55e)
-    \Rect(x: guide_x, y: x_height_y, width: guide_width, height: 1, color: #f97316)
-    \Rect(x: guide_x, y: descender_y, width: guide_width, height: 1, color: #a855f7)
+    \Rect(x: guide_x, y: baseline_y, width: guide_width, height: 1px, color: #ef4444)
+    \Rect(x: guide_x, y: cap_height_y, width: guide_width, height: 1px, color: #22c55e)
+    \Rect(x: guide_x, y: x_height_y, width: guide_width, height: 1px, color: #f97316)
+    \Rect(x: guide_x, y: descender_y, width: guide_width, height: 1px, color: #a855f7)
 
-    \Measurement(x: guide_x - 10, y1: t.top, y2: t.bottom)
-    \Measurement(x: guide_x + guide_width + 10, y1: t.y, y2: baseline_y)
-    \Measurement(x: guide_x + guide_width + 30, y1: cap_height_y, y2: descender_y)
+    \Measurement(x: guide_x - 10px, y1: t.top, y2: t.bottom)
+    \Measurement(x: guide_x + guide_width + 10px, y1: t.y, y2: baseline_y)
+    \Measurement(x: guide_x + guide_width + 30px, y1: cap_height_y, y2: descender_y)
     \Measurement(x: guide_x + guide_width/2, y1: self.y, y2: t.y)
     \Measurement(x: guide_x + guide_width/2, y1: t.bottom, y2: self.bottom)
-    \Measurement(x: self.right + 10, y1: self.top, y2: self.bottom, color: #000000)
+    \Measurement(x: self.right + 10px, y1: self.top, y2: self.bottom, color: #000000)
 
 }
 
-\Component Measurement(x, y1, y2, arm: 5, color: #ffffff) {
-    \env font = \Font(family: "Arial", size: 10);
-    \Rect(x: x, y: y1, width: 1, height: y2 - y1, color: #ef4444)
-    \Rect(x: x-arm, y: y1, width: 2*arm, height: 1, color: #ef4444)
-    \Rect(x: x-arm, y: y2, width: 2*arm, height: 1, color: #ef4444)
-    \Text(x: x + 2, y: (y1 + y2)/2, color: color, text: to_fixed(y2 - y1, 2))
+\Component Measurement(x, y1, y2, arm: 5px, color: #ffffff) {
+    \env font = \Font(family: "Arial", size: 10px);
+    \Rect(x: x, y: y1, width: 1px, height: y2 - y1, color: #ef4444)
+    \Rect(x: x-arm, y: y1, width: 2*arm, height: 1px, color: #ef4444)
+    \Rect(x: x-arm, y: y2, width: 2*arm, height: 1px, color: #ef4444)
+    \Text(x: x + 2px, y: (y1 + y2)/2, color: color, text: to_fixed(distance_to_float(y2 - y1, px), 2))
 }
 
 \Center{
-    \VStack(shrink: true, gap: 50) {
-        \Box(width: 1000, height: 160, font: \Font(family: "Arial", size: 120, line_height: 180, weight: 700))
-        \Box(width: 1000, height: 160, font: \Font(family: "Times New Roman", size: 120, line_height: 180, weight: 700))
-        \Box(width: 1000, height: 160, font: \Font(family: "Georgia", size: 120, line_height: 180, weight: 700))
-        \Box(width: 1000, height: 160, font: \Font(family: "Courier New", size: 120, line_height: 180, weight: 700))
+    \VStack(shrink: true, gap: 50px) {
+        \Box(width: 1000px, height: 160px, font: \Font(family: "Arial", size: 120px, line_height: 180px, weight: 700))
+        \Box(width: 1000px, height: 160px, font: \Font(family: "Times New Roman", size: 120px, line_height: 180px, weight: 700))
+        \Box(width: 1000px, height: 160px, font: \Font(family: "Georgia", size: 120px, line_height: 180px, weight: 700))
+        \Box(width: 1000px, height: 160px, font: \Font(family: "Courier New", size: 120px, line_height: 180px, weight: 700))
     }
 }

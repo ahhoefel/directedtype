@@ -8,7 +8,7 @@ use std::path::Path;
 fn test_ctx_window_scroll_to() {
     let source = r##"
         \Component TestComp {
-            \Rect(x: 0, y: 0, width: 100, height: 100, color: #1e293b, on_click: self.click)
+            \Rect(x: 0, y: 0, width: 100px, height: 100px, color: #1e293b, on_click: self.click)
         }
         \TestComp
     "##;
@@ -73,12 +73,12 @@ fn test_link_default_view_is_window() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        \VStack(width: 800, gap: 20) {
+        \VStack(width: 800px, gap: 20px) {
             \Link(url: "#target_header", link_style: link_default) {
                 Jump to Target
             }
             \Anchor("target_header") {
-                \Rect(width: 200, height: 50, color: #3b82f6)
+                \Rect(width: 200px, height: 50px, color: #3b82f6)
             }
         }
     "##;
@@ -130,9 +130,9 @@ fn test_link_custom_view_is_scroll_view() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        \let pane = \ScrollView(width: 400, height: 250) {
+        \let pane = \ScrollView(width: 400px, height: 250px) {
             \Anchor("inside_pane") {
-                \Rect(width: 100, height: 40, color: #10b981)
+                \Rect(width: 100px, height: 40px, color: #10b981)
             }
         };
 
@@ -187,8 +187,8 @@ fn test_scroll_view_hardware_clip_boundary() {
     let source = r##"
         \use "components/ScrollView.dt";
 
-        \ScrollView(width: 300, height: 200, radius: 12) {
-            \Rect(width: 400, height: 500, color: #3b82f6)
+        \ScrollView(width: 300px, height: 200px, radius: 12px) {
+            \Rect(width: 400px, height: 500px, color: #3b82f6)
         }
     "##;
 
@@ -217,8 +217,8 @@ fn test_scroll_view_on_scroll_event() {
     let source = r##"
         \use "components/ScrollView.dt";
 
-        \ScrollView(width: 300, height: 200) {
-            \Rect(width: 200, height: 600, color: #3b82f6)
+        \ScrollView(width: 300px, height: 200px) {
+            \Rect(width: 200px, height: 600px, color: #3b82f6)
         }
     "##;
 
@@ -256,7 +256,7 @@ fn test_scroll_view_on_scroll_event() {
 
     assert_eq!(
         compiled.get_state(scroll_view_id, "scroll_y"),
-        Some(&Value::Number(35.0)),
+        Some(&Value::Distance(35.0)),
         "ScrollView scroll_y should be updated to 35.0"
     );
 
@@ -277,12 +277,12 @@ fn test_scroll_view_scroll_container_to_node() {
     let source = r##"
         \use "components/ScrollView.dt";
 
-        \ScrollView(width: 300, height: 200) {
-            \Rect(width: 200, height: 100, color: #ef4444)
+        \ScrollView(width: 300px, height: 200px) {
+            \Rect(width: 200px, height: 100px, color: #ef4444)
             \Anchor("middle") {
-                \Rect(width: 200, height: 100, color: #3b82f6)
+                \Rect(width: 200px, height: 100px, color: #3b82f6)
             }
-            \Rect(width: 200, height: 100, color: #10b981)
+            \Rect(width: 200px, height: 100px, color: #10b981)
         }
     "##;
 
@@ -313,7 +313,7 @@ fn test_scroll_view_scroll_container_to_node() {
     // scroll_y should now be 100.0
     assert_eq!(
         compiled.get_state(scroll_view_id, "scroll_y"),
-        Some(&Value::Number(100.0))
+        Some(&Value::Distance(100.0))
     );
 
     // Target anchor layout position remains static, while clip scroll offset brings it visually to y = 0.0
@@ -331,12 +331,12 @@ fn test_end_to_end_link_scrolls_scroll_view() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        \let my_scroll = \ScrollView(width: 300, height: 150) {
-            \Rect(width: 200, height: 120, color: #ef4444)
+        \let my_scroll = \ScrollView(width: 300px, height: 150px) {
+            \Rect(width: 200px, height: 120px, color: #ef4444)
             \Anchor("deep_section") {
-                \Rect(width: 200, height: 100, color: #3b82f6)
+                \Rect(width: 200px, height: 100px, color: #3b82f6)
             }
-            \Rect(width: 200, height: 150, color: #10b981)
+            \Rect(width: 200px, height: 150px, color: #10b981)
         };
 
         \Link(url: "#deep_section", link_style: link_default, view: my_scroll) {
@@ -387,7 +387,7 @@ fn test_end_to_end_link_scrolls_scroll_view() {
     // 3. ScrollView state is updated to 120.0, bringing anchor visually to y = 0.0
     assert_eq!(
         compiled.get_state(scroll_view_id, "scroll_y"),
-        Some(&Value::Number(120.0))
+        Some(&Value::Distance(120.0))
     );
     let updated_anchor = compiled.layout.get_node(anchor_id).unwrap();
     assert_eq!(updated_anchor.rect.y, 120.0, "Anchor layout coordinate remains static");
@@ -403,11 +403,11 @@ fn test_scroll_event_coalescing_queue_and_flush() {
     let source = r#"
         \use "components/ScrollView.dt";
 
-        \ScrollView(width: 400, height: 200, padding: 0) {
-            \Rect(width: 400, height: 100, color: #ff0000)
-            \Rect(width: 400, height: 100, color: #00ff00)
-            \Rect(width: 400, height: 100, color: #0000ff)
-            \Rect(width: 400, height: 100, color: #ffff00)
+        \ScrollView(width: 400px, height: 200px, padding: 0) {
+            \Rect(width: 400px, height: 100px, color: #ff0000)
+            \Rect(width: 400px, height: 100px, color: #00ff00)
+            \Rect(width: 400px, height: 100px, color: #0000ff)
+            \Rect(width: 400px, height: 100px, color: #ffff00)
         }
     "#;
     let ast = parse_document(source).expect("parse ok");
@@ -427,18 +427,18 @@ fn test_scroll_event_coalescing_queue_and_flush() {
     // Position cursor inside ScrollView
     viewer.set_cursor_pos(Some(Point::new(100.0, 100.0)));
     assert_eq!(viewer.pending_scroll(), None);
-    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Number(0.0)));
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Distance(0.0)));
 
     // Queue 3 high-frequency trackpad scroll ticks (delta_y = -10, -15, -25)
     viewer.queue_scroll(0.0, -10.0);
     assert_eq!(viewer.pending_scroll(), Some(PendingScroll::new(0.0, -10.0)));
     // State must remain un-mutated until flush (no DAG re-evaluation yet!)
-    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Number(0.0)));
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Distance(0.0)));
 
     viewer.queue_scroll(0.0, -15.0);
     viewer.queue_scroll(0.0, -25.0);
     assert_eq!(viewer.pending_scroll(), Some(PendingScroll::new(0.0, -50.0)));
-    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Number(0.0)));
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Distance(0.0)));
 
     // Flush the coalesced scroll
     let flushed = viewer.flush_pending_scroll();
@@ -446,7 +446,7 @@ fn test_scroll_event_coalescing_queue_and_flush() {
     assert_eq!(viewer.pending_scroll(), None);
 
     // ScrollView state is now updated in a single pass to 50.0
-    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Number(50.0)));
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Distance(50.0)));
 
     // Second flush is a no-op
     assert!(!viewer.flush_pending_scroll());
@@ -459,8 +459,8 @@ fn test_scroll_event_coalescing_2d() {
     let source = r#"
         \use "components/ScrollView.dt";
 
-        \ScrollView(width: 200, height: 200, padding: 0) {
-            \Rect(width: 500, height: 500, color: #ff0000)
+        \ScrollView(width: 200px, height: 200px, padding: 0) {
+            \Rect(width: 500px, height: 500px, color: #ff0000)
         }
     "#;
     let ast = parse_document(source).expect("parse ok");
@@ -484,8 +484,8 @@ fn test_scroll_event_coalescing_2d() {
     assert_eq!(viewer.pending_scroll(), Some(PendingScroll::new(-30.0, -30.0)));
 
     assert!(viewer.flush_pending_scroll());
-    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_x"), Some(&Value::Number(30.0)));
-    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Number(30.0)));
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_x"), Some(&Value::Distance(30.0)));
+    assert_eq!(viewer.compiled().unwrap().get_state(sv_id, "scroll_y"), Some(&Value::Distance(30.0)));
 }
 
 #[test]
@@ -493,7 +493,7 @@ fn test_scroll_event_coalescing_window_fallback() {
     use directedtype::render::{PendingScroll, ViewerApp, ViewerConfig};
 
     let source = r#"
-        \Rect(x: 0, y: 0, width: 400, height: 1200, color: #334455)
+        \Rect(x: 0, y: 0, width: 400px, height: 1200px, color: #334455)
     "#;
     let ast = parse_document(source).expect("parse ok");
     let compiled = CompiledDocument::compile_with_registry(

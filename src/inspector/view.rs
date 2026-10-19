@@ -89,8 +89,14 @@ fn collect_tree_items(
         for (k, v) in ports {
             if k != "id" {
                 match v {
-                    Expr::Literal(crate::ast::Literal::Number(n, _)) => {
+                    Expr::Literal(crate::ast::Literal::Integer(i, _)) => {
+                        summary_parts.push(format!("{k}: {i}"));
+                    }
+                    Expr::Literal(crate::ast::Literal::Float(n, _)) => {
                         summary_parts.push(format!("{k}: {n}"));
+                    }
+                    Expr::Literal(crate::ast::Literal::Distance(d, unit, _)) => {
+                        summary_parts.push(format!("{k}: {d}{unit}"));
                     }
                     Expr::Literal(crate::ast::Literal::String(s, _)) => {
                         summary_parts.push(format!("{k}: \"{s}\""));

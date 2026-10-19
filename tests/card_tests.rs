@@ -9,7 +9,7 @@ fn test_card_with_direct_raw_text() {
     \use "components/Card.dt"
     \use "theme/default.dt"
 
-    \Card(style: card_dark, x: 20, y: 30, width: 250) {
+    \Card(style: card_dark, x: 20px, y: 30px, width: 250px) {
         Hello Direct Text!
     }
     "#;
@@ -47,7 +47,7 @@ fn test_card_multi_child_vertical_flow_gap() {
     \use "components/Card.dt"
     \use "theme/default.dt"
 
-    \Card(style: card_dark, x: 0, y: 0, width: 300, gap: 10) {
+    \Card(style: card_dark, x: 0, y: 0, width: 300px, gap: 10px) {
         \Text(text: "Line 1")
         \Text(text: "Line 2")
     }
@@ -87,15 +87,15 @@ fn test_card_auto_height_wraps_children() {
     \let custom_style = \CardStyle(
         bg: #1e293b,
         border_color: #334155,
-        border_width: 1,
-        radius: 12,
-        padding_x: 16,
-        padding_y: 18
+        border_width: 1px,
+        radius: 12px,
+        padding_x: 16px,
+        padding_y: 18px
     );
 
-    \Card(style: custom_style, x: 20, y: 30, width: 300, gap: 12) {
-        \Rect(width: 100, height: 40, color: #3b82f6)
-        \Rect(width: 150, height: 50, color: #10b981)
+    \Card(style: custom_style, x: 20px, y: 30px, width: 300px, gap: 12px) {
+        \Rect(width: 100px, height: 40px, color: #3b82f6)
+        \Rect(width: 150px, height: 50px, color: #10b981)
     }
     "#;
 
@@ -131,8 +131,8 @@ fn test_card_rejects_external_height_specification() {
     \use "components/Card.dt"
     \use "theme/default.dt"
 
-    \Card(style: card_dark, x: 0, y: 0, width: 200, height: 80) {
-        \Rect(width: 100, height: 40)
+    \Card(style: card_dark, x: 0, y: 0, width: 200px, height: 80px) {
+        \Rect(width: 100px, height: 40px)
     }
     "#;
 
@@ -163,10 +163,10 @@ fn test_card_pushes_width_down_to_nested_vstack() {
     \use "components/VStack.dt"
     \use "theme/default.dt"
 
-    \Card(style: card_dark, x: 20, y: 30, width: 300) {
-        \VStack(gap: 12) {
-            \Rect(x: 40, y: 50, width: 100, height: 40, color: #3b82f6)
-            \Rect(x: 40, y: 102, width: 120, height: 40, color: #10b981)
+    \Card(style: card_dark, x: 20px, y: 30px, width: 300px) {
+        \VStack(gap: 12px) {
+            \Rect(x: 40px, y: 50px, width: 100px, height: 40px, color: #3b82f6)
+            \Rect(x: 40px, y: 102px, width: 120px, height: 40px, color: #10b981)
         }
     }
     "#;

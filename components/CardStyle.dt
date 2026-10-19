@@ -5,9 +5,9 @@
 \Component CardStyle(
     bg: Color,
     border_color: Color,
-    border_width: Number,
-    radius: Number,
-    padding: Number
+    border_width: Distance,
+    radius: Distance,
+    padding: Distance
 ) {
     \alias padding_x = padding;
     \alias padding_y = padding;
@@ -17,10 +17,10 @@
 \Component CardStyle(
     bg: Color,
     border_color: Color,
-    border_width: Number,
-    radius: Number,
-    padding_x: Number,
-    padding_y: Number
+    border_width: Distance,
+    radius: Distance,
+    padding_x: Distance,
+    padding_y: Distance
 ) {
     \alias padding = padding_y;
 }

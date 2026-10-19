@@ -6,23 +6,23 @@
 \use "components/LinkStyle.dt"
 
 // Standard Ambient Typography
-\env font = \Font(size: 16);
+\env font = \Font(size: 12pt);
 
 // 1. Standard Cards
 \let card_dark = \CardStyle(
     bg: #1e293b,
     border_color: #334155,
-    border_width: 1,
-    radius: 12,
-    padding: 20
+    border_width: 1px,
+    radius: 12px,
+    padding: 20px
 );
 
 \let card_light = \CardStyle(
     bg: #f8fafc,
     border_color: #e2e8f0,
-    border_width: 1,
-    radius: 12,
-    padding: 20
+    border_width: 1px,
+    radius: 12px,
+    padding: 20px
 );
 
 // 2. Standard Buttons
@@ -30,10 +30,10 @@
     bg: #2563eb,
     text_color: #ffffff,
     border_color: #3b82f6,
-    border_width: 1,
-    radius: 8,
-    height: 38,
-    size: 14,
+    border_width: 1px,
+    radius: 8px,
+    height: 38px,
+    size: 14px,
     weight: 600,
     disabled_bg: #33415580,
     disabled_text: #64748b,
@@ -44,10 +44,10 @@
     bg: #334155,
     text_color: #ffffff,
     border_color: #475569,
-    border_width: 1,
-    radius: 8,
-    height: 38,
-    size: 14,
+    border_width: 1px,
+    radius: 8px,
+    height: 38px,
+    size: 14px,
     weight: 600,
     disabled_bg: #33415580,
     disabled_text: #64748b,
@@ -58,10 +58,10 @@
     bg: #0f172a,
     text_color: #38bdf8,
     border_color: #38bdf8,
-    border_width: 1.5,
-    radius: 8,
-    height: 38,
-    size: 14,
+    border_width: 1.5px,
+    radius: 8px,
+    height: 38px,
+    size: 14px,
     weight: 600,
     disabled_bg: #33415580,
     disabled_text: #64748b,
@@ -72,10 +72,10 @@
     bg: #dc2626,
     text_color: #ffffff,
     border_color: #ef4444,
-    border_width: 1,
-    radius: 8,
-    height: 38,
-    size: 14,
+    border_width: 1px,
+    radius: 8px,
+    height: 38px,
+    size: 14px,
     weight: 600,
     disabled_bg: #33415580,
     disabled_text: #64748b,
@@ -86,10 +86,10 @@
     bg: #16a34a,
     text_color: #ffffff,
     border_color: #22c55e,
-    border_width: 1,
-    radius: 8,
-    height: 38,
-    size: 14,
+    border_width: 1px,
+    radius: 8px,
+    height: 38px,
+    size: 14px,
     weight: 600,
     disabled_bg: #33415580,
     disabled_text: #64748b,
@@ -101,9 +101,9 @@
     text_color: #94a3b8,
     border_color: #00000000,
     border_width: 0,
-    radius: 8,
-    height: 38,
-    size: 14,
+    radius: 8px,
+    height: 38px,
+    size: 14px,
     weight: 600,
     disabled_bg: #33415580,
     disabled_text: #64748b,

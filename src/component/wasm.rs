@@ -222,7 +222,9 @@ impl Component for WasmComponent {
 
 fn host_to_guest_value(val: &Value) -> GuestValue {
     match val {
-        Value::Number(n) => GuestValue::Number(*n),
+        Value::Integer(i) => GuestValue::Integer(*i),
+        Value::Float(n) => GuestValue::Float(*n),
+        Value::Distance(d) => GuestValue::Distance(*d),
         Value::String(s) => GuestValue::String(s.clone()),
         Value::Bool(b) => GuestValue::Bool(*b),
         Value::Color(c) => GuestValue::Color(c.clone()),
@@ -236,7 +238,9 @@ fn host_to_guest_value(val: &Value) -> GuestValue {
 
 fn guest_to_host_value(val: GuestValue) -> Value {
     match val {
-        GuestValue::Number(n) => Value::Number(n),
+        GuestValue::Integer(i) => Value::Integer(i),
+        GuestValue::Float(n) => Value::Float(n),
+        GuestValue::Distance(d) => Value::Distance(d),
         GuestValue::String(s) => Value::String(s),
         GuestValue::Bool(b) => Value::Bool(b),
         GuestValue::Color(c) => Value::Color(c),

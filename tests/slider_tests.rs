@@ -46,14 +46,14 @@ fn test_slider_component_drag_and_callback() {
     \use "components/Slider.dt"
 
     \Component Equalizer() {
-        \state bass: 20;
-        \state treble: 80;
+        \state bass: Float: 20;
+        \state treble: Float: 80;
 
         \Slider(
-            x: 50,
-            y: 50,
-            width: 200,
-            height: 24,
+            x: 50px,
+            y: 50px,
+            width: 200px,
+            height: 24px,
             min: 0,
             max: 100,
             value: 20,
@@ -61,10 +61,10 @@ fn test_slider_component_drag_and_callback() {
         )
 
         \Slider(
-            x: 50,
-            y: 100,
-            width: 200,
-            height: 24,
+            x: 50px,
+            y: 100px,
+            width: 200px,
+            height: 24px,
             min: 0,
             max: 100,
             value: 80,
@@ -113,19 +113,19 @@ fn test_slider_component_drag_and_callback() {
     // Initial state check
     assert_eq!(
         app.compiled().unwrap().get_state(eq_node, "bass"),
-        Some(&Value::Number(20.0))
+        Some(&Value::Float(20.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(eq_node, "treble"),
-        Some(&Value::Number(80.0))
+        Some(&Value::Float(80.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(bass_slider, "current_value"),
-        Some(&Value::Number(20.0))
+        Some(&Value::Float(20.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(treble_slider, "current_value"),
-        Some(&Value::Number(80.0))
+        Some(&Value::Float(80.0))
     );
 
     // 1. Click Bass slider at (150, 62):
@@ -139,33 +139,33 @@ fn test_slider_component_drag_and_callback() {
     // Both Bass slider current_value and Equalizer bass state should be 50.0
     assert_eq!(
         app.compiled().unwrap().get_state(bass_slider, "current_value"),
-        Some(&Value::Number(50.0))
+        Some(&Value::Float(50.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(eq_node, "bass"),
-        Some(&Value::Number(50.0))
+        Some(&Value::Float(50.0))
     );
 
     // 2. Drag Bass slider to (200, 62) -> local_x = 150 -> ratio = 150 / 200 = 0.75 -> 75.0
     app.dispatch_cursor_moved(Point::new(200.0, 62.0));
     assert_eq!(
         app.compiled().unwrap().get_state(bass_slider, "current_value"),
-        Some(&Value::Number(75.0))
+        Some(&Value::Float(75.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(eq_node, "bass"),
-        Some(&Value::Number(75.0))
+        Some(&Value::Float(75.0))
     );
 
     // 3. Drag far beyond right bounds to (400, 62) -> clamped to 100.0
     app.dispatch_cursor_moved(Point::new(400.0, 62.0));
     assert_eq!(
         app.compiled().unwrap().get_state(bass_slider, "current_value"),
-        Some(&Value::Number(100.0))
+        Some(&Value::Float(100.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(eq_node, "bass"),
-        Some(&Value::Number(100.0))
+        Some(&Value::Float(100.0))
     );
 
     // 4. Release mouse button -> pointer capture released
@@ -180,22 +180,22 @@ fn test_slider_component_drag_and_callback() {
 
     assert_eq!(
         app.compiled().unwrap().get_state(treble_slider, "current_value"),
-        Some(&Value::Number(25.0))
+        Some(&Value::Float(25.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(eq_node, "treble"),
-        Some(&Value::Number(25.0))
+        Some(&Value::Float(25.0))
     );
 
     // Drag Treble to far left (-50, 112) -> clamped to 0.0
     app.dispatch_cursor_moved(Point::new(-50.0, 112.0));
     assert_eq!(
         app.compiled().unwrap().get_state(treble_slider, "current_value"),
-        Some(&Value::Number(0.0))
+        Some(&Value::Float(0.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(eq_node, "treble"),
-        Some(&Value::Number(0.0))
+        Some(&Value::Float(0.0))
     );
 
     app.dispatch_mouse_input(ElementState::Released, MouseButton::Left, Point::new(-50.0, 112.0));
@@ -204,7 +204,7 @@ fn test_slider_component_drag_and_callback() {
     // Bass slider state remains unchanged at 100.0 while Treble was dragged
     assert_eq!(
         app.compiled().unwrap().get_state(eq_node, "bass"),
-        Some(&Value::Number(100.0))
+        Some(&Value::Float(100.0))
     );
 }
 
@@ -278,25 +278,25 @@ fn test_slider_demo_visualizer_rectangle() {
     // Verify initial states
     assert_eq!(
         app.compiled().unwrap().get_state(mixer_node, "master"),
-        Some(&Value::Number(75.0))
+        Some(&Value::Float(75.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(mixer_node, "bass"),
-        Some(&Value::Number(40.0))
+        Some(&Value::Float(40.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(mixer_node, "treble"),
-        Some(&Value::Number(60.0))
+        Some(&Value::Float(60.0))
     );
 
-    // Find the visualizer Rect node (it's the Rect inside AudioMixer that has radius 8)
+    // Find the visualizer Rect node (it's the Rect inside AudioMixer that has radius 8px)
     let visualizer_rect = app
         .layout()
         .nodes
         .iter()
         .find(|n| {
             n.name == "Rect"
-                && n.properties.get("radius") == Some(&Value::Number(8.0))
+                && n.properties.get("radius") == Some(&Value::Distance(8.0))
         })
         .expect("Visualizer Rect node found")
         .clone();
@@ -315,7 +315,7 @@ fn test_slider_demo_visualizer_rectangle() {
     // Mutate bass to 100 -> width becomes 40 + 100 * 3.6 = 400.0!
     app.compiled_mut()
         .unwrap()
-        .dispatch_callback(mixer_node, "set_bass", Value::Number(100.0))
+        .dispatch_callback(mixer_node, "set_bass", Value::Float(100.0))
         .expect("dispatch set_bass ok");
 
     let updated_rect = app
@@ -329,7 +329,7 @@ fn test_slider_demo_visualizer_rectangle() {
     // Mutate treble to 10 -> height becomes 20 + 10 * 0.8 = 28.0!
     app.compiled_mut()
         .unwrap()
-        .dispatch_callback(mixer_node, "set_treble", Value::Number(10.0))
+        .dispatch_callback(mixer_node, "set_treble", Value::Float(10.0))
         .expect("dispatch set_treble ok");
 
     let updated_rect = app
@@ -343,7 +343,7 @@ fn test_slider_demo_visualizer_rectangle() {
     // Mutate master to 0 -> hue becomes hsl(0, 85, 55) -> red!
     app.compiled_mut()
         .unwrap()
-        .dispatch_callback(mixer_node, "set_master", Value::Number(0.0))
+        .dispatch_callback(mixer_node, "set_master", Value::Float(0.0))
         .expect("dispatch set_master ok");
 
     let updated_rect = app
@@ -404,7 +404,7 @@ fn test_slider_content_shrink_auto_scrolls_up() {
     // Now mutate treble from 60 to 0 -> visualizer shrinks, card shrinks, background rect shrinks!
     app.compiled_mut()
         .unwrap()
-        .dispatch_callback(mixer_node, "set_treble", Value::Number(0.0))
+        .dispatch_callback(mixer_node, "set_treble", Value::Float(0.0))
         .expect("dispatch set_treble ok");
     app.clamp_scroll();
 

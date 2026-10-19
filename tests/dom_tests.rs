@@ -10,10 +10,10 @@ fn test_dom_create_and_append() {
     let root = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(10.0)),
-            ("y".to_string(), Expr::lit(20.0)),
-            ("width".to_string(), Expr::lit(200.0)),
-            ("height".to_string(), Expr::lit(100.0)),
+            ("x".to_string(), Expr::distance_px(10.0)),
+            ("y".to_string(), Expr::distance_px(20.0)),
+            ("width".to_string(), Expr::distance_px(200.0)),
+            ("height".to_string(), Expr::distance_px(100.0)),
             ("color".to_string(), Expr::color("#ff0000")),
         ],
     );
@@ -21,9 +21,9 @@ fn test_dom_create_and_append() {
     let child = dom.create_text(
         "Hello DirectedType",
         vec![
-            ("x".to_string(), Expr::lit(15.0)),
-            ("y".to_string(), Expr::lit(25.0)),
-            ("size".to_string(), Expr::lit(16.0)),
+            ("x".to_string(), Expr::distance_px(15.0)),
+            ("y".to_string(), Expr::distance_px(25.0)),
+            ("size".to_string(), Expr::distance_px(16.0)),
             ("color".to_string(), Expr::color("#ffffff")),
         ],
     );
@@ -60,10 +60,10 @@ fn test_dom_insert_before_staged() {
     let container = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(0.0)),
-            ("y".to_string(), Expr::lit(0.0)),
-            ("width".to_string(), Expr::lit(500.0)),
-            ("height".to_string(), Expr::lit(500.0)),
+            ("x".to_string(), Expr::distance_px(0.0)),
+            ("y".to_string(), Expr::distance_px(0.0)),
+            ("width".to_string(), Expr::distance_px(500.0)),
+            ("height".to_string(), Expr::distance_px(500.0)),
             ("color".to_string(), Expr::color("#222222")),
         ],
     );
@@ -72,10 +72,10 @@ fn test_dom_insert_before_staged() {
     let child_a = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(10.0)),
-            ("y".to_string(), Expr::lit(10.0)),
-            ("width".to_string(), Expr::lit(50.0)),
-            ("height".to_string(), Expr::lit(50.0)),
+            ("x".to_string(), Expr::distance_px(10.0)),
+            ("y".to_string(), Expr::distance_px(10.0)),
+            ("width".to_string(), Expr::distance_px(50.0)),
+            ("height".to_string(), Expr::distance_px(50.0)),
             ("color".to_string(), Expr::color("#ff0000")),
         ],
     );
@@ -83,10 +83,10 @@ fn test_dom_insert_before_staged() {
     let child_c = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(10.0)),
-            ("y".to_string(), Expr::lit(150.0)),
-            ("width".to_string(), Expr::lit(50.0)),
-            ("height".to_string(), Expr::lit(50.0)),
+            ("x".to_string(), Expr::distance_px(10.0)),
+            ("y".to_string(), Expr::distance_px(150.0)),
+            ("width".to_string(), Expr::distance_px(50.0)),
+            ("height".to_string(), Expr::distance_px(50.0)),
             ("color".to_string(), Expr::color("#0000ff")),
         ],
     );
@@ -101,10 +101,10 @@ fn test_dom_insert_before_staged() {
     let child_b = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(10.0)),
-            ("y".to_string(), Expr::lit(80.0)),
-            ("width".to_string(), Expr::lit(50.0)),
-            ("height".to_string(), Expr::lit(50.0)),
+            ("x".to_string(), Expr::distance_px(10.0)),
+            ("y".to_string(), Expr::distance_px(80.0)),
+            ("width".to_string(), Expr::distance_px(50.0)),
+            ("height".to_string(), Expr::distance_px(50.0)),
             ("color".to_string(), Expr::color("#00ff00")),
         ],
     );
@@ -133,10 +133,10 @@ fn test_dom_replace_child() {
     let parent = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(0.0)),
-            ("y".to_string(), Expr::lit(0.0)),
-            ("width".to_string(), Expr::lit(100.0)),
-            ("height".to_string(), Expr::lit(100.0)),
+            ("x".to_string(), Expr::distance_px(0.0)),
+            ("y".to_string(), Expr::distance_px(0.0)),
+            ("width".to_string(), Expr::distance_px(100.0)),
+            ("height".to_string(), Expr::distance_px(100.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -145,10 +145,10 @@ fn test_dom_replace_child() {
     let old_child = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(10.0)),
-            ("y".to_string(), Expr::lit(10.0)),
-            ("width".to_string(), Expr::lit(20.0)),
-            ("height".to_string(), Expr::lit(20.0)),
+            ("x".to_string(), Expr::distance_px(10.0)),
+            ("y".to_string(), Expr::distance_px(10.0)),
+            ("width".to_string(), Expr::distance_px(20.0)),
+            ("height".to_string(), Expr::distance_px(20.0)),
             ("color".to_string(), Expr::color("#ff0000")),
         ],
     );
@@ -157,10 +157,10 @@ fn test_dom_replace_child() {
     let new_child = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(30.0)),
-            ("y".to_string(), Expr::lit(30.0)),
-            ("width".to_string(), Expr::lit(40.0)),
-            ("height".to_string(), Expr::lit(40.0)),
+            ("x".to_string(), Expr::distance_px(30.0)),
+            ("y".to_string(), Expr::distance_px(30.0)),
+            ("width".to_string(), Expr::distance_px(40.0)),
+            ("height".to_string(), Expr::distance_px(40.0)),
             ("color".to_string(), Expr::color("#00ff00")),
         ],
     );
@@ -183,10 +183,10 @@ fn test_dom_remove_child() {
     let parent = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(0.0)),
-            ("y".to_string(), Expr::lit(0.0)),
-            ("width".to_string(), Expr::lit(100.0)),
-            ("height".to_string(), Expr::lit(100.0)),
+            ("x".to_string(), Expr::distance_px(0.0)),
+            ("y".to_string(), Expr::distance_px(0.0)),
+            ("width".to_string(), Expr::distance_px(100.0)),
+            ("height".to_string(), Expr::distance_px(100.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -195,10 +195,10 @@ fn test_dom_remove_child() {
     let child = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(10.0)),
-            ("y".to_string(), Expr::lit(10.0)),
-            ("width".to_string(), Expr::lit(20.0)),
-            ("height".to_string(), Expr::lit(20.0)),
+            ("x".to_string(), Expr::distance_px(10.0)),
+            ("y".to_string(), Expr::distance_px(10.0)),
+            ("width".to_string(), Expr::distance_px(20.0)),
+            ("height".to_string(), Expr::distance_px(20.0)),
             ("color".to_string(), Expr::color("#ff0000")),
         ],
     );
@@ -216,9 +216,9 @@ fn test_dom_ports_and_text_mutation() {
     let text_node = dom.create_text(
         "Initial Text",
         vec![
-            ("x".to_string(), Expr::lit(0.0)),
-            ("y".to_string(), Expr::lit(0.0)),
-            ("size".to_string(), Expr::lit(16.0)),
+            ("x".to_string(), Expr::distance_px(0.0)),
+            ("y".to_string(), Expr::distance_px(0.0)),
+            ("size".to_string(), Expr::distance_px(16.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -229,7 +229,7 @@ fn test_dom_ports_and_text_mutation() {
 
     // Mutate text and port
     dom.set_text(text_node, "Updated Text").unwrap();
-    dom.set_port(text_node, "x", Expr::lit(45.0)).unwrap();
+    dom.set_port(text_node, "x", Expr::distance_px(45.0)).unwrap();
 
     assert!(dom.is_dirty());
     dom.commit().unwrap();
@@ -249,7 +249,7 @@ fn test_dom_parse_fragment() {
     let mut dom = Dom::new();
 
     let fragment_handle = dom
-        .parse_fragment(r#"\Rect(x: 25, y: 35, width: 220, height: 110, color: #6366f1)"#)
+        .parse_fragment(r#"\Rect(x: 25px, y: 35px, width: 220px, height: 110px, color: #6366f1)"#)
         .unwrap();
 
     dom.append_root(fragment_handle).unwrap();
@@ -271,20 +271,20 @@ fn test_dom_transaction_auto_commit() {
             let n1 = tx.create_element(
                 "Rect",
                 vec![
-                    ("x".to_string(), Expr::lit(0.0)),
-                    ("y".to_string(), Expr::lit(0.0)),
-                    ("width".to_string(), Expr::lit(100.0)),
-                    ("height".to_string(), Expr::lit(50.0)),
+                    ("x".to_string(), Expr::distance_px(0.0)),
+                    ("y".to_string(), Expr::distance_px(0.0)),
+                    ("width".to_string(), Expr::distance_px(100.0)),
+                    ("height".to_string(), Expr::distance_px(50.0)),
                     ("color".to_string(), Expr::color("#ff0000")),
                 ],
             );
             let n2 = tx.create_element(
                 "Rect",
                 vec![
-                    ("x".to_string(), Expr::lit(100.0)),
-                    ("y".to_string(), Expr::lit(0.0)),
-                    ("width".to_string(), Expr::lit(100.0)),
-                    ("height".to_string(), Expr::lit(50.0)),
+                    ("x".to_string(), Expr::distance_px(100.0)),
+                    ("y".to_string(), Expr::distance_px(0.0)),
+                    ("width".to_string(), Expr::distance_px(100.0)),
+                    ("height".to_string(), Expr::distance_px(50.0)),
                     ("color".to_string(), Expr::color("#00ff00")),
                 ],
             );
@@ -307,10 +307,10 @@ fn test_dom_transaction_rollback_on_user_error() {
     let root = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(0.0)),
-            ("y".to_string(), Expr::lit(0.0)),
-            ("width".to_string(), Expr::lit(100.0)),
-            ("height".to_string(), Expr::lit(100.0)),
+            ("x".to_string(), Expr::distance_px(0.0)),
+            ("y".to_string(), Expr::distance_px(0.0)),
+            ("width".to_string(), Expr::distance_px(100.0)),
+            ("height".to_string(), Expr::distance_px(100.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -342,10 +342,10 @@ fn test_dom_transaction_rollback_on_compile_cycle() {
     let root = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(10.0)),
-            ("y".to_string(), Expr::lit(10.0)),
-            ("width".to_string(), Expr::lit(100.0)),
-            ("height".to_string(), Expr::lit(100.0)),
+            ("x".to_string(), Expr::distance_px(10.0)),
+            ("y".to_string(), Expr::distance_px(10.0)),
+            ("width".to_string(), Expr::distance_px(100.0)),
+            ("height".to_string(), Expr::distance_px(100.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -398,11 +398,11 @@ fn test_dom_spatial_hit_test() {
     let bg = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(0.0)),
-            ("y".to_string(), Expr::lit(0.0)),
-            ("width".to_string(), Expr::lit(500.0)),
-            ("height".to_string(), Expr::lit(500.0)),
-            ("z".to_string(), Expr::lit(1.0)),
+            ("x".to_string(), Expr::distance_px(0.0)),
+            ("y".to_string(), Expr::distance_px(0.0)),
+            ("width".to_string(), Expr::distance_px(500.0)),
+            ("height".to_string(), Expr::distance_px(500.0)),
+            ("z".to_string(), Expr::integer(1)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -410,11 +410,11 @@ fn test_dom_spatial_hit_test() {
     let btn = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(50.0)),
-            ("y".to_string(), Expr::lit(50.0)),
-            ("width".to_string(), Expr::lit(100.0)),
-            ("height".to_string(), Expr::lit(40.0)),
-            ("z".to_string(), Expr::lit(2.0)),
+            ("x".to_string(), Expr::distance_px(50.0)),
+            ("y".to_string(), Expr::distance_px(50.0)),
+            ("width".to_string(), Expr::distance_px(100.0)),
+            ("height".to_string(), Expr::distance_px(40.0)),
+            ("z".to_string(), Expr::integer(2)),
             ("color".to_string(), Expr::color("#ff0000")),
         ],
     );
@@ -469,16 +469,16 @@ fn test_dom_destroy_node_frees_subtree() {
 #[test]
 fn test_dom_insert_before_dynamic_flow_recurrence() {
     let source = r#"
-        \Component Flow(y: Number: 0, gap: Number: 20) {
+        \Component Flow(y: Distance: 0, gap: Distance: 20px) {
             \Children {
                 x: 0,
                 y: prev ? prev.bottom + gap : parent.top,
-                width: 200
+                width: 200px
             }
         }
         \Flow() {
-            \Rect(height: 50, color: #ff0000)
-            \Rect(height: 50, color: #0000ff)
+            \Rect(height: 50px, color: #ff0000)
+            \Rect(height: 50px, color: #0000ff)
         }
     "#;
     let doc = directedtype::parse(source).expect("Source must parse");
@@ -499,7 +499,7 @@ fn test_dom_insert_before_dynamic_flow_recurrence() {
     let middle_child = dom.create_element(
         "Rect",
         vec![
-            ("height".to_string(), Expr::lit(30.0)),
+            ("height".to_string(), Expr::distance_px(30.0)),
             ("color".to_string(), Expr::color("#00ff00")),
         ],
     );

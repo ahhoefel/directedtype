@@ -35,7 +35,7 @@ fn test_basic_module_import_and_layout() {
     resolver.insert(
         "components/Button.dt",
         r#"
-        \Component Button(width: Number: 120, height: Number: 40) {
+        \Component Button(width: Distance: 120px, height: Distance: 40px) {
             \Rect(x: 0, y: 0, width: width, height: height, color: #1E293B)
         }
         "#,
@@ -69,7 +69,7 @@ fn test_aliased_module_import() {
     resolver.insert(
         "widgets/Button.dt",
         r#"
-        \Component Button(width: Number: 100, height: Number: 30) {
+        \Component Button(width: Distance: 100px, height: Distance: 30px) {
             \Rect(x: 0, y: 0, width: width, height: height, color: #2563EB)
         }
         "#,
@@ -78,7 +78,7 @@ fn test_aliased_module_import() {
     let main_src = r#"
     \use "./widgets/Button.dt" as PrimaryButton;
 
-    \PrimaryButton(width: 250, height: 60)
+    \PrimaryButton(width: 250px, height: 60px)
     "#;
 
     let doc = parse(main_src).expect("Failed to parse main");
@@ -105,7 +105,7 @@ fn test_transitive_imports() {
     resolver.insert(
         "ui/Icon.dt",
         r#"
-        \Component Icon(size: Number: 16) {
+        \Component Icon(size: Distance: 16px) {
             \Rect(x: 0, y: 0, width: size, height: size, color: #E2E8F0)
         }
         "#,
@@ -116,7 +116,7 @@ fn test_transitive_imports() {
         \use "./Icon.dt";
 
         \Component Button() {
-            \Icon(size: 24)
+            \Icon(size: 24px)
         }
         "#,
     );
@@ -149,7 +149,7 @@ fn test_transitive_imports_with_alias() {
     resolver.insert(
         "ui/Icon.dt",
         r#"
-        \Component Icon(size: Number: 16) {
+        \Component Icon(size: Distance: 16px) {
             \Rect(x: 0, y: 0, width: size, height: size, color: #E2E8F0)
         }
         "#,
@@ -160,7 +160,7 @@ fn test_transitive_imports_with_alias() {
         \use "./Icon.dt";
 
         \Component Button() {
-            \Icon(size: 32)
+            \Icon(size: 32px)
         }
         "#,
     );
@@ -195,7 +195,7 @@ fn test_diamond_dependency_resolution() {
     resolver.insert(
         "core/Base.dt",
         r#"
-        \Component BaseBox(dim: Number: 50) {
+        \Component BaseBox(dim: Distance: 50px) {
             \Rect(x: 0, y: 0, width: dim, height: dim, color: #000)
         }
         "#,
@@ -205,7 +205,7 @@ fn test_diamond_dependency_resolution() {
         r#"
         \use "./Base.dt";
         \Component LeftComp() {
-            \BaseBox(dim: 60)
+            \BaseBox(dim: 60px)
         }
         "#,
     );
@@ -214,7 +214,7 @@ fn test_diamond_dependency_resolution() {
         r#"
         \use "./Base.dt";
         \Component RightComp() {
-            \BaseBox(dim: 70)
+            \BaseBox(dim: 70px)
         }
         "#,
     );
@@ -251,14 +251,14 @@ fn test_cyclic_import_detection() {
         "A.dt",
         r#"
         \use "./B.dt";
-        \Component AComp() { \Rect(x: 0, y: 0, width: 10, height: 10, color: #000) }
+        \Component AComp() { \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000) }
         "#,
     );
     resolver.insert(
         "B.dt",
         r#"
         \use "./A.dt";
-        \Component BComp() { \Rect(x: 0, y: 0, width: 10, height: 10, color: #000) }
+        \Component BComp() { \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000) }
         "#,
     );
 
@@ -292,7 +292,7 @@ fn test_self_cyclic_import_detection() {
         "SelfCycle.dt",
         r#"
         \use "./SelfCycle.dt";
-        \Component Foo() { \Rect(x: 0, y: 0, width: 10, height: 10, color: #000) }
+        \Component Foo() { \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000) }
         "#,
     );
 
@@ -322,7 +322,7 @@ fn test_missing_file_import_error() {
     let resolver = VirtualResolver::new();
     let main_src = r#"
     \use "./NonExistent.dt";
-    \Rect(x: 0, y: 0, width: 10, height: 10, color: #000)
+    \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
     "#;
 
     let doc = parse(main_src).expect("Failed to parse main");
@@ -355,7 +355,7 @@ fn test_syntax_error_in_imported_file() {
 
     let main_src = r#"
     \use "./Broken.dt";
-    \Rect(x: 0, y: 0, width: 10, height: 10, color: #000)
+    \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
     "#;
 
     let doc = parse(main_src).expect("Failed to parse main");
@@ -383,9 +383,9 @@ fn test_imported_component_with_state_and_structured_key() {
     resolver.insert(
         "Counter.dt",
         r#"
-        \Component Counter(multiplier: Number: 10) {
+        \Component Counter(multiplier: Distance: 10px) {
             \state count: 42;
-            \Rect(x: 0, y: 0, width: count * multiplier, height: 30, color: #0F0)
+            \Rect(x: 0, y: 0, width: count * multiplier, height: 30px, color: #0F0)
         }
         "#,
     );
@@ -393,7 +393,7 @@ fn test_imported_component_with_state_and_structured_key() {
     let main_src = r#"
     \use "./Counter.dt";
 
-    \Counter(1, "main"; multiplier: 5)
+    \Counter(1, "main"; multiplier: 5px)
     "#;
 
     let doc = parse(main_src).expect("Failed to parse main");
@@ -401,7 +401,7 @@ fn test_imported_component_with_state_and_structured_key() {
         .expect("Failed to expand document");
 
     // Verify structured key lookup
-    let expected_key = ComponentKey::tuple(&[Expr::number(1.0), Expr::string("main")]);
+    let expected_key = ComponentKey::tuple(&[Expr::integer(1), Expr::string("main")]);
     let counter_node = expanded
         .find_by_key(None, &expected_key)
         .expect("Should find Counter with key [1, 'main']");
@@ -418,7 +418,7 @@ fn test_imported_component_with_state_and_structured_key() {
 
     assert_eq!(layout.roots.len(), 1);
     let rect_node = layout.nodes.iter().find(|n| n.name == "Rect").expect("Should have Rect node");
-    // count (42) * multiplier (5) = 210
+    // count (42) * multiplier (5px) = 210
     assert_eq!(rect_node.rect.width, 210.0);
     assert_eq!(rect_node.rect.height, 30.0);
 }
@@ -432,8 +432,8 @@ fn test_fs_resolver_disk_import() {
     std::fs::write(
         &comp_file,
         r#"
-        \Component DiskWidget(w: Number: 180) {
-            \Rect(x: 0, y: 0, width: w, height: 45, color: #3B82F6)
+        \Component DiskWidget(w: Distance: 180px) {
+            \Rect(x: 0, y: 0, width: w, height: 45px, color: #3B82F6)
         }
         "#,
     )
@@ -442,7 +442,7 @@ fn test_fs_resolver_disk_import() {
     let main_src = r#"
     \use "./DiskWidget.dt";
 
-    \DiskWidget(w: 320)
+    \DiskWidget(w: 320px)
     "#;
 
     let doc = parse(main_src).expect("Failed to parse main");
@@ -465,11 +465,11 @@ fn test_module_import_overloads() {
     resolver.insert(
         "components/Card.dt",
         r#"
-        \Component Card(width: Number) {
-            \Rect(x: 0, y: 0, width: width, height: 40, color: #1E293B)
+        \Component Card(width: Distance) {
+            \Rect(x: 0, y: 0, width: width, height: 40px, color: #1E293B)
         }
-        \Component Card(height: Number) {
-            \Rect(x: 0, y: 0, width: 80, height: height, color: #334155)
+        \Component Card(height: Distance) {
+            \Rect(x: 0, y: 0, width: 80px, height: height, color: #334155)
         }
         "#,
     );
@@ -477,8 +477,8 @@ fn test_module_import_overloads() {
     let main_src = r#"
     \use "./components/Card.dt";
 
-    \Card(width: 150)
-    \Card(height: 90)
+    \Card(width: 150px)
+    \Card(height: 90px)
     "#;
 
     let doc = parse(main_src).expect("Failed to parse main");
@@ -506,11 +506,11 @@ fn test_aliased_module_import_overloads() {
     resolver.insert(
         "components/Card.dt",
         r#"
-        \Component Card(width: Number) {
-            \Rect(x: 0, y: 0, width: width, height: 40, color: #1E293B)
+        \Component Card(width: Distance) {
+            \Rect(x: 0, y: 0, width: width, height: 40px, color: #1E293B)
         }
-        \Component Card(height: Number) {
-            \Rect(x: 0, y: 0, width: 80, height: height, color: #334155)
+        \Component Card(height: Distance) {
+            \Rect(x: 0, y: 0, width: 80px, height: height, color: #334155)
         }
         "#,
     );
@@ -518,8 +518,8 @@ fn test_aliased_module_import_overloads() {
     let main_src = r#"
     \use "./components/Card.dt" as PrimaryCard;
 
-    \PrimaryCard(width: 220)
-    \PrimaryCard(height: 110)
+    \PrimaryCard(width: 220px)
+    \PrimaryCard(height: 110px)
     "#;
 
     let doc = parse(main_src).expect("Failed to parse main");
@@ -547,11 +547,11 @@ fn test_diamond_dependency_with_overloads() {
     resolver.insert(
         "core/Base.dt",
         r#"
-        \Component BaseBox(width: Number) {
-            \Rect(x: 0, y: 0, width: width, height: 50, color: #000)
+        \Component BaseBox(width: Distance) {
+            \Rect(x: 0, y: 0, width: width, height: 50px, color: #000)
         }
-        \Component BaseBox(height: Number) {
-            \Rect(x: 0, y: 0, width: 50, height: height, color: #111)
+        \Component BaseBox(height: Distance) {
+            \Rect(x: 0, y: 0, width: 50px, height: height, color: #111)
         }
         "#,
     );
@@ -560,7 +560,7 @@ fn test_diamond_dependency_with_overloads() {
         r#"
         \use "./Base.dt";
         \Component LeftComp() {
-            \BaseBox(width: 75)
+            \BaseBox(width: 75px)
         }
         "#,
     );
@@ -569,7 +569,7 @@ fn test_diamond_dependency_with_overloads() {
         r#"
         \use "./Base.dt";
         \Component RightComp() {
-            \BaseBox(height: 85)
+            \BaseBox(height: 85px)
         }
         "#,
     );
@@ -607,14 +607,14 @@ fn test_named_import_components_and_layout() {
     resolver.insert(
         "ui/Widgets.dt",
         r#"
-        \Component PrimaryButton(width: Number: 100) {
-            \Rect(x: 0, y: 0, width: width, height: 40, color: #2563EB)
+        \Component PrimaryButton(width: Distance: 100px) {
+            \Rect(x: 0, y: 0, width: width, height: 40px, color: #2563EB)
         }
-        \Component SecondaryButton(width: Number: 80) {
-            \Rect(x: 0, y: 0, width: width, height: 35, color: #64748B)
+        \Component SecondaryButton(width: Distance: 80px) {
+            \Rect(x: 0, y: 0, width: width, height: 35px, color: #64748B)
         }
         \Component SecretWidget() {
-            \Rect(x: 0, y: 0, width: 999, height: 999, color: #FF0000)
+            \Rect(x: 0, y: 0, width: 999px, height: 999px, color: #FF0000)
         }
         "#,
     );
@@ -622,8 +622,8 @@ fn test_named_import_components_and_layout() {
     let main_src = r#"
     \use { PrimaryButton, SecondaryButton as SecBtn } from "./ui/Widgets.dt";
 
-    \PrimaryButton(width: 150)
-    \SecBtn(width: 90)
+    \PrimaryButton(width: 150px)
+    \SecBtn(width: 90px)
     "#;
 
     let doc = parse(main_src).expect("Failed to parse main");
@@ -650,10 +650,10 @@ fn test_named_import_unimported_component_rejected() {
         "ui/Widgets.dt",
         r#"
         \Component PublicWidget() {
-            \Rect(x: 0, y: 0, width: 100, height: 50, color: #000)
+            \Rect(x: 0, y: 0, width: 100px, height: 50px, color: #000)
         }
         \Component SecretWidget() {
-            \Rect(x: 0, y: 0, width: 999, height: 999, color: #FF0000)
+            \Rect(x: 0, y: 0, width: 999px, height: 999px, color: #FF0000)
         }
         "#,
     );
@@ -689,7 +689,7 @@ fn test_named_import_unknown_symbol_error() {
         "ui/Widgets.dt",
         r#"
         \Component PublicWidget() {
-            \Rect(x: 0, y: 0, width: 100, height: 50, color: #000)
+            \Rect(x: 0, y: 0, width: 100px, height: 50px, color: #000)
         }
         "#,
     );
@@ -725,13 +725,13 @@ fn test_named_import_helper_scoping_and_independence() {
     resolver.insert(
         "ui/Card.dt",
         r#"
-        \Component Helper(w: Number) {
-            \Rect(x: 0, y: 0, width: w, height: 20, color: #111)
+        \Component Helper(w: Distance) {
+            \Rect(x: 0, y: 0, width: w, height: 20px, color: #111)
         }
 
-        \Component Card(width: Number) {
+        \Component Card(width: Distance) {
             \Helper(w: width)
-            \Rect(x: 0, y: 20, width: width, height: 100, color: #222)
+            \Rect(x: 0, y: 20px, width: width, height: 100px, color: #222)
         }
         "#,
     );
@@ -740,12 +740,12 @@ fn test_named_import_helper_scoping_and_independence() {
     let main_src = r#"
     \use { Card } from "./ui/Card.dt";
 
-    \Component Helper(extra_h: Number) {
-        \Rect(x: 0, y: 150, width: 80, height: extra_h, color: #333)
+    \Component Helper(extra_h: Distance) {
+        \Rect(x: 0, y: 150px, width: 80px, height: extra_h, color: #333)
     }
 
-    \Card(width: 200)
-    \Helper(extra_h: 45)
+    \Card(width: 200px)
+    \Helper(extra_h: 45px)
     "#;
 
     let doc = parse(main_src).expect("Failed to parse main");
@@ -778,8 +778,8 @@ fn test_named_import_let_and_enum() {
         "theme/DesignTokens.dt",
         r#"
         \let primary_color = #2563EB;
-        \let card_height = 80;
-        \let secret_padding = 999;
+        \let card_height = 80px;
+        \let secret_padding = 999px;
 
         \Enum ThemeVariant { Dark, Light }
         \Enum SecretEnum { A, B }
@@ -790,7 +790,7 @@ fn test_named_import_let_and_enum() {
     \use { primary_color as brand_color, card_height, ThemeVariant } from "./theme/DesignTokens.dt";
 
     \Component TokenBox(variant: ThemeVariant) {
-        \Rect(x: 0, y: 0, width: 120, height: card_height, color: brand_color)
+        \Rect(x: 0, y: 0, width: 120px, height: card_height, color: brand_color)
     }
 
     \TokenBox(variant: ThemeVariant.Dark)
@@ -834,7 +834,7 @@ fn test_transitive_enum_not_automatically_imported() {
         \use { Align } from "./Align.dt";
 
         \Component Card(align: Align: Align.Center) {
-            \Rect(x: 0, y: 0, width: 100, height: 50, color: #000)
+            \Rect(x: 0, y: 0, width: 100px, height: 50px, color: #000)
         }
         "#,
     );
@@ -899,7 +899,7 @@ fn test_cannot_import_transitive_symbol_from_intermediary() {
         \use { Align } from "./Align.dt";
 
         \Component Card() {
-            \Rect(x: 0, y: 0, width: 100, height: 50, color: #000)
+            \Rect(x: 0, y: 0, width: 100px, height: 50px, color: #000)
         }
         "#,
     );
@@ -908,7 +908,7 @@ fn test_cannot_import_transitive_symbol_from_intermediary() {
     let main_src = r#"
     \use { Align } from "./components/Card.dt";
 
-    \Rect(x: 0, y: 0, width: 50, height: 50, color: #000)
+    \Rect(x: 0, y: 0, width: 50px, height: 50px, color: #000)
     "#;
 
     let doc = parse(main_src).expect("Failed to parse main");
@@ -929,5 +929,6 @@ fn test_cannot_import_transitive_symbol_from_intermediary() {
         other => panic!("Expected ImportError, got {:?}", other),
     }
 }
+
 
 

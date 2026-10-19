@@ -8,8 +8,8 @@ fn test_padout_uniform_wrapping_rect() {
     let input = r#"
     \use "components/PadOut.dt"
 
-    \PadOut(padding: 20, x: 10, y: 15) {
-        \Rect(width: 100, height: 60, color: #3b82f6)
+    \PadOut(padding: 20px, x: 10px, y: 15px) {
+        \Rect(width: 100px, height: 60px, color: #3b82f6)
     }
     "#;
 
@@ -41,7 +41,7 @@ fn test_padin_uniform_insetting_child() {
     let input = r#"
     \use "components/PadIn.dt"
 
-    \PadIn(padding: 20, x: 10, y: 15) {
+    \PadIn(padding: 20px, x: 10px, y: 15px) {
         \Rect(color: #3b82f6)
     }
     "#;
@@ -77,11 +77,11 @@ fn test_padout_asymmetric_wrapping_hstack() {
     \use "components/PadOut.dt"
     \use "components/HStack.dt"
 
-    \PadOut(padding_x: 20, padding_y: 24, x: 10, y: 20) {
-        \HStack(gap: 16) {
-            \Rect(width: 100, height: 40, color: #3b82f6)
-            \Rect(width: 150, height: 50, color: #10b981)
-            \Rect(width: 80, height: 30, color: #f59e0b)
+    \PadOut(padding_x: 20px, padding_y: 24px, x: 10px, y: 20px) {
+        \HStack(gap: 16px) {
+            \Rect(width: 100px, height: 40px, color: #3b82f6)
+            \Rect(width: 150px, height: 50px, color: #10b981)
+            \Rect(width: 80px, height: 30px, color: #f59e0b)
         }
     }
     "#;
@@ -125,11 +125,11 @@ fn test_padin_asymmetric_insetting_vstack() {
     \use "components/PadIn.dt"
     \use "components/VStack.dt"
 
-    \PadIn(padding_x: 20, padding_y: 24, x: 10, y: 20) {
-        \VStackStretch(gap: 16) {
-            \Rect(height: 40, color: #3b82f6)
-            \Rect(height: 50, color: #10b981)
-            \Rect(height: 30, color: #f59e0b)
+    \PadIn(padding_x: 20px, padding_y: 24px, x: 10px, y: 20px) {
+        \VStackStretch(gap: 16px) {
+            \Rect(height: 40px, color: #3b82f6)
+            \Rect(height: 50px, color: #10b981)
+            \Rect(height: 30px, color: #f59e0b)
         }
     }
     "#;
@@ -171,9 +171,9 @@ fn test_padout_assertion_rejects_multiple_children() {
     let input = r#"
     \use "components/PadOut.dt"
 
-    \PadOut(padding: 20) {
-        \Rect(width: 100, height: 50, color: #ff0000)
-        \Rect(width: 100, height: 50, color: #00ff00)
+    \PadOut(padding: 20px) {
+        \Rect(width: 100px, height: 50px, color: #ff0000)
+        \Rect(width: 100px, height: 50px, color: #00ff00)
     }
     "#;
 
@@ -204,9 +204,9 @@ fn test_padin_assertion_rejects_multiple_children() {
     let input = r#"
     \use "components/PadIn.dt"
 
-    \PadIn(padding: 20) {
-        \Rect(width: 100, height: 50, color: #ff0000)
-        \Rect(width: 100, height: 50, color: #00ff00)
+    \PadIn(padding: 20px) {
+        \Rect(width: 100px, height: 50px, color: #ff0000)
+        \Rect(width: 100px, height: 50px, color: #00ff00)
     }
     "#;
 

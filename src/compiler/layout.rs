@@ -594,7 +594,10 @@ impl ResolvedLayout {
         for key in extra_keys {
             if let Some(val) = node.properties.get(key) {
                 match val {
-                    Value::Number(n) => ports.push(format!("{}: {}", key, format_num(*n))),
+                    Value::Integer(i) => ports.push(format!("{}: {}", key, i)),
+                    Value::Float(n) | Value::Distance(n) => {
+                        ports.push(format!("{}: {}", key, format_num(*n)))
+                    }
                     Value::Color(c) | Value::String(c) => ports.push(format!("{}: {}", key, c)),
                     Value::Enum { enum_name, variant } => {
                         ports.push(format!("{}: {}.{}", key, enum_name, variant))
@@ -681,7 +684,13 @@ pub fn resolve_layout(
                 .map(|part| {
                     if let Ok(val) = eval_expr(part, &values) {
                         match val {
-                            Value::Number(n) => Expr::Literal(Literal::Number(n, part.span())),
+                            Value::Integer(i) => Expr::Literal(Literal::Integer(i, part.span())),
+                            Value::Float(n) => Expr::Literal(Literal::Float(n, part.span())),
+                            Value::Distance(d) => Expr::Literal(Literal::Distance(
+                                d,
+                                crate::ast::DistanceUnit::Px,
+                                part.span(),
+                            )),
                             Value::String(s) => Expr::Literal(Literal::String(s, part.span())),
                             Value::Bool(b) => Expr::Literal(Literal::Bool(b, part.span())),
                             Value::Color(c) => Expr::Literal(Literal::Color(c, part.span())),
@@ -792,7 +801,15 @@ pub fn update_resolved_layout(
                     .map(|part| {
                         if let Ok(val) = eval_expr(part, &layout.values) {
                             match val {
-                                Value::Number(n) => Expr::Literal(Literal::Number(n, part.span())),
+                                Value::Integer(i) => {
+                                    Expr::Literal(Literal::Integer(i, part.span()))
+                                }
+                                Value::Float(n) => Expr::Literal(Literal::Float(n, part.span())),
+                                Value::Distance(d) => Expr::Literal(Literal::Distance(
+                                    d,
+                                    crate::ast::DistanceUnit::Px,
+                                    part.span(),
+                                )),
                                 Value::String(s) => Expr::Literal(Literal::String(s, part.span())),
                                 Value::Bool(b) => Expr::Literal(Literal::Bool(b, part.span())),
                                 Value::Color(c) => Expr::Literal(Literal::Color(c, part.span())),
@@ -908,10 +925,10 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                     child_node.fragments = fragments;
                     child_node.rect = union_rect;
 
-                    child_node.properties.insert("x".to_string(), Value::Number(union_rect.x));
-                    child_node.properties.insert("y".to_string(), Value::Number(union_rect.y));
-                    child_node.properties.insert("width".to_string(), Value::Number(union_rect.width));
-                    child_node.properties.insert("height".to_string(), Value::Number(union_rect.height));
+                    child_node.properties.insert("x".to_string(), Value::Distance(union_rect.x));
+                    child_node.properties.insert("y".to_string(), Value::Distance(union_rect.y));
+                    child_node.properties.insert("width".to_string(), Value::Distance(union_rect.width));
+                    child_node.properties.insert("height".to_string(), Value::Distance(union_rect.height));
 
                     if let Some(style) = span_style {
                         if let Some(ref u) = style.url {
@@ -928,10 +945,10 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                         }
                     }
 
-                    layout.values.insert(VarId::new(child_id, "x"), Value::Number(union_rect.x));
-                    layout.values.insert(VarId::new(child_id, "y"), Value::Number(union_rect.y));
-                    layout.values.insert(VarId::new(child_id, "width"), Value::Number(union_rect.width));
-                    layout.values.insert(VarId::new(child_id, "height"), Value::Number(union_rect.height));
+                    layout.values.insert(VarId::new(child_id, "x"), Value::Distance(union_rect.x));
+                    layout.values.insert(VarId::new(child_id, "y"), Value::Distance(union_rect.y));
+                    layout.values.insert(VarId::new(child_id, "width"), Value::Distance(union_rect.width));
+                    layout.values.insert(VarId::new(child_id, "height"), Value::Distance(union_rect.height));
                 }
             }
         }

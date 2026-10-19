@@ -5,11 +5,11 @@
 
 // 1. Explicit Fixed Width & Fixed Height VStack: supports explicit bounds in both dimensions
 \Component VStack(
-    width: Number,
-    height: Number,
-    x: Number: parent.left,
-    y: Number: parent.top,
-    gap: Number: 0,
+    width: Distance,
+    height: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    gap: Distance: 0,
     align: Align: Align.Left
 ) {
     \let is_center = align == Align.Center;
@@ -31,10 +31,10 @@
 
 // 2. Explicit Fixed Width & Intrinsic Height VStack: zero references to parent.width
 \Component VStack(
-    width: Number,
-    x: Number: parent.left,
-    y: Number: parent.top,
-    gap: Number: 0,
+    width: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    gap: Distance: 0,
     align: Align: Align.Left
 ) {
     \let is_center = align == Align.Center;
@@ -58,9 +58,9 @@
 // 3. Intrinsic Shrink-Wrapping Width VStack: wraps width to widest child
 \Component VStack(
     shrink: Boolean,
-    x: Number: parent.left,
-    y: Number: parent.top,
-    gap: Number: 0,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    gap: Distance: 0,
     align: Align: Align.Left
 ) {
     \alias max_child_width = max(children.width);

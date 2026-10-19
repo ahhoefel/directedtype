@@ -7,10 +7,10 @@
 // 1. Explicit / Fixed Width Button by Style
 \Component Button(
     style: ButtonStyle,
-    width: Number,
+    width: Distance,
     label: String,
-    x: Number: parent.left,
-    y: Number: parent.top,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
     disabled: Boolean: false
 ) {
     \let is_disabled = disabled;
@@ -48,8 +48,8 @@
 \Component Button(
     style: ButtonStyle,
     label: String,
-    x: Number: parent.left,
-    y: Number: parent.top,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
     disabled: Boolean: false
 ) {
     \let is_disabled = disabled;
@@ -58,7 +58,7 @@
     \let border_color = is_disabled ? style.disabled_border_color : style.border_color;
 
     \let measured_label_w = text_width(label, style.size, style.weight);
-    \let resolved_width = max(64, measured_label_w + 32);
+    \let resolved_width = max(64px, measured_label_w + 32px);
 
     \alias right = x + resolved_width;
     \alias width = resolved_width;
@@ -90,10 +90,10 @@
 // 3. Explicit / Fixed Width Button by Variant
 \Component Button(
     variant: ButtonVariant: ButtonVariant.Primary,
-    width: Number,
+    width: Distance,
     label: String,
-    x: Number: parent.left,
-    y: Number: parent.top,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
     disabled: Boolean: false
 ) {
     \let is_primary = variant == ButtonVariant.Primary;
@@ -125,7 +125,7 @@
         )
     );
 
-    \let default_border_w = is_outline ? 1.5 : (is_ghost ? 0 : 1);
+    \let default_border_w = is_outline ? 1.5px : (is_ghost ? 0 : 1px);
 
     \let is_disabled = disabled;
     \let bg_color = is_disabled ? #33415580 : default_bg;
@@ -133,23 +133,23 @@
     \let border_color = is_disabled ? #33415540 : default_border;
 
     \alias right = x + width;
-    \alias bottom = y + 38;
-    \alias height = 38;
+    \alias bottom = y + 38px;
+    \alias height = 38px;
 
     \Rect(
         x: x,
         y: y,
         width: width,
-        height: 38,
+        height: 38px,
         color: bg_color,
-        radius: 8,
+        radius: 8px,
         border_color: border_color,
         border_width: default_border_w,
         on_click: self.click
     ) {
         \Center {
             \Text(
-                size: 14,
+                size: 14px,
                 weight: 600,
                 color: text_color,
                 text: label
@@ -162,8 +162,8 @@
 \Component Button(
     variant: ButtonVariant: ButtonVariant.Primary,
     label: String,
-    x: Number: parent.left,
-    y: Number: parent.top,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
     disabled: Boolean: false
 ) {
     \let is_primary = variant == ButtonVariant.Primary;
@@ -195,35 +195,35 @@
         )
     );
 
-    \let default_border_w = is_outline ? 1.5 : (is_ghost ? 0 : 1);
+    \let default_border_w = is_outline ? 1.5px : (is_ghost ? 0 : 1px);
 
     \let is_disabled = disabled;
     \let bg_color = is_disabled ? #33415580 : default_bg;
     \let text_color = is_disabled ? #64748b : default_text;
     \let border_color = is_disabled ? #33415540 : default_border;
 
-    \let measured_label_w = text_width(label, 14, 600);
-    \let resolved_width = max(64, measured_label_w + 32);
+    \let measured_label_w = text_width(label, 14px, 600);
+    \let resolved_width = max(64px, measured_label_w + 32px);
 
     \alias right = x + resolved_width;
     \alias width = resolved_width;
-    \alias bottom = y + 38;
-    \alias height = 38;
+    \alias bottom = y + 38px;
+    \alias height = 38px;
 
     \Rect(
         x: x,
         y: y,
         width: resolved_width,
-        height: 38,
+        height: 38px,
         color: bg_color,
-        radius: 8,
+        radius: 8px,
         border_color: border_color,
         border_width: default_border_w,
         on_click: self.click
     ) {
         \Center {
             \Text(
-                size: 14,
+                size: 14px,
                 weight: 600,
                 color: text_color,
                 text: label

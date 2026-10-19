@@ -3,9 +3,9 @@
 
 // 1. 2D Uniform Inward Padding
 \Component PadIn(
-    padding: Number,
-    x: Number: parent.left,
-    y: Number: parent.top
+    padding: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top
 ) {
     \assert num_children == 1 as "Should have only one child.";
 
@@ -29,10 +29,10 @@
 
 // 2. 2D Asymmetric Inward Padding
 \Component PadIn(
-    padding_x: Number,
-    padding_y: Number,
-    x: Number: parent.left,
-    y: Number: parent.top
+    padding_x: Distance,
+    padding_y: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top
 ) {
     \assert num_children == 1 as "Should have only one child.";
 
@@ -56,9 +56,9 @@
 
 // 3. 1D Horizontal Inward Padding (vertical is pass-through)
 \Component PadIn(
-    padding_x: Number,
-    x: Number: parent.left,
-    y: Number: parent.top
+    padding_x: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top
 ) {
     \assert num_children == 1 as "Should have only one child.";
 
@@ -79,9 +79,9 @@
 
 // 4. 1D Vertical Inward Padding (horizontal is pass-through)
 \Component PadIn(
-    padding_y: Number,
-    x: Number: parent.left,
-    y: Number: parent.top
+    padding_y: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top
 ) {
     \assert num_children == 1 as "Should have only one child.";
 

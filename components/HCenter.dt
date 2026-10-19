@@ -5,9 +5,9 @@
 
 // 1. Explicit Width HCenter
 \Component HCenter(
-    width: Number,
-    x: Number: parent.left,
-    y: Number: parent.top
+    width: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top
 ) {
     \assert num_children == 1 as "Should have only one child.";
 
@@ -23,8 +23,8 @@
 
 // 2. Fluid Width HCenter with explicit origin
 \Component HCenter(
-    x: Number,
-    y: Number
+    x: Distance,
+    y: Distance
 ) {
     \assert num_children == 1 as "Should have only one child.";
 
@@ -44,7 +44,7 @@
 
 // 3. Fluid Parent-Fitting HCenter with explicit y
 \Component HCenter(
-    y: Number
+    y: Distance
 ) {
     \assert num_children == 1 as "Should have only one child.";
 

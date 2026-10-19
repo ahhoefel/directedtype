@@ -9,7 +9,7 @@ fn test_center_horizontal_fluid_in_window() {
     \use "components/HCenter.dt"
 
     \HCenter {
-        \Rect(width: 400, height: 100, color: #3b82f6)
+        \Rect(width: 400px, height: 100px, color: #3b82f6)
     }
     "#;
 
@@ -47,10 +47,10 @@ fn test_center_horizontal_inside_padding() {
     \use "components/PadOut.dt"
     \use "components/HCenter.dt"
 
-    \PadIn(padding_x: 40) {
+    \PadIn(padding_x: 40px) {
         \HCenter {
-            \PadOut(padding_y: 50) {
-                \Rect(width: 480, height: 200, color: #3b82f6)
+            \PadOut(padding_y: 50px) {
+                \Rect(width: 480px, height: 200px, color: #3b82f6)
             }
         }
     }
@@ -102,8 +102,8 @@ fn test_center_horizontal_clamps_when_narrower_than_child() {
     \use "components/HCenter.dt"
 
     \HCenter {
-        \PadOut(padding_x: 40, padding_y: 40) {
-            \Rect(width: 480, height: 100, color: #3b82f6)
+        \PadOut(padding_x: 40px, padding_y: 40px) {
+            \Rect(width: 480px, height: 100px, color: #3b82f6)
         }
     }
     "#;
@@ -139,8 +139,8 @@ fn test_center_horizontal_multiple_children_fails_assertion() {
     \use "components/HCenter.dt"
 
     \HCenter {
-        \Rect(width: 100, height: 50, color: #ff0000)
-        \Rect(width: 100, height: 50, color: #00ff00)
+        \Rect(width: 100px, height: 50px, color: #ff0000)
+        \Rect(width: 100px, height: 50px, color: #00ff00)
     }
     "#;
 
@@ -193,13 +193,13 @@ fn test_center_horizontal_zero_children_fails_assertion() {
 #[test]
 fn test_assert_directive_in_custom_component() {
     let input = r#"
-    \Component MustBeSquare(width: Number, height: Number) {
+    \Component MustBeSquare(width: Distance, height: Distance) {
         \assert width == height as "Must be a square!";
         \Children
     }
 
-    \MustBeSquare(width: 100, height: 100) {
-        \Rect(x: 0, y: 0, width: 100, height: 100, color: #3b82f6)
+    \MustBeSquare(width: 100px, height: 100px) {
+        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: #3b82f6)
     }
     "#;
 
@@ -215,13 +215,13 @@ fn test_assert_directive_in_custom_component() {
     ).expect("compilation of valid MustBeSquare should succeed");
 
     let fail_input = r#"
-    \Component MustBeSquare(width: Number, height: Number) {
+    \Component MustBeSquare(width: Distance, height: Distance) {
         \assert width == height as "Must be a square!";
         \Children
     }
 
-    \MustBeSquare(width: 100, height: 200) {
-        \Rect(x: 0, y: 0, width: 100, height: 200, color: #3b82f6)
+    \MustBeSquare(width: 100px, height: 200px) {
+        \Rect(x: 0, y: 0, width: 100px, height: 200px, color: #3b82f6)
     }
     "#;
 

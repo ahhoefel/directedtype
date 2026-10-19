@@ -3,21 +3,21 @@
 // interactive mousewheel/trackpad scrolling, and targeted anchor navigation.
 
 \Component ScrollView(
-    width: Number,
-    height: Number,
-    x: Number = parent.left,
-    y: Number = parent.top,
-    padding: Number = 0,
-    radius: Number = 0,
+    width: Distance,
+    height: Distance,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    padding: Distance = 0,
+    radius: Distance = 0,
     bg: Color = #00000000,
     border_color: Color = #00000000,
-    border_width: Number = 0,
+    border_width: Distance = 0,
     scrollbar_color: Color = #64748b80,
-    scrollbar_width: Number = 6,
+    scrollbar_width: Distance = 6px,
     on_scroll = self.on_scroll
 ) {
-    \state scroll_y: Number = 0;
-    \state scroll_x: Number = 0;
+    \state scroll_y: Distance = 0;
+    \state scroll_x: Distance = 0;
 
     \alias left = x;
     \alias top = y;
@@ -64,11 +64,11 @@
     // 4. Dynamic scrollbar
     \let content_bottom = max(children.bottom) + padding;
     \let content_height = max(height, content_bottom - y);
-    \let max_scroll_y = max(1, content_height - height);
-    \let has_overflow = content_height > (height + 1);
-    \let track_inset = 4;
-    \let track_height = max(1, height - (2 * track_inset));
-    \let thumb_height = max(24, min(track_height, track_height * (height / content_height)));
+    \let max_scroll_y = max(1px, content_height - height);
+    \let has_overflow = content_height > (height + 1px);
+    \let track_inset = 4px;
+    \let track_height = max(1px, height - (2 * track_inset));
+    \let thumb_height = max(24px, min(track_height, track_height * (height / content_height)));
     \let scroll_ratio = min(1, max(0, scroll_y / max_scroll_y));
     \let thumb_y = y + track_inset + scroll_ratio * (track_height - thumb_height);
 

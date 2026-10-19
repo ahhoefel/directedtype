@@ -6,13 +6,13 @@
 // 1. Explicit / Fixed Width Card: zero references to parent.width, preventing layout DAG cycles
 \Component Card(
     style: CardStyle,
-    width: Number,
-    x: Number,
-    y: Number,
-    gap: Number: 0,
+    width: Distance,
+    x: Distance,
+    y: Distance,
+    gap: Distance: 0,
     focused_bg: Color: #eff6ff,
     focused_border_color: Color: #3b82f6,
-    focused_border_width: Number: 2,
+    focused_border_width: Distance: 2px,
     on_focus = self.focus,
     on_blur = self.blur
 ) {
@@ -49,12 +49,12 @@
 // 2. Fluid / Parent-Filling Card: automatically spans parent width
 \Component Card(
     style: CardStyle,
-    x: Number,
-    y: Number,
-    gap: Number: 0,
+    x: Distance,
+    y: Distance,
+    gap: Distance: 0,
     focused_bg: Color: #eff6ff,
     focused_border_color: Color: #3b82f6,
-    focused_border_width: Number: 2,
+    focused_border_width: Distance: 2px,
     on_focus = self.focus,
     on_blur = self.blur
 ) {

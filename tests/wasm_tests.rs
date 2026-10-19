@@ -34,7 +34,7 @@ fn test_wasm_counter_component_lifecycle() {
 
     // Test on_mount with initial port 5
     let mut ports = HashMap::new();
-    ports.insert("initial".to_string(), Value::Number(5.0));
+    ports.insert("initial".to_string(), Value::Integer(5));
     let layout = directedtype::compiler::layout::ResolvedLayout::default();
     let mut ctx = Context::new(
         directedtype::compiler::expanded::NodeId(1),
@@ -59,21 +59,21 @@ fn test_wasm_counter_component_lifecycle() {
         .dispatch("increment", &mut event, &mut ctx)
         .expect("dispatch increment ok");
     let mutations = ctx.take_mutations();
-    assert_eq!(mutations, vec![("count".to_string(), Value::Number(6.0))]);
+    assert_eq!(mutations, vec![("count".to_string(), Value::Integer(6))]);
 
     // Dispatch "decrement" -> 6 - 1 = 5
     wasm_comp
         .dispatch("decrement", &mut event, &mut ctx)
         .expect("dispatch decrement ok");
     let mutations = ctx.take_mutations();
-    assert_eq!(mutations, vec![("count".to_string(), Value::Number(5.0))]);
+    assert_eq!(mutations, vec![("count".to_string(), Value::Integer(5))]);
 
     // Dispatch "reset" -> 0
     wasm_comp
         .dispatch("reset", &mut event, &mut ctx)
         .expect("dispatch reset ok");
     let mutations = ctx.take_mutations();
-    assert_eq!(mutations, vec![("count".to_string(), Value::Number(0.0))]);
+    assert_eq!(mutations, vec![("count".to_string(), Value::Integer(0))]);
 }
 
 #[test]
@@ -118,9 +118,9 @@ fn test_wasm_audio_mixer_lifecycle_and_callback() {
 
     // Mount AudioMixer with initial master=75, bass=40, treble=60
     let mut ports = HashMap::new();
-    ports.insert("master".to_string(), Value::Number(75.0));
-    ports.insert("bass".to_string(), Value::Number(40.0));
-    ports.insert("treble".to_string(), Value::Number(60.0));
+    ports.insert("master".to_string(), Value::Float(75.0));
+    ports.insert("bass".to_string(), Value::Float(40.0));
+    ports.insert("treble".to_string(), Value::Float(60.0));
 
     let layout = directedtype::compiler::layout::ResolvedLayout::default();
     let mut ctx = Context::new(
@@ -140,20 +140,20 @@ fn test_wasm_audio_mixer_lifecycle_and_callback() {
         Default::default(),
         directedtype::compiler::expanded::NodeId(1),
     );
-    event.payload = Some(Value::Number(88.4));
+    event.payload = Some(Value::Float(88.4));
     wasm_comp
         .dispatch("set_master", &mut event, &mut ctx)
         .expect("dispatch set_master ok");
     let mutations = ctx.take_mutations();
-    assert_eq!(mutations, vec![("master".to_string(), Value::Number(88.0))]);
+    assert_eq!(mutations, vec![("master".to_string(), Value::Float(88.0))]);
 
     // Dispatch "set_bass" with payload 22.0
-    event.payload = Some(Value::Number(22.0));
+    event.payload = Some(Value::Float(22.0));
     wasm_comp
         .dispatch("set_bass", &mut event, &mut ctx)
         .expect("dispatch set_bass ok");
     let mutations = ctx.take_mutations();
-    assert_eq!(mutations, vec![("bass".to_string(), Value::Number(22.0))]);
+    assert_eq!(mutations, vec![("bass".to_string(), Value::Float(22.0))]);
 
     // Test auto-discovery of slider_demo.wasm for AudioMixer component
     let dt_path = std::path::Path::new("examples/slider_demo.dt");

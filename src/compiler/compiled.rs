@@ -203,6 +203,29 @@ impl CompiledDocument {
             node.state_vars.get(state_name).and_then(|opt| opt.clone())
         };
 
+        let var_id = VarId::new(node_id, state_name);
+
+        // Coerce numeric/distance values to match the state variable's declared or inferred type
+        let mut value = value;
+        let target_is_distance = expected_type_opt.as_deref() == Some("Distance")
+            || (expected_type_opt.is_none()
+                && matches!(self.layout.values.get(&var_id), Some(Value::Distance(_))));
+        let target_is_float = expected_type_opt.as_deref() == Some("Float")
+            || (expected_type_opt.is_none()
+                && matches!(self.layout.values.get(&var_id), Some(Value::Float(_))));
+
+        if target_is_distance {
+            match value {
+                Value::Float(d) => value = Value::Distance(d),
+                Value::Integer(0) => value = Value::Distance(0.0),
+                _ => {}
+            }
+        } else if target_is_float {
+            if let Value::Integer(i) = value {
+                value = Value::Float(i as f64);
+            }
+        }
+
         // 2. Validate type annotation if one was declared
         if let Some(expected_type) = expected_type_opt {
             if !value.matches_type_name(&expected_type) {
@@ -215,7 +238,6 @@ impl CompiledDocument {
         }
 
         // 3. Inject new state value into the cell
-        let var_id = VarId::new(node_id, state_name);
         self.state_overrides.insert(var_id.clone(), value);
 
         // 4. Incrementally re-evaluate downstream variables in the DAG
@@ -272,46 +294,51 @@ impl CompiledDocument {
         let height_id = VarId::new(NodeId::WINDOW, "height");
         let right_id = VarId::new(NodeId::WINDOW, "right");
         let bottom_id = VarId::new(NodeId::WINDOW, "bottom");
+        let px = crate::ast::DistanceUnit::Px;
 
         if let Some(var) = self.graph.variables.get_mut(&width_id) {
             var.equation =
-                crate::ast::Expr::Literal(crate::ast::Literal::Number(window_width, window_span));
+                crate::ast::Expr::Literal(crate::ast::Literal::Distance(window_width, px, window_span));
         }
         if let Some(var) = self.graph.variables.get_mut(&height_id) {
             var.equation =
-                crate::ast::Expr::Literal(crate::ast::Literal::Number(window_height, window_span));
+                crate::ast::Expr::Literal(crate::ast::Literal::Distance(window_height, px, window_span));
         }
         if let Some(var) = self.graph.variables.get_mut(&right_id) {
             var.equation =
-                crate::ast::Expr::Literal(crate::ast::Literal::Number(window_width, window_span));
+                crate::ast::Expr::Literal(crate::ast::Literal::Distance(window_width, px, window_span));
         }
         if let Some(var) = self.graph.variables.get_mut(&bottom_id) {
             var.equation =
-                crate::ast::Expr::Literal(crate::ast::Literal::Number(window_height, window_span));
+                crate::ast::Expr::Literal(crate::ast::Literal::Distance(window_height, px, window_span));
         }
 
         if let Some(ref mut layout_graph) = self.layout.graph {
             if let Some(var) = layout_graph.variables.get_mut(&width_id) {
-                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Number(
+                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Distance(
                     window_width,
+                    px,
                     window_span,
                 ));
             }
             if let Some(var) = layout_graph.variables.get_mut(&height_id) {
-                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Number(
+                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Distance(
                     window_height,
+                    px,
                     window_span,
                 ));
             }
             if let Some(var) = layout_graph.variables.get_mut(&right_id) {
-                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Number(
+                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Distance(
                     window_width,
+                    px,
                     window_span,
                 ));
             }
             if let Some(var) = layout_graph.variables.get_mut(&bottom_id) {
-                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Number(
+                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Distance(
                     window_height,
+                    px,
                     window_span,
                 ));
             }
@@ -570,7 +597,7 @@ impl CompiledDocument {
         };
 
         let target_scroll_y = relative_y.min(max_scroll_y);
-        self.set_state(container, "scroll_y", Value::Number(target_scroll_y))
+        self.set_state(container, "scroll_y", Value::Distance(target_scroll_y))
     }
 
     /// Executes a context action on the compiled document (e.g. updating focus on scroll_to actions).

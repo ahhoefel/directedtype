@@ -16,13 +16,13 @@ pub struct AudioMixer {
 #[component]
 impl AudioMixer {
     pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
-        if let Some(m) = ctx.get_state_number("master") {
+        if let Some(m) = ctx.get_state_float("master") {
             self.master = m;
         }
-        if let Some(b) = ctx.get_state_number("bass") {
+        if let Some(b) = ctx.get_state_float("bass") {
             self.bass = b;
         }
-        if let Some(t) = ctx.get_state_number("treble") {
+        if let Some(t) = ctx.get_state_float("treble") {
             self.treble = t;
         }
     }

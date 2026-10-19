@@ -138,7 +138,21 @@ fn parse_prefix(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
     let (tok, span) = cursor.expect_token("expression")?;
 
     match tok {
-        Token::Number(val) => Ok(Expr::Literal(Literal::Number(val, span))),
+        Token::Integer(val) => Ok(Expr::Literal(Literal::Integer(val, span))),
+        Token::Float(val) => Ok(Expr::Literal(Literal::Float(val, span))),
+        Token::Dimension((val, unit_str)) => {
+            if let Some(unit) = crate::ast::DistanceUnit::from_str(&unit_str) {
+                Ok(Expr::Literal(Literal::Distance(val, unit, span)))
+            } else {
+                Err(ParseError::Custom {
+                    message: format!(
+                        "Unknown distance unit '{}'. Supported units are 'px', 'pt', and 'em'",
+                        unit_str
+                    ),
+                    span,
+                })
+            }
+        }
         Token::String(val) => Ok(Expr::Literal(Literal::String(val, span))),
         Token::Color(val) => Ok(Expr::Literal(Literal::Color(val, span))),
         Token::True => Ok(Expr::Literal(Literal::Bool(true, span))),

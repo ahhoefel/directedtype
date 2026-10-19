@@ -2,21 +2,21 @@
 \use { Align } from "components/Align.dt";
 \use { VStack } from "components/VStack.dt";
 
-\env font = \Font(family: "Arial", size: 16);
-\let inset = 20;
+\env font = \Font(family: "Arial", size: 16px);
+\let inset = 20px;
 
-\VStack(shrink:true, x:10,y:10,gap: 10){
-    \List(inset, width: 200, gap: 10, item_gap: 10, bullet_type: BulletType.Bullet) {
+\VStack(shrink:true, x:10px, y:10px, gap: 10px){
+    \List(inset, width: 200px, gap: 10px, item_gap: 10px, bullet_type: BulletType.Bullet) {
         \Item{One}
         \Item{Two}
         \Item{Three}
     }
-    \List(inset, width: 200, gap: 10, item_gap: 10) {
+    \List(inset, width: 200px, gap: 10px, item_gap: 10px) {
         \Item{Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum.}
         \Item{Two}
         \Item{Three}
     }
-    \List(inset, width: 200, gap: 10, item_gap: 10) {
+    \List(inset, width: 200px, gap: 10px, item_gap: 10px) {
         \Item{Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum. Hello, lorem ipsum dolor emit sum.}
         \Item{Two}
         \Item{Three}

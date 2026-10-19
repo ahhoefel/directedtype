@@ -182,10 +182,21 @@ impl ComponentKey {
         }
     }
 
-    pub fn number(n: f64) -> Self {
+    pub fn integer(n: i64) -> Self {
         Self {
-            parts: vec![Expr::Literal(Literal::Number(n, Span::default()))],
+            parts: vec![Expr::Literal(Literal::Integer(n, Span::default()))],
             span: Span::default(),
+        }
+    }
+
+    pub fn number(n: f64) -> Self {
+        if n.fract() == 0.0 && n.abs() < 1e15 {
+            Self::integer(n as i64)
+        } else {
+            Self {
+                parts: vec![Expr::Literal(Literal::Float(n, Span::default()))],
+                span: Span::default(),
+            }
         }
     }
 
@@ -202,7 +213,9 @@ impl ComponentKey {
         if self.parts.len() == 1 {
             match &self.parts[0] {
                 Expr::Literal(Literal::String(s, _)) => s.clone(),
-                Expr::Literal(Literal::Number(n, _)) => format!("{n}"),
+                Expr::Literal(Literal::Integer(n, _)) => format!("{n}"),
+                Expr::Literal(Literal::Float(n, _)) => format!("{n}"),
+                Expr::Literal(Literal::Distance(n, u, _)) => format!("{n}{u}"),
                 Expr::Ident(id) => id.as_str().to_string(),
                 other => format!("{other}"),
             }
@@ -212,7 +225,9 @@ impl ComponentKey {
                 .iter()
                 .map(|p| match p {
                     Expr::Literal(Literal::String(s, _)) => format!("\"{s}\""),
-                    Expr::Literal(Literal::Number(n, _)) => format!("{n}"),
+                    Expr::Literal(Literal::Integer(n, _)) => format!("{n}"),
+                    Expr::Literal(Literal::Float(n, _)) => format!("{n}"),
+                    Expr::Literal(Literal::Distance(n, u, _)) => format!("{n}{u}"),
                     Expr::Ident(id) => id.as_str().to_string(),
                     other => format!("{other}"),
                 })
@@ -252,7 +267,13 @@ impl fmt::Display for ComponentKey {
 pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
     match (a, b) {
         (Expr::Literal(l1), Expr::Literal(l2)) => match (l1, l2) {
-            (Literal::Number(n1, _), Literal::Number(n2, _)) => (n1 - n2).abs() < f64::EPSILON,
+            (Literal::Integer(i1, _), Literal::Integer(i2, _)) => i1 == i2,
+            (Literal::Float(n1, _), Literal::Float(n2, _)) => (n1 - n2).abs() < f64::EPSILON,
+            (Literal::Integer(i1, _), Literal::Float(n2, _))
+            | (Literal::Float(n2, _), Literal::Integer(i1, _)) => (*i1 as f64 - n2).abs() < f64::EPSILON,
+            (Literal::Distance(d1, u1, _), Literal::Distance(d2, u2, _)) => {
+                u1 == u2 && (d1 - d2).abs() < f64::EPSILON
+            }
             (Literal::String(s1, _), Literal::String(s2, _)) => s1 == s2,
             (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 == b2,
             (Literal::Color(c1, _), Literal::Color(c2, _)) => c1 == c2,
@@ -468,8 +489,28 @@ impl Expr {
         }
     }
 
+    pub fn integer(val: i64) -> Self {
+        Expr::Literal(Literal::Integer(val, Span::default()))
+    }
+
+    pub fn float(val: f64) -> Self {
+        Expr::Literal(Literal::Float(val, Span::default()))
+    }
+
+    pub fn distance(val: f64, unit: DistanceUnit) -> Self {
+        Expr::Literal(Literal::Distance(val, unit, Span::default()))
+    }
+
+    pub fn distance_px(val: f64) -> Self {
+        Expr::Literal(Literal::Distance(val, DistanceUnit::Px, Span::default()))
+    }
+
     pub fn number(val: f64) -> Self {
-        Expr::Literal(Literal::Number(val, Span::default()))
+        if val.fract() == 0.0 && val.abs() < 1e15 {
+            Self::integer(val as i64)
+        } else {
+            Self::float(val)
+        }
     }
 
     pub fn lit(val: f64) -> Self {
@@ -557,9 +598,43 @@ pub enum UnaryOp {
     Not,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DistanceUnit {
+    Px,
+    Pt,
+    Em,
+}
+
+impl DistanceUnit {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "px" => Some(Self::Px),
+            "pt" => Some(Self::Pt),
+            "em" => Some(Self::Em),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Px => "px",
+            Self::Pt => "pt",
+            Self::Em => "em",
+        }
+    }
+}
+
+impl fmt::Display for DistanceUnit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
-    Number(f64, Span),
+    Integer(i64, Span),
+    Float(f64, Span),
+    Distance(f64, DistanceUnit, Span),
     String(String, Span),
     Bool(bool, Span),
     Color(String, Span),
@@ -569,7 +644,9 @@ pub enum Literal {
 impl Literal {
     pub fn span(&self) -> Span {
         match self {
-            Literal::Number(_, span)
+            Literal::Integer(_, span)
+            | Literal::Float(_, span)
+            | Literal::Distance(_, _, span)
             | Literal::String(_, span)
             | Literal::Bool(_, span)
             | Literal::Color(_, span)
@@ -579,7 +656,9 @@ impl Literal {
 
     pub fn type_name(&self) -> &str {
         match self {
-            Literal::Number(..) => "Number",
+            Literal::Integer(..) => "Integer",
+            Literal::Float(..) => "Float",
+            Literal::Distance(..) => "Distance",
             Literal::String(..) => "String",
             Literal::Bool(..) => "Boolean",
             Literal::Color(..) => "Color",
@@ -589,7 +668,9 @@ impl Literal {
 
     pub fn matches_type_name(&self, expected: &str) -> bool {
         match expected {
-            "Number" => matches!(self, Literal::Number(..)),
+            "Integer" | "Int" => matches!(self, Literal::Integer(..)),
+            "Float" | "Number" => matches!(self, Literal::Float(..) | Literal::Integer(..)),
+            "Distance" => matches!(self, Literal::Distance(..) | Literal::Integer(0, _)),
             "String" => matches!(self, Literal::String(..)),
             "Boolean" | "Bool" => matches!(self, Literal::Bool(..)),
             "Color" => matches!(self, Literal::Color(..)),
@@ -639,11 +720,13 @@ impl fmt::Display for UnaryOp {
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Literal::Number(n, _) => {
+            Literal::Integer(n, _) => write!(f, "{}", n),
+            Literal::Float(n, _) => write!(f, "{}", n),
+            Literal::Distance(n, u, _) => {
                 if n.fract() == 0.0 && n.abs() < 1e15 {
-                    write!(f, "{}", *n as i64)
+                    write!(f, "{}{}", *n as i64, u)
                 } else {
-                    write!(f, "{}", n)
+                    write!(f, "{}{}", n, u)
                 }
             }
             Literal::String(s, _) => write!(f, "\"{}\"", s),

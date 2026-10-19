@@ -3,10 +3,10 @@
 
 // 1. Fluid Divider: spans full width of parent container
 \Component Divider(
-    x: Number,
-    y: Number,
+    x: Distance,
+    y: Distance,
     color: Color: #334155,
-    thickness: Number: 1
+    thickness: Distance: 1px
 ) {
     \let resolved_width = parent.width;
 
@@ -26,11 +26,11 @@
 
 // 2. Fixed Width Divider: renders hairline with explicit width
 \Component Divider(
-    width: Number,
-    x: Number,
-    y: Number,
+    width: Distance,
+    x: Distance,
+    y: Distance,
     color: Color: #334155,
-    thickness: Number: 1
+    thickness: Distance: 1px
 ) {
     \alias right = x + width;
     \alias bottom = y + thickness;

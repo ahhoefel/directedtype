@@ -90,16 +90,16 @@ fn save_golden_or_preview(img: &image::RgbaImage, name: &str) {
 #[test]
 fn test_headless_render_layout_to_image() {
     let source = r#"
-\Component Flow(x: Number: 0, y: Number: 0, gap: Number: 16) {
+\Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 16px) {
     \Children {
         x: parent.left,
         y: prev ? prev.bottom + gap : parent.top
     }
 }
 
-\Flow(gap: 20) {
-    \Rect(x: 20, y: 20, width: 200, height: 60, color: #ff0000)
-    \Text(x: 20, y: 100, width: 200, size: 20, color: #0000ff) {
+\Flow(gap: 20px) {
+    \Rect(x: 20px, y: 20px, width: 200px, height: 60px, color: #ff0000)
+    \Text(x: 20px, y: 100px, width: 200px, size: 20px, color: #0000ff) {
         Hello DirectedType Vello
     }
 }
@@ -140,23 +140,23 @@ fn test_headless_render_layout_to_image() {
 #[test]
 fn test_headless_render_to_png_file() {
     let source = r#"
-\Component ShadedBox(x: Number: 0, y: Number: 0, bg_color: Color: #333333, width: max(children.width) + 32, height: sum(children.height) + 32) {
+\Component ShadedBox(x: Distance: 0, y: Distance: 0, bg_color: Color: #333333, width: max(children.width) + 32px, height: sum(children.height) + 32px) {
     \Rect(
         x: x,
         y: y,
         width: width,
         height: height,
         color: bg_color,
-        radius: 8
+        radius: 8px
     )
     \Children {
-        x: x + 16,
-        y: y + 16
+        x: x + 16px,
+        y: y + 16px
     }
 }
 
 \ShadedBox(bg_color: #224488) {
-    \Text(width: 250, size: 18, color: #ffffff) {
+    \Text(width: 250px, size: 18px, color: #ffffff) {
         DirectedType Headless PNG Rendering
     }
 }
@@ -193,7 +193,7 @@ fn test_viewer_hot_reload_document() {
     let test_file = temp_dir.join(format!("dt_hot_reload_test_{}.dt", std::process::id()));
 
     // 1. Initial version: Rect with width 100
-    let v1 = r#"\Rect(x: 10, y: 10, width: 100, height: 50, color: #ff0000)"#;
+    let v1 = r#"\Rect(x: 10px, y: 10px, width: 100px, height: 50px, color: #ff0000)"#;
     std::fs::write(&test_file, v1).expect("Failed to write v1 test file");
 
     let doc1 = parse_document(v1).expect("Failed to parse v1");
@@ -207,7 +207,7 @@ fn test_viewer_hot_reload_document() {
     assert_eq!(app.layout().nodes[0].rect.width, 100.0);
 
     // 2. Updated version: Rect with width 350
-    let v2 = r#"\Rect(x: 10, y: 10, width: 350, height: 50, color: #00ff00)"#;
+    let v2 = r#"\Rect(x: 10px, y: 10px, width: 350px, height: 50px, color: #00ff00)"#;
     std::fs::write(&test_file, v2).expect("Failed to write v2 test file");
 
     app.reload_document();
@@ -216,7 +216,7 @@ fn test_viewer_hot_reload_document() {
     assert_eq!(app.layout().nodes[0].rect.width, 350.0);
 
     // 3. Invalid syntax version: Must not crash, must retain last valid layout
-    let v_invalid_syntax = r#"\Rect(x: 10, y: 10, width: { invalid syntax"#;
+    let v_invalid_syntax = r#"\Rect(x: 10px, y: 10px, width: { invalid syntax"#;
     std::fs::write(&test_file, v_invalid_syntax).expect("Failed to write invalid syntax");
 
     app.reload_document();
@@ -236,7 +236,7 @@ fn test_viewer_hot_reload_document() {
 }
 
 \ParadoxBox {
-  \Rect(height: 50, color: #000)
+  \Rect(height: 50px, color: #000)
 }
 "#;
     std::fs::write(&test_file, v_cycle).expect("Failed to write cyclic layout");
@@ -255,8 +255,8 @@ fn test_viewer_hot_reload_document() {
 fn test_headless_render_clipping() {
     let source = r#"
 \Component ScrollPane {
-    \let clip = \Clip(up: self.clip, box: \Box(x: 20, y: 20, width: 60, height: 60))
-    \Rect(clip: clip, x: 20, y: 20, width: 200, height: 200, color: #ff0000)
+    \let clip = \Clip(up: self.clip, box: \Box(x: 20px, y: 20px, width: 60px, height: 60px))
+    \Rect(clip: clip, x: 20px, y: 20px, width: 200px, height: 200px, color: #ff0000)
 }
 
 \ScrollPane()
@@ -665,7 +665,7 @@ fn test_render_link_focus_highlight() {
 \use "components/LinkStyle.dt"
 \use "components/Link.dt"
 
-\env font = \Font(size: 16);
+\env font = \Font(size: 16px);
 
 \let red_link_style = \LinkStyle(
     color: #2563eb,
@@ -679,9 +679,9 @@ fn test_render_link_focus_highlight() {
     focused_bg: #fee2e2
 );
 
-\PadIn(padding: 30, x: 0, y: 0) {
-    \VStack(gap: 16) {
-        \Text(size: 20) {
+\PadIn(padding: 30px, x: 0, y: 0) {
+    \VStack(gap: 16px) {
+        \Text(size: 20px) {
             Check out \Link(url: "https://directedtype.org", link_style: red_link_style){DirectedType Engine} today.
         }
     }
@@ -754,9 +754,9 @@ fn test_render_link_hover_highlight() {
     focused_bg: #fee2e2
 );
 
-\PadIn(padding: 30, x: 0, y: 0) {
-    \VStack(gap: 16) {
-        \Text(size: 20) {
+\PadIn(padding: 30px, x: 0, y: 0) {
+    \VStack(gap: 16px) {
+        \Text(size: 20px) {
             Hovering over \Link(url: "https://directedtype.org", link_style: blue_hover_link_style){DirectedType Engine} reveals hover styles.
         }
     }

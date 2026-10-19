@@ -4,7 +4,9 @@ use std::fmt;
 /// A runtime value computed during layout graph evaluation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    Number(f64),
+    Integer(i64),
+    Float(f64),
+    Distance(f64),
     String(String),
     Bool(bool),
     Color(String),
@@ -18,9 +20,30 @@ pub enum Value {
 impl Value {
     pub fn as_f64(&self) -> Option<f64> {
         match self {
-            Value::Number(n) => Some(*n),
+            Value::Integer(n) => Some(*n as f64),
+            Value::Float(n) | Value::Distance(n) => Some(*n),
             _ => None,
         }
+    }
+
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            Value::Integer(n) => Some(*n),
+            Value::Float(n) | Value::Distance(n) => Some(*n as i64),
+            _ => None,
+        }
+    }
+
+    pub fn as_distance(&self) -> Option<f64> {
+        match self {
+            Value::Distance(d) => Some(*d),
+            Value::Integer(0) => Some(0.0),
+            _ => None,
+        }
+    }
+
+    pub fn is_zero_integer(&self) -> bool {
+        matches!(self, Value::Integer(0))
     }
 
     pub fn as_bool(&self) -> Option<bool> {
@@ -48,7 +71,8 @@ impl Value {
     pub fn is_truthy(&self) -> bool {
         match self {
             Value::Bool(b) => *b,
-            Value::Number(n) => *n != 0.0,
+            Value::Integer(n) => *n != 0,
+            Value::Float(n) | Value::Distance(n) => *n != 0.0,
             Value::String(s) => !s.is_empty(),
             Value::Color(_) => true,
             Value::Node(_) => true,
@@ -59,11 +83,19 @@ impl Value {
     pub fn to_display_string(&self) -> String {
         match self {
             Value::String(s) => s.clone(),
-            Value::Number(n) => {
+            Value::Integer(n) => format!("{n}"),
+            Value::Float(n) => {
                 if n.fract() == 0.0 && n.is_finite() {
                     format!("{:.0}", n)
                 } else {
                     format!("{n}")
+                }
+            }
+            Value::Distance(n) => {
+                if n.fract() == 0.0 && n.is_finite() {
+                    format!("{:.0}px", n)
+                } else {
+                    format!("{n}px")
                 }
             }
             Value::Bool(b) => format!("{b}"),
@@ -75,7 +107,9 @@ impl Value {
 
     pub fn type_name(&self) -> &str {
         match self {
-            Value::Number(_) => "Number",
+            Value::Integer(_) => "Integer",
+            Value::Float(_) => "Float",
+            Value::Distance(_) => "Distance",
             Value::String(_) => "String",
             Value::Bool(_) => "Boolean",
             Value::Color(_) => "Color",
@@ -86,7 +120,9 @@ impl Value {
 
     pub fn matches_type_name(&self, expected: &str) -> bool {
         match expected {
-            "Number" => matches!(self, Value::Number(_)),
+            "Integer" | "Int" => matches!(self, Value::Integer(_)),
+            "Float" | "Number" => matches!(self, Value::Float(_) | Value::Integer(_)),
+            "Distance" => matches!(self, Value::Distance(_) | Value::Integer(0)),
             "String" => matches!(self, Value::String(_)),
             "Boolean" | "Bool" => matches!(self, Value::Bool(_)),
             "Color" => matches!(self, Value::Color(_)),
@@ -102,7 +138,15 @@ impl Value {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Value::Number(n) => write!(f, "{}", n),
+            Value::Integer(n) => write!(f, "{}", n),
+            Value::Float(n) => write!(f, "{}", n),
+            Value::Distance(n) => {
+                if n.fract() == 0.0 && n.is_finite() {
+                    write!(f, "{:.0}px", n)
+                } else {
+                    write!(f, "{}px", n)
+                }
+            }
             Value::String(s) => write!(f, "\"{}\"", s),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Color(c) => write!(f, "{}", c),
@@ -114,7 +158,7 @@ impl fmt::Display for Value {
 
 impl From<f64> for Value {
     fn from(n: f64) -> Self {
-        Value::Number(n)
+        Value::Float(n)
     }
 }
 
@@ -138,25 +182,25 @@ impl From<&str> for Value {
 
 impl From<f32> for Value {
     fn from(n: f32) -> Self {
-        Value::Number(n as f64)
+        Value::Float(n as f64)
     }
 }
 
 impl From<i32> for Value {
     fn from(n: i32) -> Self {
-        Value::Number(n as f64)
+        Value::Integer(n as i64)
     }
 }
 
 impl From<i64> for Value {
     fn from(n: i64) -> Self {
-        Value::Number(n as f64)
+        Value::Integer(n)
     }
 }
 
 impl From<usize> for Value {
     fn from(n: usize) -> Self {
-        Value::Number(n as f64)
+        Value::Integer(n as i64)
     }
 }
 

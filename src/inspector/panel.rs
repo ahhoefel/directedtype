@@ -1438,7 +1438,9 @@ impl InspectPanelComponent {
                         let val_col = match val_opt {
                             Some(Value::Bool(true)) => Color::from_rgb8(52, 211, 153), // emerald 400
                             Some(Value::Bool(false)) => Color::from_rgb8(248, 113, 113), // red 400
-                            Some(Value::Number(_)) => Color::from_rgb8(251, 191, 36), // amber 400
+                            Some(Value::Integer(_) | Value::Float(_) | Value::Distance(_)) => {
+                                Color::from_rgb8(251, 191, 36)
+                            } // amber 400
                             Some(Value::String(_)) => Color::from_rgb8(251, 191, 36), // amber
                             _ => Color::from_rgb8(241, 245, 249),
                         };
@@ -1585,7 +1587,9 @@ impl InspectPanelComponent {
                         let val_col = match val_opt {
                             Some(Value::Bool(true)) => Color::from_rgb8(52, 211, 153), // emerald 400
                             Some(Value::Bool(false)) => Color::from_rgb8(248, 113, 113), // red 400
-                            Some(Value::Number(_)) => Color::from_rgb8(251, 191, 36), // amber 400
+                            Some(Value::Integer(_) | Value::Float(_) | Value::Distance(_)) => {
+                                Color::from_rgb8(251, 191, 36)
+                            } // amber 400
                             Some(Value::String(_)) => Color::from_rgb8(251, 191, 36), // amber
                             _ => Color::from_rgb8(241, 245, 249),
                         };

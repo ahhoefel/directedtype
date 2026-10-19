@@ -12,9 +12,9 @@ fn test_button_intrinsic_width_calculation() {
     \use "components/Button.dt"
     \use "theme/default.dt"
 
-    \Button("auto"; style: button_primary, label: "OK", x: 10, y: 10)
-    \Button("wide"; style: button_primary, label: "Submit Application Form", x: 10, y: 60)
-    \Button("fixed"; style: button_primary, label: "Fixed", width: 180, x: 10, y: 110)
+    \Button("auto"; style: button_primary, label: "OK", x: 10px, y: 10px)
+    \Button("wide"; style: button_primary, label: "Submit Application Form", x: 10px, y: 60px)
+    \Button("fixed"; style: button_primary, label: "Fixed", width: 180px, x: 10px, y: 110px)
     "#;
 
     let doc = parse(input).expect("parse ok");
@@ -56,10 +56,10 @@ fn test_button_variants_visual_ports() {
     \use "components/Button.dt"
     \use "theme/default.dt"
 
-    \Button("primary"; style: button_primary, x: 10, y: 10, label: "Primary")
-    \Button("outline"; style: button_outline, x: 10, y: 60, label: "Outline")
-    \Button("danger"; style: button_danger, x: 10, y: 110, label: "Danger")
-    \Button("disabled"; style: button_primary, x: 10, y: 160, label: "Disabled", disabled: true)
+    \Button("primary"; style: button_primary, x: 10px, y: 10px, label: "Primary")
+    \Button("outline"; style: button_outline, x: 10px, y: 60px, label: "Outline")
+    \Button("danger"; style: button_danger, x: 10px, y: 110px, label: "Danger")
+    \Button("disabled"; style: button_primary, x: 10px, y: 160px, label: "Disabled", disabled: true)
     "#;
 
     let doc = parse(input).expect("parse ok");
@@ -81,7 +81,7 @@ fn test_button_variants_visual_ports() {
     let outline_comp = compiled.find_by_key(None, &ComponentKey::string("outline")).unwrap();
     let outline_rect = compiled.layout.nodes.iter().find(|n| n.parent == Some(outline_comp.id) && n.name == "Rect").unwrap();
     assert_eq!(outline_rect.properties.get("color"), Some(&Value::Color("#0f172a".to_string())));
-    assert_eq!(outline_rect.properties.get("border_width"), Some(&Value::Number(1.5)));
+    assert_eq!(outline_rect.properties.get("border_width"), Some(&Value::Distance(1.5)));
 
     let danger_comp = compiled.find_by_key(None, &ComponentKey::string("danger")).unwrap();
     let danger_rect = compiled.layout.nodes.iter().find(|n| n.parent == Some(danger_comp.id) && n.name == "Rect").unwrap();
@@ -118,9 +118,9 @@ fn test_disabled_button_suppresses_event_bubbling() {
     \use "theme/default.dt"
 
     \Component Card {
-        \Rect(x: 0, y: 0, width: 300, height: 200, color: #1e293b, on_click: self.on_parent_click) {
-            \Button("active_btn"; style: button_primary, x: 20, y: 20, width: 100, label: "Active", disabled: false)
-            \Button("disabled_btn"; style: button_primary, x: 20, y: 80, width: 100, label: "Disabled", disabled: true)
+        \Rect(x: 0, y: 0, width: 300px, height: 200px, color: #1e293b, on_click: self.on_parent_click) {
+            \Button("active_btn"; style: button_primary, x: 20px, y: 20px, width: 100px, label: "Active", disabled: false)
+            \Button("disabled_btn"; style: button_primary, x: 20px, y: 80px, width: 100px, label: "Disabled", disabled: true)
         }
     }
 
@@ -188,8 +188,8 @@ fn test_button_spatial_alias_flow() {
     \use "components/Button.dt"
     \use "theme/default.dt"
 
-    \Button("first"; style: button_primary, x: 20, y: 20, label: "First Button")
-    \Button("second"; style: button_primary, x: prev.right + 16, y: 20, label: "Second Button")
+    \Button("first"; style: button_primary, x: 20px, y: 20px, label: "First Button")
+    \Button("second"; style: button_primary, x: prev.right + 16px, y: 20px, label: "Second Button")
     "#;
 
     let doc = parse(input).expect("parse ok");

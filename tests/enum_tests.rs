@@ -13,11 +13,11 @@ fn test_enum_declaration_and_variant_usage() {
         Right,
     }
 
-    \Component Box(align: Align: Align.Left, x: Number: 0, y: Number: 0) {
+    \Component Box(align: Align: Align.Left, x: Distance: 0, y: Distance: 0) {
         \let is_center = align == Align.Center;
         \let is_right = align == Align.Right;
-        \alias offset = is_center ? 50 : (is_right ? 100 : 0);
-        \Rect(x: x + offset, y: y, width: 100, height: 100, color: #ff0000)
+        \alias offset = is_center ? 50px : (is_right ? 100px : 0);
+        \Rect(x: x + offset, y: y, width: 100px, height: 100px, color: #ff0000)
     }
 
     \Box(align: Align.Center)
@@ -58,7 +58,7 @@ fn test_enum_unknown_variant_error() {
     }
 
     \Component Box(align: Align) {
-        \Rect(x: 0, y: 0, width: 10, height: 10, color: #000000)
+        \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000000)
     }
 
     \Box(align: Align.Bottom)
@@ -84,7 +84,7 @@ fn test_enum_bare_use_error() {
     }
 
     \Component Box(align: Align) {
-        \Rect(x: 0, y: 0, width: 10, height: 10, color: #000000)
+        \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000000)
     }
 
     \Box(align: Align)
@@ -109,7 +109,7 @@ fn test_enum_type_mismatch_error() {
     }
 
     \Component Box(align: Align) {
-        \Rect(x: 0, y: 0, width: 10, height: 10, color: #000000)
+        \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000000)
     }
 
     \Box(align: "left")
@@ -139,7 +139,7 @@ fn test_enum_duplicate_declaration_error() {
         Bottom,
     }
 
-    \Rect(x: 0, y: 0, width: 10, height: 10, color: #000000)
+    \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000000)
     "#;
 
     let doc = parse(input).expect("Failed to parse");
@@ -190,8 +190,8 @@ fn test_enum_import_and_aliased_import() {
 
     \Component Card(align: Align: Align.Start, sub_align: Layout: Layout.Middle) {
         \let is_middle = sub_align == Layout.Middle;
-        \alias w = is_middle ? 200 : 100;
-        \Rect(x: 0, y: 0, width: w, height: 50, color: #ffffff)
+        \alias w = is_middle ? 200px : 100px;
+        \Rect(x: 0, y: 0, width: w, height: 50px, color: #ffffff)
     }
 
     \Card(align: Align.End, sub_align: Layout.Middle)
@@ -214,21 +214,21 @@ fn test_enum_import_and_aliased_import() {
 
     let card_w = card.ports.get("w").unwrap();
     match card_w {
-        Expr::Literal(Literal::Number(n, _)) => assert_eq!(*n, 200.0),
-        other => panic!("Expected Literal 200, got {:?}", other),
+        Expr::Literal(Literal::Distance(n, DistanceUnit::Px, _)) => assert_eq!(*n, 200.0),
+        other => panic!("Expected Literal 200px, got {:?}", other),
     }
 }
 
 #[test]
 fn test_text_ends_at_baseline_and_descender() {
     let input = r#"
-    \Text(size: 32, ends_at: TextEnd.Baseline) {
+    \Text(size: 32px, ends_at: TextEnd.Baseline) {
         Typography & Baseline
     }
-    \Text(size: 32, ends_at: TextEnd.Descender) {
+    \Text(size: 32px, ends_at: TextEnd.Descender) {
         Typography & Baseline
     }
-    \Text(size: 32) {
+    \Text(size: 32px) {
         Typography & Baseline
     }
     "#;
@@ -279,7 +279,7 @@ fn test_text_ends_at_via_component_use() {
     let input = r#"
     \use "components/TextEnd.dt"
 
-    \Text(size: 24, ends_at: TextEnd.Descender) {
+    \Text(size: 24px, ends_at: TextEnd.Descender) {
         Descender text
     }
     "#;
@@ -309,15 +309,15 @@ fn test_text_start_at_capital_and_ascender() {
     use directedtype::component::ComponentRegistry;
 
     let input = r#"
-    \Text(size: 32, start_at: TextStart.Capital, ends_at: TextEnd.Baseline) {
+    \Text(size: 32px, start_at: TextStart.Capital, ends_at: TextEnd.Baseline) {
         Capital baseline text
     }
 
-    \Text(size: 32, start_at: TextStart.Ascender, ends_at: TextEnd.Baseline) {
+    \Text(size: 32px, start_at: TextStart.Ascender, ends_at: TextEnd.Baseline) {
         Ascender baseline text
     }
 
-    \Text(size: 32) {
+    \Text(size: 32px) {
         Default text
     }
     "#;
@@ -374,7 +374,7 @@ fn test_text_start_at_via_component_use() {
     let input = r#"
     \use "components/TextStart.dt"
 
-    \Text(size: 24, start_at: TextStart.Capital) {
+    \Text(size: 24px, start_at: TextStart.Capital) {
         Capital start text
     }
     "#;
@@ -403,7 +403,7 @@ fn test_text_start_at_misspelled_acender_rejected() {
     let input = r#"
     \use "components/TextStart.dt"
 
-    \Text(size: 24, start_at: TextStart.Acender) {
+    \Text(size: 24px, start_at: TextStart.Acender) {
         Misspelled enum
     }
     "#;

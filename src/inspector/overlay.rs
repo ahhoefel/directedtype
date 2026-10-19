@@ -241,7 +241,7 @@ impl InspectOverlayComponent {
     /// Generates a reusable DTML element snippet instantiating `\InspectOverlay` for this target.
     pub fn build_dtml(&self, info: &InspectTargetInfo, is_selected: bool) -> String {
         format!(
-            r#"\InspectOverlay(target_x: {}, target_y: {}, target_w: {}, target_h: {}, label: "{}", is_selected: {})"#,
+            r#"\InspectOverlay(target_x: {}px, target_y: {}px, target_w: {}px, target_h: {}px, label: "{}", is_selected: {})"#,
             info.rect.x,
             info.rect.y,
             info.rect.width,

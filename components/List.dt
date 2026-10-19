@@ -21,7 +21,7 @@
     \alias height = sum(children.height) + max(0, num_children-1) * gap;
 }
 
-\Component Item(x,y, width, index: Number, item_gap, bullet_type: BulletType, bullet: String: "•", env font) {
+\Component Item(x,y, width, index: Integer, item_gap, bullet_type: BulletType, bullet: String: "•", env font) {
     \let bullet_node = \Text(
         x: x - bullet_node.width - item_gap,
         y: y,

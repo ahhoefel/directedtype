@@ -9,12 +9,12 @@ use directedtype::Value;
 #[test]
 fn test_compiled_document_set_state_updates_downstream_dag() {
     let input = r#"
-    \Component Counter(multiplier: Number: 10) {
+    \Component Counter(multiplier: Distance: 10px) {
         \state count: 0;
-        \Rect(x: 0, y: 0, width: count * multiplier, height: 30, color: #00FF00)
+        \Rect(x: 0, y: 0, width: count * multiplier, height: 30px, color: #00FF00)
     }
 
-    \Counter(multiplier: 10)
+    \Counter(multiplier: 10px)
     "#;
 
     let doc = parse(input).expect("Failed to parse document");
@@ -36,7 +36,7 @@ fn test_compiled_document_set_state_updates_downstream_dag() {
 
     // Mutate state: count = 7
     let changed = compiled
-        .set_state(counter_id, "count", Value::Number(7.0))
+        .set_state(counter_id, "count", Value::Integer(7))
         .expect("Failed to set state");
 
     // Verify changed set contains count and width
@@ -56,12 +56,12 @@ fn test_compiled_document_set_state_updates_downstream_dag() {
 #[test]
 fn test_compiled_document_not_a_state_variable_error() {
     let input = r#"
-    \Component Counter(multiplier: Number: 10) {
+    \Component Counter(multiplier: Distance: 10px) {
         \state count: 0;
-        \Rect(x: 0, y: 0, width: count * multiplier, height: 30, color: #00FF00)
+        \Rect(x: 0, y: 0, width: count * multiplier, height: 30px, color: #00FF00)
     }
 
-    \Counter(multiplier: 10)
+    \Counter(multiplier: 10px)
     "#;
 
     let doc = parse(input).expect("Failed to parse document");
@@ -70,7 +70,7 @@ fn test_compiled_document_not_a_state_variable_error() {
 
     // Attempting to mutate "multiplier" (which is an input port, not a state variable)
     let err = compiled
-        .set_state(counter_id, "multiplier", Value::Number(20.0))
+        .set_state(counter_id, "multiplier", Value::Distance(20.0))
         .expect_err("Should reject mutating non-state variable");
 
     match err {
@@ -86,8 +86,8 @@ fn test_compiled_document_not_a_state_variable_error() {
 fn test_compiled_document_type_mismatch_error() {
     let input = r#"
     \Component Counter {
-        \state count: Number: 0;
-        \Rect(x: 0, y: 0, width: count * 10, height: 30, color: #00FF00)
+        \state count: Integer: 0;
+        \Rect(x: 0, y: 0, width: count * 10px, height: 30px, color: #00FF00)
     }
 
     \Counter()
@@ -97,14 +97,14 @@ fn test_compiled_document_type_mismatch_error() {
     let mut compiled = compile_document_with_window(&doc, 800.0, 600.0).unwrap();
     let counter_id = compiled.layout.roots[0];
 
-    // Attempting to pass a String to a Number state variable
+    // Attempting to pass a String to an Integer state variable
     let err = compiled
         .set_state(counter_id, "count", Value::String("ten".to_string()))
         .expect_err("Should reject type mismatch");
 
     match err {
         CompileError::TypeMismatch { expected, actual, .. } => {
-            assert_eq!(expected, "Number");
+            assert_eq!(expected, "Integer");
             assert_eq!(actual, "String");
         }
         other => panic!("Expected TypeMismatch, got {:?}", other),
@@ -116,7 +116,7 @@ fn test_compiled_document_set_state_by_structured_key() {
     let input = r#"
     \Component Cell(is_selected: Boolean: false) {
         \state active: false;
-        \Rect(x: 0, y: 0, width: 50, height: 50, color: (active || is_selected) ? #00FF00 : #FF0000)
+        \Rect(x: 0, y: 0, width: 50px, height: 50px, color: (active || is_selected) ? #00FF00 : #FF0000)
     }
 
     \Component Grid {
@@ -133,8 +133,8 @@ fn test_compiled_document_set_state_by_structured_key() {
     let grid_id = compiled.layout.roots[0];
 
     // Initially all cells are inactive / red (#FF0000)
-    let key_1_0 = ComponentKey::tuple(&[Expr::number(1.0), Expr::number(0.0)]);
-    let key_0_0 = ComponentKey::tuple(&[Expr::number(0.0), Expr::number(0.0)]);
+    let key_1_0 = ComponentKey::tuple(&[Expr::integer(1), Expr::integer(0)]);
+    let key_0_0 = ComponentKey::tuple(&[Expr::integer(0), Expr::integer(0)]);
 
     // Mutate state of cell (1, 0)
     compiled
@@ -179,7 +179,7 @@ fn test_state_mutation_updates_dependent_component_key() {
     let input = r#"
     \Component Master {
         \state cursor_idx: 0;
-        \Rect(cursor_idx; x: cursor_idx * 100, y: 0, width: 80, height: 40, color: #0000FF)
+        \Rect(cursor_idx; x: cursor_idx * 100px, y: 0, width: 80px, height: 40px, color: #0000FF)
     }
 
     \Master()
@@ -189,8 +189,8 @@ fn test_state_mutation_updates_dependent_component_key() {
     let mut compiled = compile_document_with_window(&doc, 800.0, 600.0).unwrap();
     let master_id = compiled.layout.roots[0];
 
-    // Initial key for the rect is (0.0)
-    let initial_key = ComponentKey::tuple(&[Expr::number(0.0)]);
+    // Initial key for the rect is (0)
+    let initial_key = ComponentKey::tuple(&[Expr::integer(0)]);
     let rect = compiled
         .find_by_key(Some(master_id), &initial_key)
         .expect("Should find rect with key (0)");
@@ -198,11 +198,11 @@ fn test_state_mutation_updates_dependent_component_key() {
 
     // Mutate state cursor_idx = 3
     compiled
-        .set_state(master_id, "cursor_idx", Value::Number(3.0))
+        .set_state(master_id, "cursor_idx", Value::Integer(3))
         .expect("Failed to set state");
 
-    // Key has re-evaluated to (3.0) and rect x has updated to 300.0
-    let updated_key = ComponentKey::tuple(&[Expr::number(3.0)]);
+    // Key has re-evaluated to (3) and rect x has updated to 300.0
+    let updated_key = ComponentKey::tuple(&[Expr::integer(3)]);
     let updated_rect = compiled
         .find_by_key(Some(master_id), &updated_key)
         .expect("Should find rect with key (3)");
@@ -213,9 +213,9 @@ fn test_state_mutation_updates_dependent_component_key() {
 fn test_multi_level_transitive_dependency_propagation() {
     let input = r#"
     \Component Pipeline {
-        \state base: 10;
-        \Rect(x: 0, y: 0, width: base * 2, height: 20, color: #FFFFFF)
-        \Rect(x: prev.right + 10, y: 0, width: prev.width + 5, height: 20, color: #FFFFFF)
+        \state base: 10px;
+        \Rect(x: 0, y: 0, width: base * 2, height: 20px, color: #FFFFFF)
+        \Rect(x: prev.right + 10px, y: 0, width: prev.width + 5px, height: 20px, color: #FFFFFF)
     }
 
     \Pipeline()
@@ -225,7 +225,7 @@ fn test_multi_level_transitive_dependency_propagation() {
     let mut compiled = compile_document_with_window(&doc, 800.0, 600.0).unwrap();
     let pipe_id = compiled.layout.roots[0];
 
-    // Initial: base = 10
+    // Initial: base = 10px
     // Rect 1 width = 20
     // Rect 2 width = 25, x = 30
     let (rect_1_id, rect_2_id) = {
@@ -236,11 +236,11 @@ fn test_multi_level_transitive_dependency_propagation() {
         (rects[0].id, rects[1].id)
     };
 
-    // Mutate base = 50:
+    // Mutate base = 50px:
     // Rect 1 width = 100
     // Rect 2 width = 105, x = 110
     let changed = compiled
-        .set_state(pipe_id, "base", Value::Number(50.0))
+        .set_state(pipe_id, "base", Value::Distance(50.0))
         .expect("Failed to set state");
 
     assert!(changed.contains(&VarId::new(pipe_id, "base")));
@@ -257,12 +257,12 @@ fn test_multi_level_transitive_dependency_propagation() {
 #[test]
 fn test_dom_set_state_microsecond_incremental_update() {
     let input = r#"
-    \Component Counter(multiplier: Number: 10) {
+    \Component Counter(multiplier: Distance: 10px) {
         \state count: 0;
-        \Rect(x: 0, y: 0, width: count * multiplier, height: 35, color: #0000FF)
+        \Rect(x: 0, y: 0, width: count * multiplier, height: 35px, color: #0000FF)
     }
 
-    \Counter(multiplier: 10)
+    \Counter(multiplier: 10px)
     "#;
 
     let mut dom = Dom::from_source(input).expect("Failed to create DOM");
@@ -278,7 +278,7 @@ fn test_dom_set_state_microsecond_incremental_update() {
 
     // Mutate state: count = 12
     let changed = dom
-        .set_state(counter_handle, "count", Value::Number(12.0))
+        .set_state(counter_handle, "count", Value::Integer(12))
         .expect("Failed to set state in DOM");
 
     assert!(!changed.is_empty());
@@ -290,11 +290,11 @@ fn test_dom_set_state_microsecond_incremental_update() {
     assert_eq!(updated_rect.rect.width, 120.0);
     assert_eq!(
         dom.layout().unwrap().get_value(rect_id, "width"),
-        Some(&Value::Number(120.0))
+        Some(&Value::Distance(120.0))
     );
     assert_eq!(
         dom.get_state(counter_handle, "count"),
-        Some(&Value::Number(12.0))
+        Some(&Value::Integer(12))
     );
 }
 
@@ -307,7 +307,7 @@ fn test_dom_set_state_by_key() {
 
     \Component Button(label: String: "OK") {
         \state pressed: false;
-        \Rect(x: 0, y: 0, width: pressed ? 120 : 100, height: 40, color: #222222)
+        \Rect(x: 0, y: 0, width: pressed ? 120px : 100px, height: 40px, color: #222222)
     }
 
     \Flow() {
@@ -343,7 +343,7 @@ fn test_dom_structural_mutation_preserves_state() {
     let input = r#"
     \Component Counter {
         \state count: 0;
-        \Rect(x: 0, y: 0, width: count * 10, height: 30, color: #00FF00)
+        \Rect(x: 0, y: 0, width: count * 10px, height: 30px, color: #00FF00)
     }
 
     \Counter()
@@ -353,16 +353,16 @@ fn test_dom_structural_mutation_preserves_state() {
     dom.commit().unwrap();
 
     let counter_handle = dom.roots()[0];
-    dom.set_state(counter_handle, "count", Value::Number(99.0)).unwrap();
+    dom.set_state(counter_handle, "count", Value::Integer(99)).unwrap();
 
     // Now perform a structural mutation: append an additional child rect to the document root
     let new_elem = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::number(0.0)),
-            ("y".to_string(), Expr::number(100.0)),
-            ("width".to_string(), Expr::number(50.0)),
-            ("height".to_string(), Expr::number(50.0)),
+            ("x".to_string(), Expr::integer(0)),
+            ("y".to_string(), Expr::distance_px(100.0)),
+            ("width".to_string(), Expr::distance_px(50.0)),
+            ("height".to_string(), Expr::distance_px(50.0)),
             ("color".to_string(), Expr::color("#000")),
         ],
     );
@@ -385,9 +385,9 @@ fn test_dom_structural_mutation_preserves_state() {
 fn test_transaction_batching_state_mutations() {
     let input = r#"
     \Component DualCounter {
-        \state a: 10;
-        \state b: 20;
-        \Rect(x: 0, y: 0, width: a + b, height: 40, color: #000)
+        \state a: 10px;
+        \state b: 20px;
+        \Rect(x: 0, y: 0, width: a + b, height: 40px, color: #000)
     }
 
     \DualCounter()
@@ -399,8 +399,8 @@ fn test_transaction_batching_state_mutations() {
 
     // Begin transaction and mutate both state fields
     let mut tx = dom.begin_transaction();
-    tx.set_state(comp_handle, "a", Value::Number(50.0)).unwrap();
-    tx.set_state(comp_handle, "b", Value::Number(30.0)).unwrap();
+    tx.set_state(comp_handle, "a", Value::Distance(50.0)).unwrap();
+    tx.set_state(comp_handle, "b", Value::Distance(30.0)).unwrap();
     tx.commit().unwrap();
 
     // Width should now be 50 + 30 = 80

@@ -9,34 +9,34 @@
 \let font_card_style_1 = \CardStyle(
     bg: #f8fafc,
     border_color: #e2e8f0,
-    border_width: 1,
-    radius: 12,
-    padding_x: 24,
-    padding_y: 20
+    border_width: 1px,
+    radius: 12px,
+    padding_x: 24px,
+    padding_y: 20px
 );
 
 \let font_card_style_2 = \CardStyle(
     bg: #f1f5f9,
     border_color: #e2e8f0,
-    border_width: 1,
-    radius: 12,
-    padding_x: 24,
-    padding_y: 20
+    border_width: 1px,
+    radius: 12px,
+    padding_x: 24px,
+    padding_y: 20px
 );
 
 // 1. Reusable font resource definitions
-\let heading_font = \Font(size: 28, weight: 700);
-\let subhead_font = \Font(size: 18, weight: 600);
-\let badge_font = \Font(size: 13, weight: 600);
-\let body_font = \Font(size: 15, weight: 400);
+\let heading_font = \Font(size: 28px, weight: 700);
+\let subhead_font = \Font(size: 18px, weight: 600);
+\let badge_font = \Font(size: 13px, weight: 600);
+\let body_font = \Font(size: 15px, weight: 400);
 
-\let badge_pad = 8;
+\let badge_pad = 8px;
 
 \VStackStretch(
-    x: 40,
-    y: 40,
-    gap: 24,
-    width: min(max(window.width - 80, 400), 800)
+    x: 40px,
+    y: 40px,
+    gap: 24px,
+    width: min(max(window.width - 80px, 400px), 800px)
 ) {
     // Section Header using shared heading_font
     \Text(font: heading_font, color: #0f172a) {
@@ -51,15 +51,15 @@
     \Card(style: font_card_style_1) {
         // Badge background sized to precisely fit cap_height + padding
         \Rect(
-            width: 180,
-            height: badge_font.cap_height + (2 * badge_pad) + 4,
+            width: 180px,
+            height: badge_font.cap_height + (2 * badge_pad) + 4px,
             color: #dbeafe,
-            radius: 6
+            radius: 6px
         ) {
             // Text mathematically centered on the cap_height optical baseline
             \Text(
                 font: badge_font,
-                x: parent.left + 14,
+                x: parent.left + 14px,
                 y: parent.top + badge_pad,
                 color: #1e40af
             ) {

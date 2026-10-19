@@ -123,8 +123,14 @@ pub enum Token {
     Bang,
 
     // Literals
-    #[regex(r"[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?", |lex| lex.slice().parse::<f64>().ok())]
-    Number(f64),
+    #[regex(r"[0-9]+", priority = 3, callback = |lex| lex.slice().parse::<i64>().ok())]
+    Integer(i64),
+
+    #[regex(r"[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?|[0-9]+[eE][+-]?[0-9]+", priority = 3, callback = |lex| lex.slice().parse::<f64>().ok())]
+    Float(f64),
+
+    #[regex(r"[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?[a-zA-Z_][a-zA-Z0-9_]*", priority = 2, callback = parse_dimension_token)]
+    Dimension((f64, String)),
 
     #[regex(r#""([^"\\]|\\.)*""#, |lex| {
         let s = lex.slice();
@@ -157,6 +163,37 @@ pub enum Token {
     // Identifiers
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
     Ident(String),
+}
+
+fn parse_dimension_token(lex: &mut logos::Lexer<'_, Token>) -> Option<(f64, String)> {
+    let s = lex.slice();
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i < bytes.len() && bytes[i] == b'.' {
+        i += 1;
+        while i < bytes.len() && bytes[i].is_ascii_digit() {
+            i += 1;
+        }
+    }
+    if i < bytes.len() && (bytes[i] == b'e' || bytes[i] == b'E') {
+        let mut exp_i = i + 1;
+        if exp_i < bytes.len() && (bytes[exp_i] == b'+' || bytes[exp_i] == b'-') {
+            exp_i += 1;
+        }
+        if exp_i < bytes.len() && bytes[exp_i].is_ascii_digit() {
+            while exp_i < bytes.len() && bytes[exp_i].is_ascii_digit() {
+                exp_i += 1;
+            }
+            i = exp_i;
+        }
+    }
+    let num_str = &s[..i];
+    let unit_str = &s[i..];
+    let val = num_str.parse::<f64>().ok()?;
+    Some((val, unit_str.to_string()))
 }
 
 impl fmt::Display for Token {
@@ -199,7 +236,9 @@ impl fmt::Display for Token {
             Token::AmpAmp => write!(f, "&&"),
             Token::PipePipe => write!(f, "||"),
             Token::Bang => write!(f, "!"),
-            Token::Number(n) => write!(f, "{}", n),
+            Token::Integer(n) => write!(f, "{}", n),
+            Token::Float(n) => write!(f, "{}", n),
+            Token::Dimension((n, u)) => write!(f, "{}{}", n, u),
             Token::String(s) => write!(f, "\"{}\"", s),
             Token::Color(c) => write!(f, "{}", c),
             Token::Ident(id) => write!(f, "{}", id),

@@ -168,7 +168,8 @@ pub fn compute_clip_content_hash(clip_id: NodeId, layout: &ResolvedLayout) -> u6
             for (k, v) in &node.properties {
                 k.hash(&mut hasher);
                 match v {
-                    Value::Number(n) => n.to_bits().hash(&mut hasher),
+                    Value::Integer(i) => i.hash(&mut hasher),
+                    Value::Float(n) | Value::Distance(n) => n.to_bits().hash(&mut hasher),
                     Value::String(s) => s.hash(&mut hasher),
                     Value::Bool(b) => b.hash(&mut hasher),
                     Value::Color(c) => c.hash(&mut hasher),
@@ -580,7 +581,8 @@ pub fn build_scene(
             .or_else(|| node.properties.get("content"))
             .and_then(|v| match v {
                 Value::String(s) => Some(s.clone()),
-                Value::Number(n) => Some(format!("{n}")),
+                Value::Integer(i) => Some(format!("{i}")),
+                Value::Float(n) | Value::Distance(n) => Some(format!("{n}")),
                 Value::Bool(b) => Some(format!("{b}")),
                 _ => None,
             });
@@ -1034,10 +1036,10 @@ mod tests {
             anchor_name: None,
             scope_id: None,
             properties: HashMap::from([
-                ("x".to_string(), Value::Number(0.0)),
-                ("y".to_string(), Value::Number(0.0)),
-                ("width".to_string(), Value::Number(300.0)),
-                ("height".to_string(), Value::Number(200.0)),
+                ("x".to_string(), Value::Distance(0.0)),
+                ("y".to_string(), Value::Distance(0.0)),
+                ("width".to_string(), Value::Distance(300.0)),
+                ("height".to_string(), Value::Distance(200.0)),
             ]),
             state_vars: HashMap::new(),
             env_vars: HashMap::new(),
@@ -1066,7 +1068,7 @@ mod tests {
             scope_id: None,
             properties: HashMap::from([
                 ("box".to_string(), Value::Node(NodeId(10))),
-                ("scroll_y".to_string(), Value::Number(0.0)),
+                ("scroll_y".to_string(), Value::Distance(0.0)),
             ]),
             state_vars: HashMap::new(),
             env_vars: HashMap::new(),
@@ -1109,11 +1111,11 @@ mod tests {
 
         let mut values = HashMap::new();
         values.insert(crate::compiler::graph::VarId::new(NodeId(2), "box"), Value::Node(NodeId(10)));
-        values.insert(crate::compiler::graph::VarId::new(NodeId(2), "scroll_y"), Value::Number(0.0));
-        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "x"), Value::Number(0.0));
-        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "y"), Value::Number(0.0));
-        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "width"), Value::Number(300.0));
-        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "height"), Value::Number(200.0));
+        values.insert(crate::compiler::graph::VarId::new(NodeId(2), "scroll_y"), Value::Distance(0.0));
+        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "x"), Value::Distance(0.0));
+        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "y"), Value::Distance(0.0));
+        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "width"), Value::Distance(300.0));
+        values.insert(crate::compiler::graph::VarId::new(NodeId(10), "height"), Value::Distance(200.0));
 
         let mut layout = ResolvedLayout {
             roots: vec![NodeId(2)],
@@ -1129,8 +1131,8 @@ mod tests {
         let hash_before = clip_cache.get(&NodeId(2)).unwrap().content_hash;
 
         // Frame 2: Simulating vertical scroll - scroll_y changes on clip node and in values
-        layout.values.insert(crate::compiler::graph::VarId::new(NodeId(2), "scroll_y"), Value::Number(50.0));
-        layout.nodes[1].properties.insert("scroll_y".to_string(), Value::Number(50.0));
+        layout.values.insert(crate::compiler::graph::VarId::new(NodeId(2), "scroll_y"), Value::Distance(50.0));
+        layout.nodes[1].properties.insert("scroll_y".to_string(), Value::Distance(50.0));
 
         // Child node static coordinates remain completely unchanged!
         assert_eq!(layout.nodes[2].rect.y, 20.0);

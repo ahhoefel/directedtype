@@ -8,9 +8,9 @@ fn test_center_fluid_in_rect() {
     let input = r#"
     \use "components/Center.dt"
 
-    \Rect(x: 100, y: 100, width: 200, height: 100, color: #1e293b) {
+    \Rect(x: 100px, y: 100px, width: 200px, height: 100px, color: #1e293b) {
         \Center {
-            \Rect(width: 80, height: 40, color: #3b82f6)
+            \Rect(width: 80px, height: 40px, color: #3b82f6)
         }
     }
     "#;
@@ -43,9 +43,9 @@ fn test_center_with_intrinsic_text() {
     let input = r#"
     \use "components/Center.dt"
 
-    \Rect(x: 50, y: 50, width: 200, height: 80, color: #1e293b) {
+    \Rect(x: 50px, y: 50px, width: 200px, height: 80px, color: #1e293b) {
         \Center {
-            \Text(size: 20, weight: 700) {
+            \Text(size: 20px, weight: 700) {
                 Centered
             }
         }
@@ -85,8 +85,8 @@ fn test_center_explicit_spatial_bounds() {
     let input = r#"
     \use "components/Center.dt"
 
-    \Center(x: 50, y: 50, width: 300, height: 200) {
-        \Rect(width: 100, height: 60, color: #3b82f6)
+    \Center(x: 50px, y: 50px, width: 300px, height: 200px) {
+        \Rect(width: 100px, height: 60px, color: #3b82f6)
     }
     "#;
 
@@ -118,9 +118,9 @@ fn test_center_explicit_dimensions_in_parent() {
     let input = r#"
     \use "components/Center.dt"
 
-    \Rect(x: 20, y: 40, width: 500, height: 400, color: #0f172a) {
-        \Center(width: 200, height: 100) {
-            \Rect(width: 50, height: 30, color: #3b82f6)
+    \Rect(x: 20px, y: 40px, width: 500px, height: 400px, color: #0f172a) {
+        \Center(width: 200px, height: 100px) {
+            \Rect(width: 50px, height: 30px, color: #3b82f6)
         }
     }
     "#;
@@ -156,7 +156,7 @@ fn test_center_with_card() {
     \use "theme/default.dt"
 
     \Center {
-        \Card(width: 400, style: card_dark) {
+        \Card(width: 400px, style: card_dark) {
             \Text { Hello }
         }
     }

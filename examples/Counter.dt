@@ -8,45 +8,45 @@
 \use "components/ButtonStyle.dt"
 \use "theme/default.dt"
 
-\Component Counter(x: Number, y: Number, initial: Number: 0) {
-    \state count: Number: initial;
+\Component Counter(x: Distance, y: Distance, initial: Integer: 0) {
+    \state count: Integer: initial;
 
     \let is_max = count >= 10;
     \let is_zero = count <= 0;
-    \let bar_width = (count * 26) + 12;
+    \let bar_width = (count * 26px) + 12px;
     \let count_label = "Count: " + to_fixed(count, 0);
     \let status_label = is_max ? "MAX (10)" : (is_zero ? "MIN (0)" : "Active");
 
-    \alias width = 360;
-    \alias height = 270;
-    \alias right = x + 360;
-    \alias bottom = y + 270;
+    \alias width = 360px;
+    \alias height = 270px;
+    \alias right = x + 360px;
+    \alias bottom = y + 270px;
 
     \let outer_card_style = \CardStyle(
         bg: #1e293b,
         border_color: is_max ? #ef4444 : #334155,
-        border_width: 2,
-        radius: 16,
-        padding: 24
+        border_width: 2px,
+        radius: 16px,
+        padding: 24px
     );
 
     \let inner_card_style = \CardStyle(
         bg: #0f172a,
         border_color: is_max ? #7f1d1d : #1e293b,
-        border_width: 1,
-        radius: 10,
-        padding_x: 20,
-        padding_y: 16
+        border_width: 1px,
+        radius: 10px,
+        padding_x: 20px,
+        padding_y: 16px
     );
 
     \let counter_btn_decrement = \ButtonStyle(
         bg: #334155,
         text_color: #ffffff,
         border_color: #475569,
-        border_width: 1,
-        radius: 10,
-        height: 48,
-        size: 22,
+        border_width: 1px,
+        radius: 10px,
+        height: 48px,
+        size: 22px,
         weight: 700,
         disabled_bg: #33415580,
         disabled_text: #64748b,
@@ -57,10 +57,10 @@
         bg: is_max ? #dc2626 : #2563eb,
         text_color: #ffffff,
         border_color: is_max ? #ef4444 : #3b82f6,
-        border_width: 1,
-        radius: 10,
-        height: 48,
-        size: 22,
+        border_width: 1px,
+        radius: 10px,
+        height: 48px,
+        size: 22px,
         weight: 700,
         disabled_bg: #33415580,
         disabled_text: #64748b,
@@ -71,10 +71,10 @@
         bg: #334155,
         text_color: #ffffff,
         border_color: #475569,
-        border_width: 1,
-        radius: 10,
-        height: 48,
-        size: 14,
+        border_width: 1px,
+        radius: 10px,
+        height: 48px,
+        size: 14px,
         weight: 600,
         disabled_bg: #33415580,
         disabled_text: #64748b,
@@ -83,18 +83,18 @@
 
     \Card(
         style: outer_card_style,
-        width: 360,
+        width: 360px,
         x: x,
         y: y,
-        gap: 16
+        gap: 16px
     ) {
         // Component Title & Subtitle via VStack
-        \VStack(gap: 4) {
-            \Text(size: 22, weight: 700, color: #f8fafc) {
+        \VStack(gap: 4px) {
+            \Text(size: 22px, weight: 700, color: #f8fafc) {
                 Reactive Counter
             }
 
-            \Text(size: 12, color: #94a3b8) {
+            \Text(size: 12px, color: #94a3b8) {
                 One-Way Pipeline: State -> DAG -> Pixels
             }
         }
@@ -102,17 +102,17 @@
         // Count Value Display Surface via nested Card & HStack
         \Card(
             style: inner_card_style,
-            width: 312
+            width: 312px
         ) {
-            \HStack(gap: 60, align: Align.Center) {
+            \HStack(gap: 60px, align: Align.Center) {
                 \Text(
-                    size: 26,
+                    size: 26px,
                     weight: 700,
                     color: is_max ? #ef4444 : (is_zero ? #94a3b8 : #38bdf8),
                     text: count_label
                 )
                 \Text(
-                    size: 12,
+                    size: 12px,
                     weight: 600,
                     color: is_max ? #f87171 : #64748b,
                     text: status_label
@@ -121,22 +121,22 @@
         }
 
         // Reactive Progress Gauge
-        \Rect(width: 312, height: 8, color: #0f172a, radius: 4) {
+        \Rect(width: 312px, height: 8px, color: #0f172a, radius: 4px) {
             \Rect(
                 x: parent.left,
                 y: parent.top,
-                width: min(bar_width, 312),
-                height: 8,
+                width: min(bar_width, 312px),
+                height: 8px,
                 color: is_max ? #ef4444 : #3b82f6,
-                radius: 4
+                radius: 4px
             )
         }
 
         // Interactive Button Row: [-], [+], [Reset] via HStack
-        \HStack(gap: 16) {
+        \HStack(gap: 16px) {
             \Button(
                 style: counter_btn_decrement,
-                width: 72,
+                width: 72px,
                 label: "-",
                 disabled: is_zero,
                 on_click: self.decrement
@@ -144,14 +144,14 @@
 
             \Button(
                 style: counter_btn_increment,
-                width: 72,
+                width: 72px,
                 label: "+",
                 on_click: self.increment
             )
 
             \Button(
                 style: counter_btn_reset,
-                width: 136,
+                width: 136px,
                 label: "Reset",
                 on_click: self.reset
             )
@@ -162,8 +162,8 @@
 // Root Document: Centered Dark Canvas
 \Rect(x: 0, y: 0, width: window.width, height: window.height, color: #0b0f19) {
     \Counter(
-        x: (window.width - 360) / 2,
-        y: (window.height - 270) / 2,
+        x: (window.width - 360px) / 2,
+        y: (window.height - 270px) / 2,
         initial: 3
     )
 }

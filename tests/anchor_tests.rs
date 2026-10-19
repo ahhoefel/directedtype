@@ -10,12 +10,12 @@ fn test_block_anchor_geometry_passthrough_in_vstack() {
     let source = r##"
         \use "components/VStack.dt";
 
-        \VStack(width: 800, gap: 16) {
+        \VStack(width: 800px, gap: 16px) {
             \Anchor("first") {
-                \Rect(width: 200, height: 50, color: "#112233")
+                \Rect(width: 200px, height: 50px, color: "#112233")
             }
             \Anchor("second") {
-                \Rect(width: 300, height: 80, color: "#445566")
+                \Rect(width: 300px, height: 80px, color: "#445566")
             }
         }
     "##;
@@ -63,7 +63,7 @@ fn test_block_anchor_geometry_passthrough_in_vstack() {
 #[test]
 fn test_inline_anchor_bookmark_in_text() {
     let source = r##"
-        \Text(size: 16) {
+        \Text(size: 16px) {
             Hello \Anchor("bookmark") World
         }
     "##;
@@ -88,15 +88,15 @@ fn test_hierarchical_scopes_and_path_resolution() {
     let source = r##"
         \use "components/HStack.dt";
 
-        \HStack(gap: 20) {
+        \HStack(gap: 20px) {
             \AnchorScope("pane-left") {
                 \Anchor("intro") {
-                    \Rect(width: 100, height: 40, color: "#111111")
+                    \Rect(width: 100px, height: 40px, color: "#111111")
                 }
             }
             \AnchorScope("pane-right") {
                 \Anchor("intro") {
-                    \Rect(width: 150, height: 60, color: "#222222")
+                    \Rect(width: 150px, height: 60px, color: "#222222")
                 }
             }
         }
@@ -148,10 +148,10 @@ fn test_duplicate_anchor_in_same_scope_rejected() {
     let source = r##"
         \AnchorScope("doc") {
             \Anchor("section") {
-                \Rect(width: 100, height: 40, color: "#111111")
+                \Rect(width: 100px, height: 40px, color: "#111111")
             }
             \Anchor("section") {
-                \Rect(width: 100, height: 40, color: "#222222")
+                \Rect(width: 100px, height: 40px, color: "#222222")
             }
         }
     "##;
@@ -168,7 +168,7 @@ fn test_anchor_scope_first_class_port_and_append_method() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        \Component TableOfContents(target_scope: Node, env font: Font, x: Number = 0, y: Number = 0) {
+        \Component TableOfContents(target_scope: Node, env font: Font, x: Distance = 0, y: Distance = 0) {
             \Link(url: target_scope.append("setup"), link_style: link_default) {
                 Setup Link
             }
@@ -176,7 +176,7 @@ fn test_anchor_scope_first_class_port_and_append_method() {
 
         \let main_scope = \AnchorScope("main") {
             \Anchor("setup") {
-                \Rect(width: 200, height: 50, color: "#abcdef")
+                \Rect(width: 200px, height: 50px, color: "#abcdef")
             }
         };
 
@@ -233,17 +233,17 @@ fn test_viewer_window_scrolling_to_anchors() {
     let source = r##"
         \use "components/VStack.dt";
 
-        \VStack(width: 800, gap: 50) {
+        \VStack(width: 800px, gap: 50px) {
             \Anchor("top") {
-                \Rect(width: 400, height: 100, color: "#111111")
+                \Rect(width: 400px, height: 100px, color: "#111111")
             }
-            \Rect(width: 400, height: 1000, color: "#222222")
+            \Rect(width: 400px, height: 1000px, color: "#222222")
             \Anchor("middle") {
-                \Rect(width: 400, height: 100, color: "#333333")
+                \Rect(width: 400px, height: 100px, color: "#333333")
             }
-            \Rect(width: 400, height: 1000, color: "#444444")
+            \Rect(width: 400px, height: 1000px, color: "#444444")
             \Anchor("bottom") {
-                \Rect(width: 400, height: 100, color: "#555555")
+                \Rect(width: 400px, height: 100px, color: "#555555")
             }
         }
     "##;
@@ -297,9 +297,9 @@ fn test_headless_render_with_scroll_offset() {
     let source = r##"
         \use "components/VStack.dt";
 
-        \VStack(width: 200) {
-            \Rect(width: 200, height: 100, color: "#ff0000")
-            \Rect(width: 200, height: 100, color: "#0000ff")
+        \VStack(width: 200px) {
+            \Rect(width: 200px, height: 100px, color: "#ff0000")
+            \Rect(width: 200px, height: 100px, color: "#0000ff")
         }
     "##;
 
@@ -352,12 +352,12 @@ fn test_scrolled_coordinate_hit_testing() {
     let source = r##"
         \use "components/VStack.dt";
 
-        \VStack(width: 800) {
-            \Rect(width: 300, height: 500, color: "#111111")
+        \VStack(width: 800px) {
+            \Rect(width: 300px, height: 500px, color: "#111111")
             \Anchor("target") {
-                \Rect(width: 300, height: 200, color: "#222222")
+                \Rect(width: 300px, height: 200px, color: "#222222")
             }
-            \Rect(width: 300, height: 800, color: "#333333")
+            \Rect(width: 300px, height: 800px, color: "#333333")
         }
     "##;
 
@@ -424,7 +424,7 @@ fn test_focus_and_blur_event_dispatch_and_bubbling() {
     let source = r##"
         \Component FocusTracker {
             \state focused: false;
-            \Rect(x: 0, y: 0, width: 120, height: 40, color: "#111111", on_focus: self.handle_focus, on_blur: self.handle_blur)
+            \Rect(x: 0, y: 0, width: 120px, height: 40px, color: "#111111", on_focus: self.handle_focus, on_blur: self.handle_blur)
         }
         \FocusTracker
     "##;
@@ -498,9 +498,9 @@ fn test_keyboard_focus_traversal_reading_order() {
 
         \env link_style = link_default;
 
-        \VStack(width: 800, gap: 20) {
+        \VStack(width: 800px, gap: 20px) {
             \Link(url: "#sec1") { Link 1 }
-            \HStack(gap: 10) {
+            \HStack(gap: 10px) {
                 \Link(url: "#sec2") { Link 2 }
                 \Link(url: "#sec3") { Link 3 }
             }
@@ -565,9 +565,9 @@ fn test_keyboard_focus_scrolls_into_view() {
 
         \env link_style = link_default;
 
-        \VStack(width: 800, gap: 40) {
+        \VStack(width: 800px, gap: 40px) {
             \Link(url: "#top") { Top Link }
-            \Rect(width: 300, height: 1200, color: "#111111")
+            \Rect(width: 300px, height: 1200px, color: "#111111")
             \Link(url: "#bottom") { Bottom Link }
         }
     "##;
@@ -611,11 +611,11 @@ fn test_keyboard_activation_triggers_anchor_navigation() {
 
         \env link_style = link_default;
 
-        \VStack(width: 800, gap: 30) {
+        \VStack(width: 800px, gap: 30px) {
             \Link(url: "#deep") { Jump to Deep Anchor }
-            \Rect(width: 300, height: 1000, color: "#222222")
+            \Rect(width: 300px, height: 1000px, color: "#222222")
             \Anchor("deep") {
-                \Rect(width: 300, height: 100, color: "#333333")
+                \Rect(width: 300px, height: 100px, color: "#333333")
             }
         }
     "##;
@@ -664,7 +664,7 @@ fn test_designer_driven_focus_and_blur_target_styling() {
             \let bg_color = focused ? #3b82f6 : #ffffff;
 
             \Anchor(name: "styled-target", on_focus: self.handle_focus, on_blur: self.handle_blur) {
-                \Rect(width: 200, height: 80, color: bg_color)
+                \Rect(width: 200px, height: 80px, color: bg_color)
             }
         }
 
@@ -777,12 +777,12 @@ fn test_link_component_click_handler_and_action_queue() {
 
         \env link_style = link_default;
 
-        \VStack(width: 800, gap: 20) {
+        \VStack(width: 800px, gap: 20px) {
             \Link(url: "#dest") { Go to Destination }
             \Link(url: "#nonexistent") { Broken Link }
             \Link(url: "https://example.com") { External Web }
             \Anchor("dest") {
-                \Rect(width: 200, height: 50, color: "#cccccc")
+                \Rect(width: 200px, height: 50px, color: "#cccccc")
             }
         }
     "##;
@@ -876,7 +876,7 @@ fn test_link_component_custom_on_click_override() {
         \use "components/Link.dt";
         \use "theme/default.dt";
 
-        \Component CustomPage(env font: Font, x: Number = 0, y: Number = 0) {
+        \Component CustomPage(env font: Font, x: Distance = 0, y: Distance = 0) {
             \state custom_clicked: Boolean = false;
 
             \Link(url: "#ignored", link_style: link_default, on_click: self.handle_custom_click) {
@@ -1094,7 +1094,7 @@ fn test_link_component_focus_and_blur_transitions() {
         \use "components/LinkStyle.dt";
         \use "components/Link.dt";
         \use "components/VStack.dt";
-        \env font = \Font(size: 14);
+        \env font = \Font(size: 14px);
 
         \let custom_style = \LinkStyle(
             color: #1a73e8,
@@ -1108,7 +1108,7 @@ fn test_link_component_focus_and_blur_transitions() {
             focused_bg: #fef3c7
         );
 
-        \VStack(width: 400) {
+        \VStack(width: 400px) {
             \Link(url: "https://example.com", link_style: custom_style) {
                 Visit Example
             }

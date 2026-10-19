@@ -14,7 +14,7 @@ pub struct Counter {
 #[component]
 impl Counter {
     pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
-        if let Some(initial) = ctx.get_port_number("initial") {
+        if let Some(initial) = ctx.get_port_integer("initial") {
             self.count = initial as i32;
         }
     }
@@ -22,7 +22,7 @@ impl Counter {
     pub fn increment(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         if self.count < 10 {
             self.count += 1;
-            ctx.set_state("count", self.count as f64);
+            ctx.set_state("count", self.count);
         }
         Ok(())
     }
@@ -30,14 +30,14 @@ impl Counter {
     pub fn decrement(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         if self.count > 0 {
             self.count -= 1;
-            ctx.set_state("count", self.count as f64);
+            ctx.set_state("count", self.count);
         }
         Ok(())
     }
 
     pub fn reset(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         self.count = 0;
-        ctx.set_state("count", 0.0);
+        ctx.set_state("count", 0i64);
         Ok(())
     }
 }

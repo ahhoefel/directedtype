@@ -163,7 +163,22 @@ fn validate_font_family(family: Option<&str>, span: crate::span::Span) -> Result
 pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, CompileError> {
     match expr {
         Expr::Literal(lit) => match lit {
-            Literal::Number(n, _) => Ok(Value::Number(*n)),
+            Literal::Integer(n, _) => Ok(Value::Integer(*n)),
+            Literal::Float(n, _) => Ok(Value::Float(*n)),
+            Literal::Distance(d, unit, span) => match unit {
+                crate::ast::DistanceUnit::Px => Ok(Value::Distance(*d)),
+                crate::ast::DistanceUnit::Pt => {
+                    let dpi = env
+                        .get(&VarId::new(NodeId::WINDOW, "dpi"))
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(96.0);
+                    Ok(Value::Distance(*d * (dpi / 72.0)))
+                }
+                crate::ast::DistanceUnit::Em => Err(CompileError::UndefinedEnvVariable {
+                    name: "font".to_string(),
+                    span: *span,
+                }),
+            },
             Literal::String(s, _) => Ok(Value::String(s.clone())),
             Literal::Bool(b, _) => Ok(Value::Bool(*b)),
             Literal::Color(c, _) => Ok(Value::Color(c.clone())),
@@ -227,72 +242,194 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
             let right = eval_expr(&b.right, env)?;
 
             match b.op {
-                BinaryOp::Add => {
-                    if let (Some(l), Some(r)) = (left.as_f64(), right.as_f64()) {
-                        Ok(Value::Number(l + r))
-                    } else if matches!(left, Value::String(_)) || matches!(right, Value::String(_)) {
-                        Ok(Value::String(format!(
-                            "{}{}",
-                            left.to_display_string(),
-                            right.to_display_string()
-                        )))
-                    } else {
-                        Err(CompileError::Custom {
-                            message: format!("Cannot add {} and {}", left, right),
-                            span: b.span,
-                        })
+                BinaryOp::Add => match (&left, &right) {
+                    (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_add(*r))),
+                    (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l + r)),
+                    (Value::Integer(l), Value::Float(r)) => Ok(Value::Float(*l as f64 + r)),
+                    (Value::Float(l), Value::Integer(r)) => Ok(Value::Float(l + *r as f64)),
+                    (Value::Distance(l), Value::Distance(r)) => Ok(Value::Distance(l + r)),
+                    (Value::Distance(l), Value::Integer(0))
+                    | (Value::Integer(0), Value::Distance(l)) => Ok(Value::Distance(*l)),
+                    (Value::String(_), _) | (_, Value::String(_)) => Ok(Value::String(format!(
+                        "{}{}",
+                        left.to_display_string(),
+                        right.to_display_string()
+                    ))),
+                    _ => Err(CompileError::Custom {
+                        message: format!(
+                            "Cannot add {} ({}) and {} ({})",
+                            left,
+                            left.type_name(),
+                            right,
+                            right.type_name()
+                        ),
+                        span: b.span,
+                    }),
+                },
+                BinaryOp::Sub => match (&left, &right) {
+                    (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_sub(*r))),
+                    (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l - r)),
+                    (Value::Integer(l), Value::Float(r)) => Ok(Value::Float(*l as f64 - r)),
+                    (Value::Float(l), Value::Integer(r)) => Ok(Value::Float(l - *r as f64)),
+                    (Value::Distance(l), Value::Distance(r)) => Ok(Value::Distance(l - r)),
+                    (Value::Distance(l), Value::Integer(0)) => Ok(Value::Distance(*l)),
+                    (Value::Integer(0), Value::Distance(r)) => Ok(Value::Distance(-*r)),
+                    _ => Err(CompileError::Custom {
+                        message: format!(
+                            "Cannot subtract {} ({}) from {} ({})",
+                            right,
+                            right.type_name(),
+                            left,
+                            left.type_name()
+                        ),
+                        span: b.span,
+                    }),
+                },
+                BinaryOp::Mul => match (&left, &right) {
+                    (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l.wrapping_mul(*r))),
+                    (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l * r)),
+                    (Value::Integer(l), Value::Float(r)) => Ok(Value::Float(*l as f64 * r)),
+                    (Value::Float(l), Value::Integer(r)) => Ok(Value::Float(l * *r as f64)),
+                    (Value::Distance(d), Value::Integer(i))
+                    | (Value::Integer(i), Value::Distance(d)) => Ok(Value::Distance(d * *i as f64)),
+                    (Value::Distance(d), Value::Float(f))
+                    | (Value::Float(f), Value::Distance(d)) => Ok(Value::Distance(d * f)),
+                    (Value::Distance(_), Value::Distance(_)) => Err(CompileError::Custom {
+                        message: "Cannot multiply Distance by Distance".to_string(),
+                        span: b.span,
+                    }),
+                    _ => Err(CompileError::Custom {
+                        message: format!(
+                            "Cannot multiply {} ({}) and {} ({})",
+                            left,
+                            left.type_name(),
+                            right,
+                            right.type_name()
+                        ),
+                        span: b.span,
+                    }),
+                },
+                BinaryOp::Div => match (&left, &right) {
+                    (Value::Integer(l), Value::Integer(r)) => {
+                        if *r == 0 {
+                            Ok(Value::Float(0.0))
+                        } else {
+                            Ok(Value::Float(*l as f64 / *r as f64))
+                        }
                     }
-                }
-                BinaryOp::Sub => {
-                    let l = left.as_f64().unwrap_or(0.0);
-                    let r = right.as_f64().unwrap_or(0.0);
-                    Ok(Value::Number(l - r))
-                }
-                BinaryOp::Mul => {
-                    let l = left.as_f64().unwrap_or(0.0);
-                    let r = right.as_f64().unwrap_or(0.0);
-                    Ok(Value::Number(l * r))
-                }
-                BinaryOp::Div => {
-                    let l = left.as_f64().unwrap_or(0.0);
-                    let r = right.as_f64().unwrap_or(0.0);
-                    if r == 0.0 {
-                        // Graceful zero-division fallback for layout stability
-                        Ok(Value::Number(0.0))
-                    } else {
-                        Ok(Value::Number(l / r))
+                    (Value::Float(l), Value::Float(r)) => {
+                        if *r == 0.0 {
+                            Ok(Value::Float(0.0))
+                        } else {
+                            Ok(Value::Float(l / r))
+                        }
                     }
-                }
-                BinaryOp::Rem => {
-                    let l = left.as_f64().unwrap_or(0.0);
-                    let r = right.as_f64().unwrap_or(1.0);
-                    if r == 0.0 {
-                        Ok(Value::Number(0.0))
-                    } else {
-                        Ok(Value::Number(l % r))
+                    (Value::Integer(l), Value::Float(r)) => {
+                        if *r == 0.0 {
+                            Ok(Value::Float(0.0))
+                        } else {
+                            Ok(Value::Float(*l as f64 / r))
+                        }
                     }
-                }
-                BinaryOp::Eq => Ok(Value::Bool(left == right)),
-                BinaryOp::Ne => Ok(Value::Bool(left != right)),
-                BinaryOp::Lt => {
-                    let l = left.as_f64().unwrap_or(0.0);
-                    let r = right.as_f64().unwrap_or(0.0);
-                    Ok(Value::Bool(l < r))
-                }
-                BinaryOp::Le => {
-                    let l = left.as_f64().unwrap_or(0.0);
-                    let r = right.as_f64().unwrap_or(0.0);
-                    Ok(Value::Bool(l <= r))
-                }
-                BinaryOp::Gt => {
-                    let l = left.as_f64().unwrap_or(0.0);
-                    let r = right.as_f64().unwrap_or(0.0);
-                    Ok(Value::Bool(l > r))
-                }
-                BinaryOp::Ge => {
-                    let l = left.as_f64().unwrap_or(0.0);
-                    let r = right.as_f64().unwrap_or(0.0);
-                    Ok(Value::Bool(l >= r))
+                    (Value::Float(l), Value::Integer(r)) => {
+                        if *r == 0 {
+                            Ok(Value::Float(0.0))
+                        } else {
+                            Ok(Value::Float(l / *r as f64))
+                        }
+                    }
+                    (Value::Distance(d), Value::Integer(r)) => {
+                        if *r == 0 {
+                            Ok(Value::Distance(0.0))
+                        } else {
+                            Ok(Value::Distance(d / *r as f64))
+                        }
+                    }
+                    (Value::Distance(d), Value::Float(r)) => {
+                        if *r == 0.0 {
+                            Ok(Value::Distance(0.0))
+                        } else {
+                            Ok(Value::Distance(d / r))
+                        }
+                    }
+                    (Value::Distance(l), Value::Distance(r)) => {
+                        if *r == 0.0 {
+                            Ok(Value::Float(0.0))
+                        } else {
+                            Ok(Value::Float(l / r))
+                        }
+                    }
+                    (Value::Integer(0), Value::Distance(_)) => Ok(Value::Float(0.0)),
+                    _ => Err(CompileError::Custom {
+                        message: format!(
+                            "Cannot divide {} ({}) by {} ({})",
+                            left,
+                            left.type_name(),
+                            right,
+                            right.type_name()
+                        ),
+                        span: b.span,
+                    }),
+                },
+                BinaryOp::Rem => match (&left, &right) {
+                    (Value::Integer(l), Value::Integer(r)) => {
+                        if *r == 0 {
+                            Ok(Value::Integer(0))
+                        } else {
+                            Ok(Value::Integer(l % r))
+                        }
+                    }
+                    (Value::Float(l), Value::Float(r)) => {
+                        if *r == 0.0 {
+                            Ok(Value::Float(0.0))
+                        } else {
+                            Ok(Value::Float(l % r))
+                        }
+                    }
+                    (Value::Integer(l), Value::Float(r)) => {
+                        if *r == 0.0 {
+                            Ok(Value::Float(0.0))
+                        } else {
+                            Ok(Value::Float((*l as f64) % r))
+                        }
+                    }
+                    (Value::Float(l), Value::Integer(r)) => {
+                        if *r == 0 {
+                            Ok(Value::Float(0.0))
+                        } else {
+                            Ok(Value::Float(l % (*r as f64)))
+                        }
+                    }
+                    (Value::Distance(l), Value::Distance(r)) => {
+                        if *r == 0.0 {
+                            Ok(Value::Distance(0.0))
+                        } else {
+                            Ok(Value::Distance(l % r))
+                        }
+                    }
+                    _ => Err(CompileError::Custom {
+                        message: format!(
+                            "Cannot compute remainder of {} ({}) and {} ({})",
+                            left,
+                            left.type_name(),
+                            right,
+                            right.type_name()
+                        ),
+                        span: b.span,
+                    }),
+                },
+                BinaryOp::Eq => Ok(Value::Bool(values_equal(&left, &right))),
+                BinaryOp::Ne => Ok(Value::Bool(!values_equal(&left, &right))),
+                BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
+                    let (l, r) = extract_comparable_pair(&left, &right, b.span)?;
+                    let res = match b.op {
+                        BinaryOp::Lt => l < r,
+                        BinaryOp::Le => l <= r,
+                        BinaryOp::Gt => l > r,
+                        BinaryOp::Ge => l >= r,
+                        _ => unreachable!(),
+                    };
+                    Ok(Value::Bool(res))
                 }
                 BinaryOp::And => Ok(Value::Bool(left.is_truthy() && right.is_truthy())),
                 BinaryOp::Or => Ok(Value::Bool(left.is_truthy() || right.is_truthy())),
@@ -302,10 +439,15 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         Expr::Unary(u) => {
             let operand = eval_expr(&u.operand, env)?;
             match u.op {
-                UnaryOp::Neg => {
-                    let n = operand.as_f64().unwrap_or(0.0);
-                    Ok(Value::Number(-n))
-                }
+                UnaryOp::Neg => match operand {
+                    Value::Integer(n) => Ok(Value::Integer(-n)),
+                    Value::Float(n) => Ok(Value::Float(-n)),
+                    Value::Distance(d) => Ok(Value::Distance(-d)),
+                    other => Err(CompileError::Custom {
+                        message: format!("Cannot negate value of type {}", other.type_name()),
+                        span: u.span,
+                    }),
+                },
                 UnaryOp::Not => Ok(Value::Bool(!operand.is_truthy())),
             }
         }
@@ -313,13 +455,83 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         Expr::Ternary(t) => {
             let cond = eval_expr(&t.condition, env)?;
             if cond.is_truthy() {
-                eval_expr(&t.then_expr, env)
+                let val = eval_expr(&t.then_expr, env)?;
+                if matches!(val, Value::Integer(0)) {
+                    if let Ok(Value::Distance(_)) = eval_expr(&t.else_expr, env) {
+                        return Ok(Value::Distance(0.0));
+                    }
+                }
+                Ok(val)
             } else {
-                eval_expr(&t.else_expr, env)
+                let val = eval_expr(&t.else_expr, env)?;
+                if matches!(val, Value::Integer(0)) {
+                    if let Ok(Value::Distance(_)) = eval_expr(&t.then_expr, env) {
+                        return Ok(Value::Distance(0.0));
+                    }
+                }
+                Ok(val)
             }
         }
 
         Expr::Call(c) => {
+            if c.callee.as_str() == "distance_to_float" {
+                if c.args.len() != 2 {
+                    return Err(CompileError::Custom {
+                        message: "distance_to_float() expects 2 arguments: distance_to_float(distance, unit)".to_string(),
+                        span: c.span,
+                    });
+                }
+                let d_val = eval_expr(&c.args[0], env)?;
+                let d_px = match d_val {
+                    Value::Distance(d) => d,
+                    Value::Integer(0) => 0.0,
+                    other => {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "distance_to_float() first argument must be a Distance, found {}",
+                                other.type_name()
+                            ),
+                            span: c.args[0].span(),
+                        });
+                    }
+                };
+                let unit_px = match &c.args[1] {
+                    Expr::Ident(unit_id) => match unit_id.as_str() {
+                        "px" => 1.0,
+                        "pt" => {
+                            let dpi = env
+                                .get(&VarId::new(NodeId::WINDOW, "dpi"))
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(96.0);
+                            dpi / 72.0
+                        }
+                        "em" => {
+                            return Err(CompileError::UndefinedEnvVariable {
+                                name: "font".to_string(),
+                                span: unit_id.span,
+                            });
+                        }
+                        other => {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Unknown unit '{}' in distance_to_float(). Supported units are 'px', 'pt', and 'em'",
+                                    other
+                                ),
+                                span: unit_id.span,
+                            });
+                        }
+                    },
+                    other_expr => {
+                        let unit_val = eval_expr(other_expr, env)?;
+                        unit_val.as_f64().unwrap_or(1.0)
+                    }
+                };
+                if unit_px == 0.0 {
+                    return Ok(Value::Float(0.0));
+                }
+                return Ok(Value::Float(d_px / unit_px));
+            }
+
             let evaluated_args: Vec<Value> = c
                 .args
                 .iter()
@@ -327,24 +539,17 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 .collect::<Result<_, _>>()?;
 
             match c.callee.as_str() {
-                "max" => {
-                    let max_val = evaluated_args
-                        .iter()
-                        .filter_map(|v| v.as_f64())
-                        .fold(f64::NEG_INFINITY, f64::max);
-                    Ok(Value::Number(if max_val.is_finite() { max_val } else { 0.0 }))
-                }
-                "min" => {
-                    let min_val = evaluated_args
-                        .iter()
-                        .filter_map(|v| v.as_f64())
-                        .fold(f64::INFINITY, f64::min);
-                    Ok(Value::Number(if min_val.is_finite() { min_val } else { 0.0 }))
-                }
-                "sum" => {
-                    let sum_val: f64 = evaluated_args.iter().filter_map(|v| v.as_f64()).sum();
-                    Ok(Value::Number(sum_val))
-                }
+                "max" => eval_aggregate_fn("max", &evaluated_args, c.span, |vals| {
+                    let m = vals.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                    if m.is_finite() { m } else { 0.0 }
+                }),
+                "min" => eval_aggregate_fn("min", &evaluated_args, c.span, |vals| {
+                    let m = vals.iter().copied().fold(f64::INFINITY, f64::min);
+                    if m.is_finite() { m } else { 0.0 }
+                }),
+                "sum" => eval_aggregate_fn("sum", &evaluated_args, c.span, |vals| {
+                    vals.iter().copied().sum()
+                }),
                 "only" => {
                     if evaluated_args.len() == 1 {
                         Ok(evaluated_args[0].clone())
@@ -360,10 +565,9 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 }
                 "clamp" => {
                     if evaluated_args.len() >= 3 {
-                        let val = evaluated_args[0].as_f64().unwrap_or(0.0);
-                        let min = evaluated_args[1].as_f64().unwrap_or(0.0);
-                        let max = evaluated_args[2].as_f64().unwrap_or(0.0);
-                        Ok(Value::Number(val.clamp(min, max)))
+                        eval_aggregate_fn("clamp", &evaluated_args[..3], c.span, |vals| {
+                            vals[0].clamp(vals[1], vals[2])
+                        })
                     } else {
                         Err(CompileError::Custom {
                             message: "clamp() expects 3 arguments: clamp(value, min, max)".to_string(),
@@ -371,22 +575,30 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         })
                     }
                 }
-                "round" => {
-                    let val = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    Ok(Value::Number(val.round()))
-                }
-                "floor" => {
-                    let val = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    Ok(Value::Number(val.floor()))
-                }
-                "ceil" => {
-                    let val = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    Ok(Value::Number(val.ceil()))
-                }
-                "abs" => {
-                    let val = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    Ok(Value::Number(val.abs()))
-                }
+                "round" => match evaluated_args.first() {
+                    Some(Value::Distance(d)) => Ok(Value::Distance(d.round())),
+                    Some(Value::Float(f)) => Ok(Value::Integer(f.round() as i64)),
+                    Some(Value::Integer(i)) => Ok(Value::Integer(*i)),
+                    _ => Ok(Value::Integer(0)),
+                },
+                "floor" => match evaluated_args.first() {
+                    Some(Value::Distance(d)) => Ok(Value::Distance(d.floor())),
+                    Some(Value::Float(f)) => Ok(Value::Integer(f.floor() as i64)),
+                    Some(Value::Integer(i)) => Ok(Value::Integer(*i)),
+                    _ => Ok(Value::Integer(0)),
+                },
+                "ceil" => match evaluated_args.first() {
+                    Some(Value::Distance(d)) => Ok(Value::Distance(d.ceil())),
+                    Some(Value::Float(f)) => Ok(Value::Integer(f.ceil() as i64)),
+                    Some(Value::Integer(i)) => Ok(Value::Integer(*i)),
+                    _ => Ok(Value::Integer(0)),
+                },
+                "abs" => match evaluated_args.first() {
+                    Some(Value::Distance(d)) => Ok(Value::Distance(d.abs())),
+                    Some(Value::Float(f)) => Ok(Value::Float(f.abs())),
+                    Some(Value::Integer(i)) => Ok(Value::Integer(i.abs())),
+                    _ => Ok(Value::Integer(0)),
+                },
                 "hsl" | "hsla" => {
                     let h = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
                     let s = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(100.0);
@@ -425,7 +637,64 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let sigfigs = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(1.0).max(1.0) as usize;
                     Ok(Value::String(format_sigfigs(val, sigfigs)))
                 }
-
+                "to_px" => match evaluated_args.first() {
+                    Some(Value::Distance(d)) => Ok(Value::Float(*d)),
+                    Some(Value::Integer(0)) => Ok(Value::Float(0.0)),
+                    Some(other) => Err(CompileError::Custom {
+                        message: format!("to_px() expects a Distance, found {}", other.type_name()),
+                        span: c.span,
+                    }),
+                    None => Err(CompileError::Custom {
+                        message: "to_px() expects 1 argument".to_string(),
+                        span: c.span,
+                    }),
+                },
+                "to_pt" => match evaluated_args.first() {
+                    Some(Value::Distance(d)) => {
+                        let dpi = env
+                            .get(&VarId::new(NodeId::WINDOW, "dpi"))
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(96.0);
+                        Ok(Value::Float(*d / (dpi / 72.0)))
+                    }
+                    Some(Value::Integer(0)) => Ok(Value::Float(0.0)),
+                    Some(other) => Err(CompileError::Custom {
+                        message: format!("to_pt() expects a Distance, found {}", other.type_name()),
+                        span: c.span,
+                    }),
+                    None => Err(CompileError::Custom {
+                        message: "to_pt() expects 1 argument".to_string(),
+                        span: c.span,
+                    }),
+                },
+                "to_float" | "to_number" => match evaluated_args.first() {
+                    Some(Value::Integer(i)) => Ok(Value::Float(*i as f64)),
+                    Some(Value::Float(f)) => Ok(Value::Float(*f)),
+                    Some(other) => Err(CompileError::Custom {
+                        message: format!(
+                            "{}() expects an Integer or Float, found {}",
+                            c.callee.as_str(),
+                            other.type_name()
+                        ),
+                        span: c.span,
+                    }),
+                    None => Err(CompileError::Custom {
+                        message: format!("{}() expects 1 argument", c.callee.as_str()),
+                        span: c.span,
+                    }),
+                },
+                "to_integer" => match evaluated_args.first() {
+                    Some(Value::Integer(i)) => Ok(Value::Integer(*i)),
+                    Some(Value::Float(f)) => Ok(Value::Integer(*f as i64)),
+                    Some(other) => Err(CompileError::Custom {
+                        message: format!("to_integer() expects an Integer or Float, found {}", other.type_name()),
+                        span: c.span,
+                    }),
+                    None => Err(CompileError::Custom {
+                        message: "to_integer() expects 1 argument".to_string(),
+                        span: c.span,
+                    }),
+                },
 
                 "text_height" => {
                     let text = evaluated_args.first().and_then(|v| v.as_str()).unwrap_or("");
@@ -439,7 +708,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     validate_font_family(family, c.span)?;
 
                     let h = crate::compiler::text::measure_text_height(text, size, weight, family, max_width, ends_at, start_at, line_height);
-                    Ok(Value::Number(h))
+                    Ok(Value::Distance(h))
                 }
                 "text_baseline_offset" => {
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
@@ -449,7 +718,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     validate_font_family(family, c.span)?;
 
                     let offset = crate::compiler::text::text_baseline_offset(size, weight, family, start_at);
-                    Ok(Value::Number(offset))
+                    Ok(Value::Distance(offset))
                 }
                 "text_width" => {
                     let text = evaluated_args.first().and_then(|v| v.as_str()).unwrap_or("");
@@ -459,7 +728,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     validate_font_family(family, c.span)?;
 
                     let w = crate::compiler::text::measure_text_width(text, size, weight, family);
-                    Ok(Value::Number(w))
+                    Ok(Value::Distance(w))
                 }
                 "font_cap_height" => {
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
@@ -468,7 +737,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     validate_font_family(family, c.span)?;
 
                     let m = crate::compiler::text::measure_font_metrics(size, weight, family);
-                    Ok(Value::Number(m.cap_height))
+                    Ok(Value::Distance(m.cap_height))
                 }
                 "font_x_height" => {
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
@@ -477,7 +746,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     validate_font_family(family, c.span)?;
 
                     let m = crate::compiler::text::measure_font_metrics(size, weight, family);
-                    Ok(Value::Number(m.x_height))
+                    Ok(Value::Distance(m.x_height))
                 }
                 "font_descent" => {
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
@@ -486,7 +755,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     validate_font_family(family, c.span)?;
 
                     let m = crate::compiler::text::measure_font_metrics(size, weight, family);
-                    Ok(Value::Number(m.descent))
+                    Ok(Value::Distance(m.descent))
                 }
                 "font_ascent" => {
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
@@ -495,7 +764,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     validate_font_family(family, c.span)?;
 
                     let m = crate::compiler::text::measure_font_metrics(size, weight, family);
-                    Ok(Value::Number(m.ascent))
+                    Ok(Value::Distance(m.ascent))
                 }
                 "font_line_height" => {
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
@@ -504,7 +773,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     validate_font_family(family, c.span)?;
 
                     let m = crate::compiler::text::measure_font_metrics(size, weight, family);
-                    Ok(Value::Number(m.line_height))
+                    Ok(Value::Distance(m.line_height))
                 }
                 other => Err(CompileError::Custom {
                     message: format!("Unknown math/collection function '{}'", other),
@@ -555,9 +824,10 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 "to_fixed" => {
                     let decimals = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0).max(0.0) as usize;
                     match target_val {
-                        Value::Number(n) => Ok(Value::String(format_fixed(n, decimals))),
+                        Value::Integer(n) => Ok(Value::String(format_fixed(n as f64, decimals))),
+                        Value::Float(n) | Value::Distance(n) => Ok(Value::String(format_fixed(n, decimals))),
                         _ => Err(CompileError::Custom {
-                            message: format!("to_fixed() can only be called on Number, got {}", target_val.type_name()),
+                            message: format!("to_fixed() can only be called on numeric values, got {}", target_val.type_name()),
                             span: mc.span,
                         }),
                     }
@@ -565,13 +835,56 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 "to_precision" => {
                     let sigfigs = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(1.0).max(1.0) as usize;
                     match target_val {
-                        Value::Number(n) => Ok(Value::String(format_sigfigs(n, sigfigs))),
+                        Value::Integer(n) => Ok(Value::String(format_sigfigs(n as f64, sigfigs))),
+                        Value::Float(n) | Value::Distance(n) => Ok(Value::String(format_sigfigs(n, sigfigs))),
                         _ => Err(CompileError::Custom {
-                            message: format!("to_precision() can only be called on Number, got {}", target_val.type_name()),
+                            message: format!("to_precision() can only be called on numeric values, got {}", target_val.type_name()),
                             span: mc.span,
                         }),
                     }
                 }
+                "to_px" => match target_val {
+                    Value::Distance(d) => Ok(Value::Float(d)),
+                    Value::Integer(0) => Ok(Value::Float(0.0)),
+                    other => Err(CompileError::Custom {
+                        message: format!("to_px() can only be called on Distance, got {}", other.type_name()),
+                        span: mc.span,
+                    }),
+                },
+                "to_pt" => match target_val {
+                    Value::Distance(d) => {
+                        let dpi = env
+                            .get(&VarId::new(NodeId::WINDOW, "dpi"))
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(96.0);
+                        Ok(Value::Float(d / (dpi / 72.0)))
+                    }
+                    Value::Integer(0) => Ok(Value::Float(0.0)),
+                    other => Err(CompileError::Custom {
+                        message: format!("to_pt() can only be called on Distance, got {}", other.type_name()),
+                        span: mc.span,
+                    }),
+                },
+                "to_float" | "to_number" => match target_val {
+                    Value::Integer(i) => Ok(Value::Float(i as f64)),
+                    Value::Float(f) => Ok(Value::Float(f)),
+                    other => Err(CompileError::Custom {
+                        message: format!(
+                            "{}() can only be called on Integer or Float, got {}",
+                            mc.method.as_str(),
+                            other.type_name()
+                        ),
+                        span: mc.span,
+                    }),
+                },
+                "to_integer" => match target_val {
+                    Value::Integer(i) => Ok(Value::Integer(i)),
+                    Value::Float(f) => Ok(Value::Integer(f as i64)),
+                    other => Err(CompileError::Custom {
+                        message: format!("to_integer() can only be called on Integer or Float, got {}", other.type_name()),
+                        span: mc.span,
+                    }),
+                },
                 other => Err(CompileError::Custom {
                     message: format!("Unknown method '{}' called on expression", other),
                     span: mc.span,
@@ -584,6 +897,122 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
             message: format!("Unexpanded node in expression: '{}'", n.name.as_str()),
             span: n.span,
         }),
+    }
+}
+
+fn values_equal(left: &Value, right: &Value) -> bool {
+    match (left, right) {
+        (Value::Integer(a), Value::Integer(b)) => a == b,
+        (Value::Float(a), Value::Float(b)) => (a - b).abs() < 1e-9,
+        (Value::Integer(a), Value::Float(b)) | (Value::Float(b), Value::Integer(a)) => {
+            (*a as f64 - *b).abs() < 1e-9
+        }
+        (Value::Distance(a), Value::Distance(b)) => (a - b).abs() < 1e-9,
+        (Value::Distance(a), Value::Integer(0)) | (Value::Integer(0), Value::Distance(a)) => {
+            a.abs() < 1e-9
+        }
+        _ => left == right,
+    }
+}
+
+fn extract_comparable_pair(
+    left: &Value,
+    right: &Value,
+    span: crate::span::Span,
+) -> Result<(f64, f64), CompileError> {
+    match (left, right) {
+        (Value::Integer(a), Value::Integer(b)) => Ok((*a as f64, *b as f64)),
+        (Value::Float(a), Value::Float(b)) => Ok((*a, *b)),
+        (Value::Integer(a), Value::Float(b)) => Ok((*a as f64, *b)),
+        (Value::Float(a), Value::Integer(b)) => Ok((*a, *b as f64)),
+        (Value::Distance(a), Value::Distance(b)) => Ok((*a, *b)),
+        (Value::Distance(a), Value::Integer(0)) => Ok((*a, 0.0)),
+        (Value::Integer(0), Value::Distance(b)) => Ok((0.0, *b)),
+        _ => Err(CompileError::Custom {
+            message: format!(
+                "Cannot compare {} ({}) and {} ({})",
+                left,
+                left.type_name(),
+                right,
+                right.type_name()
+            ),
+            span,
+        }),
+    }
+}
+
+fn eval_aggregate_fn<F>(
+    name: &str,
+    args: &[Value],
+    span: crate::span::Span,
+    f: F,
+) -> Result<Value, CompileError>
+where
+    F: FnOnce(&[f64]) -> f64,
+{
+    if args.is_empty() {
+        return Ok(Value::Integer(0));
+    }
+    let has_distance = args.iter().any(|v| matches!(v, Value::Distance(_)));
+    let has_float = args.iter().any(|v| matches!(v, Value::Float(_)));
+
+    if has_distance {
+        let mut nums = Vec::with_capacity(args.len());
+        for arg in args {
+            match arg {
+                Value::Distance(d) => nums.push(*d),
+                Value::Integer(0) => nums.push(0.0),
+                other => {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "{}() cannot mix Distance with {} ({})",
+                            name,
+                            other,
+                            other.type_name()
+                        ),
+                        span,
+                    });
+                }
+            }
+        }
+        Ok(Value::Distance(f(&nums)))
+    } else if has_float {
+        let mut nums = Vec::with_capacity(args.len());
+        for arg in args {
+            match arg {
+                Value::Float(n) => nums.push(*n),
+                Value::Integer(i) => nums.push(*i as f64),
+                other => {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "{}() expected numeric arguments, found {}",
+                            name,
+                            other.type_name()
+                        ),
+                        span,
+                    });
+                }
+            }
+        }
+        Ok(Value::Float(f(&nums)))
+    } else {
+        let mut nums = Vec::with_capacity(args.len());
+        for arg in args {
+            match arg {
+                Value::Integer(i) => nums.push(*i as f64),
+                other => {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "{}() expected numeric arguments, found {}",
+                            name,
+                            other.type_name()
+                        ),
+                        span,
+                    });
+                }
+            }
+        }
+        Ok(Value::Integer(f(&nums) as i64))
     }
 }
 
@@ -640,7 +1069,7 @@ pub(crate) fn format_sigfigs(val: f64, sigfigs: usize) -> String {
         return format!("{val}");
     }
     if sigfigs == 0 {
-        return Value::Number(val).to_display_string();
+        return Value::Float(val).to_display_string();
     }
     if val == 0.0 {
         if sigfigs == 1 {

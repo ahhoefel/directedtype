@@ -9,10 +9,10 @@ fn test_vertical_spacer_in_vstack() {
     \use "components/VStack.dt"
     \use "components/Spacer.dt"
 
-    \VStack(x: 20, y: 20, width: 200, gap: 10) {
-        \Rect(width: 100, height: 40, color: #3b82f6)
-        \Spacer(height: 35)
-        \Rect(width: 100, height: 40, color: #10b981)
+    \VStack(x: 20px, y: 20px, width: 200px, gap: 10px) {
+        \Rect(width: 100px, height: 40px, color: #3b82f6)
+        \Spacer(height: 35px)
+        \Rect(width: 100px, height: 40px, color: #10b981)
     }
     "#;
 
@@ -47,10 +47,10 @@ fn test_horizontal_spacer_in_hstack() {
     \use "components/HStack.dt"
     \use "components/Spacer.dt"
 
-    \HStack(x: 10, y: 10, gap: 12) {
-        \Rect(width: 50, height: 30, color: #3b82f6)
-        \Spacer(width: 48)
-        \Rect(width: 50, height: 30, color: #10b981)
+    \HStack(x: 10px, y: 10px, gap: 12px) {
+        \Rect(width: 50px, height: 30px, color: #3b82f6)
+        \Spacer(width: 48px)
+        \Rect(width: 50px, height: 30px, color: #10b981)
     }
     "#;
 
@@ -85,11 +85,11 @@ fn test_divider_in_vstack() {
     \use "components/VStack.dt"
     \use "components/Divider.dt"
 
-    \VStack(x: 0, y: 0, width: 300, gap: 8) {
-        \Rect(width: 100, height: 20, color: #3b82f6)
+    \VStack(x: 0, y: 0, width: 300px, gap: 8px) {
+        \Rect(width: 100px, height: 20px, color: #3b82f6)
         \Divider()
-        \Rect(width: 100, height: 20, color: #10b981)
-        \Divider(width: 120, color: #ef4444, thickness: 2)
+        \Rect(width: 100px, height: 20px, color: #10b981)
+        \Divider(width: 120px, color: #ef4444, thickness: 2px)
     }
     "#;
 

@@ -10,7 +10,7 @@ fn test_hcenter_fluid_in_window() {
     \use "components/HCenter.dt"
 
     \HCenter {
-        \Rect(width: 400, height: 100, color: #3b82f6)
+        \Rect(width: 400px, height: 100px, color: #3b82f6)
     }
     "#;
 
@@ -46,8 +46,8 @@ fn test_hcenter_explicit_parameters() {
     let input = r#"
     \use "components/HCenter.dt"
 
-    \HCenter(width: 500, x: 50, y: 30) {
-        \Rect(width: 300, height: 80, color: #3b82f6)
+    \HCenter(width: 500px, x: 50px, y: 30px) {
+        \Rect(width: 300px, height: 80px, color: #3b82f6)
     }
     "#;
 
@@ -81,8 +81,8 @@ fn test_hcenter_assertion_rejects_multiple_children() {
     \use "components/HCenter.dt"
 
     \HCenter {
-        \Rect(width: 100, height: 50, color: #ff0000)
-        \Rect(width: 100, height: 50, color: #00ff00)
+        \Rect(width: 100px, height: 50px, color: #ff0000)
+        \Rect(width: 100px, height: 50px, color: #00ff00)
     }
     "#;
 
@@ -111,7 +111,7 @@ fn test_vcenter_fluid_in_window() {
     \use "components/VCenter.dt"
 
     \VCenter {
-        \Rect(width: 200, height: 100, color: #10b981)
+        \Rect(width: 200px, height: 100px, color: #10b981)
     }
     "#;
 
@@ -147,8 +147,8 @@ fn test_vcenter_explicit_parameters() {
     let input = r#"
     \use "components/VCenter.dt"
 
-    \VCenter(height: 400, x: 40, y: 50) {
-        \Rect(width: 150, height: 100, color: #10b981)
+    \VCenter(height: 400px, x: 40px, y: 50px) {
+        \Rect(width: 150px, height: 100px, color: #10b981)
     }
     "#;
 
@@ -182,8 +182,8 @@ fn test_vcenter_assertion_rejects_multiple_children() {
     \use "components/VCenter.dt"
 
     \VCenter {
-        \Rect(width: 100, height: 50, color: #ff0000)
-        \Rect(width: 100, height: 50, color: #00ff00)
+        \Rect(width: 100px, height: 50px, color: #ff0000)
+        \Rect(width: 100px, height: 50px, color: #00ff00)
     }
     "#;
 
@@ -241,7 +241,7 @@ fn test_nesting_vcenter_and_hcenter() {
 
     \VCenter {
         \HCenter {
-            \Rect(width: 300, height: 200, color: #a855f7)
+            \Rect(width: 300px, height: 200px, color: #a855f7)
         }
     }
     "#;
@@ -280,7 +280,7 @@ fn test_hcenter_width_capped_by_child_width() {
     \use "components/HCenter.dt"
 
     \let center = \HCenter {
-        \Rect(width: 480, height: 100, color: #3b82f6)
+        \Rect(width: 480px, height: 100px, color: #3b82f6)
     };
     "#;
 
@@ -326,7 +326,7 @@ fn test_vcenter_height_capped_by_child_height() {
     \use "components/VCenter.dt"
 
     \let center = \VCenter {
-        \Rect(width: 200, height: 500, color: #10b981)
+        \Rect(width: 200px, height: 500px, color: #10b981)
     };
     "#;
 
@@ -373,8 +373,8 @@ fn test_hcenter_wrapping_padout_capped_by_child_width() {
     \use "components/HCenter.dt"
 
     \let content = \HCenter {
-        \PadOut(padding_x: 40, padding_y: 40) {
-            \Rect(width: 480, height: 100, color: #3b82f6)
+        \PadOut(padding_x: 40px, padding_y: 40px) {
+            \Rect(width: 480px, height: 100px, color: #3b82f6)
         }
     };
     "#;

@@ -129,12 +129,14 @@ impl Event {
         self
     }
 
+    /// Returns the event payload as an integer, if present.
+    pub fn payload_integer(&self) -> Option<i64> {
+        self.payload.as_ref().and_then(|v| v.as_i64())
+    }
+
     /// Returns the event payload as a floating-point number, if present.
     pub fn payload_number(&self) -> Option<f64> {
-        match self.payload.as_ref()? {
-            crate::compiler::Value::Number(n) => Some(*n),
-            _ => None,
-        }
+        self.payload.as_ref().and_then(|v| v.as_f64())
     }
 
     /// Returns the event payload as a boolean, if present.

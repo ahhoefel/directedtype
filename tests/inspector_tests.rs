@@ -14,10 +14,10 @@ fn test_inspect_target_info_from_dom() {
         "Rect",
         vec![
             ("id".to_string(), Expr::string("main_card")),
-            ("x".to_string(), Expr::lit(50.0)),
-            ("y".to_string(), Expr::lit(120.0)),
-            ("width".to_string(), Expr::lit(380.0)),
-            ("height".to_string(), Expr::lit(180.0)),
+            ("x".to_string(), Expr::distance_px(50.0)),
+            ("y".to_string(), Expr::distance_px(120.0)),
+            ("width".to_string(), Expr::distance_px(380.0)),
+            ("height".to_string(), Expr::distance_px(180.0)),
             ("color".to_string(), Expr::color("#6366f1")),
         ],
     );
@@ -43,10 +43,10 @@ fn test_badge_rect_positioning_and_clamping() {
     let top_node = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(100.0)),
-            ("y".to_string(), Expr::lit(8.0)),
-            ("width".to_string(), Expr::lit(120.0)),
-            ("height".to_string(), Expr::lit(40.0)),
+            ("x".to_string(), Expr::distance_px(100.0)),
+            ("y".to_string(), Expr::distance_px(8.0)),
+            ("width".to_string(), Expr::distance_px(120.0)),
+            ("height".to_string(), Expr::distance_px(40.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -55,10 +55,10 @@ fn test_badge_rect_positioning_and_clamping() {
     let mid_node = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(100.0)),
-            ("y".to_string(), Expr::lit(200.0)),
-            ("width".to_string(), Expr::lit(120.0)),
-            ("height".to_string(), Expr::lit(40.0)),
+            ("x".to_string(), Expr::distance_px(100.0)),
+            ("y".to_string(), Expr::distance_px(200.0)),
+            ("width".to_string(), Expr::distance_px(120.0)),
+            ("height".to_string(), Expr::distance_px(40.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -67,10 +67,10 @@ fn test_badge_rect_positioning_and_clamping() {
     let right_node = dom.create_element(
         "Rect",
         vec![
-            ("x".to_string(), Expr::lit(750.0)),
-            ("y".to_string(), Expr::lit(200.0)),
-            ("width".to_string(), Expr::lit(100.0)),
-            ("height".to_string(), Expr::lit(40.0)),
+            ("x".to_string(), Expr::distance_px(750.0)),
+            ("y".to_string(), Expr::distance_px(200.0)),
+            ("width".to_string(), Expr::distance_px(100.0)),
+            ("height".to_string(), Expr::distance_px(40.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -141,10 +141,10 @@ fn test_dom_tree_item_building() {
         "Rect",
         vec![
             ("id".to_string(), Expr::string("main_container")),
-            ("x".to_string(), Expr::lit(0.0)),
-            ("y".to_string(), Expr::lit(0.0)),
-            ("width".to_string(), Expr::lit(500.0)),
-            ("height".to_string(), Expr::lit(500.0)),
+            ("x".to_string(), Expr::distance_px(0.0)),
+            ("y".to_string(), Expr::distance_px(0.0)),
+            ("width".to_string(), Expr::distance_px(500.0)),
+            ("height".to_string(), Expr::distance_px(500.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -152,10 +152,10 @@ fn test_dom_tree_item_building() {
         "Rect",
         vec![
             ("id".to_string(), Expr::string("card1")),
-            ("x".to_string(), Expr::lit(10.0)),
-            ("y".to_string(), Expr::lit(10.0)),
-            ("width".to_string(), Expr::lit(300.0)),
-            ("height".to_string(), Expr::lit(100.0)),
+            ("x".to_string(), Expr::distance_px(10.0)),
+            ("y".to_string(), Expr::distance_px(10.0)),
+            ("width".to_string(), Expr::distance_px(300.0)),
+            ("height".to_string(), Expr::distance_px(100.0)),
             ("color".to_string(), Expr::color("#ff0000")),
         ],
     );
@@ -163,10 +163,10 @@ fn test_dom_tree_item_building() {
         "Rect",
         vec![
             ("id".to_string(), Expr::string("card2")),
-            ("x".to_string(), Expr::lit(10.0)),
-            ("y".to_string(), Expr::lit(120.0)),
-            ("width".to_string(), Expr::lit(300.0)),
-            ("height".to_string(), Expr::lit(100.0)),
+            ("x".to_string(), Expr::distance_px(10.0)),
+            ("y".to_string(), Expr::distance_px(120.0)),
+            ("width".to_string(), Expr::distance_px(300.0)),
+            ("height".to_string(), Expr::distance_px(100.0)),
             ("color".to_string(), Expr::color("#00ff00")),
         ],
     );
@@ -225,10 +225,10 @@ fn test_overlay_component_build_dtml() {
         "Rect",
         vec![
             ("id".to_string(), Expr::string("test_box")),
-            ("x".to_string(), Expr::lit(40.0)),
-            ("y".to_string(), Expr::lit(60.0)),
-            ("width".to_string(), Expr::lit(200.0)),
-            ("height".to_string(), Expr::lit(100.0)),
+            ("x".to_string(), Expr::distance_px(40.0)),
+            ("y".to_string(), Expr::distance_px(60.0)),
+            ("width".to_string(), Expr::distance_px(200.0)),
+            ("height".to_string(), Expr::distance_px(100.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -240,10 +240,10 @@ fn test_overlay_component_build_dtml() {
     let dtml_snippet = overlay.build_dtml(&info, true);
 
     assert!(dtml_snippet.contains(r#"\InspectOverlay"#));
-    assert!(dtml_snippet.contains("target_x: 40"));
-    assert!(dtml_snippet.contains("target_y: 60"));
-    assert!(dtml_snippet.contains("target_w: 200"));
-    assert!(dtml_snippet.contains("target_h: 100"));
+    assert!(dtml_snippet.contains("target_x: 40px"));
+    assert!(dtml_snippet.contains("target_y: 60px"));
+    assert!(dtml_snippet.contains("target_w: 200px"));
+    assert!(dtml_snippet.contains("target_h: 100px"));
     assert!(dtml_snippet.contains(r#"label: "Rect#test_box [200 × 100]""#));
     assert!(dtml_snippet.contains("is_selected: true"));
 }
@@ -255,10 +255,10 @@ fn test_overlay_render_to_scene_dpi_scaling() {
         "Rect",
         vec![
             ("id".to_string(), Expr::string("scaled_card")),
-            ("x".to_string(), Expr::lit(100.0)),
-            ("y".to_string(), Expr::lit(150.0)),
-            ("width".to_string(), Expr::lit(200.0)),
-            ("height".to_string(), Expr::lit(80.0)),
+            ("x".to_string(), Expr::distance_px(100.0)),
+            ("y".to_string(), Expr::distance_px(150.0)),
+            ("width".to_string(), Expr::distance_px(200.0)),
+            ("height".to_string(), Expr::distance_px(80.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
@@ -302,8 +302,8 @@ fn test_overlay_render_to_scene_dpi_scaling() {
 fn test_build_tree_items_from_layout_and_ancestor_expansion() {
     let source = r#"
         \Component Card(id: String: "c1") {
-            \Rect(id: id, x: 0, y: 0, width: 200, height: 100, color: #38bdf8) {
-                \Text(size: 14) { "Card Title" }
+            \Rect(id: id, x: 0, y: 0, width: 200px, height: 100px, color: #38bdf8) {
+                \Text(size: 14px) { "Card Title" }
             }
         }
         \Card(id: "main_card")
@@ -345,8 +345,8 @@ fn test_build_tree_items_from_layout_and_ancestor_expansion() {
 #[test]
 fn test_inspect_panel_component_rendering_and_hit_testing() {
     let source = r#"
-        \Rect(id: "hero_box", x: 0, y: 0, width: 400, height: 200, color: #0284c7) {
-            \Text(size: 24) { "Hero Headline" }
+        \Rect(id: "hero_box", x: 0, y: 0, width: 400px, height: 200px, color: #0284c7) {
+            \Text(size: 24px) { "Hero Headline" }
         }
     "#;
     let doc = directedtype::parse(source).expect("Must parse");
@@ -452,7 +452,7 @@ fn test_inspect_panel_component_rendering_and_hit_testing() {
 fn test_inspect_cursor_toggle_and_selection_gating() {
     let source = r#"
         \Component Button {
-            \Rect(id: "btn_rect", x: 20, y: 20, width: 120, height: 40, color: #2563eb)
+            \Rect(id: "btn_rect", x: 20px, y: 20px, width: 120px, height: 40px, color: #2563eb)
         }
         \Button()
     "#;
@@ -520,8 +520,8 @@ fn test_inspect_cursor_toggle_and_selection_gating() {
 fn test_inspector_bottom_panel_dimensions_and_formulas() {
     let source = r#"
         \Component Card(id: String: "card1") {
-            \Rect(id: id, x: 20 + 5, y: 10 * 2, width: min(400, 300), height: 180, color: #6366f1) {
-                \Text(size: 14) { "Card Content" }
+            \Rect(id: id, x: 20px + 5px, y: 10px * 2, width: min(400px, 300px), height: 180px, color: #6366f1) {
+                \Text(size: 14px) { "Card Content" }
             }
         }
         \Card(id: "my_card")
@@ -560,11 +560,11 @@ fn test_inspector_bottom_panel_dimensions_and_formulas() {
         !rect_node.formulas.is_empty(),
         "ResolvedNode should contain preserved authored formulas"
     );
-    // x had expression `20 + 5`
+    // x had expression `20px + 5px`
     if let Some(f_x) = rect_node.formulas.get("x") {
         assert!(f_x.contains("20") && f_x.contains('+') && f_x.contains('5'), "Formula for x: {}", f_x);
     }
-    // width had expression `min(400, 300)`
+    // width had expression `min(400px, 300px)`
     if let Some(f_w) = rect_node.formulas.get("width") {
         assert!(f_w.contains("min"), "Formula for width: {}", f_w);
     }
@@ -620,7 +620,7 @@ fn test_inspector_bottom_panel_dimensions_and_formulas() {
 #[test]
 fn test_ambient_children_authored_formulas_preserved() {
     let source = r#"
-        \Component Flow(x: Number: 0, y: Number: 0, width: Number: parent.width, margin: Number: 30, gap: Number: 20) {
+        \Component Flow(x: Distance: 0, y: Distance: 0, width: Distance: parent.width, margin: Distance: 30px, gap: Distance: 20px) {
             \Children {
                 x: parent.left + parent.margin,
                 y: prev ? prev.bottom + gap : parent.top,
@@ -628,8 +628,8 @@ fn test_ambient_children_authored_formulas_preserved() {
             }
         }
 
-        \Flow(margin: 40) {
-            \Text(size: 16) { "Environmental Scope Showcase" }
+        \Flow(margin: 40px) {
+            \Text(size: 16px) { "Environmental Scope Showcase" }
         }
     "#;
     let doc = directedtype::parse(source).expect("Source must parse");
@@ -784,7 +784,7 @@ fn test_property_bullet_vertical_centering() {
 #[test]
 fn test_let_bound_var_name_in_dom_tree() {
     let source = r#"
-        \let heading_font = \Font(size: 24, weight: 700, family: "Arial")
+        \let heading_font = \Font(size: 24px, weight: 700, family: "Arial")
         \Text(font: heading_font, text: "Hello World")
     "#;
     let doc = directedtype::parse(source).expect("Parse ok");
@@ -803,7 +803,7 @@ fn test_let_bound_var_name_in_dom_tree() {
 #[test]
 fn test_expandable_reference_properties() {
     let source = r#"
-        \let heading_font = \Font(size: 24, weight: 700, family: "Arial")
+        \let heading_font = \Font(size: 24px, weight: 700, family: "Arial")
         \Text(id: "my_text", font: heading_font, text: "Hello World")
     "#;
     let doc = directedtype::parse(source).expect("Parse ok");
@@ -888,7 +888,7 @@ fn test_expandable_reference_properties() {
 #[test]
 fn test_dom_tree_item_structured_keys() {
     let source = r#"
-\Component Cell(w: Number: 80, h: Number: 30) {
+\Component Cell(w: Distance: 80px, h: Distance: 30px) {
     \Rect(x: 0, y: 0, width: w, height: h, color: #ffffff)
 }
 
@@ -897,8 +897,8 @@ fn test_dom_tree_item_structured_keys() {
 }
 
 \Table("main";) {
-    \Cell(0, 0; w: 80, h: 30)
-    \Cell(0, 1; w: 80, h: 30)
+    \Cell(0, 0; w: 80px, h: 30px)
+    \Cell(0, 1; w: 80px, h: 30px)
 }
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
@@ -932,10 +932,10 @@ fn test_dom_tree_item_structured_keys() {
 #[test]
 fn test_inspector_target_info_state_variables() {
     let source = r#"
-\Component Counter(initial: Number: 7) {
-    \state count: Number: initial;
+\Component Counter(initial: Integer: 7) {
+    \state count: Integer: initial;
     \state is_active: Boolean: true;
-    \Rect(x: 0, y: 0, width: 200, height: 100, color: #ffffff)
+    \Rect(x: 0, y: 0, width: 200px, height: 100px, color: #ffffff)
 }
 
 \Counter(initial: 42)
@@ -948,8 +948,8 @@ fn test_inspector_target_info_state_variables() {
 
     assert_eq!(info.state_vars.len(), 2);
     let count_state = info.state_vars.iter().find(|s| s.0 == "count").expect("count found");
-    assert_eq!(count_state.1, Some("Number".to_string()));
-    assert_eq!(count_state.2, Some(directedtype::compiler::Value::Number(42.0)));
+    assert_eq!(count_state.1, Some("Integer".to_string()));
+    assert_eq!(count_state.2, Some(directedtype::compiler::Value::Integer(42)));
 
     let active_state = info.state_vars.iter().find(|s| s.0 == "is_active").expect("is_active found");
     assert_eq!(active_state.1, Some("Boolean".to_string()));
@@ -962,15 +962,15 @@ fn test_inspector_target_info_state_variables() {
     let initial_info = InspectTargetInfo::from_dom(&dom, counter_handle).expect("dom info ok");
     assert_eq!(
         initial_info.state_vars.iter().find(|s| s.0 == "count").unwrap().2,
-        Some(directedtype::compiler::Value::Number(42.0))
+        Some(directedtype::compiler::Value::Integer(42))
     );
 
     // Mutate state in DOM
-    dom.set_state(counter_handle, "count", directedtype::compiler::Value::Number(99.0)).expect("set_state ok");
+    dom.set_state(counter_handle, "count", directedtype::compiler::Value::Integer(99)).expect("set_state ok");
     let updated_info = InspectTargetInfo::from_dom(&dom, counter_handle).expect("updated dom info ok");
     assert_eq!(
         updated_info.state_vars.iter().find(|s| s.0 == "count").unwrap().2,
-        Some(directedtype::compiler::Value::Number(99.0))
+        Some(directedtype::compiler::Value::Integer(99))
     );
 }
 
@@ -979,7 +979,7 @@ fn test_inspector_panel_render_state_variables_and_structured_keys() {
     let source = r#"
 \Component Switch {
     \state is_on: Boolean: false;
-    \Rect(x: 0, y: 0, width: 100, height: 40, color: #112233)
+    \Rect(x: 0, y: 0, width: 100px, height: 40px, color: #112233)
 }
 
 \Switch("toggle_btn";)
@@ -1028,10 +1028,10 @@ fn test_inspector_panel_render_state_variables_and_structured_keys() {
 #[test]
 fn test_dag_property_trace_building() {
     let source = r#"
-\Component Container(x = 0, y = 0, width = 400) {
-    \Rect("box"; x: x, y: y, width: width - 60, height: 80, color: #3b82f6)
+\Component Container(x = 0, y = 0, width = 400px) {
+    \Rect("box"; x: x, y: y, width: width - 60px, height: 80px, color: #3b82f6)
 }
-\Container("container"; x: 0, y: 0, width: 400)
+\Container("container"; x: 0, y: 0, width: 400px)
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
     let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
@@ -1039,25 +1039,25 @@ fn test_dag_property_trace_building() {
     let box_node = layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect found");
     let container_node = layout.nodes.iter().find(|n| n.name == "Container").expect("Container found");
 
-    // Trace 'width' on box node (computed expression: width - 60 = 340.0)
+    // Trace 'width' on box node (computed expression: width - 60px = 340px)
     let box_trace = directedtype::inspector::build_property_dag_trace(&layout, box_node.id, "width")
         .expect("box width trace ok");
 
     assert_eq!(box_trace.port_name, "width");
-    assert_eq!(box_trace.evaluated_value_str, "340");
-    assert_eq!(box_trace.value_type, "Number");
+    assert_eq!(box_trace.evaluated_value_str, "340px");
+    assert_eq!(box_trace.value_type, "Distance");
     assert_eq!(box_trace.origin_kind, directedtype::inspector::PortOriginKind::Expression);
     assert_eq!(box_trace.upstream_dependencies.len(), 1);
     assert_eq!(box_trace.upstream_dependencies[0].node_id, container_node.id);
     assert_eq!(box_trace.upstream_dependencies[0].port_name, "width");
-    assert_eq!(box_trace.upstream_dependencies[0].value_str, "400");
+    assert_eq!(box_trace.upstream_dependencies[0].value_str, "400px");
 
-    // Trace 'width' on container node (authored literal: 400)
+    // Trace 'width' on container node (authored literal: 400px)
     let container_trace = directedtype::inspector::build_property_dag_trace(&layout, container_node.id, "width")
         .expect("container width trace ok");
 
     assert_eq!(container_trace.port_name, "width");
-    assert_eq!(container_trace.evaluated_value_str, "400");
+    assert_eq!(container_trace.evaluated_value_str, "400px");
     assert_eq!(container_trace.origin_kind, directedtype::inspector::PortOriginKind::Literal);
     assert!(container_trace.upstream_dependencies.is_empty());
     // Box width depends downstream on container width
@@ -1067,18 +1067,18 @@ fn test_dag_property_trace_building() {
 #[test]
 fn test_dag_property_trace_inferred_default() {
     let source = r#"
-\let b = \Box(width: 100, height: 40)
+\let b = \Box(width: 100px, height: 40px)
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
     let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
     let box_node = layout.nodes.iter().find(|n| n.name == "Box").expect("Box found");
 
-    // Coordinate 'x' was not explicitly authored on the Box primitive, so it gets the default spatial coordinate (0)
+    // Coordinate 'x' was not explicitly authored on the Box primitive, so it gets the default spatial coordinate (0px)
     let trace = directedtype::inspector::build_property_dag_trace(&layout, box_node.id, "x")
         .expect("trace ok");
 
     assert_eq!(trace.port_name, "x");
-    assert_eq!(trace.evaluated_value_str, "0");
+    assert_eq!(trace.evaluated_value_str, "0px");
     assert_eq!(trace.origin_kind, directedtype::inspector::PortOriginKind::InferredDefault);
     assert!(trace.upstream_dependencies.is_empty());
     assert!(trace.origin_description.contains("Default spatial coordinate"));
@@ -1109,10 +1109,10 @@ fn test_inspector_state_property_selection() {
 #[test]
 fn test_panel_hit_testing_property_details_and_back() {
     let source = r#"
-\Component Container(x = 0, y = 0, width = 400) {
-    \Rect("box"; x: x, y: y, width: width - 60, height: 80, color: #3b82f6)
+\Component Container(x = 0, y = 0, width = 400px) {
+    \Rect("box"; x: x, y: y, width: width - 60px, height: 80px, color: #3b82f6)
 }
-\Container("container"; x: 0, y: 0, width: 400)
+\Container("container"; x: 0, y: 0, width: 400px)
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
     let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
@@ -1202,13 +1202,13 @@ fn test_property_stack_and_history_navigation() {
     use directedtype::inspector::{InspectPanelComponent, InspectorState, PanelHitResult, PropertyTraceDirection};
 
     let source = r#"
-\Component Outer(x = 0, y = 0, w = 500) {
-    \Inner("inner"; x: x, y: y, width: w - 40)
+\Component Outer(x = 0, y = 0, w = 500px) {
+    \Inner("inner"; x: x, y: y, width: w - 40px)
 }
-\Component Inner(x = 0, y = 0, width = 460) {
-    \Rect("leaf"; x: x, y: y, width: width - 20, height: 60, color: #3b82f6)
+\Component Inner(x = 0, y = 0, width = 460px) {
+    \Rect("leaf"; x: x, y: y, width: width - 20px, height: 60px, color: #3b82f6)
 }
-\Outer("outer"; x: 0, y: 0, w: 500)
+\Outer("outer"; x: 0, y: 0, w: 500px)
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
     let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
@@ -1304,10 +1304,10 @@ fn test_property_stack_and_history_navigation() {
 #[test]
 fn test_render_property_details_headless() {
     let source = r#"
-\Component Container(x = 0, y = 0, width = 400) {
-    \Rect(x: x, y: y, width: width - 50, height: 40, color: #10b981)
+\Component Container(x = 0, y = 0, width = 400px) {
+    \Rect(x: x, y: y, width: width - 50px, height: 40px, color: #10b981)
 }
-\Container(x: 0, y: 0, width: 400)
+\Container(x: 0, y: 0, width: 400px)
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
     let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
@@ -1344,8 +1344,8 @@ fn test_render_property_details_headless() {
 #[test]
 fn test_inspector_horizontal_scroll_and_bounds() {
     let source = r#"
-\Component VeryLongNamedComponentWithManyParametersAndDeepHierarchy(x = 0, y = 0, extra_long_parameter_expression_name = 100) {
-    \Rect(x: x, y: y, width: 400, height: 100, color: #3b82f6)
+\Component VeryLongNamedComponentWithManyParametersAndDeepHierarchy(x = 0, y = 0, extra_long_parameter_expression_name = 100px) {
+    \Rect(x: x, y: y, width: 400px, height: 100px, color: #3b82f6)
 }
 \Component GrandChild(x = 0, y = 0) {
     \VeryLongNamedComponentWithManyParametersAndDeepHierarchy(x: 0, y: 0)
@@ -1353,10 +1353,10 @@ fn test_inspector_horizontal_scroll_and_bounds() {
 \Component InnerChild(x = 0, y = 0) {
     \GrandChild(x: 0, y: 0)
 }
-\Component DeepNestedContainer(x = 0, y = 0, width = 500) {
+\Component DeepNestedContainer(x = 0, y = 0, width = 500px) {
     \InnerChild(x: 0, y: 0)
 }
-\DeepNestedContainer(x: 0, y: 0, width: 500)
+\DeepNestedContainer(x: 0, y: 0, width: 500px)
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
     let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
@@ -1405,23 +1405,23 @@ fn test_inspector_horizontal_scroll_and_bounds() {
 #[test]
 fn test_inspector_scrollbar_hit_testing() {
     let source = r#"
-\Component LongList(x = 0, y = 0, width = 500) {
-    \Rect(x: 0, y: 0, width: 600, height: 20, color: #111111)
-    \Rect(x: 0, y: 25, width: 600, height: 20, color: #222222)
-    \Rect(x: 0, y: 50, width: 600, height: 20, color: #333333)
-    \Rect(x: 0, y: 75, width: 600, height: 20, color: #444444)
-    \Rect(x: 0, y: 100, width: 600, height: 20, color: #555555)
-    \Rect(x: 0, y: 125, width: 600, height: 20, color: #666666)
-    \Rect(x: 0, y: 150, width: 600, height: 20, color: #777777)
-    \Rect(x: 0, y: 175, width: 600, height: 20, color: #888888)
-    \Rect(x: 0, y: 200, width: 600, height: 20, color: #999999)
-    \Rect(x: 0, y: 225, width: 600, height: 20, color: #aaaaaa)
-    \Rect(x: 0, y: 250, width: 600, height: 20, color: #bbbbbb)
-    \Rect(x: 0, y: 275, width: 600, height: 20, color: #cccccc)
-    \Rect(x: 0, y: 300, width: 600, height: 20, color: #dddddd)
-    \Rect(x: 0, y: 325, width: 600, height: 20, color: #eeeeee)
+\Component LongList(x = 0, y = 0, width = 500px) {
+    \Rect(x: 0, y: 0, width: 600px, height: 20px, color: #111111)
+    \Rect(x: 0, y: 25px, width: 600px, height: 20px, color: #222222)
+    \Rect(x: 0, y: 50px, width: 600px, height: 20px, color: #333333)
+    \Rect(x: 0, y: 75px, width: 600px, height: 20px, color: #444444)
+    \Rect(x: 0, y: 100px, width: 600px, height: 20px, color: #555555)
+    \Rect(x: 0, y: 125px, width: 600px, height: 20px, color: #666666)
+    \Rect(x: 0, y: 150px, width: 600px, height: 20px, color: #777777)
+    \Rect(x: 0, y: 175px, width: 600px, height: 20px, color: #888888)
+    \Rect(x: 0, y: 200px, width: 600px, height: 20px, color: #999999)
+    \Rect(x: 0, y: 225px, width: 600px, height: 20px, color: #aaaaaa)
+    \Rect(x: 0, y: 250px, width: 600px, height: 20px, color: #bbbbbb)
+    \Rect(x: 0, y: 275px, width: 600px, height: 20px, color: #cccccc)
+    \Rect(x: 0, y: 300px, width: 600px, height: 20px, color: #dddddd)
+    \Rect(x: 0, y: 325px, width: 600px, height: 20px, color: #eeeeee)
 }
-\LongList(x: 0, y: 0, width: 500)
+\LongList(x: 0, y: 0, width: 500px)
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
     let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
@@ -1481,12 +1481,12 @@ fn test_inspector_scrollbar_hit_testing() {
 fn test_render_inspector_with_horizontal_scrollbars() {
     let source = r#"
 \Component InnerDeepChild(x = 0, y = 0, very_long_formula_and_variable_name_causing_overflow = 123456789) {
-    \Rect(x: x, y: y, width: 500, height: 60, color: #06b6d4)
+    \Rect(x: x, y: y, width: 500px, height: 60px, color: #06b6d4)
 }
-\Component LargeComponentWithWideTree(x = 0, y = 0, width = 600) {
+\Component LargeComponentWithWideTree(x = 0, y = 0, width = 600px) {
     \InnerDeepChild(x: 0, y: 0)
 }
-\LargeComponentWithWideTree(x: 0, y: 0, width: 600)
+\LargeComponentWithWideTree(x: 0, y: 0, width: 600px)
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
     let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
@@ -1567,7 +1567,7 @@ fn test_inspect_mode_resizes_main_panel_window_to_visible_area() {
 #[test]
 fn test_inspect_mode_allows_horizontal_scrolling_for_wide_content() {
     let source = r#"
-\Rect("wide_box"; x: 0, y: 0, width: 900, height: 400, color: #3b82f6)
+\Rect("wide_box"; x: 0, y: 0, width: 900px, height: 400px, color: #3b82f6)
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
     let compiled = directedtype::compiler::CompiledDocument::compile_with_window(&doc, 1024.0, 768.0)
@@ -1678,14 +1678,14 @@ fn test_component_overload_signature_in_resolved_node() {
     let source = r#"
 \use "components/VStack.dt"
 
-\VStack("fixed_both"; width: 300, height: 200) {
-    \Rect(width: 100, height: 40, color: #3b82f6)
+\VStack("fixed_both"; width: 300px, height: 200px) {
+    \Rect(width: 100px, height: 40px, color: #3b82f6)
 }
-\VStack("fixed_width"; x: 0, y: 220, width: 300) {
-    \Rect(width: 100, height: 40, color: #10b981)
+\VStack("fixed_width"; x: 0, y: 220px, width: 300px) {
+    \Rect(width: 100px, height: 40px, color: #10b981)
 }
-\VStack("shrink_wrap"; x: 0, y: 300, shrink: true) {
-    \Rect(width: 100, height: 40, color: #f59e0b)
+\VStack("shrink_wrap"; x: 0, y: 300px, shrink: true) {
+    \Rect(width: 100px, height: 40px, color: #f59e0b)
 }
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
@@ -1706,16 +1706,16 @@ fn test_inspect_component_env_properties() {
     Light
 }
 
-\Component ThemeProvider(theme: Theme = Theme.Dark, width: Number = parent.width) {
+\Component ThemeProvider(theme: Theme = Theme.Dark, width: Distance = parent.width) {
     \env text_color = (self.theme == Theme.Dark) ? #f8fafc : #0f172a
     \env card_bg = (self.theme == Theme.Dark) ? #1e293b : #e2e8f0
     \env accent_color = #3b82f6
-    \env content_width = self.width - 40
+    \env content_width = self.width - 40px
     \Children
 }
 
-\ThemeProvider(theme: Theme.Dark, width: 400) {
-    \Rect(x: 0, y: 0, width: 100, height: 100, color: env.text_color)
+\ThemeProvider(theme: Theme.Dark, width: 400px) {
+    \Rect(x: 0, y: 0, width: 100px, height: 100px, color: env.text_color)
 }
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
@@ -1735,7 +1735,7 @@ fn test_inspect_component_env_properties() {
     assert_eq!(text_col_env.2, Some(directedtype::compiler::Value::Color("#f8fafc".to_string())));
 
     let content_w_env = info.env_vars.iter().find(|e| e.0 == "content_width").expect("content_width found");
-    assert_eq!(content_w_env.2, Some(directedtype::compiler::Value::Number(360.0)));
+    assert_eq!(content_w_env.2, Some(directedtype::compiler::Value::Distance(360.0)));
 
     // Test DAG property trace
     let trace_text = directedtype::inspector::build_property_dag_trace(&layout, theme_node.id, "text_color")
@@ -1746,7 +1746,7 @@ fn test_inspect_component_env_properties() {
     let trace_cw = directedtype::inspector::build_property_dag_trace(&layout, theme_node.id, "content_width")
         .expect("DAG trace for content_width exists");
     assert_eq!(trace_cw.origin_kind, directedtype::inspector::PortOriginKind::EnvironmentVariable);
-    assert_eq!(trace_cw.evaluated_value_str, "360");
+    assert_eq!(trace_cw.evaluated_value_str, "360px");
     assert!(trace_cw.upstream_dependencies.iter().any(|d| d.node_id == theme_node.id && d.port_name == "width"));
 
     // Test DOM target info

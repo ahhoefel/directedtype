@@ -4,8 +4,8 @@ use directedtype::parser::parse_document;
 #[test]
 fn test_text_overload_with_baseline_port() {
     let source = r#"
-\let icon = \Rect(x: 10, y: 20, width: 14, height: 14, color: #3b82f6)
-\let label = \Text(x: 30, baseline: icon.bottom, size: 14) {
+\let icon = \Rect(x: 10px, y: 20px, width: 14px, height: 14px, color: #3b82f6)
+\let label = \Text(x: 30px, baseline: icon.bottom, size: 14px) {
     "Document.dt"
 }
 "#;
@@ -31,10 +31,10 @@ fn test_text_overload_with_baseline_port() {
 #[test]
 fn test_two_text_sizes_sharing_same_baseline() {
     let source = r#"
-\let title = \Text(x: 10, baseline: 80, size: 24) {
+\let title = \Text(x: 10px, baseline: 80px, size: 24px) {
     "Large Title"
 }
-\let subtitle = \Text(x: 200, baseline: 80, size: 12) {
+\let subtitle = \Text(x: 200px, baseline: 80px, size: 12px) {
     "Small Subtitle"
 }
 "#;
@@ -60,7 +60,7 @@ fn test_two_text_sizes_sharing_same_baseline() {
 #[test]
 fn test_traditional_y_still_generates_baseline() {
     let source = r#"
-\let t = \Text(x: 10, y: 40, size: 16) {
+\let t = \Text(x: 10px, y: 40px, size: 16px) {
     "Traditional"
 }
 "#;

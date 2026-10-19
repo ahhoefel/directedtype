@@ -23,38 +23,38 @@
 )
 
 \Component AudioMixer(
-    width: Number: 480,
-    x: Number: parent.left,
-    y: Number: parent.top
+    width: Distance: 480px,
+    x: Distance: parent.left,
+    y: Distance: parent.top
 ) {
-    \state master: 75;
-    \state bass: 40;
-    \state treble: 60;
+    \state master: Float: 75;
+    \state bass: Float: 40;
+    \state treble: Float: 60;
 
     \alias height = card.height;
     \alias right = card.right;
     \alias bottom = card.bottom;
 
-    \let card = \Card("mixer_card"; x: self.x, y: self.y, width: self.width, style: card_dark, gap: 16) {
-        \Text(size: 18, weight: 700, color: #f8fafc) {
+    \let card = \Card("mixer_card"; x: self.x, y: self.y, width: self.width, style: card_dark, gap: 16px) {
+        \Text(size: 18px, weight: 700, color: #f8fafc) {
             Studio Audio Mixer
         }
-        \Text(size: 13, weight: 400, color: #94a3b8) {
+        \Text(size: 13px, weight: 400, color: #94a3b8) {
             Hardware pointer capture, smooth dragging, and strongly-typed callbacks.
         }
 
         \Divider(color: #334155)
 
         // Master Volume
-        \VStack(gap: 6) {
-            \HStack(gap: 8) {
-                \Text(size: 14, weight: 600, color: #e2e8f0) { Master Volume }
-                \Spacer(width: 1)
-                \Text(text: to_fixed(self.master, 0) + "%", size: 14, weight: 700, color: #38bdf8)
+        \VStack(gap: 6px) {
+            \HStack(gap: 8px) {
+                \Text(size: 14px, weight: 600, color: #e2e8f0) { Master Volume }
+                \Spacer(width: 1px)
+                \Text(text: to_fixed(self.master, 0) + "%", size: 14px, weight: 700, color: #38bdf8)
             }
             \Slider(
-                width: 400,
-                height: 24,
+                width: 400px,
+                height: 24px,
                 min: 0,
                 max: 100,
                 value: 75,
@@ -64,15 +64,15 @@
         }
 
         // Bass Boost
-        \VStack(gap: 6) {
-            \HStack(gap: 8) {
-                \Text(size: 14, weight: 600, color: #e2e8f0) { Bass Boost }
-                \Spacer(width: 1)
-                \Text(text: to_fixed(self.bass, 0) + "%", size: 14, weight: 700, color: #a855f7)
+        \VStack(gap: 6px) {
+            \HStack(gap: 8px) {
+                \Text(size: 14px, weight: 600, color: #e2e8f0) { Bass Boost }
+                \Spacer(width: 1px)
+                \Text(text: to_fixed(self.bass, 0) + "%", size: 14px, weight: 700, color: #a855f7)
             }
             \Slider(
-                width: 400,
-                height: 24,
+                width: 400px,
+                height: 24px,
                 min: 0,
                 max: 100,
                 value: 40,
@@ -82,15 +82,15 @@
         }
 
         // Treble
-        \VStack(gap: 6) {
-            \HStack(gap: 8) {
-                \Text(size: 14, weight: 600, color: #e2e8f0) { Treble }
-                \Spacer(width: 1)
-                \Text(text: to_fixed(self.treble, 0) + "%", size: 14, weight: 700, color: #10b981)
+        \VStack(gap: 6px) {
+            \HStack(gap: 8px) {
+                \Text(size: 14px, weight: 600, color: #e2e8f0) { Treble }
+                \Spacer(width: 1px)
+                \Text(text: to_fixed(self.treble, 0) + "%", size: 14px, weight: 700, color: #10b981)
             }
             \Slider(
-                width: 400,
-                height: 24,
+                width: 400px,
+                height: 24px,
                 min: 0,
                 max: 100,
                 value: 60,
@@ -102,17 +102,17 @@
         \Divider(color: #334155)
 
         // Dynamic Output Monitor
-        \VStack(gap: 8) {
-            \HStack(gap: 8) {
-                \Text(size: 14, weight: 600, color: #e2e8f0) { Output Visualizer }
-                \Spacer(width: 1)
-                \Text(text: to_fixed(40 + self.bass * 3.6, 0) + "w × " + to_fixed(20 + self.treble * 0.8, 0) + "h", size: 12, weight: 600, color: #94a3b8)
+        \VStack(gap: 8px) {
+            \HStack(gap: 8px) {
+                \Text(size: 14px, weight: 600, color: #e2e8f0) { Output Visualizer }
+                \Spacer(width: 1px)
+                \Text(text: to_fixed(40 + self.bass * 3.6, 0) + "w × " + to_fixed(20 + self.treble * 0.8, 0) + "h", size: 12px, weight: 600, color: #94a3b8)
             }
             \Rect(
-                width: max(40, min(400, 40 + self.bass * 3.6)),
-                height: max(20, min(100, 20 + self.treble * 0.8)),
+                width: max(40px, min(400px, 40px + self.bass * 3.6px)),
+                height: max(20px, min(100px, 20px + self.treble * 0.8px)),
                 color: hsl(self.master * 3.6, 85, 55),
-                radius: 8
+                radius: 8px
             )
         }
     };
@@ -120,8 +120,8 @@
 
 // Main Page Layout: centered horizontally with outward padding around the card
 \let content = \HCenter {
-    \PadOut(padding_x: 40, padding_y: 40) {
-        \AudioMixer(width: 480)
+    \PadOut(padding_x: 40px, padding_y: 40px) {
+        \AudioMixer(width: 480px)
     }
 };
 

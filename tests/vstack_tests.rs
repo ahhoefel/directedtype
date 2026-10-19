@@ -8,10 +8,10 @@ fn test_vstack_default_left_alignment_and_gap() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(x: 10, y: 20, width: 300, gap: 16) {
-        \Rect(width: 100, height: 40, color: #3b82f6)
-        \Rect(width: 150, height: 50, color: #10b981)
-        \Rect(width: 80, height: 30, color: #f59e0b)
+    \VStack(x: 10px, y: 20px, width: 300px, gap: 16px) {
+        \Rect(width: 100px, height: 40px, color: #3b82f6)
+        \Rect(width: 150px, height: 50px, color: #10b981)
+        \Rect(width: 80px, height: 30px, color: #f59e0b)
     }
     "#;
 
@@ -58,9 +58,9 @@ fn test_vstack_center_and_centered_alignment() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(x: 0, y: 0, width: 400, align: Align.Center, gap: 10) {
-        \Rect(width: 100, height: 40, color: #3b82f6)
-        \Rect(width: 250, height: 50, color: #10b981)
+    \VStack(x: 0, y: 0, width: 400px, align: Align.Center, gap: 10px) {
+        \Rect(width: 100px, height: 40px, color: #3b82f6)
+        \Rect(width: 250px, height: 50px, color: #10b981)
     }
     "#;
 
@@ -89,8 +89,8 @@ fn test_vstack_right_alignment() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(x: 50, y: 0, width: 400, align: Align.Right) {
-        \Rect(width: 120, height: 40, color: #ef4444)
+    \VStack(x: 50px, y: 0, width: 400px, align: Align.Right) {
+        \Rect(width: 120px, height: 40px, color: #ef4444)
     }
     "#;
 
@@ -119,9 +119,9 @@ fn test_vstack_stretch_alignment() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStackStretch(x: 0, y: 0, width: 500) {
-        \Rect(height: 50, color: #8b5cf6)
-        \Rect(width: 200, height: 40, color: #ec4899)
+    \VStackStretch(x: 0, y: 0, width: 500px) {
+        \Rect(height: 50px, color: #8b5cf6)
+        \Rect(width: 200px, height: 40px, color: #ec4899)
     }
     "#;
 
@@ -156,8 +156,8 @@ fn test_vstack_with_button_and_text_composition() {
     \use "components/Button.dt"
     \use "theme/default.dt"
 
-    \VStackStretch(x: 20, y: 20, width: 350, gap: 14) {
-        \Text(size: 20, weight: 700) { Header Title }
+    \VStackStretch(x: 20px, y: 20px, width: 350px, gap: 14px) {
+        \Text(size: 20px, weight: 700) { Header Title }
         \Button(style: button_primary, label: "Submit Order")
     }
     "#;
@@ -189,9 +189,9 @@ fn test_vstack_default_zero_gap() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(x: 10, y: 20, width: 300) {
-        \Rect(width: 100, height: 40, color: #3b82f6)
-        \Rect(width: 150, height: 50, color: #10b981)
+    \VStack(x: 10px, y: 20px, width: 300px) {
+        \Rect(width: 100px, height: 40px, color: #3b82f6)
+        \Rect(width: 150px, height: 50px, color: #10b981)
     }
     "#;
 
@@ -220,9 +220,9 @@ fn test_vstack_standalone_without_width_rejected() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(gap: 12) {
-        \Rect(width: 80, height: 30, color: #3b82f6)
-        \Rect(width: 90, height: 40, color: #10b981)
+    \VStack(gap: 12px) {
+        \Rect(width: 80px, height: 30px, color: #3b82f6)
+        \Rect(width: 90px, height: 40px, color: #10b981)
     }
     "#;
 
@@ -252,10 +252,10 @@ fn test_vstack_shrink_wrap_width() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(shrink: true, x: 20, y: 30, gap: 10, align: Align.Center) {
-        \Rect(width: 140, height: 40, color: #3b82f6)
-        \Rect(width: 200, height: 50, color: #10b981)
-        \Rect(width: 80, height: 30, color: #f59e0b)
+    \VStack(shrink: true, x: 20px, y: 30px, gap: 10px, align: Align.Center) {
+        \Rect(width: 140px, height: 40px, color: #3b82f6)
+        \Rect(width: 200px, height: 50px, color: #10b981)
+        \Rect(width: 80px, height: 30px, color: #f59e0b)
     }
     "#;
 
@@ -294,8 +294,8 @@ fn test_vstack_fixed_height() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(height: 250, width: 180, x: 10, y: 15) {
-        \Rect(width: 100, height: 40, color: #3b82f6)
+    \VStack(height: 250px, width: 180px, x: 10px, y: 15px) {
+        \Rect(width: 100px, height: 40px, color: #3b82f6)
     }
     "#;
 
@@ -323,9 +323,9 @@ fn test_vstack_inside_center_shrink_wrap_no_cycle() {
     \use "components/VStack.dt"
 
     \Center {
-        \VStack(shrink: true, gap: 10) {
-            \Rect(width: 200, height: 50, color: #ef4444)
-            \Rect(width: 150, height: 60, color: #22c55e)
+        \VStack(shrink: true, gap: 10px) {
+            \Rect(width: 200px, height: 50px, color: #ef4444)
+            \Rect(width: 150px, height: 60px, color: #22c55e)
         }
     }
     "#;
@@ -368,9 +368,9 @@ fn test_vstack_inside_center_explicit_width_no_cycle() {
     \use "components/VStack.dt"
 
     \Center {
-        \VStack(width: 400, gap: 20) {
-            \Rect(width: 100, height: 30, color: #ef4444)
-            \Rect(width: 120, height: 40, color: #22c55e)
+        \VStack(width: 400px, gap: 20px) {
+            \Rect(width: 100px, height: 30px, color: #ef4444)
+            \Rect(width: 120px, height: 40px, color: #22c55e)
         }
     }
     "#;

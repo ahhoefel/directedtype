@@ -129,6 +129,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         "top".to_string(),
         "right".to_string(),
         "bottom".to_string(),
+        "dpi".to_string(),
     ];
 
     // Pre-register top-level Window declaration
@@ -158,7 +159,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         }
     }
 
-    const ALLOWED_WINDOW_PORTS: &[&str] = &["title", "vscroll", "hscroll"];
+    const ALLOWED_WINDOW_PORTS: &[&str] = &["title", "vscroll", "hscroll", "dpi"];
 
     if let Some(window_elem) = window_decl {
         let mut seen_window_ports = HashSet::new();
@@ -271,15 +272,16 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             declared_state_names: None,
                             enums: &enums,
                         };
-                        let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
-                        if let Some(LexicalBinding::Expr(existing)) = global_scope.get(let_binding.name.as_str()) {
-                            if existing != &rewritten {
+                        if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
+                            if let Some(LexicalBinding::Expr(existing)) = global_scope.get(let_binding.name.as_str()) {
+                                if existing != &rewritten {
+                                    global_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                                    changed = true;
+                                }
+                            } else {
                                 global_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
                                 changed = true;
                             }
-                        } else {
-                            global_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
-                            changed = true;
                         }
                     }
                 }
@@ -305,17 +307,18 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                                 declared_state_names: None,
                                 enums: &enums,
                             };
-                            let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
-                            if let Some(LexicalBinding::Expr(existing)) = global_scope.get(env_binding.name.as_str()) {
-                                if existing != &rewritten {
+                            if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
+                                if let Some(LexicalBinding::Expr(existing)) = global_scope.get(env_binding.name.as_str()) {
+                                    if existing != &rewritten {
+                                        global_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten.clone()));
+                                        global_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(rewritten));
+                                        changed = true;
+                                    }
+                                } else {
                                     global_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten.clone()));
                                     global_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(rewritten));
                                     changed = true;
                                 }
-                            } else {
-                                global_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten.clone()));
-                                global_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(rewritten));
-                                changed = true;
                             }
                         }
                     }
@@ -342,8 +345,9 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         enums: &enums,
     };
     for (name, expr) in expanded_doc.window_ports.clone() {
-        let rewritten = rewrite_expr(&expr, &window_scope_ctx)?;
-        expanded_doc.window_ports.insert(name, rewritten);
+        if let Ok(rewritten) = rewrite_expr(&expr, &window_scope_ctx) {
+            expanded_doc.window_ports.insert(name, rewritten);
+        }
     }
 
     // 3. Expand root elements and top-level node bindings in document order
@@ -404,18 +408,16 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             declared_state_names: None,
                             enums: &enums,
                         };
-                        rewrite_expr(raw_expr, &scope_ctx)
+                        rewrite_expr(raw_expr, &scope_ctx)?
                     };
-                    if let Ok(rewritten) = rewritten {
-                        global_scope.borrow_mut().insert(
-                            env_binding.name.as_str().to_string(),
-                            LexicalBinding::Expr(rewritten.clone()),
-                        );
-                        global_env_scope.insert(
-                            env_binding.name.as_str().to_string(),
-                            EnvEntry::Bound(rewritten),
-                        );
-                    }
+                    global_scope.borrow_mut().insert(
+                        env_binding.name.as_str().to_string(),
+                        LexicalBinding::Expr(rewritten.clone()),
+                    );
+                    global_env_scope.insert(
+                        env_binding.name.as_str().to_string(),
+                        EnvEntry::Bound(rewritten),
+                    );
                 }
             }
             Item::Node(node) => {
@@ -441,7 +443,33 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                 last_root_id = Some(root_id);
             }
             Item::Let(let_binding) => match &let_binding.value {
-                Some(LetValue::Expr(_)) | None => {} // Already resolved in pre-pass
+                None => {}
+                Some(LetValue::Expr(raw_expr)) => {
+                    let rewritten = {
+                        let scope_borrow = global_scope.borrow();
+                        let scope_ctx = ScopeContext {
+                            current_node: NodeId::WINDOW,
+                            parent_node: None,
+                            parent_name: None,
+                            prev_sibling: None,
+                            child_ids: &empty_children,
+                            parent_ports: &empty_ports,
+                            current_ports: &window_scope_ports,
+                            lexical_scope: &*scope_borrow,
+                            env_scope: &global_env_scope,
+                            node_fonts: &node_fonts,
+                            enclosing_component: None,
+                            comp_ports: None,
+                            declared_state_names: None,
+                            enums: &enums,
+                        };
+                        rewrite_expr(raw_expr, &scope_ctx)?
+                    };
+                    global_scope.borrow_mut().insert(
+                        let_binding.name.as_str().to_string(),
+                        LexicalBinding::Expr(rewritten),
+                    );
+                }
                 Some(LetValue::Node(elem)) => {
                     let root_id = NodeId(expanded_doc.nodes.len());
                     global_scope.borrow_mut().insert(
@@ -479,6 +507,26 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
     }
 
     let final_global_scope = global_scope.borrow();
+    let final_window_scope_ctx = ScopeContext {
+        current_node: NodeId::WINDOW,
+        parent_node: None,
+        parent_name: None,
+        prev_sibling: None,
+        child_ids: &empty_children,
+        parent_ports: &empty_ports,
+        current_ports: &window_scope_ports,
+        lexical_scope: &*final_global_scope,
+        env_scope: &global_env_scope,
+        node_fonts: &node_fonts,
+        enclosing_component: None,
+        comp_ports: None,
+        declared_state_names: None,
+        enums: &enums,
+    };
+    for (name, expr) in expanded_doc.window_ports.clone() {
+        let rewritten = rewrite_expr(&expr, &final_window_scope_ctx)?;
+        expanded_doc.window_ports.insert(name, rewritten);
+    }
     for expr in expanded_doc.window_ports.values_mut() {
         *expr = resolve_forward_scope_refs(expr, &final_global_scope);
     }
@@ -1138,8 +1186,40 @@ fn expand_component_instance(
     let mut explicit_ports = HashMap::new();
     let empty_ports: [String; 0] = [];
     let empty_children: [NodeId; 0] = [];
+
+    // Pre-resolve explicit "font" port if passed on this component instance so sibling ports (e.g. `1em`) see it
+    if let Some(font_port) = instance.ports.iter().find(|p| p.name.as_str() == "font") {
+        if !matches!(&font_port.expr, Expr::Node(_)) {
+            let caller_scope_borrow = lexical_scope.borrow();
+            let caller_scope_ctx = ScopeContext {
+                current_node: ctx.comp_node_id,
+                parent_node: ctx.parent_id,
+                parent_name: ctx.parent_name,
+                prev_sibling: ctx.prev_sibling_id,
+                child_ids: &empty_children,
+                parent_ports: ctx.parent_ports,
+                current_ports: &empty_ports,
+                lexical_scope: &*caller_scope_borrow,
+                env_scope: caller_env_scope,
+                node_fonts,
+                enclosing_component: ctx.enclosing_component_id,
+                comp_ports: None,
+                declared_state_names: None,
+                enums: ctx.enums,
+            };
+            if let Ok(Expr::Ident(id)) = rewrite_expr(&font_port.expr, &caller_scope_ctx) {
+                if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                    node_fonts.insert(ctx.comp_node_id, fid);
+                    doc.get_node_mut(ctx.comp_node_id).unwrap().font = Some(fid);
+                }
+            }
+        }
+    }
+
+    let mut explicit_unlowered_ports = HashMap::new();
     for port in &instance.ports {
         let name = port.name.as_str().to_string();
+        explicit_unlowered_ports.insert(name.clone(), port.expr.clone());
         let expr = match &port.expr {
             Expr::Node(inline_elem) => {
                 let child_ctx = ElementContext {
@@ -1157,6 +1237,10 @@ fn expand_component_instance(
                     consumer_children: None,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
+                if name == "font" && inline_elem.name.as_str() == "Font" {
+                    node_fonts.insert(ctx.comp_node_id, child_id);
+                    doc.get_node_mut(ctx.comp_node_id).unwrap().font = Some(child_id);
+                }
                 Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span))
             }
             other => {
@@ -1257,11 +1341,57 @@ fn expand_component_instance(
         comp_scope_ports.push("bottom".to_string());
     }
 
-    // Record component font if resolved
-    if let Some(Expr::Ident(id)) = comp_ports.get("font") {
-        if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
-            node_fonts.insert(ctx.comp_node_id, fid);
-            doc.get_node_mut(ctx.comp_node_id).unwrap().font = Some(fid);
+    // Record component font if resolved (including Tier 1 / Tier 2 defaults)
+    if let Some(font_expr) = comp_ports.get("font").cloned() {
+        let resolved_font_expr = if let Expr::Ident(id) = &font_expr {
+            if NodeId::from_canonical_name(id.as_str()).is_some() {
+                Some(font_expr)
+            } else {
+                let caller_scope_borrow = lexical_scope.borrow();
+                let temp_ctx = ScopeContext {
+                    current_node: ctx.comp_node_id,
+                    parent_node: ctx.parent_id,
+                    parent_name: ctx.parent_name,
+                    prev_sibling: ctx.prev_sibling_id,
+                    child_ids: &empty_children,
+                    parent_ports: ctx.parent_ports,
+                    current_ports: &empty_ports,
+                    lexical_scope: &*caller_scope_borrow,
+                    env_scope: caller_env_scope,
+                    node_fonts,
+                    enclosing_component: ctx.enclosing_component_id,
+                    comp_ports: None,
+                    declared_state_names: None,
+                    enums: ctx.enums,
+                };
+                rewrite_expr(&font_expr, &temp_ctx).ok()
+            }
+        } else {
+            let caller_scope_borrow = lexical_scope.borrow();
+            let temp_ctx = ScopeContext {
+                current_node: ctx.comp_node_id,
+                parent_node: ctx.parent_id,
+                parent_name: ctx.parent_name,
+                prev_sibling: ctx.prev_sibling_id,
+                child_ids: &empty_children,
+                parent_ports: ctx.parent_ports,
+                current_ports: &empty_ports,
+                lexical_scope: &*caller_scope_borrow,
+                env_scope: caller_env_scope,
+                node_fonts,
+                enclosing_component: ctx.enclosing_component_id,
+                comp_ports: None,
+                declared_state_names: None,
+                enums: ctx.enums,
+            };
+            rewrite_expr(&font_expr, &temp_ctx).ok()
+        };
+        if let Some(Expr::Ident(id)) = resolved_font_expr {
+            if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                comp_ports.insert("font".to_string(), Expr::Ident(id));
+                node_fonts.insert(ctx.comp_node_id, fid);
+                doc.get_node_mut(ctx.comp_node_id).unwrap().font = Some(fid);
+            }
         }
     }
 
@@ -1396,13 +1526,26 @@ fn expand_component_instance(
     );
     for param in &comp_def.params {
         if param.is_env {
-            internal_body_env_scope.insert(
-                param.name.as_str().to_string(),
-                EnvEntry::Bound(Expr::MemberAccess(MemberAccessExpr {
+            let env_bound_expr = if param.name.as_str() == "font" {
+                if let Some(&fid) = node_fonts.get(&ctx.comp_node_id) {
+                    Expr::Ident(Ident::new(fid.canonical_name(), instance.span))
+                } else {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
+                        member: param.name.clone(),
+                        span: instance.span,
+                    })
+                }
+            } else {
+                Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
                     member: param.name.clone(),
                     span: instance.span,
-                })),
+                })
+            };
+            internal_body_env_scope.insert(
+                param.name.as_str().to_string(),
+                EnvEntry::Bound(env_bound_expr),
             );
         }
     }
@@ -1419,13 +1562,26 @@ fn expand_component_instance(
     );
     for param in &comp_def.params {
         if param.is_env {
-            children_env_scope.insert(
-                param.name.as_str().to_string(),
-                EnvEntry::Bound(Expr::MemberAccess(MemberAccessExpr {
+            let env_bound_expr = if param.name.as_str() == "font" {
+                if let Some(&fid) = node_fonts.get(&ctx.comp_node_id) {
+                    Expr::Ident(Ident::new(fid.canonical_name(), instance.span))
+                } else {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
+                        member: param.name.clone(),
+                        span: instance.span,
+                    })
+                }
+            } else {
+                Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
                     member: param.name.clone(),
                     span: instance.span,
-                })),
+                })
+            };
+            children_env_scope.insert(
+                param.name.as_str().to_string(),
+                EnvEntry::Bound(env_bound_expr),
             );
         }
     }
@@ -1486,15 +1642,16 @@ fn expand_component_instance(
                         declared_state_names: Some(&declared_state_names),
                         enums: ctx.enums,
                     };
-                    let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
-                    if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
-                        if existing != &rewritten {
+                    if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
+                        if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
+                            if existing != &rewritten {
+                                local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                                changed = true;
+                            }
+                        } else {
                             local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
                             changed = true;
                         }
-                    } else {
-                        local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
-                        changed = true;
                     }
                 }
             }
@@ -1521,15 +1678,16 @@ fn expand_component_instance(
                             declared_state_names: None,
                             enums: ctx.enums,
                         };
-                        let rewritten = rewrite_expr(raw_expr, &scope_ctx)?;
-                        if let Some(LexicalBinding::Expr(existing)) = local_scope.get(env_binding.name.as_str()) {
-                            if existing != &rewritten {
+                        if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
+                            if let Some(LexicalBinding::Expr(existing)) = local_scope.get(env_binding.name.as_str()) {
+                                if existing != &rewritten {
+                                    local_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
+                                    changed = true;
+                                }
+                            } else {
                                 local_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
                                 changed = true;
                             }
-                        } else {
-                            local_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
-                            changed = true;
                         }
                     }
                 }
@@ -1674,6 +1832,10 @@ fn expand_component_instance(
                             comp_ports.insert(env_binding.name.as_str().to_string(), bound_expr);
                             if elem.name.as_str() == "Font" {
                                 node_fonts.insert(node_id, node_id);
+                                if env_binding.name.as_str() == "font" {
+                                    node_fonts.insert(ctx.comp_node_id, node_id);
+                                    doc.get_node_mut(ctx.comp_node_id).unwrap().font = Some(node_id);
+                                }
                             }
                         }
                         _ => {
@@ -1877,13 +2039,20 @@ fn expand_component_instance(
         *expr = resolve_forward_scope_refs(expr, &final_local_scope);
     }
 
-    // Validate parameter types
+    // Validate parameter types and coerce 0 -> 0px (for Distance) or Integer -> Float (for Float)
     for param in &comp_def.params {
         if let Some(type_ref) = &param.type_annotation {
             let expected_type = type_ref.name.as_str();
             let name = param.name.as_str();
-            if let Some(expr) = rewritten_ports.get(name) {
-                if let Some(lit) = resolve_ident_or_member_to_literal(expr, &scope_ctx) {
+            let unlowered_lit = explicit_unlowered_ports
+                .get(name)
+                .or(param.default_edge.as_ref())
+                .and_then(|e| match e {
+                    Expr::Literal(lit) => Some(lit.clone()),
+                    _ => None,
+                });
+            if let Some(expr) = rewritten_ports.get_mut(name) {
+                if let Some(lit) = unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(expr, &scope_ctx)) {
                     if !lit.matches_type_name(expected_type) {
                         return Err(CompileError::TypeMismatch {
                             expected: expected_type.to_string(),
@@ -1892,13 +2061,38 @@ fn expand_component_instance(
                         });
                     }
                 }
+                if expected_type == "Distance" {
+                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                        *expr = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, *span));
+                    }
+                } else if expected_type == "Float" || expected_type == "Number" {
+                    if let Expr::Literal(Literal::Integer(i, span)) = expr {
+                        *expr = Expr::Literal(Literal::Float(*i as f64, *span));
+                    }
+                }
             }
         }
     }
 
     // Validate assertions in component body
     let mut const_env = HashMap::new();
-    for (port_name, port_expr) in comp_ports.iter() {
+    const_env.insert(
+        crate::compiler::graph::VarId::new(NodeId::WINDOW, "dpi"),
+        doc.window_ports
+            .get("dpi")
+            .and_then(|e| eval_expr(e, &HashMap::new()).ok())
+            .unwrap_or(crate::compiler::value::Value::Float(96.0)),
+    );
+    for n in &doc.nodes {
+        if n.name == "Font" {
+            if let Some(size_expr) = n.ports.get("size") {
+                if let Ok(val) = eval_expr(size_expr, &const_env) {
+                    const_env.insert(crate::compiler::graph::VarId::new(n.id, "size"), val);
+                }
+            }
+        }
+    }
+    for (port_name, port_expr) in rewritten_ports.iter() {
         if let Some(states) = scope_ctx.declared_state_names {
             if states.contains(port_name) {
                 continue;
@@ -1906,7 +2100,9 @@ fn expand_component_instance(
         }
         if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, &scope_ctx) {
             let val = match lit {
-                Literal::Number(n, _) => crate::compiler::value::Value::Number(n),
+                Literal::Integer(i, _) => crate::compiler::value::Value::Integer(i),
+                Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
+                Literal::Distance(d, _, _) => crate::compiler::value::Value::Distance(d),
                 Literal::String(s, _) => crate::compiler::value::Value::String(s),
                 Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
                 Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
@@ -1916,7 +2112,7 @@ fn expand_component_instance(
             if let Some(parent) = ctx.parent_id {
                 const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
             }
-        } else if let Ok(val) = eval_expr(port_expr, &HashMap::new()) {
+        } else if let Ok(val) = eval_expr(port_expr, &const_env) {
             const_env.insert(crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name), val.clone());
             if let Some(parent) = ctx.parent_id {
                 const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
@@ -2840,7 +3036,42 @@ fn expand_primitive_element(
             }
         }
 
-        let rewritten = rewrite_expr(&expr, &scope_ctx)?;
+        let mut rewritten = rewrite_expr(&expr, &scope_ctx)?;
+        if matches!(
+            port_name.as_str(),
+            "x" | "y" | "width" | "height" | "size" | "line_height" | "baseline"
+        ) {
+            let unlowered_lit = match &expr {
+                Expr::Literal(lit) => Some(lit.clone()),
+                _ => None,
+            };
+            if let Some(lit) = unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(&rewritten, &scope_ctx)) {
+                if !lit.matches_type_name("Distance") {
+                    return Err(CompileError::TypeMismatch {
+                        expected: "Distance".to_string(),
+                        actual: lit.type_name().to_string(),
+                        span: expr.span(),
+                    });
+                }
+            }
+            if let Expr::Literal(Literal::Integer(0, span)) = rewritten {
+                rewritten = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+            }
+        } else if matches!(port_name.as_str(), "z" | "weight") {
+            let unlowered_lit = match &expr {
+                Expr::Literal(lit) => Some(lit.clone()),
+                _ => None,
+            };
+            if let Some(lit) = unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(&rewritten, &scope_ctx)) {
+                if !lit.matches_type_name("Integer") {
+                    return Err(CompileError::TypeMismatch {
+                        expected: "Integer".to_string(),
+                        actual: lit.type_name().to_string(),
+                        span: expr.span(),
+                    });
+                }
+            }
+        }
         ports.insert(port_name, rewritten);
     }
 
@@ -2887,11 +3118,11 @@ fn expand_primitive_element(
                 span: elem.span,
             });
         }
-        // Default weight to 400.0 if not specified
+        // Default weight to 400 if not specified
         if !ports.contains_key("weight") {
             ports.insert(
                 "weight".to_string(),
-                Expr::Literal(Literal::Number(400.0, elem.span)),
+                Expr::Literal(Literal::Integer(400, elem.span)),
             );
         }
         // Default family to empty string if not specified
@@ -3257,7 +3488,7 @@ fn expand_primitive_element(
             span: elem.span,
         })
     } else {
-        Expr::Literal(Literal::Number(0.0, elem.span))
+        Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span))
     };
 
     let weight_expr = if ports.contains_key("weight") {
@@ -3267,7 +3498,7 @@ fn expand_primitive_element(
             span: elem.span,
         })
     } else {
-        Expr::Literal(Literal::Number(400.0, elem.span))
+        Expr::Literal(Literal::Integer(400, elem.span))
     };
 
     let font_expr = if ports.contains_key("family") {
@@ -3422,10 +3653,10 @@ fn expand_primitive_element(
                 });
             }
         } else if child_ids.is_empty() {
-            ports.entry("x".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
-            ports.entry("y".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
-            ports.entry("width".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
-            ports.entry("height".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+            ports.entry("x".to_string()).or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)));
+            ports.entry("y".to_string()).or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)));
+            ports.entry("width".to_string()).or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)));
+            ports.entry("height".to_string()).or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)));
         } else {
             for cid in &child_ids {
                 doc.nodes[cid.0].ports.entry("x".to_string()).or_insert_with(|| {
@@ -3467,14 +3698,14 @@ fn expand_primitive_element(
             }
         }
 
-        ports.entry("z".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+        ports.entry("z".to_string()).or_insert_with(|| Expr::Literal(Literal::Integer(0, elem.span)));
     }
 
     let is_inline_span = ctx.parent_id.is_some_and(|p| doc.get_node(p).is_some_and(|n| n.name == "Text"));
 
     if is_inline_span {
-        ports.entry("x".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
-        ports.entry("y".to_string()).or_insert_with(|| Expr::Literal(Literal::Number(0.0, elem.span)));
+        ports.entry("x".to_string()).or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)));
+        ports.entry("y".to_string()).or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)));
     }
 
     // Height defaults / resolution
@@ -3502,7 +3733,7 @@ fn expand_primitive_element(
                     span: elem.span,
                 })
             } else {
-                Expr::Literal(Literal::Number(0.0, elem.span))
+                Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span))
             };
             let height_call = Expr::Call(CallExpr {
                 callee: Ident::new("text_height", elem.span),
@@ -3520,7 +3751,7 @@ fn expand_primitive_element(
             });
             ports.insert("height".to_string(), height_call);
         } else if ports.contains_key("size") {
-            // E.g. \Header(size: 32) -> height: self.size
+            // E.g. \Header(size: 32px) -> height: self.size
             ports.insert(
                 "height".to_string(),
                 Expr::MemberAccess(MemberAccessExpr {
@@ -3532,7 +3763,7 @@ fn expand_primitive_element(
         } else if is_inline_span {
             ports.insert(
                 "height".to_string(),
-                Expr::Literal(Literal::Number(0.0, elem.span)),
+                Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)),
             );
         } else if elem.name.as_str() != "Font" && elem.name.as_str() != "Clip" {
             return Err(CompileError::MissingPort {
@@ -3560,7 +3791,7 @@ fn expand_primitive_element(
         } else if is_inline_span {
             ports.insert(
                 "width".to_string(),
-                Expr::Literal(Literal::Number(0.0, elem.span)),
+                Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)),
             );
         } else if elem.name.as_str() != "Font" && elem.name.as_str() != "Clip" {
             return Err(CompileError::MissingPort {
@@ -3702,6 +3933,142 @@ fn expand_primitive_element(
     Ok(())
 }
 
+fn infer_expr_literal_for_typecheck<'a>(
+    expr: &'a Expr,
+    ctx: &ScopeContext<'a>,
+) -> Option<Literal> {
+    if let Some(lit) = resolve_ident_or_member_to_literal(expr, ctx) {
+        return Some(lit);
+    }
+    match expr {
+        Expr::Paren(inner, _) => infer_expr_literal_for_typecheck(inner, ctx),
+        Expr::Unary(u) if u.op == UnaryOp::Neg => {
+            match infer_expr_literal_for_typecheck(&u.operand, ctx)? {
+                Literal::Integer(i, _) => Some(Literal::Integer(-i, u.span)),
+                Literal::Float(f, _) => Some(Literal::Float(-f, u.span)),
+                Literal::Distance(d, unit, _) => Some(Literal::Distance(-d, unit, u.span)),
+                _ => None,
+            }
+        }
+        Expr::MemberAccess(m) => {
+            let member = m.member.as_str();
+            if matches!(
+                member,
+                "size"
+                    | "width"
+                    | "height"
+                    | "x"
+                    | "y"
+                    | "left"
+                    | "top"
+                    | "right"
+                    | "bottom"
+                    | "baseline"
+                    | "cap_height"
+                    | "x_height"
+                    | "ascent"
+                    | "descent"
+                    | "line_height"
+            ) {
+                return Some(Literal::Distance(0.0, DistanceUnit::Px, m.span));
+            }
+            if member == "dpi" {
+                return Some(Literal::Float(96.0, m.span));
+            }
+            if member == "weight" || member == "z" || member == "num_children" || member == "len" || member == "count" {
+                return Some(Literal::Integer(0, m.span));
+            }
+            None
+        }
+        Expr::Call(call) => {
+            if matches!(
+                call.callee.as_str(),
+                "distance_to_float" | "to_px" | "to_pt" | "to_float" | "to_number"
+            ) {
+                return Some(Literal::Float(0.0, call.span));
+            }
+            if call.callee.as_str() == "to_integer" {
+                return Some(Literal::Integer(0, call.span));
+            }
+            if matches!(
+                call.callee.as_str(),
+                "text_width"
+                    | "text_height"
+                    | "text_baseline_offset"
+                    | "font_cap_height"
+                    | "font_x_height"
+                    | "font_ascent"
+                    | "font_descent"
+                    | "font_line_height"
+            ) {
+                return Some(Literal::Distance(0.0, DistanceUnit::Px, call.span));
+            }
+            None
+        }
+        Expr::MethodCall(mc) => {
+            if matches!(mc.method.as_str(), "to_px" | "to_pt" | "to_float" | "to_number") {
+                return Some(Literal::Float(0.0, mc.span));
+            }
+            if mc.method.as_str() == "to_integer" {
+                return Some(Literal::Integer(0, mc.span));
+            }
+            None
+        }
+        Expr::Binary(bin) => {
+            let left = infer_expr_literal_for_typecheck(&bin.left, ctx)?;
+            let right = infer_expr_literal_for_typecheck(&bin.right, ctx)?;
+            match bin.op {
+                BinaryOp::Add | BinaryOp::Sub => match (&left, &right) {
+                    (Literal::Distance(_, _, _), Literal::Distance(_, _, _))
+                    | (Literal::Distance(_, _, _), Literal::Integer(0, _))
+                    | (Literal::Integer(0, _), Literal::Distance(_, _, _)) => {
+                        Some(Literal::Distance(0.0, DistanceUnit::Px, bin.span))
+                    }
+                    (Literal::Integer(_, _), Literal::Integer(_, _)) => {
+                        Some(Literal::Integer(1, bin.span))
+                    }
+                    (Literal::Float(_, _), Literal::Float(_, _))
+                    | (Literal::Float(_, _), Literal::Integer(_, _))
+                    | (Literal::Integer(_, _), Literal::Float(_, _)) => {
+                        Some(Literal::Float(0.0, bin.span))
+                    }
+                    _ => None,
+                },
+                BinaryOp::Mul => match (&left, &right) {
+                    (Literal::Distance(_, _, _), Literal::Integer(_, _) | Literal::Float(_, _))
+                    | (Literal::Integer(_, _) | Literal::Float(_, _), Literal::Distance(_, _, _)) => {
+                        Some(Literal::Distance(0.0, DistanceUnit::Px, bin.span))
+                    }
+                    (Literal::Integer(_, _), Literal::Integer(_, _)) => {
+                        Some(Literal::Integer(1, bin.span))
+                    }
+                    (Literal::Float(_, _), Literal::Float(_, _))
+                    | (Literal::Float(_, _), Literal::Integer(_, _))
+                    | (Literal::Integer(_, _), Literal::Float(_, _)) => {
+                        Some(Literal::Float(0.0, bin.span))
+                    }
+                    _ => None,
+                },
+                BinaryOp::Div => match (&left, &right) {
+                    (Literal::Distance(_, _, _), Literal::Distance(_, _, _)) => {
+                        Some(Literal::Float(0.0, bin.span))
+                    }
+                    (Literal::Distance(_, _, _), Literal::Integer(_, _) | Literal::Float(_, _)) => {
+                        Some(Literal::Distance(0.0, DistanceUnit::Px, bin.span))
+                    }
+                    (
+                        Literal::Integer(_, _) | Literal::Float(_, _),
+                        Literal::Integer(_, _) | Literal::Float(_, _),
+                    ) => Some(Literal::Float(0.0, bin.span)),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 fn resolve_ident_or_member_to_literal<'a>(
     expr: &'a Expr,
     ctx: &ScopeContext<'a>,
@@ -3711,7 +4078,7 @@ fn resolve_ident_or_member_to_literal<'a>(
         Expr::Paren(inner, _) => resolve_ident_or_member_to_literal(inner, ctx),
         Expr::Ident(id) => {
             if id.as_str() == "num_children" {
-                return Some(Literal::Number(ctx.child_ids.len() as f64, id.span));
+                return Some(Literal::Integer(ctx.child_ids.len() as i64, id.span));
             }
             if let Some(comp_ports) = ctx.comp_ports {
                 if let Some(port_expr) = comp_ports.get(id.as_str()) {
@@ -3787,7 +4154,13 @@ fn resolve_ident_or_member_to_literal<'a>(
                 BinaryOp::Eq => {
                     let eq = match (&left_lit, &right_lit) {
                         (Literal::String(s1, _), Literal::String(s2, _)) => s1 == s2,
-                        (Literal::Number(n1, _), Literal::Number(n2, _)) => n1 == n2,
+                        (Literal::Integer(i1, _), Literal::Integer(i2, _)) => i1 == i2,
+                        (Literal::Float(n1, _), Literal::Float(n2, _)) => n1 == n2,
+                        (Literal::Integer(i1, _), Literal::Float(n2, _)) => (*i1 as f64) == *n2,
+                        (Literal::Float(n1, _), Literal::Integer(i2, _)) => *n1 == (*i2 as f64),
+                        (Literal::Distance(d1, u1, _), Literal::Distance(d2, u2, _)) if u1 == u2 => d1 == d2,
+                        (Literal::Distance(d1, _, _), Literal::Integer(0, _))
+                        | (Literal::Integer(0, _), Literal::Distance(d1, _, _)) => *d1 == 0.0,
                         (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 == b2,
                         (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 == e2 && v1 == v2,
                         _ => false,
@@ -3797,7 +4170,13 @@ fn resolve_ident_or_member_to_literal<'a>(
                 BinaryOp::Ne => {
                     let ne = match (&left_lit, &right_lit) {
                         (Literal::String(s1, _), Literal::String(s2, _)) => s1 != s2,
-                        (Literal::Number(n1, _), Literal::Number(n2, _)) => n1 != n2,
+                        (Literal::Integer(i1, _), Literal::Integer(i2, _)) => i1 != i2,
+                        (Literal::Float(n1, _), Literal::Float(n2, _)) => n1 != n2,
+                        (Literal::Integer(i1, _), Literal::Float(n2, _)) => (*i1 as f64) != *n2,
+                        (Literal::Float(n1, _), Literal::Integer(i2, _)) => *n1 != (*i2 as f64),
+                        (Literal::Distance(d1, u1, _), Literal::Distance(d2, u2, _)) if u1 == u2 => d1 != d2,
+                        (Literal::Distance(d1, _, _), Literal::Integer(0, _))
+                        | (Literal::Integer(0, _), Literal::Distance(d1, _, _)) => *d1 != 0.0,
                         (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 != b2,
                         (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 != e2 || v1 != v2,
                         _ => true,
@@ -3821,14 +4200,53 @@ fn resolve_ident_or_member_to_literal<'a>(
                 _ => None,
             }
         }
-        Expr::Unary(u) if u.op == UnaryOp::Not => {
-            if let Some(Literal::Bool(b, _)) = resolve_ident_or_member_to_literal(&u.operand, ctx) {
-                Some(Literal::Bool(!b, u.span))
-            } else {
-                None
+        Expr::Unary(u) => match u.op {
+            UnaryOp::Not => {
+                if let Some(Literal::Bool(b, _)) = resolve_ident_or_member_to_literal(&u.operand, ctx) {
+                    Some(Literal::Bool(!b, u.span))
+                } else {
+                    None
+                }
             }
-        }
+            UnaryOp::Neg => match resolve_ident_or_member_to_literal(&u.operand, ctx)? {
+                Literal::Integer(i, _) => Some(Literal::Integer(-i, u.span)),
+                Literal::Float(f, _) => Some(Literal::Float(-f, u.span)),
+                Literal::Distance(d, unit, _) => Some(Literal::Distance(-d, unit, u.span)),
+                _ => None,
+            },
+        },
         _ => None,
+    }
+}
+
+/// Resolves the active font's `.size` expression in the current scope for `em` units and `distance_to_float(d, em)`.
+fn resolve_active_font_size_expr(ctx: &ScopeContext<'_>, span: Span) -> Result<Expr, CompileError> {
+    if let Some(&fid) = ctx.node_fonts.get(&ctx.current_node) {
+        if fid != ctx.current_node {
+            return Ok(Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::new(fid.canonical_name(), span))),
+                member: Ident::new("size", span),
+                span,
+            }));
+        }
+    }
+    match ctx.env_scope.get("font") {
+        Some(EnvEntry::Bound(font_expr)) => {
+            let rewritten_font = rewrite_expr(font_expr, ctx)?;
+            Ok(Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(rewritten_font),
+                member: Ident::new("size", span),
+                span,
+            }))
+        }
+        Some(EnvEntry::Tombstone) => Err(CompileError::BlockedEnvVariable {
+            name: "font".to_string(),
+            span,
+        }),
+        None => Err(CompileError::UndefinedEnvVariable {
+            name: "font".to_string(),
+            span,
+        }),
     }
 }
 
@@ -3908,7 +4326,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
             }
             if id.as_str() == "num_children" {
-                return Ok(Expr::Literal(Literal::Number(ctx.child_ids.len() as f64, id.span)));
+                return Ok(Expr::Literal(Literal::Integer(ctx.child_ids.len() as i64, id.span)));
             }
             Ok(expr.clone())
         }
@@ -3937,7 +4355,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     }
                     if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, ctx) {
                         let val = match lit {
-                            Literal::Number(n, _) => crate::compiler::value::Value::Number(n),
+                            Literal::Integer(i, _) => crate::compiler::value::Value::Integer(i),
+                            Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
+                            Literal::Distance(d, _, _) => crate::compiler::value::Value::Distance(d),
                             Literal::String(s, _) => crate::compiler::value::Value::String(s),
                             Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
                             Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
@@ -3998,10 +4418,10 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             // Enum variant access: EnumName.VariantName
             if let Some(target_name) = &target_ident_name {
                 if target_name == "children" && (m.member.as_str() == "len" || m.member.as_str() == "count") {
-                    return Ok(Expr::Literal(Literal::Number(ctx.child_ids.len() as f64, m.span)));
+                    return Ok(Expr::Literal(Literal::Integer(ctx.child_ids.len() as i64, m.span)));
                 }
                 if (target_name == "self" || target_name == "parent") && m.member.as_str() == "num_children" {
-                    return Ok(Expr::Literal(Literal::Number(ctx.child_ids.len() as f64, m.span)));
+                    return Ok(Expr::Literal(Literal::Integer(ctx.child_ids.len() as i64, m.span)));
                 }
                 if let Some(enum_def) = ctx.enums.get(target_name) {
                     let variant_name = m.member.as_str();
@@ -4108,6 +4528,46 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
         }
 
         Expr::Call(call) => {
+            if call.callee.as_str() == "distance_to_float" {
+                if call.args.len() != 2 {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "distance_to_float() expects 2 arguments (distance, unit), got {}",
+                            call.args.len()
+                        ),
+                        span: call.span,
+                    });
+                }
+                let dist_expr = rewrite_expr(&call.args[0], ctx)?;
+                let unit_expr = match &call.args[1] {
+                    Expr::Ident(unit_id) => {
+                        let Some(unit) = DistanceUnit::from_str(unit_id.as_str()) else {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Second argument to distance_to_float() must be a unit ('px', 'pt', or 'em'), got '{}'",
+                                    unit_id.as_str()
+                                ),
+                                span: unit_id.span,
+                            });
+                        };
+                        rewrite_expr(&Expr::Literal(Literal::Distance(1.0, unit, unit_id.span)), ctx)?
+                    }
+                    already_lowered @ (Expr::Literal(Literal::Distance(_, DistanceUnit::Px, _))
+                    | Expr::Binary(_)) => rewrite_expr(already_lowered, ctx)?,
+                    other => {
+                        return Err(CompileError::Custom {
+                            message: "Second argument to distance_to_float() must be a unit ('px', 'pt', or 'em')".to_string(),
+                            span: other.span(),
+                        });
+                    }
+                };
+                return Ok(Expr::Call(CallExpr {
+                    callee: call.callee.clone(),
+                    args: vec![dist_expr, unit_expr],
+                    span: call.span,
+                }));
+            }
+
             let mut rewritten_args = Vec::new();
             let mut had_children = false;
             for arg in &call.args {
@@ -4134,7 +4594,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
 
             if had_children && rewritten_args.is_empty() && call.callee.as_str() != "only" {
-                return Ok(Expr::Literal(Literal::Number(0.0, call.span)));
+                return Ok(Expr::Literal(Literal::Integer(0, call.span)));
             }
 
             Ok(Expr::Call(CallExpr {
@@ -4174,6 +4634,40 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             Ok(Expr::Paren(Box::new(rewrite_expr(inner, ctx)?), *span))
         }
 
+        Expr::Literal(Literal::Distance(val, unit, span)) => match unit {
+            DistanceUnit::Px => Ok(expr.clone()),
+            DistanceUnit::Pt => Ok(Expr::Binary(BinaryExpr {
+                op: BinaryOp::Mul,
+                left: Box::new(Expr::Literal(Literal::Distance(
+                    *val,
+                    DistanceUnit::Px,
+                    *span,
+                ))),
+                right: Box::new(Expr::Binary(BinaryExpr {
+                    op: BinaryOp::Div,
+                    left: Box::new(Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(
+                            NodeId::WINDOW.canonical_name(),
+                            *span,
+                        ))),
+                        member: Ident::new("dpi", *span),
+                        span: *span,
+                    })),
+                    right: Box::new(Expr::Literal(Literal::Float(72.0, *span))),
+                    span: *span,
+                })),
+                span: *span,
+            })),
+            DistanceUnit::Em => {
+                let font_size_expr = resolve_active_font_size_expr(ctx, *span)?;
+                Ok(Expr::Binary(BinaryExpr {
+                    op: BinaryOp::Mul,
+                    left: Box::new(Expr::Literal(Literal::Float(*val, *span))),
+                    right: Box::new(font_size_expr),
+                    span: *span,
+                }))
+            }
+        },
         Expr::Literal(_) => Ok(expr.clone()),
         Expr::Node(n) => Ok(Expr::Node(n.clone())),
     }
@@ -4181,17 +4675,31 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
 
 /// Returns the initial default expression for a state binding.
 pub fn default_expr_for_state(state: &StateBinding) -> Expr {
+    let ty_name = state.type_annotation.as_ref().map(|t| t.name.as_str());
     if let Some(def) = &state.default {
+        if let Expr::Literal(Literal::Integer(0, span)) = def {
+            if ty_name == Some("Distance") {
+                return Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, *span));
+            } else if ty_name == Some("Float") {
+                return Expr::Literal(Literal::Float(0.0, *span));
+            }
+        } else if let Expr::Literal(Literal::Integer(i, span)) = def {
+            if ty_name == Some("Float") {
+                return Expr::Literal(Literal::Float(*i as f64, *span));
+            }
+        }
         def.clone()
-    } else if let Some(ty) = &state.type_annotation {
-        match ty.name.as_str() {
+    } else if let Some(ty) = ty_name {
+        match ty {
             "Boolean" | "Bool" => Expr::Literal(Literal::Bool(false, state.span)),
             "String" => Expr::Literal(Literal::String(String::new(), state.span)),
             "Color" => Expr::Literal(Literal::Color("#000000".to_string(), state.span)),
-            _ => Expr::Literal(Literal::Number(0.0, state.span)),
+            "Float" => Expr::Literal(Literal::Float(0.0, state.span)),
+            "Distance" => Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, state.span)),
+            _ => Expr::Literal(Literal::Integer(0, state.span)),
         }
     } else {
-        Expr::Literal(Literal::Number(0.0, state.span))
+        Expr::Literal(Literal::Integer(0, state.span))
     }
 }
 

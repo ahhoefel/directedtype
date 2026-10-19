@@ -5,11 +5,11 @@
 
 // 1. Explicit Fixed Width & Fixed Height HStack: supports cross-axis alignment
 \Component HStack(
-    width: Number,
-    height: Number,
-    x: Number: parent.left,
-    y: Number: parent.top,
-    gap: Number: 0,
+    width: Distance,
+    height: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    gap: Distance: 0,
     align: Align: Align.Top
 ) {
     \let is_center = align == Align.Center;
@@ -30,10 +30,10 @@
 
 // 2. Intrinsic Width & Fixed Height HStack: content-wrapping width with cross-axis alignment
 \Component HStack(
-    height: Number,
-    x: Number: parent.left,
-    y: Number: parent.top,
-    gap: Number: 0,
+    height: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    gap: Distance: 0,
     align: Align: Align.Top
 ) {
     \let is_center = align == Align.Center;
@@ -55,10 +55,10 @@
 
 // 3. Explicit / Fixed Width HStack: specifies width directly, intrinsic height
 \Component HStack(
-    width: Number,
-    x: Number: parent.left,
-    y: Number: parent.top,
-    gap: Number: 0,
+    width: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    gap: Distance: 0,
     align: Align: Align.Top
 ) {
     \let is_center = align == Align.Center;
@@ -81,9 +81,9 @@
 
 // 4. Intrinsic / Content-Wrapping HStack: automatically sizes width and height to wrap children
 \Component HStack(
-    x: Number: parent.left,
-    y: Number: parent.top,
-    gap: Number: 0,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    gap: Distance: 0,
     align: Align: Align.Top
 ) {
     \let is_center = align == Align.Center;

@@ -102,9 +102,9 @@ fn test_companion_file_discovery_via_resolver() {
 #[test]
 fn test_companion_component_on_mount_lifecycle() {
     let input = r#"
-    \Component Counter(initial: Number: 0) {
-        \state count: Number = 0;
-        \Rect(x: 0, y: 0, width: count * 10, height: 40, color: #3b82f6)
+    \Component Counter(initial: Float: 0) {
+        \state count: Float = 0;
+        \Rect(x: 0, y: 0, width: count * 10px, height: 40px, color: #3b82f6)
     }
 
     \Counter(initial: 7)
@@ -133,8 +133,8 @@ fn test_companion_component_on_mount_lifecycle() {
 fn test_event_dispatch_self_increment_and_decrement() {
     let input = r#"
     \Component Counter {
-        \state count: Number: 0;
-        \Rect(x: 10, y: 10, width: 100 + count * 20, height: 40, color: #10b981, on_click: self.increment)
+        \state count: Float: 0;
+        \Rect(x: 10px, y: 10px, width: 100px + count * 20px, height: 40px, color: #10b981, on_click: self.increment)
     }
 
     \Counter
@@ -198,13 +198,13 @@ fn test_event_dispatch_self_increment_and_decrement() {
 fn test_sibling_actor_messaging_drawer_toggle() {
     let input = r#"
     \Component PageLayout {
-        \let drawer = \Drawer(width: 300);
-        \Rect(x: 0, y: 0, width: 80, height: 30, color: #2563eb, on_click: drawer.toggle)
+        \let drawer = \Drawer(width: 300px);
+        \Rect(x: 0, y: 0, width: 80px, height: 30px, color: #2563eb, on_click: drawer.toggle)
     }
 
-    \Component Drawer(width: Number: 200) {
+    \Component Drawer(width: Distance: 200px) {
         \state is_open: Boolean: false;
-        \Rect(x: 100, y: 0, width: is_open ? width : 0, height: 200, color: #1e293b)
+        \Rect(x: 100px, y: 0, width: is_open ? width : 0, height: 200px, color: #1e293b)
     }
 
     \PageLayout
@@ -283,11 +283,11 @@ fn test_structured_key_lookup_from_companion_context() {
 
     let input = r#"
     \Component Grid {
-        \Cell(0, 0; x: 0, y: 0, width: 50, height: 50)
-        \Cell(1, 2; x: 60, y: 0, width: 50, height: 50)
+        \Cell(0, 0; x: 0, y: 0, width: 50px, height: 50px)
+        \Cell(1, 2; x: 60px, y: 0, width: 50px, height: 50px)
     }
 
-    \Component Cell(x: Number: 0, y: Number: 0, width: Number: 50, height: Number: 50) {
+    \Component Cell(x: Distance: 0, y: Distance: 0, width: Distance: 50px, height: Distance: 50px) {
         \Rect(x: x, y: y, width: width, height: height, color: #3b82f6)
     }
 
@@ -314,8 +314,8 @@ fn test_structured_key_lookup_from_companion_context() {
         .find_by_key(
             Some(grid_node.id),
             &ComponentKey::tuple(&[
-                directedtype::ast::Expr::number(1.0),
-                directedtype::ast::Expr::number(2.0),
+                directedtype::ast::Expr::integer(1),
+                directedtype::ast::Expr::integer(2),
             ]),
         )
         .expect("Cell (1, 2) should exist");
@@ -329,8 +329,8 @@ fn test_structured_key_lookup_from_companion_context() {
 fn test_dom_integration_register_and_dispatch() {
     let input = r#"
     \Component Counter {
-        \state count: Number: 0;
-        \Rect(x: 20, y: 20, width: 100 + count * 50, height: 30, color: #ff0000, on_click: self.increment)
+        \state count: Float: 0;
+        \Rect(x: 20px, y: 20px, width: 100px + count * 50px, height: 30px, color: #ff0000, on_click: self.increment)
     }
 
     \Counter
@@ -385,8 +385,8 @@ fn test_event_propagation_stops_by_default() {
 
     let input = r#"
     \Component Parent {
-        \Rect(x: 0, y: 0, width: 200, height: 200, color: #1e293b, on_click: self.on_outer) {
-            \Rect(x: 10, y: 10, width: 50, height: 50, color: #3b82f6, on_click: self.on_inner)
+        \Rect(x: 0, y: 0, width: 200px, height: 200px, color: #1e293b, on_click: self.on_outer) {
+            \Rect(x: 10px, y: 10px, width: 50px, height: 50px, color: #3b82f6, on_click: self.on_inner)
         }
     }
 
@@ -429,7 +429,7 @@ fn test_event_propagation_stops_by_default() {
 fn test_dispatch_error_method_not_found() {
     let input = r#"
     \Component Broken {
-        \Rect(x: 0, y: 0, width: 100, height: 100, color: #ff0000, on_click: self.nonexistent)
+        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: #ff0000, on_click: self.nonexistent)
     }
 
     \Broken
@@ -483,7 +483,7 @@ fn test_examples_counter_dt_and_rs_integration() {
 
     impl Component for ExampleCounter {
         fn on_mount(&mut self, ctx: &mut Context<'_>) {
-            if let Some(initial) = ctx.get_port_number("initial") {
+            if let Some(initial) = ctx.get_port_integer("initial") {
                 self.count = initial as i32;
             }
         }
@@ -498,20 +498,20 @@ fn test_examples_counter_dt_and_rs_integration() {
                 "increment" => {
                     if self.count < 10 {
                         self.count += 1;
-                        ctx.set_state("count", self.count as f64);
+                        ctx.set_state("count", self.count);
                     }
                     Ok(())
                 }
                 "decrement" => {
                     if self.count > 0 {
                         self.count -= 1;
-                        ctx.set_state("count", self.count as f64);
+                        ctx.set_state("count", self.count);
                     }
                     Ok(())
                 }
                 "reset" => {
                     self.count = 0;
-                    ctx.set_state("count", 0.0);
+                    ctx.set_state("count", 0i64);
                     Ok(())
                 }
                 _ => Err(DispatchError::MethodNotFound {
@@ -542,7 +542,7 @@ fn test_examples_counter_dt_and_rs_integration() {
     let counter_id = counter_node.id;
     assert_eq!(
         compiled.get_state(counter_id, "count"),
-        Some(&directedtype::compiler::Value::Number(3.0))
+        Some(&directedtype::compiler::Value::Integer(3))
     );
 
     // Find the "+" increment button (has on_click: self.increment)
@@ -573,7 +573,7 @@ fn test_examples_counter_dt_and_rs_integration() {
     assert!(!changed.is_empty(), "State mutations must update downstream DAG");
     assert_eq!(
         compiled.get_state(counter_id, "count"),
-        Some(&directedtype::compiler::Value::Number(4.0))
+        Some(&directedtype::compiler::Value::Integer(4))
     );
 
     // Find the "-" decrement button (has on_click: self.decrement)
@@ -603,7 +603,7 @@ fn test_examples_counter_dt_and_rs_integration() {
     compiled.dispatch_event(&mut click_dec).expect("dispatch click ok");
     assert_eq!(
         compiled.get_state(counter_id, "count"),
-        Some(&directedtype::compiler::Value::Number(3.0))
+        Some(&directedtype::compiler::Value::Integer(3))
     );
 
     // Find the "Reset" button (has on_click: self.reset)
@@ -633,7 +633,7 @@ fn test_examples_counter_dt_and_rs_integration() {
     compiled.dispatch_event(&mut click_reset).expect("dispatch click ok");
     assert_eq!(
         compiled.get_state(counter_id, "count"),
-        Some(&directedtype::compiler::Value::Number(0.0))
+        Some(&directedtype::compiler::Value::Integer(0))
     );
 
     // Headless render verification
@@ -671,13 +671,13 @@ fn test_click_propagation_stops_by_default() {
 
     let input = r#"
     \Component Parent {
-        \Rect(x: 0, y: 0, width: 200, height: 200, color: #1e293b, on_click: self.parent_click) {
+        \Rect(x: 0, y: 0, width: 200px, height: 200px, color: #1e293b, on_click: self.parent_click) {
             \Child
         }
     }
 
     \Component Child {
-        \Rect(x: 10, y: 10, width: 50, height: 50, color: #3b82f6, on_click: self.child_click)
+        \Rect(x: 10px, y: 10px, width: 50px, height: 50px, color: #3b82f6, on_click: self.child_click)
     }
 
     \Parent
@@ -744,13 +744,13 @@ fn test_click_propagation_continue_propagation() {
 
     let input = r#"
     \Component Parent {
-        \Rect(x: 0, y: 0, width: 200, height: 200, color: #1e293b, on_click: self.parent_click) {
+        \Rect(x: 0, y: 0, width: 200px, height: 200px, color: #1e293b, on_click: self.parent_click) {
             \Child
         }
     }
 
     \Component Child {
-        \Rect(x: 10, y: 10, width: 50, height: 50, color: #3b82f6, on_click: self.child_click)
+        \Rect(x: 10px, y: 10px, width: 50px, height: 50px, color: #3b82f6, on_click: self.child_click)
     }
 
     \Parent

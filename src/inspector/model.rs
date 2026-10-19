@@ -364,7 +364,9 @@ pub fn build_property_dag_trace(
 
     let value_type = if let Some(v) = val_opt {
         match v {
-            Value::Number(_) => "Number".to_string(),
+            Value::Integer(_) => "Integer".to_string(),
+            Value::Float(_) => "Float".to_string(),
+            Value::Distance(_) => "Distance".to_string(),
             Value::String(_) => "String".to_string(),
             Value::Bool(_) => "Boolean".to_string(),
             Value::Color(_) => "Color".to_string(),
@@ -373,7 +375,8 @@ pub fn build_property_dag_trace(
         }
     } else {
         match port {
-            "x" | "y" | "width" | "height" | "z" => "Number".to_string(),
+            "x" | "y" | "width" | "height" => "Distance".to_string(),
+            "z" => "Integer".to_string(),
             "clip" => "Node Reference".to_string(),
             _ => "Unknown".to_string(),
         }

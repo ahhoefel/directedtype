@@ -12,7 +12,7 @@ use winit::event::ElementState;
 #[test]
 fn test_hit_test_basic_rect() {
     let input = r#"
-    \Rect(x: 10, y: 20, width: 100, height: 50, color: #ff0000)
+    \Rect(x: 10px, y: 20px, width: 100px, height: 50px, color: #ff0000)
     "#;
     let doc = parse(input).expect("Parse error");
     let layout = evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout error");
@@ -38,8 +38,8 @@ fn test_hit_test_z_index_dominance() {
     // Rect A is declared SECOND with z: 0.
     // Both cover (50, 50). Rect B must win because z: 10 > z: 0.
     let input = r#"
-    \Rect(x: 0, y: 0, width: 100, height: 100, z: 10, color: #00ff00)
-    \Rect(x: 0, y: 0, width: 100, height: 100, z: 0, color: #ff0000)
+    \Rect(x: 0, y: 0, width: 100px, height: 100px, z: 10, color: #00ff00)
+    \Rect(x: 0, y: 0, width: 100px, height: 100px, z: 0, color: #ff0000)
     "#;
     let doc = parse(input).expect("Parse error");
     let layout = evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout error");
@@ -55,8 +55,8 @@ fn test_hit_test_painters_dominance_same_z() {
     // Rect A is declared first. Rect B is declared second.
     // Both cover (50, 50). Rect B must win because it paints on top (Painter's Algorithm).
     let input = r#"
-    \Rect(x: 0, y: 0, width: 100, height: 100, color: #ff0000)
-    \Rect(x: 0, y: 0, width: 100, height: 100, color: #0000ff)
+    \Rect(x: 0, y: 0, width: 100px, height: 100px, color: #ff0000)
+    \Rect(x: 0, y: 0, width: 100px, height: 100px, color: #0000ff)
     "#;
     let doc = parse(input).expect("Parse error");
     let layout = evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout error");
@@ -69,10 +69,10 @@ fn test_hit_test_painters_dominance_same_z() {
 #[test]
 fn test_hit_test_hardware_clip_culling() {
     let input = r#"
-    \let clip_box = \Box(x: 0, y: 0, width: 100, height: 100)
+    \let clip_box = \Box(x: 0, y: 0, width: 100px, height: 100px)
     \let my_clip = \Clip(box: clip_box)
 
-    \Rect(clip: my_clip, x: 50, y: 50, width: 200, height: 200, color: #ff0000)
+    \Rect(clip: my_clip, x: 50px, y: 50px, width: 200px, height: 200px, color: #ff0000)
     "#;
     let doc = parse(input).expect("Parse error");
     let layout = evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout error");
@@ -87,7 +87,7 @@ fn test_hit_test_hardware_clip_culling() {
 #[test]
 fn test_hit_test_corner_radius_culling() {
     let input = r#"
-    \Rect(x: 0, y: 0, width: 100, height: 100, radius: 20, color: #3b82f6)
+    \Rect(x: 0, y: 0, width: 100px, height: 100px, radius: 20px, color: #3b82f6)
     "#;
     let doc = parse(input).expect("Parse error");
     let layout = evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout error");
@@ -109,7 +109,7 @@ fn test_hit_test_corner_radius_culling() {
 fn test_hit_test_bubble_path_through_component_hierarchy() {
     let input = r#"
     \Component Card {
-        \Rect(x: 10, y: 10, width: 100, height: 100, color: #ffffff)
+        \Rect(x: 10px, y: 10px, width: 100px, height: 100px, color: #ffffff)
     }
 
     \Component Container {
@@ -138,7 +138,7 @@ fn test_hit_test_bubble_path_through_component_hierarchy() {
 fn test_event_click_synthesis_and_bubbling() {
     let input = r#"
     \Component Button {
-        \Rect(x: 20, y: 20, width: 100, height: 40, color: #2563eb)
+        \Rect(x: 20px, y: 20px, width: 100px, height: 40px, color: #2563eb)
     }
 
     \Button()
@@ -179,7 +179,7 @@ fn test_event_click_synthesis_and_bubbling() {
 #[test]
 fn test_hit_test_inline_link_single_line() {
     let input = r#"
-    \Text(x: 20, y: 30, width: 500, size: 16) {
+    \Text(x: 20px, y: 30px, width: 500px, size: 16px) {
         Before link \Link(url: "https://directedtype.org"){ClickableLink} after link
     }
     "#;
@@ -208,7 +208,7 @@ fn test_hit_test_inline_link_single_line() {
 fn test_hit_test_inline_link_multi_line_disjoint_fragments() {
     // Narrow container forces link text to wrap across two lines
     let input = r#"
-    \Text(x: 20, y: 30, width: 140, size: 16) {
+    \Text(x: 20px, y: 30px, width: 140px, size: 16px) {
         Prefix text \Link(url: "https://example.com"){wrapped link that spans across multiple lines} suffix
     }
     "#;
@@ -248,8 +248,8 @@ fn test_hit_test_inline_link_multi_line_disjoint_fragments() {
 #[test]
 fn test_pointer_capture_explicit_routing() {
     let input = r#"
-    \Rect(x: 10, y: 10, width: 100, height: 50, color: #ff0000)
-    \Rect(x: 200, y: 200, width: 100, height: 50, color: #0000ff)
+    \Rect(x: 10px, y: 10px, width: 100px, height: 50px, color: #ff0000)
+    \Rect(x: 200px, y: 200px, width: 100px, height: 50px, color: #0000ff)
     "#;
     let doc = parse(input).expect("Parse error");
     let layout = evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout error");
@@ -356,7 +356,7 @@ impl DragTargetCompanion {
 #[test]
 fn test_pointer_capture_via_context_action_and_companion() {
     let input = r#"
-    \Component Draggable(x: Number = 50, y: Number = 50, width: Number = 100, height: Number = 50) {
+    \Component Draggable(x: Distance = 50px, y: Distance = 50px, width: Distance = 100px, height: Distance = 50px) {
         \Rect(
             x: x,
             y: y,
@@ -369,8 +369,8 @@ fn test_pointer_capture_via_context_action_and_companion() {
         )
     }
 
-    \Draggable(x: 50, y: 50)
-    \Rect(x: 300, y: 300, width: 100, height: 100, color: #10b981)
+    \Draggable(x: 50px, y: 50px)
+    \Rect(x: 300px, y: 300px, width: 100px, height: 100px, color: #10b981)
     "#;
     let doc = parse(input).expect("Parse error");
     let mut registry = ComponentRegistry::standard();
@@ -477,12 +477,12 @@ impl TestAudioPanel {
 fn test_component_typed_callback_wiring_and_execution() {
     let input = r#"
     \Component TestSlider(
-        x: Number: 0,
-        y: Number: 0,
-        width: Number: 100,
-        height: Number: 20
+        x: Distance: 0,
+        y: Distance: 0,
+        width: Distance: 100px,
+        height: Distance: 20px
     ) {
-        \state value: 0;
+        \state value: Float: 0;
         \Rect(
             x: self.x,
             y: self.y,
@@ -496,12 +496,12 @@ fn test_component_typed_callback_wiring_and_execution() {
     }
 
     \Component TestAudioPanel() {
-        \state volume: 25;
+        \state volume: Float: 25;
         \TestSlider(
-            x: 10,
-            y: 10,
-            width: 100,
-            height: 20,
+            x: 10px,
+            y: 10px,
+            width: 100px,
+            height: 20px,
             on_change: self.set_volume
         )
     }
@@ -545,11 +545,11 @@ fn test_component_typed_callback_wiring_and_execution() {
     // Initial state check
     assert_eq!(
         app.compiled().unwrap().get_state(panel_node, "volume"),
-        Some(&directedtype::Value::Number(25.0))
+        Some(&directedtype::Value::Float(25.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(slider_node, "value"),
-        Some(&directedtype::Value::Number(0.0))
+        Some(&directedtype::Value::Float(0.0))
     );
 
     let rect_node = app
@@ -569,33 +569,33 @@ fn test_component_typed_callback_wiring_and_execution() {
     // Both Slider's value and AudioPanel's volume must have been updated in one batch!
     assert_eq!(
         app.compiled().unwrap().get_state(slider_node, "value"),
-        Some(&directedtype::Value::Number(50.0))
+        Some(&directedtype::Value::Float(50.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(panel_node, "volume"),
-        Some(&directedtype::Value::Number(50.0))
+        Some(&directedtype::Value::Float(50.0))
     );
 
     // 2. Drag to (85, 15) -> local_x = 75
     app.dispatch_cursor_moved(Point::new(85.0, 15.0));
     assert_eq!(
         app.compiled().unwrap().get_state(slider_node, "value"),
-        Some(&directedtype::Value::Number(75.0))
+        Some(&directedtype::Value::Float(75.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(panel_node, "volume"),
-        Some(&directedtype::Value::Number(75.0))
+        Some(&directedtype::Value::Float(75.0))
     );
 
     // 3. Drag far outside window to (300, 15) -> clamped to 100
     app.dispatch_cursor_moved(Point::new(300.0, 15.0));
     assert_eq!(
         app.compiled().unwrap().get_state(slider_node, "value"),
-        Some(&directedtype::Value::Number(100.0))
+        Some(&directedtype::Value::Float(100.0))
     );
     assert_eq!(
         app.compiled().unwrap().get_state(panel_node, "volume"),
-        Some(&directedtype::Value::Number(100.0))
+        Some(&directedtype::Value::Float(100.0))
     );
 
     // 4. Release mouse button -> capture is cleared

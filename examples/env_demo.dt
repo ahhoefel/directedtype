@@ -4,9 +4,9 @@
 \Component Flow(
     x: parent.x, 
     y: parent.y + self.margin, 
-    gap: Number: 20, 
-    width: Number: min(max(window.width, 400), 700), 
-    margin: Number: 30
+    gap: Distance: 20px, 
+    width: Distance: min(max(window.width, 400px), 700px), 
+    margin: Distance: 30px
 ) {
     \Children {
         x: parent.left + parent.margin,
@@ -23,17 +23,17 @@
 // 1. Translator / Provider: Takes parameter and exposes as ambient environment
 \Component ThemeProvider(
     theme: Theme: Theme.Dark,
-    x: Number: parent.left,
-    y: Number: parent.top,
-    width: Number: parent.width,
-    height: Number: sum(children.height)
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    width: Distance: parent.width,
+    height: Distance: sum(children.height)
 ) {
     \env text_color = (self.theme == Theme.Dark) ? #f8fafc : #0f172a
     \env card_bg = (self.theme == Theme.Dark) ? #1e293b : #e2e8f0
     \env accent_color = #3b82f6
     \Children {
         x: parent.left,
-        y: prev ? prev.bottom + 20 : parent.top,
+        y: prev ? prev.bottom + 20px : parent.top,
         width: parent.width
     }
 }
@@ -41,9 +41,9 @@
 // 2. Interceptor: Intercepts ambient env accent_color and replaces it for subtrees
 \Component AccentInterceptor(
     new_accent: Color: #ec4899,
-    x: Number: parent.left,
-    y: Number: parent.top,
-    width: Number: parent.width,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    width: Distance: parent.width,
     height: sum(children.height)
 ) {
     \env accent_color = self.new_accent
@@ -59,33 +59,33 @@
     \env card_bg: Color, 
     \env text_color: Color, 
     \env accent_color: Color, 
-    x: Number: parent.left,
-    y: Number: parent.top,
-    width: Number: parent.width,
-    height: sum(children.height) + 50
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    width: Distance: parent.width,
+    height: sum(children.height) + 50px
 ) {
     // Firewall tombstones: stop ambient theme propagation to children
     \let card_bg;
     \let text_color;
     // Local let shadows env parameter, creating a firewall that stops accent propagation
     \let accent_color = #94a3b8;
-    \Rect(x: parent.left, y: parent.top, width: parent.width, height: 36, color: accent_color, radius: 8)
-    \Text(x: parent.left + 12, y: parent.top + 10, size: 13, weight: 600, color: #ffffff) {
+    \Rect(x: parent.left, y: parent.top, width: parent.width, height: 36px, color: accent_color, radius: 8px)
+    \Text(x: parent.left + 12px, y: parent.top + 10px, size: 13px, weight: 600, color: #ffffff) {
         Shield / Swallower Firewall: stopped env propagation below
     }
     \Children {
         x: parent.left,
-        y: parent.top + 50,
+        y: parent.top + 50px,
         width: parent.width
     }
 }
 
 // A leaf card component that automatically consumes ambient text_color, card_bg, and accent_color
 \Component AmbientCard(
-    x: Number: parent.left,
-    y: Number: parent.top,
-    width: Number: parent.width, 
-    height: Number: 90, 
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    width: Distance: parent.width, 
+    height: Distance: 90px, 
     \env card_bg: Color: #ffffff, 
     \env text_color: Color: #000000, 
     \env accent_color: Color: #2563eb
@@ -96,23 +96,23 @@
         width: parent.width,
         height: parent.height,
         color: parent.card_bg,
-        radius: 10,
-        border_width: 2,
+        radius: 10px,
+        border_width: 2px,
         border_color: parent.accent_color
     )
     \Text(
-        x: parent.left + 16,
-        y: parent.top + 20,
-        size: 16,
+        x: parent.left + 16px,
+        y: parent.top + 20px,
+        size: 16px,
         weight: 600,
         color: parent.text_color
     ) {
         Environmental Scoping Active
     }
     \Text(
-        x: parent.left + 16,
-        y: parent.top + 48,
-        size: 14,
+        x: parent.left + 16px,
+        y: parent.top + 48px,
+        size: 14px,
         color: parent.accent_color
     ) {
         Accent border color inherited via env propagation
@@ -121,10 +121,10 @@
 
 // A leaf card component that automatically consumes ambient text_color, card_bg, and accent_color
 \Component DirectCard(
-    x: Number: parent.left,
-    y: Number: parent.top,
-    width: Number: parent.width, 
-    height: Number: 90, 
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    width: Distance: parent.width, 
+    height: Distance: 90px, 
     card_bg: Color: #ff0000, 
     text_color: Color: #009900, 
     accent_color: Color: #009900
@@ -135,31 +135,31 @@
         width: parent.width,
         height: parent.height,
         color: parent.card_bg,
-        radius: 10,
-        border_width: 2,
+        radius: 10px,
+        border_width: 2px,
         border_color: parent.accent_color
     )
     \Text(
-        x: parent.left + 16,
-        y: parent.top + 20,
-        size: 16,
+        x: parent.left + 16px,
+        y: parent.top + 20px,
+        size: 16px,
         weight: 600,
         color: parent.text_color
     ) {
         No environmental scoping.
     }
     \Text(
-        x: parent.left + 16,
-        y: parent.top + 48,
-        size: 14,
+        x: parent.left + 16px,
+        y: parent.top + 48px,
+        size: 14px,
         color: parent.accent_color
     ) {
         Accent color not taken from environment. card_bg set from env.card_bg.
     }
 }
 
-\Flow(margin: 40, gap: 24) {
-    \Text(size: 28, weight: 700, color: #0f172a) {
+\Flow(margin: 40px, gap: 24px) {
+    \Text(size: 28px, weight: 700, color: #0f172a) {
         Environmental Scope Showcase
     }
 

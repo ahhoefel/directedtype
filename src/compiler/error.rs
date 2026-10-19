@@ -181,7 +181,7 @@ pub enum CompileError {
         span: Span,
     },
 
-    #[error("Disallowed port '{port}' on \\Window. Ambient spatial geometry and arbitrary custom ports cannot be set on \\Window; only viewer runtime control ports ('title', 'vscroll', 'hscroll') are supported")]
+    #[error("Disallowed port '{port}' on \\Window. Ambient spatial geometry and arbitrary custom ports cannot be set on \\Window; only viewer runtime control ports ('title', 'dpi', 'vscroll', 'hscroll') are supported")]
     DisallowedWindowPort {
         port: String,
         span: Span,

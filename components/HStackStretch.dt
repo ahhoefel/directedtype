@@ -4,11 +4,11 @@
 
 // 1. Explicit Fixed Width & Fixed Height HStackStretch
 \Component HStackStretch(
-    width: Number,
-    height: Number,
-    x: Number: parent.left,
-    y: Number: parent.top,
-    gap: Number: 0
+    width: Distance,
+    height: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    gap: Distance: 0
 ) {
     \alias right = x + width;
     \alias bottom = y + height;
@@ -22,10 +22,10 @@
 
 // 2. Intrinsic Width & Fixed Height HStackStretch
 \Component HStackStretch(
-    height: Number,
-    x: Number: parent.left,
-    y: Number: parent.top,
-    gap: Number: 0
+    height: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    gap: Distance: 0
 ) {
     \alias width = sum(children.width) + max(0, num_children - 1) * gap;
     \alias right = x + width;

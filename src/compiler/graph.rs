@@ -121,27 +121,32 @@ pub fn build_variable_graph_with_window(
     let window_span = Span::default();
     graph.add_variable(
         VarId::new(NodeId::WINDOW, "x"),
-        Expr::Literal(Literal::Number(0.0, window_span)),
+        Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, window_span)),
         window_span,
     );
     graph.add_variable(
         VarId::new(NodeId::WINDOW, "y"),
-        Expr::Literal(Literal::Number(0.0, window_span)),
+        Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, window_span)),
         window_span,
     );
     graph.add_variable(
         VarId::new(NodeId::WINDOW, "z"),
-        Expr::Literal(Literal::Number(0.0, window_span)),
+        Expr::Literal(Literal::Integer(0, window_span)),
         window_span,
     );
     graph.add_variable(
         VarId::new(NodeId::WINDOW, "width"),
-        Expr::Literal(Literal::Number(window_width, window_span)),
+        Expr::Literal(Literal::Distance(window_width, DistanceUnit::Px, window_span)),
         window_span,
     );
     graph.add_variable(
         VarId::new(NodeId::WINDOW, "height"),
-        Expr::Literal(Literal::Number(window_height, window_span)),
+        Expr::Literal(Literal::Distance(window_height, DistanceUnit::Px, window_span)),
+        window_span,
+    );
+    graph.add_variable(
+        VarId::new(NodeId::WINDOW, "dpi"),
+        Expr::Literal(Literal::Float(96.0, window_span)),
         window_span,
     );
     graph.add_variable(
@@ -151,22 +156,22 @@ pub fn build_variable_graph_with_window(
     );
     graph.add_variable(
         VarId::new(NodeId::WINDOW, "left"),
-        Expr::Literal(Literal::Number(0.0, window_span)),
+        Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, window_span)),
         window_span,
     );
     graph.add_variable(
         VarId::new(NodeId::WINDOW, "top"),
-        Expr::Literal(Literal::Number(0.0, window_span)),
+        Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, window_span)),
         window_span,
     );
     graph.add_variable(
         VarId::new(NodeId::WINDOW, "right"),
-        Expr::Literal(Literal::Number(window_width, window_span)),
+        Expr::Literal(Literal::Distance(window_width, DistanceUnit::Px, window_span)),
         window_span,
     );
     graph.add_variable(
         VarId::new(NodeId::WINDOW, "bottom"),
-        Expr::Literal(Literal::Number(window_height, window_span)),
+        Expr::Literal(Literal::Distance(window_height, DistanceUnit::Px, window_span)),
         window_span,
     );
 
@@ -188,13 +193,13 @@ pub fn build_variable_graph_with_window(
             if is_root {
                 ports
                     .entry("x".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
                 ports
                     .entry("y".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
                 ports
                     .entry("z".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                    .or_insert_with(|| Expr::Literal(Literal::Integer(0, node.span)));
                 ports
                     .entry("width".to_string())
                     .or_insert_with(|| {
@@ -222,19 +227,19 @@ pub fn build_variable_graph_with_window(
             } else {
                 ports
                     .entry("x".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
                 ports
                     .entry("y".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
                 ports
                     .entry("z".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                    .or_insert_with(|| Expr::Literal(Literal::Integer(0, node.span)));
                 ports
                     .entry("width".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
                 ports
                     .entry("height".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Number(0.0, node.span)));
+                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
             }
         }
 

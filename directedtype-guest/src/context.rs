@@ -37,6 +37,21 @@ impl<'a> Context<'a> {
         self.ports.get(name)
     }
 
+    /// Reads an input port as an integer.
+    pub fn get_port_integer(&self, name: &str) -> Option<i64> {
+        self.get_port(name).and_then(|v| v.as_i64())
+    }
+
+    /// Reads an input port as a floating-point number.
+    pub fn get_port_float(&self, name: &str) -> Option<f64> {
+        self.get_port(name).and_then(|v| v.as_f64())
+    }
+
+    /// Reads an input port as a distance in logical pixels.
+    pub fn get_port_distance(&self, name: &str) -> Option<f64> {
+        self.get_port(name).and_then(|v| v.as_distance())
+    }
+
     /// Reads an input port as a floating-point number.
     pub fn get_port_number(&self, name: &str) -> Option<f64> {
         self.get_port(name).and_then(|v| v.as_f64())
@@ -55,6 +70,21 @@ impl<'a> Context<'a> {
     /// Reads a state variable or property value.
     pub fn get_state(&self, name: &str) -> Option<&Value> {
         self.get_port(name)
+    }
+
+    /// Reads a state variable or property value as an integer.
+    pub fn get_state_integer(&self, name: &str) -> Option<i64> {
+        self.get_port_integer(name)
+    }
+
+    /// Reads a state variable or property value as a floating-point number.
+    pub fn get_state_float(&self, name: &str) -> Option<f64> {
+        self.get_port_float(name)
+    }
+
+    /// Reads a state variable or property value as a distance in logical pixels.
+    pub fn get_state_distance(&self, name: &str) -> Option<f64> {
+        self.get_port_distance(name)
     }
 
     /// Reads a state variable or property value as a floating-point number.

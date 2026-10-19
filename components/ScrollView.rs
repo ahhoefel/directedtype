@@ -20,10 +20,10 @@ impl ScrollView {
 #[component]
 impl ScrollView {
     pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
-        if let Some(sy) = ctx.get_state_number("scroll_y") {
+        if let Some(sy) = ctx.get_state_distance("scroll_y") {
             self.scroll_y = sy;
         }
-        if let Some(sx) = ctx.get_state_number("scroll_x") {
+        if let Some(sx) = ctx.get_state_distance("scroll_x") {
             self.scroll_x = sx;
         }
     }
@@ -47,7 +47,7 @@ impl ScrollView {
                         max_right = max_right.max(n.rect.x + n.rect.width);
                     }
                 }
-                let padding = ctx.get_port_number("padding").unwrap_or(0.0);
+                let padding = ctx.get_port_distance("padding").unwrap_or(0.0);
                 let content_h = (max_bottom + self.scroll_y + padding - container.rect.y).max(0.0);
                 let content_w = (max_right + self.scroll_x + padding - container.rect.x).max(0.0);
                 ((content_h - viewport_h).max(0.0), (content_w - viewport_w).max(0.0))

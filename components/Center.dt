@@ -4,10 +4,10 @@
 
 // 1. Explicit Spatial Bounds Center
 \Component Center(
-    width: Number,
-    height: Number,
-    x: Number,
-    y: Number
+    width: Distance,
+    height: Distance,
+    x: Distance,
+    y: Distance
 ) {
     \alias right = x + width;
     \alias bottom = y + height;
@@ -20,8 +20,8 @@
 
 // 2. Explicit Dimensions Center (inherits origin from parent container)
 \Component Center(
-    width: Number,
-    height: Number
+    width: Distance,
+    height: Distance
 ) {
     \alias x = parent.left;
     \alias y = parent.top;
@@ -36,8 +36,8 @@
 
 // 3. Fluid Dimensions Center (explicit origin, fills remaining parent space)
 \Component Center(
-    x: Number,
-    y: Number
+    x: Distance,
+    y: Distance
 ) {
     \let resolved_width = parent.width - (2 * (x - parent.left));
     \let resolved_height = parent.height - (2 * (y - parent.top));

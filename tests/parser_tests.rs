@@ -62,8 +62,8 @@ fn test_spec_shaded_box_component() {
                         _ => panic!("Expected call expr"),
                     }
                     match bin.right.as_ref() {
-                        Expr::Literal(Literal::Number(n, _)) => assert_eq!(*n, 32.0),
-                        _ => panic!("Expected literal number 32"),
+                        Expr::Literal(Literal::Integer(n, _)) => assert_eq!(*n, 32),
+                        _ => panic!("Expected literal integer 32"),
                     }
                 }
                 _ => panic!("Expected binary expression for width default"),
@@ -100,7 +100,7 @@ fn test_spec_shaded_box_component() {
 #[test]
 fn test_spec_flow_component() {
     let input = r#"
-    \Component Flow(gap: Number: 16) {
+    \Component Flow(gap: Distance: 16px) {
       \Children {
         x: parent.left,
         y: prev ? prev.bottom + gap : parent.top
@@ -120,11 +120,11 @@ fn test_spec_flow_component() {
             assert_eq!(param.name.as_str(), "gap");
             assert_eq!(
                 param.type_annotation.as_ref().map(|t| t.name.as_str()),
-                Some("Number")
+                Some("Distance")
             );
             match &param.default_edge {
-                Some(Expr::Literal(Literal::Number(n, _))) => assert_eq!(*n, 16.0),
-                _ => panic!("Expected literal 16 default edge"),
+                Some(Expr::Literal(Literal::Distance(n, DistanceUnit::Px, _))) => assert_eq!(*n, 16.0),
+                _ => panic!("Expected literal 16px default edge"),
             }
 
             assert_eq!(comp.body.len(), 1);
@@ -498,8 +498,8 @@ fn test_string_literals_in_ports() {
                 _ => panic!("Expected string literal for font"),
             }
             match &text_node.ports[1].expr {
-                Expr::Literal(Literal::Number(n, _)) => assert_eq!(*n, 18.0),
-                _ => panic!("Expected number literal for size"),
+                Expr::Literal(Literal::Integer(n, _)) => assert_eq!(*n, 18),
+                _ => panic!("Expected integer literal for size"),
             }
             match &text_node.ports[2].expr {
                 Expr::Literal(Literal::Color(c, _)) => assert_eq!(c, "#333333"),
@@ -547,7 +547,7 @@ fn test_parse_let_bindings() {
         Item::Let(l) => {
             assert_eq!(l.name.as_str(), "global_gap");
             match &l.value {
-                Some(LetValue::Expr(Expr::Literal(Literal::Number(n, _)))) => assert_eq!(*n, 24.0),
+                Some(LetValue::Expr(Expr::Literal(Literal::Integer(n, _)))) => assert_eq!(*n, 24),
                 _ => panic!("Expected number literal for global_gap"),
             }
         }
@@ -1040,8 +1040,8 @@ fn test_parse_state_bindings_in_component_and_toplevel() {
             assert_eq!(s.name.as_str(), "global_count");
             assert_eq!(s.type_annotation.as_ref().unwrap().name.as_str(), "Number");
             match &s.default {
-                Some(Expr::Literal(Literal::Number(n, _))) => assert_eq!(*n, 42.0),
-                _ => panic!("Expected Expr::Literal number for global_count"),
+                Some(Expr::Literal(Literal::Integer(n, _))) => assert_eq!(*n, 42),
+                _ => panic!("Expected Expr::Literal integer for global_count"),
             }
         }
         _ => panic!("Expected Item::State"),

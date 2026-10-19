@@ -46,46 +46,35 @@ pub trait FromPayload: Sized {
 
 impl FromPayload for f64 {
     fn from_payload(payload: Option<&Value>) -> Option<Self> {
-        match payload {
-            Some(Value::Number(n)) => Some(*n),
-            _ => None,
-        }
+        payload.and_then(|v| v.as_f64())
     }
 }
 
 impl FromPayload for f32 {
     fn from_payload(payload: Option<&Value>) -> Option<Self> {
-        match payload {
-            Some(Value::Number(n)) => Some(*n as f32),
-            _ => None,
-        }
+        payload.and_then(|v| v.as_f64()).map(|n| n as f32)
     }
 }
 
 impl FromPayload for i32 {
     fn from_payload(payload: Option<&Value>) -> Option<Self> {
-        match payload {
-            Some(Value::Number(n)) => Some(*n as i32),
-            _ => None,
-        }
+        payload
+            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|n| n as i64)))
+            .map(|i| i as i32)
     }
 }
 
 impl FromPayload for i64 {
     fn from_payload(payload: Option<&Value>) -> Option<Self> {
-        match payload {
-            Some(Value::Number(n)) => Some(*n as i64),
-            _ => None,
-        }
+        payload.and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|n| n as i64)))
     }
 }
 
 impl FromPayload for usize {
     fn from_payload(payload: Option<&Value>) -> Option<Self> {
-        match payload {
-            Some(Value::Number(n)) => Some(*n as usize),
-            _ => None,
-        }
+        payload
+            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|n| n as i64)))
+            .map(|i| i as usize)
     }
 }
 

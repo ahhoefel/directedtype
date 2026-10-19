@@ -1,14 +1,14 @@
 /// Reusable DTML component definition for the translucent bounding box highlight.
 pub const INSPECT_HIGHLIGHT_DTML: &str = r#"
 \Component InspectHighlight(
-    x: Number: 0,
-    y: Number: 0,
-    width: Number: 100,
-    height: Number: 100,
+    x: Distance: 0,
+    y: Distance: 0,
+    width: Distance: 100px,
+    height: Distance: 100px,
     fill_color: Color: #38bdf820,
     border_color: Color: #38bdf8,
-    border_width: Number: 1.5,
-    z: Number: 9990
+    border_width: Distance: 1.5px,
+    z: Integer: 9990
 ) {
     \Rect(
         x: x,
@@ -26,29 +26,29 @@ pub const INSPECT_HIGHLIGHT_DTML: &str = r#"
 /// Reusable DTML component definition for the floating coordinate/tag badge.
 pub const INSPECT_BADGE_DTML: &str = r#"
 \Component InspectBadge(
-    target_x: Number: 0,
-    target_y: Number: 0,
-    target_w: Number: 100,
-    target_h: Number: 50,
+    target_x: Distance: 0,
+    target_y: Distance: 0,
+    target_w: Distance: 100px,
+    target_h: Distance: 50px,
     label: String: "",
     bg_color: Color: #0f172a,
     text_color: Color: #38bdf8,
-    z: Number: 9999
+    z: Integer: 9999
 ) {
     \Rect(
-        x: max(target_x, 4),
-        y: target_y >= 26 ? target_y - 24 : target_y + target_h + 4,
-        width: 160,
-        height: 20,
-        radius: 4,
+        x: max(target_x, 4px),
+        y: target_y >= 26px ? target_y - 24px : target_y + target_h + 4px,
+        width: 160px,
+        height: 20px,
+        radius: 4px,
         color: bg_color,
         z: z
     ) {
         \Text(
-            x: parent.x + 8,
-            y: parent.y + 3,
+            x: parent.x + 8px,
+            y: parent.y + 3px,
             color: text_color,
-            font_size: 11
+            font_size: 11px
         ) { label }
     }
 }
@@ -57,12 +57,12 @@ pub const INSPECT_BADGE_DTML: &str = r#"
 /// Reusable DTML component definition for visual clip context bounds.
 pub const INSPECT_CLIP_GUIDE_DTML: &str = r#"
 \Component InspectClipGuide(
-    x: Number: 0,
-    y: Number: 0,
-    width: Number: 100,
-    height: Number: 100,
+    x: Distance: 0,
+    y: Distance: 0,
+    width: Distance: 100px,
+    height: Distance: 100px,
     stroke_color: Color: #a855f7,
-    z: Number: 9980
+    z: Integer: 9980
 ) {
     \Rect(
         x: x,
@@ -71,7 +71,7 @@ pub const INSPECT_CLIP_GUIDE_DTML: &str = r#"
         height: height,
         color: transparent,
         border_color: stroke_color,
-        border_width: 1,
+        border_width: 1px,
         z: z
     )
 }
@@ -80,17 +80,17 @@ pub const INSPECT_CLIP_GUIDE_DTML: &str = r#"
 /// Composite DTML component combining highlight, badge, and clip guides.
 pub const INSPECT_OVERLAY_DTML: &str = r#"
 \Component InspectOverlay(
-    target_x: Number,
-    target_y: Number,
-    target_w: Number,
-    target_h: Number,
+    target_x: Distance,
+    target_y: Distance,
+    target_w: Distance,
+    target_h: Distance,
     label: String: "",
     is_selected: Bool: false,
     has_clip: Bool: false,
-    clip_x: Number: 0,
-    clip_y: Number: 0,
-    clip_w: Number: 0,
-    clip_h: Number: 0
+    clip_x: Distance: 0,
+    clip_y: Distance: 0,
+    clip_w: Distance: 0,
+    clip_h: Distance: 0
 ) {
     \InspectHighlight(
         x: target_x,
@@ -99,7 +99,7 @@ pub const INSPECT_OVERLAY_DTML: &str = r#"
         height: target_h,
         fill_color: is_selected ? #f59e0b28 : #38bdf820,
         border_color: is_selected ? #f59e0b : #38bdf8,
-        border_width: is_selected ? 2.0 : 1.5
+        border_width: is_selected ? 2.0px : 1.5px
     )
     \InspectBadge(
         target_x: target_x,

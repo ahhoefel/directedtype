@@ -15,10 +15,10 @@ fn test_window_declaration_sets_ports_and_evaluates() {
     \Window(vscroll: false, hscroll: false, title: "Custom Title")
 
     \Rect(
-        x: window.vscroll ? 100 : 20,
-        y: 10,
-        width: 100,
-        height: 50,
+        x: window.vscroll ? 100px : 20px,
+        y: 10px,
+        width: 100px,
+        height: 50px,
         color: #ff0000
     )
     "#;
@@ -54,14 +54,14 @@ fn test_window_order_independence() {
     let input1 = r#"
     \Window(vscroll: false, hscroll: false, title: "Order Test")
 
-    \let w = 250;
-    \Rect(x: window.vscroll ? 50 : 20, y: 0, width: w, height: 100, color: #ff0000)
+    \let w = 250px;
+    \Rect(x: window.vscroll ? 50px : 20px, y: 0, width: w, height: 100px, color: #ff0000)
     "#;
 
     // Window declared at the bottom
     let input2 = r#"
-    \let w = 250;
-    \Rect(x: window.vscroll ? 50 : 20, y: 0, width: w, height: 100, color: #ff0000)
+    \let w = 250px;
+    \Rect(x: window.vscroll ? 50px : 20px, y: 0, width: w, height: 100px, color: #ff0000)
 
     \Window(vscroll: false, hscroll: false, title: "Order Test")
     "#;
@@ -254,7 +254,7 @@ fn test_window_vscroll_disables_scrolling_in_viewer() {
     let input = r#"
     \Window(vscroll: false)
 
-    \Rect(x: 0, y: 0, width: 400, height: 2000, color: #112233)
+    \Rect(x: 0, y: 0, width: 400px, height: 2000px, color: #112233)
     "#;
     let doc = parse(input).expect("parse ok");
     let registry = ComponentRegistry::standard();
@@ -297,7 +297,7 @@ fn test_window_vscroll_true_allows_scrolling_in_viewer() {
     let input = r#"
     \Window(vscroll: true)
 
-    \Rect(x: 0, y: 0, width: 400, height: 2000, color: #112233)
+    \Rect(x: 0, y: 0, width: 400px, height: 2000px, color: #112233)
     "#;
     let doc = parse(input).expect("parse ok");
     let registry = ComponentRegistry::standard();
@@ -337,7 +337,7 @@ fn test_window_hscroll_disables_scrolling_in_viewer() {
     let input = r#"
     \Window(hscroll: false)
 
-    \Rect(x: 0, y: 0, width: 2500, height: 400, color: #112233)
+    \Rect(x: 0, y: 0, width: 2500px, height: 400px, color: #112233)
     "#;
     let doc = parse(input).expect("parse ok");
     let registry = ComponentRegistry::standard();
@@ -381,7 +381,7 @@ fn test_window_hscroll_true_allows_scrolling_in_viewer() {
     let input = r#"
     \Window(hscroll: true)
 
-    \Rect(x: 0, y: 0, width: 2000, height: 400, color: #112233)
+    \Rect(x: 0, y: 0, width: 2000px, height: 400px, color: #112233)
     "#;
     let doc = parse(input).expect("parse ok");
     let registry = ComponentRegistry::standard();
@@ -436,7 +436,7 @@ fn test_window_both_vscroll_and_hscroll_supported() {
     let input = r#"
     \Window(vscroll: true, hscroll: true)
 
-    \Rect(x: 0, y: 0, width: 2000, height: 3000, color: #112233)
+    \Rect(x: 0, y: 0, width: 2000px, height: 3000px, color: #112233)
     "#;
     let doc = parse(input).expect("parse ok");
     let registry = ComponentRegistry::standard();

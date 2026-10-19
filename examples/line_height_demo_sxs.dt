@@ -18,19 +18,19 @@
     }
 }
 
-\Component Measurement(x, y1, y2, arm: 5, color: #ffffff) {
-    \env font = \Font(family: "Arial", size: 10);
-    \Rect(x: x, y: y1, width: 1, height: y2 - y1, color: #ef4444)
-    \Rect(x: x-arm, y: y1, width: 2*arm, height: 1, color: #ef4444)
-    \Rect(x: x-arm, y: y2, width: 2*arm, height: 1, color: #ef4444)
-    \Text(x: x + 2, y: (y1 + y2)/2, color: color, text: to_fixed(y2 - y1, 2))
+\Component Measurement(x, y1, y2, arm: 5px, color: #ffffff) {
+    \env font = \Font(family: "Arial", size: 10px);
+    \Rect(x: x, y: y1, width: 1px, height: y2 - y1, color: #ef4444)
+    \Rect(x: x-arm, y: y1, width: 2*arm, height: 1px, color: #ef4444)
+    \Rect(x: x-arm, y: y2, width: 2*arm, height: 1px, color: #ef4444)
+    \Text(x: x + 2px, y: (y1 + y2)/2, color: color, text: to_fixed(distance_to_float(y2 - y1, px), 2))
 }
 
 \Center{
-    \VStack(shrink: true, gap: 50) {
-        \Box(width: 1000, height: 160, font: \Font(family: "Arial", size: 120, weight: 700))
-        \Box(width: 1000, height: 160, font: \Font(family: "Times New Roman", size: 120, weight: 700))
-        \Box(width: 1000, height: 160, font: \Font(family: "Georgia", size: 120, weight: 700))
-        \Box(width: 1000, height: 160, font: \Font(family: "Courier New", size: 120, weight: 700))
+    \VStack(shrink: true, gap: 50px) {
+        \Box(width: 1000px, height: 160px, font: \Font(family: "Arial", size: 120px, weight: 700))
+        \Box(width: 1000px, height: 160px, font: \Font(family: "Times New Roman", size: 120px, weight: 700))
+        \Box(width: 1000px, height: 160px, font: \Font(family: "Georgia", size: 120px, weight: 700))
+        \Box(width: 1000px, height: 160px, font: \Font(family: "Courier New", size: 120px, weight: 700))
     }
 }
