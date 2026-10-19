@@ -3,4 +3,5 @@
 \Enum TextEnd {
     Baseline,
     Descender,
+    GapBottom,
 }

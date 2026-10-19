@@ -434,19 +434,20 @@ fn test_end_to_end_flow_math_evaluation() {
     assert_eq!(flow.rect.y, 0.0);
 
     // Node 1: Header
+    let expected_header_h = directedtype::compiler::text::measure_font_metrics(32.0, 400.0, None).cap_height;
     let header = &layout.nodes[1];
     assert_eq!(header.name, "Header");
     assert_eq!(header.rect.x, 0.0);
     assert_eq!(header.rect.y, 0.0);
-    assert_eq!(header.rect.height, 22.72);
+    assert_eq!(header.rect.height, expected_header_h);
     assert_eq!(header.text_content.as_deref(), Some("Welcome to DAG-UI"));
 
     // Node 2: Paragraph
-    // Paragraph y = Header.bottom + gap = (0.0 + 22.72) + 24.0 = 46.72!
+    // Paragraph y = Header.bottom + gap
     let para = &layout.nodes[2];
     assert_eq!(para.name, "Paragraph");
     assert_eq!(para.rect.x, 0.0);
-    assert_eq!(para.rect.y, 46.72);
+    assert_eq!(para.rect.y, expected_header_h + 24.0);
     assert_eq!(
         para.text_content.as_deref(),
         Some("This layout is mathematically provable.")
@@ -2094,7 +2095,7 @@ fn test_font_primitive_metrics_and_sharing() {
 
     // Evaluate layout
     let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate layout");
-    let expected_cap = 20.0 * 0.71;
+    let expected_cap = directedtype::compiler::text::measure_font_metrics(20.0, 700.0, None).cap_height;
     let expected_rect_h = expected_cap + 10.0;
 
     let r1_h = layout.get_value(expanded.roots[3], "height").and_then(|v| v.as_f64()).unwrap();
@@ -2123,7 +2124,7 @@ fn test_text_ambient_font_inheritance() {
     assert_eq!(label_node.font, Some(font_id), "Label should inherit ambient font node");
 
     let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate layout");
-    let expected_cap = 24.0 * 0.71;
+    let expected_cap = directedtype::compiler::text::measure_font_metrics(24.0, 600.0, None).cap_height;
     let expected_box_h = expected_cap + 16.0;
 
     let box_h = layout.get_value(box_id, "height").and_then(|v| v.as_f64()).unwrap();
@@ -3184,8 +3185,9 @@ fn test_text_baseline_and_text_font_baseline() {
     assert_eq!(rects[0].rect.y, rects[1].rect.y);
     assert!(rects[0].rect.y > 50.0);
     // Cap height guide is above the baseline
+    let expected_cap = directedtype::compiler::text::measure_font_metrics(32.0, 400.0, Some("Arial")).cap_height;
     assert!(rects[2].rect.y < rects[0].rect.y);
-    assert_eq!(rects[2].rect.y, rects[0].rect.y - (32.0 * 0.71));
+    assert!((rects[2].rect.y - (rects[0].rect.y - expected_cap)).abs() < 1e-4);
 }
 
 #[test]
@@ -3677,6 +3679,44 @@ fn test_em_units_and_distance_to_float() {
     assert_eq!(rect.rect.width, 38.0);
     // 38px / 20px = 1.9em -> 1.9 * 10px = 19px
     assert!((rect.rect.height - 19.0).abs() < 1e-6);
+}
+
+#[test]
+fn test_font_em_top_line_gap_and_gap_bottom_with_text_start_end() {
+    let input = r#"
+    \env font = \Font(family: "Arial", size: 120px, weight: 700);
+
+    \let t_em = \Text(x: 0, y: 0, start_at: TextStart.EmTop, ends_at: TextEnd.Descender) {
+        Typography
+    };
+    \let t_gap = \Text(x: 0, y: 0, start_at: TextStart.EmTop, ends_at: TextEnd.GapBottom) {
+        Typography
+    };
+    \let r = \Rect(
+        x: t_em.em_top,
+        y: t_em.line_gap,
+        width: t_em.gap_bottom,
+        height: t_em.em_top + t_em.descent,
+        color: #000
+    );
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("evaluate ok");
+
+    let t_em = &layout.nodes[1];
+    let t_gap = &layout.nodes[2];
+    let r = &layout.nodes[3];
+
+    // EmTop to Descender has height exactly 1em (120px)
+    assert!((t_em.rect.height - 120.0).abs() < 1e-4);
+    assert!((r.rect.height - 120.0).abs() < 1e-4);
+
+    // EmTop to GapBottom has height 1em + line_gap
+    assert!((t_gap.rect.height - (120.0 + r.rect.y)).abs() < 1e-4);
+    // gap_bottom == descent + line_gap
+    let descent = 120.0 - r.rect.x;
+    assert!((r.rect.width - (descent + r.rect.y)).abs() < 1e-4);
 }
 
 

@@ -10,6 +10,8 @@
     \Center {
         \let t = \Text(
             color: #f8fafc,
+            start_at: TextStart.EmTop,
+            ends_at: TextEnd.GapBottom,
         ) {
             Typography
         }
@@ -24,15 +26,30 @@
     \let cap_height_y = baseline_y - t.font.cap_height;
     \let x_height_y = baseline_y - t.font.x_height;
     \let descender_y = baseline_y + t.font.descent;
+    \let gap_y = baseline_y + t.font.gap_bottom;
+
+    // 1em square at the start of the text (from baseline_y - t.font.em_top down to descender_y)
+    \Rect(
+        x: t.left,
+        y: baseline_y - t.font.em_top,
+        width: 1em,
+        height: 1em,
+        color: #eab30822,
+        border_color: #eab308,
+        border_width: 1px
+    )
 
     \Rect(x: guide_x, y: baseline_y, width: guide_width, height: 1px, color: #ef4444)
     \Rect(x: guide_x, y: cap_height_y, width: guide_width, height: 1px, color: #22c55e)
     \Rect(x: guide_x, y: x_height_y, width: guide_width, height: 1px, color: #f97316)
     \Rect(x: guide_x, y: descender_y, width: guide_width, height: 1px, color: #a855f7)
+    \Rect(x: guide_x, y: gap_y, width: guide_width, height: 1px, color: #0b52c3)
+
 
     \Measurement(x: guide_x - 10px, y1: t.top, y2: t.bottom)
     \Measurement(x: guide_x + guide_width + 10px, y1: t.y, y2: baseline_y)
     \Measurement(x: guide_x + guide_width + 30px, y1: cap_height_y, y2: descender_y)
+    \Measurement(x: guide_x + guide_width + 50px, y1: baseline_y, y2: gap_y)
     \Measurement(x: guide_x + guide_width/2, y1: self.y, y2: t.y)
     \Measurement(x: guide_x + guide_width/2, y1: t.bottom, y2: self.bottom)
     \Measurement(x: self.right + 10px, y1: self.top, y2: self.bottom, color: #000000)
@@ -48,10 +65,12 @@
 }
 
 \Center{
-    \VStack(shrink: true, gap: 50px) {
-        \Box(width: 1000px, height: 160px, font: \Font(family: "Arial", size: 120px, line_height: 180px, weight: 700))
-        \Box(width: 1000px, height: 160px, font: \Font(family: "Times New Roman", size: 120px, line_height: 180px, weight: 700))
-        \Box(width: 1000px, height: 160px, font: \Font(family: "Georgia", size: 120px, line_height: 180px, weight: 700))
-        \Box(width: 1000px, height: 160px, font: \Font(family: "Courier New", size: 120px, line_height: 180px, weight: 700))
+    \PadOut(padding_y: 30px) {
+        \VStack(shrink: true, gap: 50px) {
+            \Box(width: 1000px, height: 200px, font: \Font(family: "Arial", size: 120px, line_height: 180px, weight: 700))
+            \Box(width: 1000px, height: 200px, font: \Font(family: "Times New Roman", size: 120px, line_height: 180px, weight: 700))
+            \Box(width: 1000px, height: 200px, font: \Font(family: "Georgia", size: 120px, line_height: 180px, weight: 700))
+            \Box(width: 1000px, height: 200px, font: \Font(family: "Courier New", size: 120px, line_height: 180px, weight: 700))
+        }
     }
 }

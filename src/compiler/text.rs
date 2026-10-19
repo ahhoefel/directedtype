@@ -40,14 +40,17 @@ pub fn text_y_offset(
     font_family: Option<&str>,
     start_at: Option<&str>,
 ) -> f64 {
+    let m = measure_font_metrics(font_size, font_weight, font_family);
     if let Some(s) = start_at {
         if s.eq_ignore_ascii_case("ascender") {
-            return 0.0;
+            return -(m.baseline - m.ascent);
+        }
+        if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") {
+            return -(m.baseline - m.em_top);
         }
     }
     // Default to Capital
-    let m = measure_font_metrics(font_size, font_weight, font_family);
-    -(m.ascent - m.cap_height)
+    -(m.baseline - m.cap_height)
 }
 
 /// Measures the vertical distance from a Text node's top edge (at `start_at`) down to the first baseline.
@@ -60,6 +63,7 @@ pub fn text_baseline_offset(
     let m = measure_font_metrics(font_size, font_weight, font_family);
     match start_at {
         Some(s) if s.eq_ignore_ascii_case("ascender") => m.ascent,
+        Some(s) if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") => m.em_top,
         Some(s) if s.eq_ignore_ascii_case("capital") => m.cap_height,
         _ => m.cap_height,
     }
@@ -122,15 +126,12 @@ pub fn measure_text_bounds(
                 .map(|l| l.metrics().baseline as f64)
                 .unwrap_or(m.baseline);
 
-            let extra_top_leading = if line_height.is_some() {
-                (first_baseline - m.baseline).max(0.0)
-            } else {
-                0.0
-            };
-
             let top_coord = match start_at {
                 Some(s) if s.eq_ignore_ascii_case("ascender") => {
-                    extra_top_leading
+                    first_baseline - m.ascent
+                }
+                Some(s) if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") => {
+                    first_baseline - m.em_top
                 }
                 Some(s) if s.eq_ignore_ascii_case("capital") => {
                     first_baseline - m.cap_height
@@ -147,8 +148,16 @@ pub fn measure_text_bounds(
             let bottom_coord = match ends_at {
                 Some(s) if s.eq_ignore_ascii_case("descender") => {
                     if let Some(last_line) = last_line {
-                        let m = last_line.metrics();
-                        (m.baseline + m.descent) as f64
+                        let lm = last_line.metrics();
+                        lm.baseline as f64 + m.descent
+                    } else {
+                        layout.height() as f64
+                    }
+                }
+                Some(s) if s.eq_ignore_ascii_case("gapbottom") || s.eq_ignore_ascii_case("gap_bottom") => {
+                    if let Some(last_line) = last_line {
+                        let lm = last_line.metrics();
+                        lm.baseline as f64 + m.gap_bottom
                     } else {
                         layout.height() as f64
                     }
@@ -158,8 +167,8 @@ pub fn measure_text_bounds(
                 }
                 Some(s) if s.eq_ignore_ascii_case("baseline") => {
                     if let Some(last_line) = last_line {
-                        let m = last_line.metrics();
-                        m.baseline as f64
+                        let lm = last_line.metrics();
+                        lm.baseline as f64
                     } else {
                         layout.height() as f64
                     }
@@ -167,8 +176,8 @@ pub fn measure_text_bounds(
                 _ => {
                     // Default to BASELINE when unspecified
                     if let Some(last_line) = last_line {
-                        let m = last_line.metrics();
-                        m.baseline as f64
+                        let lm = last_line.metrics();
+                        lm.baseline as f64
                     } else {
                         layout.height() as f64
                     }
@@ -191,6 +200,9 @@ pub struct FontMetrics {
     pub x_height: f64,
     pub ascent: f64,
     pub descent: f64,
+    pub em_top: f64,
+    pub line_gap: f64,
+    pub gap_bottom: f64,
     pub line_height: f64,
     pub baseline: f64,
 }
@@ -201,6 +213,10 @@ pub fn measure_font_metrics(
     font_weight: f64,
     font_family: Option<&str>,
 ) -> FontMetrics {
+    use skrifa::instance::{LocationRef, Size};
+    use skrifa::raw::TableProvider;
+    use skrifa::MetadataProvider;
+
     let size = if font_size > 0.0 { font_size as f32 } else { 16.0 };
     let weight = if font_weight > 0.0 { font_weight as f32 } else { 400.0 };
 
@@ -224,24 +240,112 @@ pub fn measure_font_metrics(
             let mut layout = builder.build(sample);
             layout.break_all_lines(None);
 
-            let (ascent, descent, leading, baseline) = if let Some(line) = layout.lines().next() {
-                let m = line.metrics();
-                (m.ascent as f64, m.descent as f64, m.leading as f64, m.baseline as f64)
-            } else {
-                (size as f64 * 0.8, size as f64 * 0.25, 0.0, size as f64 * 0.8)
-            };
+            let mut ascent = size as f64 * 0.8;
+            let mut descent = size as f64 * 0.25;
+            let mut line_gap = 0.0;
+            let mut baseline = size as f64 * 0.8;
+            let mut cap_height = None;
+            let mut x_height = None;
 
-            let cap_height = size as f64 * 0.71;
-            let x_height = size as f64 * 0.52;
-            let line_height = ascent + descent + leading;
+            if let Some(line) = layout.lines().next() {
+                let m = line.metrics();
+                ascent = m.ascent as f64;
+                descent = m.descent as f64;
+                line_gap = m.leading as f64;
+                baseline = m.baseline as f64;
+
+                for item in line.items() {
+                    if let parley::layout::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                        let font = glyph_run.run().font();
+                        if let Ok(font_ref) =
+                            skrifa::FontRef::from_index(font.data.as_ref(), font.index)
+                        {
+                            let skrifa_size = Size::new(size);
+                            let loc = LocationRef::default();
+                            let metrics = font_ref.metrics(skrifa_size, loc);
+                            let charmap = font_ref.charmap();
+                            let glyph_metrics = font_ref.glyph_metrics(skrifa_size, loc);
+
+                            cap_height = metrics
+                                .cap_height
+                                .filter(|&v| v > 0.0)
+                                .or_else(|| {
+                                    charmap
+                                        .map('H')
+                                        .and_then(|gid| glyph_metrics.bounds(gid))
+                                        .map(|b| b.y_max)
+                                })
+                                .map(|v| v as f64);
+
+                            x_height = metrics
+                                .x_height
+                                .filter(|&v| v > 0.0)
+                                .or_else(|| {
+                                    charmap
+                                        .map('x')
+                                        .and_then(|gid| glyph_metrics.bounds(gid))
+                                        .map(|b| b.y_max)
+                                })
+                                .map(|v| v as f64);
+
+                            let upem = metrics.units_per_em as f64;
+                            if upem > 0.0 {
+                                let scale = (size as f64) / upem;
+                                if let Ok(os2) = font_ref.os2() {
+                                    let typo_asc = os2.s_typo_ascender() as f64 * scale;
+                                    let typo_desc = -(os2.s_typo_descender() as f64) * scale;
+                                    let typo_gap = (os2.s_typo_line_gap() as f64 * scale).max(0.0);
+                                    if typo_asc > 0.0 {
+                                        ascent = typo_asc;
+                                    }
+                                    if typo_desc > 0.0 {
+                                        descent = typo_desc;
+                                    }
+                                    line_gap = typo_gap;
+                                } else {
+                                    if let Some(h_top) = charmap
+                                        .map('h')
+                                        .and_then(|gid| glyph_metrics.bounds(gid))
+                                        .map(|b| b.y_max as f64)
+                                    {
+                                        if h_top > 0.0 {
+                                            ascent = h_top;
+                                        }
+                                    }
+                                    if let Some(p_bot) = charmap
+                                        .map('p')
+                                        .and_then(|gid| glyph_metrics.bounds(gid))
+                                        .map(|b| -(b.y_min as f64))
+                                    {
+                                        if p_bot > 0.0 {
+                                            descent = p_bot;
+                                        }
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            let size_f64 = size as f64;
+            let cap_height = cap_height.unwrap_or(size_f64 * 0.71);
+            let x_height = x_height.unwrap_or(size_f64 * 0.52);
+            let em_top = (size_f64 - descent).max(0.0);
+            let gap_bottom = descent + line_gap;
+            let line_height = em_top + gap_bottom;
 
             FontMetrics {
-                size: size as f64,
+                size: size_f64,
                 weight: weight as f64,
                 cap_height,
                 x_height,
                 ascent,
                 descent,
+                em_top,
+                line_gap,
+                gap_bottom,
                 line_height,
                 baseline,
             }
@@ -458,5 +562,31 @@ pub enum CursorKind {
     Default,
     Pointer,
     Text,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_real_per_font_metrics() {
+        let arial = measure_font_metrics(120.0, 700.0, Some("Arial"));
+        let times = measure_font_metrics(120.0, 700.0, Some("Times New Roman"));
+        let georgia = measure_font_metrics(120.0, 700.0, Some("Georgia"));
+        let courier = measure_font_metrics(120.0, 700.0, Some("Courier New"));
+
+        // Each font should report its own distinct cap_height and x_height from OpenType tables
+        assert!((arial.cap_height - times.cap_height).abs() > 1.0);
+        assert!((georgia.cap_height - courier.cap_height).abs() > 1.0);
+        assert!((arial.x_height - times.x_height).abs() > 1.0);
+
+        // Typographic ascent + descent fits within the 1em (120px) body square with shoulder clearance
+        for m in [arial, times, georgia, courier] {
+            assert!(m.cap_height > m.x_height);
+            assert!(m.ascent >= m.cap_height);
+            assert!(m.descent > 0.0);
+            assert!(m.ascent + m.descent <= m.size);
+        }
+    }
 }
 

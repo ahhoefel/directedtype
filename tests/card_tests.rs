@@ -31,14 +31,15 @@ fn test_card_with_direct_raw_text() {
     assert_eq!(text_node.text_content.as_deref(), Some("Hello Direct Text!"));
     assert_eq!(text_node.rect.x, 40.0); // 20 + 20
     assert_eq!(text_node.rect.y, 50.0); // 30 + 20
-    assert_eq!(text_node.rect.height, 11.36);
+    let expected_cap = directedtype::compiler::text::measure_font_metrics(16.0, 400.0, None).cap_height;
+    assert_eq!(text_node.rect.height, expected_cap);
 
-    // Rect should wrap the text with padding_y on both sides: 20 + 11.36 + 20 = 51.36
+    // Rect should wrap the text with padding_y on both sides: 20 + cap_height + 20
     let rect = compiled.layout.nodes.iter().find(|n| n.name == "Rect").expect("rect found");
     assert_eq!(rect.rect.x, 20.0);
     assert_eq!(rect.rect.y, 30.0);
     assert_eq!(rect.rect.width, 250.0);
-    assert_eq!(rect.rect.height, 51.36);
+    assert_eq!(rect.rect.height, 40.0 + expected_cap);
 }
 
 #[test]
@@ -72,10 +73,11 @@ fn test_card_multi_child_vertical_flow_gap() {
     // Second line should start after first line's bottom + gap
     assert_eq!(text_nodes[1].rect.y, text_nodes[0].rect.y + text_nodes[0].rect.height + 10.0);
 
-    // Card should wrap both lines: 20 + 11.36 + 10 + 11.36 + 20 = 72.72
+    // Card should wrap both lines: 20 + cap_height + 10 + cap_height + 20
+    let expected_cap = directedtype::compiler::text::measure_font_metrics(16.0, 400.0, None).cap_height;
     let card_node = compiled.layout.nodes.iter().find(|n| n.name == "Card").expect("card found");
     let rect = compiled.layout.nodes.iter().find(|n| n.name == "Rect" && n.parent == Some(card_node.id)).expect("rect found");
-    assert_eq!(rect.rect.height, 72.72);
+    assert_eq!(rect.rect.height, 50.0 + 2.0 * expected_cap);
 }
 
 #[test]

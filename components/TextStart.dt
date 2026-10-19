@@ -2,5 +2,6 @@
 // Typographic vertical start landmarks for Text components.
 \Enum TextStart {
     Capital,
-    Ascender
+    Ascender,
+    EmTop
 }

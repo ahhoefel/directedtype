@@ -766,6 +766,15 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let m = crate::compiler::text::measure_font_metrics(size, weight, family);
                     Ok(Value::Distance(m.ascent))
                 }
+                "font_line_gap" => {
+                    let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
+                    let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
+                    let family = get_family_from_val(evaluated_args.get(2), env);
+                    validate_font_family(family, c.span)?;
+
+                    let m = crate::compiler::text::measure_font_metrics(size, weight, family);
+                    Ok(Value::Distance(m.line_gap))
+                }
                 "font_line_height" => {
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);
                     let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);

@@ -90,6 +90,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         variants: vec![
             Ident::new("Baseline", doc.span),
             Ident::new("Descender", doc.span),
+            Ident::new("GapBottom", doc.span),
         ],
         span: doc.span,
     });
@@ -98,6 +99,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         variants: vec![
             Ident::new("Capital", doc.span),
             Ident::new("Ascender", doc.span),
+            Ident::new("EmTop", doc.span),
         ],
         span: doc.span,
     });
@@ -2440,6 +2442,9 @@ fn expand_primitive_element(
             "x_height".to_string(),
             "descent".to_string(),
             "ascent".to_string(),
+            "em_top".to_string(),
+            "line_gap".to_string(),
+            "gap_bottom".to_string(),
         ]
     } else {
         vec![
@@ -3157,7 +3162,7 @@ fn expand_primitive_element(
             span: elem.span,
         });
 
-        // Add typographic metric ports: cap_height, x_height, descent, ascent, line_height
+        // Add typographic metric ports: cap_height, x_height, descent, ascent, em_top, line_gap, gap_bottom, line_height
         ports.entry("cap_height".to_string()).or_insert_with(|| {
             Expr::Call(CallExpr {
                 callee: Ident::new("font_cap_height", elem.span),
@@ -3183,6 +3188,39 @@ fn expand_primitive_element(
             Expr::Call(CallExpr {
                 callee: Ident::new("font_ascent", elem.span),
                 args: vec![size_ref.clone(), weight_ref.clone(), family_ref.clone()],
+                span: elem.span,
+            })
+        });
+        let descent_ref = Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("descent", elem.span),
+            span: elem.span,
+        });
+        ports.entry("em_top".to_string()).or_insert_with(|| {
+            Expr::Binary(BinaryExpr {
+                op: BinaryOp::Sub,
+                left: Box::new(size_ref.clone()),
+                right: Box::new(descent_ref.clone()),
+                span: elem.span,
+            })
+        });
+        ports.entry("line_gap".to_string()).or_insert_with(|| {
+            Expr::Call(CallExpr {
+                callee: Ident::new("font_line_gap", elem.span),
+                args: vec![size_ref.clone(), weight_ref.clone(), family_ref.clone()],
+                span: elem.span,
+            })
+        });
+        let line_gap_ref = Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("line_gap", elem.span),
+            span: elem.span,
+        });
+        ports.entry("gap_bottom".to_string()).or_insert_with(|| {
+            Expr::Binary(BinaryExpr {
+                op: BinaryOp::Add,
+                left: Box::new(descent_ref),
+                right: Box::new(line_gap_ref),
                 span: elem.span,
             })
         });
@@ -3968,6 +4006,9 @@ fn infer_expr_literal_for_typecheck<'a>(
                     | "x_height"
                     | "ascent"
                     | "descent"
+                    | "em_top"
+                    | "line_gap"
+                    | "gap_bottom"
                     | "line_height"
             ) {
                 return Some(Literal::Distance(0.0, DistanceUnit::Px, m.span));
@@ -3999,6 +4040,7 @@ fn infer_expr_literal_for_typecheck<'a>(
                     | "font_x_height"
                     | "font_ascent"
                     | "font_descent"
+                    | "font_line_gap"
                     | "font_line_height"
             ) {
                 return Some(Literal::Distance(0.0, DistanceUnit::Px, call.span));
@@ -4508,7 +4550,18 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
 
             // Typographic metric access: e.g. label.cap_height -> fid.cap_height
-            if ["cap_height", "x_height", "descent", "ascent", "line_height"].contains(&m.member.as_str()) {
+            if [
+                "cap_height",
+                "x_height",
+                "descent",
+                "ascent",
+                "em_top",
+                "line_gap",
+                "gap_bottom",
+                "line_height",
+            ]
+            .contains(&m.member.as_str())
+            {
                 if let Some(tid) = target_node_id {
                     if let Some(&fid) = ctx.node_fonts.get(&tid) {
                         return Ok(Expr::MemberAccess(MemberAccessExpr {

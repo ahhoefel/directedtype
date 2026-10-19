@@ -871,18 +871,13 @@ pub fn build_scene(
                     .next()
                     .map(|l| l.metrics().baseline as f64)
                     .unwrap_or(m.baseline);
-                let extra_top_leading = if line_height_prop.is_some() {
-                    (first_baseline - m.baseline).max(0.0)
-                } else {
-                    0.0
+                let y_offset = match start_at_prop {
+                    Some(s) if s.eq_ignore_ascii_case("ascender") => -(first_baseline - m.ascent),
+                    Some(s) if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") => -(first_baseline - m.em_top),
+                    Some(s) if s.eq_ignore_ascii_case("capital") => -(first_baseline - m.cap_height),
+                    Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => 0.0,
+                    _ => -(first_baseline - m.cap_height),
                 };
-                let base_y_offset = match start_at_prop {
-                    Some(s) if s.eq_ignore_ascii_case("ascender") => 0.0,
-                    Some(s) if s.eq_ignore_ascii_case("capital") => -(m.ascent - m.cap_height),
-                    Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => extra_top_leading,
-                    _ => -(m.ascent - m.cap_height),
-                };
-                let y_offset = base_y_offset - extra_top_leading;
                 active_scene.append(&local_scene, Some(Affine::translate((node.rect.x, node.rect.y + y_offset))));
 
                 // Save in 1-element cache:
