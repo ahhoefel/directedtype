@@ -220,12 +220,12 @@ fn test_enum_import_and_aliased_import() {
 }
 
 #[test]
-fn test_text_ends_at_baseline_and_descender() {
+fn test_text_end_at_baseline_and_descender() {
     let input = r#"
-    \Text(size: 32px, ends_at: TextEnd.Baseline) {
+    \Text(size: 32px, text_bounds: \TextBounds(end_at: TextEnd.Baseline)) {
         Typography & Baseline
     }
-    \Text(size: 32px, ends_at: TextEnd.Descender) {
+    \Text(size: 32px, text_bounds: \TextBounds(end_at: TextEnd.Descender)) {
         Typography & Baseline
     }
     \Text(size: 32px) {
@@ -236,26 +236,23 @@ fn test_text_ends_at_baseline_and_descender() {
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
 
-    assert_eq!(layout.nodes.len(), 3);
-    let t_baseline = &layout.nodes[0];
-    let t_descender = &layout.nodes[1];
-    let t_default = &layout.nodes[2];
+    let text_nodes: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Text").collect();
+    assert_eq!(text_nodes.len(), 3);
+    let t_baseline = text_nodes[0];
+    let t_descender = text_nodes[1];
+    let t_default = text_nodes[2];
 
-    assert_eq!(t_baseline.name, "Text");
-    assert_eq!(t_descender.name, "Text");
-    assert_eq!(t_default.name, "Text");
-
-    // Check ends_at properties
+    // Check end_at properties
     assert_eq!(
-        t_baseline.properties.get("ends_at").map(|v| v.as_str().unwrap()),
+        t_baseline.properties.get("end_at").map(|v| v.as_str().unwrap()),
         Some("Baseline")
     );
     assert_eq!(
-        t_descender.properties.get("ends_at").map(|v| v.as_str().unwrap()),
+        t_descender.properties.get("end_at").map(|v| v.as_str().unwrap()),
         Some("Descender")
     );
     assert_eq!(
-        t_default.properties.get("ends_at").map(|v| v.as_str().unwrap()),
+        t_default.properties.get("end_at").map(|v| v.as_str().unwrap()),
         Some("Baseline")
     );
 
@@ -267,19 +264,21 @@ fn test_text_ends_at_baseline_and_descender() {
         t_descender.rect.height
     );
 
-    // Default without ends_at equals Baseline height
+    // Default without text_bounds equals Baseline height
     assert_eq!(t_default.rect.height, t_baseline.rect.height);
 }
 
 #[test]
-fn test_text_ends_at_via_component_use() {
+fn test_text_end_at_via_component_use() {
     use directedtype::component::ComponentRegistry;
     use directedtype::compiler::compiled::CompiledDocument;
 
     let input = r#"
-    \use "components/TextEnd.dt"
+    \use "components/TextBounds.dt"
 
-    \Text(size: 24px, ends_at: TextEnd.Descender) {
+    \env text_bounds = \TextBounds(end_at: TextEnd.Descender);
+
+    \Text(size: 24px) {
         Descender text
     }
     "#;
@@ -298,7 +297,7 @@ fn test_text_ends_at_via_component_use() {
 
     let text_node = compiled.layout.nodes.iter().find(|n| n.name == "Text").expect("text node found");
     assert_eq!(
-        text_node.properties.get("ends_at").map(|v| v.as_str().unwrap()),
+        text_node.properties.get("end_at").map(|v| v.as_str().unwrap()),
         Some("Descender")
     );
 }
@@ -309,11 +308,11 @@ fn test_text_start_at_capital_and_ascender() {
     use directedtype::component::ComponentRegistry;
 
     let input = r#"
-    \Text(size: 32px, start_at: TextStart.Capital, ends_at: TextEnd.Baseline) {
+    \Text(size: 32px, text_bounds: \TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)) {
         Capital baseline text
     }
 
-    \Text(size: 32px, start_at: TextStart.Ascender, ends_at: TextEnd.Baseline) {
+    \Text(size: 32px, text_bounds: \TextBounds(start_at: TextStart.Ascender, end_at: TextEnd.Baseline)) {
         Ascender baseline text
     }
 
@@ -372,9 +371,11 @@ fn test_text_start_at_via_component_use() {
     use directedtype::compiler::compiled::CompiledDocument;
 
     let input = r#"
-    \use "components/TextStart.dt"
+    \use "components/TextBounds.dt"
 
-    \Text(size: 24px, start_at: TextStart.Capital) {
+    \env text_bounds = \TextBounds(start_at: TextStart.Capital);
+
+    \Text(size: 24px) {
         Capital start text
     }
     "#;
@@ -401,9 +402,9 @@ fn test_text_start_at_via_component_use() {
 #[test]
 fn test_text_start_at_misspelled_acender_rejected() {
     let input = r#"
-    \use "components/TextStart.dt"
+    \use "components/TextBounds.dt"
 
-    \Text(size: 24px, start_at: TextStart.Acender) {
+    \Text(size: 24px, text_bounds: \TextBounds(start_at: TextStart.Acender)) {
         Misspelled enum
     }
     "#;
@@ -418,4 +419,17 @@ fn test_text_start_at_misspelled_acender_rejected() {
         other => panic!("Expected UnknownEnumVariant, got {:?}", other),
     }
 }
+
+#[test]
+fn test_direct_start_at_or_end_at_on_text_rejected() {
+    let input = r#"
+    \Text(size: 24px, start_at: TextStart.Capital) {
+        Direct start_at not allowed
+    }
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let err = compile_to_graph(&doc).expect_err("Direct start_at on Text must be rejected");
+    assert!(err.to_string().contains("text_bounds"));
+}
+
 

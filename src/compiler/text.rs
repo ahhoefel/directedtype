@@ -14,11 +14,11 @@ pub fn measure_text_height(
     font_weight: f64,
     font_family: Option<&str>,
     max_width: f64,
-    ends_at: Option<&str>,
+    end_at: Option<&str>,
     start_at: Option<&str>,
     line_height: Option<f64>,
 ) -> f64 {
-    let (_, height) = measure_text_bounds(text, font_size, font_weight, font_family, Some(max_width), ends_at, start_at, line_height);
+    let (_, height) = measure_text_bounds(text, font_size, font_weight, font_family, Some(max_width), end_at, start_at, line_height);
     height
 }
 
@@ -77,7 +77,7 @@ pub fn measure_text_bounds(
     font_weight: f64,
     font_family: Option<&str>,
     max_width: Option<f64>,
-    ends_at: Option<&str>,
+    end_at: Option<&str>,
     start_at: Option<&str>,
     line_height: Option<f64>,
 ) -> (f64, f64) {
@@ -145,7 +145,7 @@ pub fn measure_text_bounds(
                 }
             };
 
-            let bottom_coord = match ends_at {
+            let bottom_coord = match end_at {
                 Some(s) if s.eq_ignore_ascii_case("descender") => {
                     if let Some(last_line) = last_line {
                         let lm = last_line.metrics();

@@ -310,23 +310,30 @@ Every `.dt` document has an implicit root viewport node named `window`. You can 
 | `color` (or `text_color`) | Optional Input | `Color` | `#000000` | Fill color of the rendered glyphs. |
 | `align` (or `text_align`) | Optional Input | `String` / `Align` | `"left"` (`Alignment::Start`) | Horizontal alignment within `width`: `"left"`, `"center"`, `"right"`, or `"justify"`. |
 | `underline` | Optional Input | `Boolean` | `false` | Draws an underline across the text run. |
-| `start_at` (or `starts_at`) | Optional Input | `TextStart` | `TextStart.Capital` | Defines the top edge (`y`) of the text bounding box (see below). |
-| `ends_at` (or `end_at`) | Optional Input | `TextEnd` | `TextEnd.Baseline` | Defines the bottom edge (`bottom`) of the text bounding box (see below). |
+| `text_bounds` | `env` Input | `\TextBounds` | `\TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)` | Controls vertical metric trimming (`start_at` and `end_at`) of the text bounding box; resolved via lexical `\env text_bounds` or explicit port. |
+| `start_at` | Output (delegated) | `TextStart` | `text_bounds.start_at` | Top edge (`y`) metric anchor of the text bounding box. |
+| `end_at` | Output (delegated) | `TextEnd` | `text_bounds.end_at` | Bottom edge (`bottom`) metric anchor of the text bounding box. |
 | `font.cap_height`, `cap_height` | Output (delegated) | `Number` | `font_cap_height(...)` | Cap height of the text node's active font. |
 | `font.x_height`, `x_height` | Output (delegated) | `Number` | `font_x_height(...)` | Lowercase x-height of the text node's active font. |
 | `font.ascent`, `ascent` | Output (delegated) | `Number` | `font_ascent(...)` | Ascender height of the text node's active font. |
 | `font.descent`, `descent` | Output (delegated) | `Number` | `font_descent(...)` | Descender depth of the text node's active font. |
 
-#### Vertical Metric Trimming (`TextStart` and `TextEnd`)
+#### Vertical Metric Trimming (`\TextBounds`, `TextStart`, and `TextEnd`)
 
-By default, `\Text` boxes in DirectedType are tightly trimmed to the **cap height** at the top and the **baseline** at the bottom (`start_at: TextStart.Capital`, `ends_at: TextEnd.Baseline`), eliminating the arbitrary half-leading whitespace that plagues CSS typography.
+By default, `\Text` boxes in DirectedType are tightly trimmed to the **cap height** at the top and the **baseline** at the bottom (`\TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)`), eliminating the arbitrary half-leading whitespace that plagues CSS typography.
 
-* **`TextStart` Enum** (controls where `y` / `top` sits on the first line):
+You can override vertical metric trimming for an entire subtree using `\env text_bounds = \TextBounds(...)`, or per-node via `text_bounds: \TextBounds(...)`:
+
+* **`TextStart` Enum** (controls where `y` / `top` sits on the first line via `start_at`):
   * `TextStart.Capital` *(default)*: `top` aligns with the flat top of capital letters (`cap_height`).
   * `TextStart.Ascender`: `top` aligns with the font's ascender line (`ascent`).
-* **`TextEnd` Enum** (controls where `bottom` sits on the last line):
+  * `TextStart.EmTop`: `top` aligns with the top of the em-square.
+  * `TextStart.GapTop`: `top` includes the upper half of the line gap.
+* **`TextEnd` Enum** (controls where `bottom` sits on the last line via `end_at`):
   * `TextEnd.Baseline` *(default)*: `bottom` aligns with the last line's typographic baseline.
   * `TextEnd.Descender`: `bottom` includes the last line's descender depth (`descent`).
+  * `TextEnd.EmBottom`: `bottom` aligns with the bottom of the em-square.
+  * `TextEnd.GapBottom`: `bottom` includes the lower half of the line gap.
 
 #### Inline Rich Text Spans
 A `\Text` block can mix string literals and inline child `\Text` or `\Link` elements inside its `{ ... }` content block:

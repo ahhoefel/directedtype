@@ -1,0 +1,10 @@
+// DirectedType Standard Component Library: TextBounds
+// Typographic vertical start and end landmarks for Text components.
+\use "components/TextStart.dt"
+\use "components/TextEnd.dt"
+
+\Component TextBounds(
+    start_at: TextStart: TextStart.Capital,
+    end_at: TextEnd: TextEnd.Baseline
+) {}
+

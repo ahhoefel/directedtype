@@ -3199,7 +3199,7 @@ fn test_missing_dimensions_on_child_rect_yields_compile_error() {
 fn test_text_baseline_and_text_font_baseline() {
     let input = r#"
     \env font = \Font(size: 32px, family: "Arial");
-    \let t = \Text(x: 10px, y: 50px, start_at: TextStart.Ascender, end_at: TextEnd.Descender) {
+    \let t = \Text(x: 10px, y: 50px, text_bounds: \TextBounds(start_at: TextStart.Ascender, end_at: TextEnd.Descender)) {
         Typography
     };
     \let guide_direct = \Rect(x: 0, y: t.baseline, width: 100px, height: 1px, color: #ff0000);
@@ -3715,10 +3715,10 @@ fn test_font_em_top_line_gap_and_gap_bottom_with_text_start_end() {
     let input = r#"
     \env font = \Font(family: "Arial", size: 120px, weight: 700);
 
-    \let t_em = \Text(x: 0, y: 0, start_at: TextStart.EmTop, ends_at: TextEnd.Descender) {
+    \let t_em = \Text(x: 0, y: 0, text_bounds: \TextBounds(start_at: TextStart.EmTop, end_at: TextEnd.Descender)) {
         Typography
     };
-    \let t_gap = \Text(x: 0, y: 0, start_at: TextStart.EmTop, ends_at: TextEnd.GapBottom) {
+    \let t_gap = \Text(x: 0, y: 0, text_bounds: \TextBounds(start_at: TextStart.EmTop, end_at: TextEnd.GapBottom)) {
         Typography
     };
     \let r = \Rect(
@@ -3733,9 +3733,10 @@ fn test_font_em_top_line_gap_and_gap_bottom_with_text_start_end() {
     let doc = parse(input).expect("parse ok");
     let layout = directedtype::evaluate_document(&doc).expect("evaluate ok");
 
-    let t_em = &layout.nodes[1];
-    let t_gap = &layout.nodes[2];
-    let r = &layout.nodes[3];
+    let text_nodes: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Text").collect();
+    let t_em = text_nodes[0];
+    let t_gap = text_nodes[1];
+    let r = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
 
     // EmTop to Descender has height exactly 1em (120px)
     assert!((t_em.rect.height - 120.0).abs() < 1e-4);

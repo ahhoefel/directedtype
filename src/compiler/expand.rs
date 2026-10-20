@@ -61,7 +61,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
     base_dir: &std::path::Path,
     resolver: &R,
 ) -> Result<ExpandedDocument, CompileError> {
-    let (registry, imported_items) = crate::compiler::module::resolve_imports(doc, base_dir, resolver)?;
+    let (mut registry, imported_items) = crate::compiler::module::resolve_imports(doc, base_dir, resolver)?;
     let mut merged_items = imported_items;
     merged_items.extend(doc.items.clone());
     let merged_doc = Document {
@@ -102,6 +102,43 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
             Ident::new("EmTop", doc.span),
         ],
         span: doc.span,
+    });
+    registry.entry("TextBounds".to_string()).or_insert_with(|| {
+        vec![ComponentDef {
+            name: Ident::new("TextBounds", doc.span),
+            params: vec![
+                ParamDef {
+                    name: Ident::new("start_at", doc.span),
+                    type_annotation: Some(TypeRef {
+                        name: Ident::new("TextStart", doc.span),
+                        span: doc.span,
+                    }),
+                    default_edge: Some(Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new("TextStart", doc.span))),
+                        member: Ident::new("Capital", doc.span),
+                        span: doc.span,
+                    })),
+                    is_env: false,
+                    span: doc.span,
+                },
+                ParamDef {
+                    name: Ident::new("end_at", doc.span),
+                    type_annotation: Some(TypeRef {
+                        name: Ident::new("TextEnd", doc.span),
+                        span: doc.span,
+                    }),
+                    default_edge: Some(Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new("TextEnd", doc.span))),
+                        member: Ident::new("Baseline", doc.span),
+                        span: doc.span,
+                    })),
+                    is_env: false,
+                    span: doc.span,
+                },
+            ],
+            body: Vec::new(),
+            span: doc.span,
+        }]
     });
 
     let mut global_scope = HashMap::new();
@@ -767,7 +804,8 @@ fn select_component_overload<'a>(
                 if param.default_edge.is_none() {
                     let name = param.name.as_str();
                     let satisfied = explicit_ports.contains(name)
-                        || (param.is_env && matches!(env_scope.get(name), Some(EnvEntry::Bound(_))));
+                        || (param.is_env && matches!(env_scope.get(name), Some(EnvEntry::Bound(_))))
+                        || (param.is_env && name == "text_bounds");
 
                     if !satisfied {
                         return false;
@@ -1283,6 +1321,34 @@ fn expand_component_instance(
             comp_scope_ports.push(name.clone());
         }
 
+        let mut resolve_default_expr = |default_expr: &Expr| -> Result<Expr, CompileError> {
+            match default_expr {
+                Expr::Node(inline_elem) => {
+                    let child_ctx = ElementContext {
+                        parent_id: Some(ctx.comp_node_id),
+                        parent_name: ctx.parent_name,
+                        prev_sibling_id: ctx.prev_sibling_id,
+                        parent_ports: ctx.parent_ports,
+                        lexical_scope,
+                        env_scope: caller_env_scope,
+                        enclosing_component_id: None,
+                        is_let: false,
+                        ambient_authored_ports: None,
+                        enums: ctx.enums,
+                        active_scope_id: ctx.active_scope_id,
+                        consumer_children: None,
+                    };
+                    let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
+                    if name == "font" && inline_elem.name.as_str() == "Font" {
+                        node_fonts.insert(ctx.comp_node_id, child_id);
+                        doc.get_node_mut(ctx.comp_node_id).unwrap().font = Some(child_id);
+                    }
+                    Ok(Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span)))
+                }
+                other => Ok(other.clone()),
+            }
+        };
+
         // Tier 4: Explicit caller argument
         if let Some(explicit_expr) = explicit_ports.remove(&name) {
             comp_ports.insert(name, explicit_expr);
@@ -1297,17 +1363,42 @@ fn expand_component_instance(
                     EnvEntry::Tombstone => {
                         // Tombstone halts lookup! Fall back to Tier 1 default
                         if let Some(default_expr) = &param.default_edge {
-                            comp_ports.insert(name, default_expr.clone());
+                            let resolved = resolve_default_expr(default_expr)?;
+                            comp_ports.insert(name, resolved);
+                        } else if name == "text_bounds" {
+                            let default_tb = Expr::Node(Box::new(ElementNode {
+                                name: Ident::new("TextBounds", param.span),
+                                key: None,
+                                ports: Vec::new(),
+                                content: None,
+                                span: param.span,
+                                handle: None,
+                            }));
+                            let resolved = resolve_default_expr(&default_tb)?;
+                            comp_ports.insert(name, resolved);
                         }
                     }
                 }
             } else if let Some(default_expr) = &param.default_edge {
-                comp_ports.insert(name, default_expr.clone());
+                let resolved = resolve_default_expr(default_expr)?;
+                comp_ports.insert(name, resolved);
+            } else if name == "text_bounds" {
+                let default_tb = Expr::Node(Box::new(ElementNode {
+                    name: Ident::new("TextBounds", param.span),
+                    key: None,
+                    ports: Vec::new(),
+                    content: None,
+                    span: param.span,
+                    handle: None,
+                }));
+                let resolved = resolve_default_expr(&default_tb)?;
+                comp_ports.insert(name, resolved);
             }
         }
         // Tier 1: Component Signature Default (for non-env parameters)
         else if let Some(default_expr) = &param.default_edge {
-            comp_ports.insert(name, default_expr.clone());
+            let resolved = resolve_default_expr(default_expr)?;
+            comp_ports.insert(name, resolved);
         }
     }
 
@@ -1538,6 +1629,16 @@ fn expand_component_instance(
                         span: instance.span,
                     })
                 }
+            } else if let Some(Expr::Ident(id)) = comp_ports.get(param.name.as_str()) {
+                if NodeId::from_canonical_name(id.as_str()).is_some() {
+                    Expr::Ident(id.clone())
+                } else {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
+                        member: param.name.clone(),
+                        span: instance.span,
+                    })
+                }
             } else {
                 Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
@@ -1567,6 +1668,16 @@ fn expand_component_instance(
             let env_bound_expr = if param.name.as_str() == "font" {
                 if let Some(&fid) = node_fonts.get(&ctx.comp_node_id) {
                     Expr::Ident(Ident::new(fid.canonical_name(), instance.span))
+                } else {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
+                        member: param.name.clone(),
+                        span: instance.span,
+                    })
+                }
+            } else if let Some(Expr::Ident(id)) = comp_ports.get(param.name.as_str()) {
+                if NodeId::from_canonical_name(id.as_str()).is_some() {
+                    Expr::Ident(id.clone())
                 } else {
                     Expr::MemberAccess(MemberAccessExpr {
                         target: Box::new(Expr::Ident(Ident::new(ctx.comp_node_id.canonical_name(), instance.span))),
@@ -1909,6 +2020,82 @@ fn expand_component_instance(
                             port: "parent".to_string(),
                             span: port.name.span,
                         });
+                    }
+                }
+                if let Some(slot) = &instance.content {
+                    for item in &slot.items {
+                        if let ContentItem::Env(env_binding) = item {
+                            if let Some(raw_expr) = &env_binding.value {
+                                match raw_expr {
+                                    Expr::Node(elem) => {
+                                        let elem_ctx = ElementContext {
+                                            parent_id: Some(ctx.comp_node_id),
+                                            parent_name: Some(comp_def.name.as_str()),
+                                            prev_sibling_id: None,
+                                            parent_ports: &comp_scope_ports,
+                                            lexical_scope,
+                                            env_scope: &children_env_scope,
+                                            enclosing_component_id: ctx.enclosing_component_id,
+                                            is_let: false,
+                                            ambient_authored_ports: None,
+                                            enums: ctx.enums,
+                                            active_scope_id: ctx.active_scope_id,
+                                            consumer_children: None,
+                                        };
+                                        let env_node_id = expand_element(
+                                            elem,
+                                            &elem_ctx,
+                                            registry,
+                                            doc,
+                                            node_fonts,
+                                        )?;
+                                        doc.get_node_mut(env_node_id).unwrap().var_name = Some(env_binding.name.as_str().to_string());
+                                        all_children_ids.push(env_node_id);
+                                        lexical_scope.borrow_mut().insert(
+                                            env_binding.name.as_str().to_string(),
+                                            LexicalBinding::Node(env_node_id),
+                                        );
+                                        let bound_expr = Expr::Ident(Ident::new(env_node_id.canonical_name(), elem.span));
+                                        children_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(bound_expr));
+                                        if elem.name.as_str() == "Font" {
+                                            node_fonts.insert(env_node_id, env_node_id);
+                                        }
+                                    }
+                                    _ => {
+                                        let rewritten = {
+                                            let scope_borrow = lexical_scope.borrow();
+                                            let empty_children: [NodeId; 0] = [];
+                                            let empty_ports: [String; 0] = [];
+                                            let scope_ctx = ScopeContext {
+                                                current_node: ctx.comp_node_id,
+                                                parent_node: ctx.parent_id,
+                                                parent_name: ctx.parent_name,
+                                                prev_sibling: ctx.prev_sibling_id,
+                                                child_ids: &empty_children,
+                                                parent_ports: ctx.parent_ports,
+                                                current_ports: &empty_ports,
+                                                lexical_scope: &*scope_borrow,
+                                                env_scope: &children_env_scope,
+                                                node_fonts: &*node_fonts,
+                                                enclosing_component: ctx.enclosing_component_id,
+                                                comp_ports: None,
+                                                declared_state_names: None,
+                                                enums: ctx.enums,
+                                            };
+                                            rewrite_expr(raw_expr, &scope_ctx)?
+                                        };
+                                        lexical_scope.borrow_mut().insert(
+                                            env_binding.name.as_str().to_string(),
+                                            LexicalBinding::Expr(rewritten.clone()),
+                                        );
+                                        children_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(rewritten));
+                                    }
+                                }
+                            } else {
+                                lexical_scope.borrow_mut().insert(env_binding.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                                children_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Tombstone);
+                            }
+                        }
                     }
                 }
                 let mut last_consumer_child_id = None;
@@ -2910,8 +3097,10 @@ fn expand_primitive_element(
                     consumer_children: None,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
-                child_ids.push(child_id);
-                last_child_id = Some(child_id);
+                if inline_elem.name.as_str() != "Font" && inline_elem.name.as_str() != "TextBounds" {
+                    child_ids.push(child_id);
+                    last_child_id = Some(child_id);
+                }
                 resolved_port_exprs.push((
                     port.name.as_str().to_string(),
                     Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span)),
@@ -3450,6 +3639,21 @@ fn expand_primitive_element(
     }
 
     if elem.name.as_str() == "Text" {
+        for port in &elem.ports {
+            if matches!(
+                port.name.as_str(),
+                "start_at" | "starts_at" | "end_at" | "ends_at"
+            ) {
+                return Err(CompileError::Custom {
+                    message: format!(
+                        "Port '{}' is not supported directly on Text; use 'text_bounds: \\TextBounds(start_at: ..., end_at: ...)' or '\\env text_bounds = \\TextBounds(...)' instead",
+                        port.name.as_str()
+                    ),
+                    span: port.name.span,
+                });
+            }
+        }
+
         if let Some(Expr::Literal(Literal::String(family, span))) = ports.get("family") {
             if !family.is_empty() && !crate::compiler::text::font_family_exists(family) {
                 return Err(CompileError::FontFamilyNotFound {
@@ -3467,28 +3671,37 @@ fn expand_primitive_element(
             }
         }
 
-        let end_val = ports.remove("end_at");
-        if !ports.contains_key("ends_at") {
-            if let Some(expr) = end_val {
-                ports.insert("ends_at".to_string(), expr.clone());
-                authored_ports.insert("ends_at".to_string(), expr);
-            } else {
-                let default_ends_at = Expr::Literal(Literal::Enum("TextEnd".to_string(), "Baseline".to_string(), elem.span));
-                ports.insert("ends_at".to_string(), default_ends_at.clone());
-                authored_ports.insert("ends_at".to_string(), default_ends_at);
+        if !ports.contains_key("text_bounds") {
+            if let Some(EnvEntry::Bound(env_expr)) = ctx.env_scope.get("text_bounds") {
+                if let Ok(rewritten) = rewrite_expr(env_expr, &scope_ctx) {
+                    ports.insert("text_bounds".to_string(), rewritten.clone());
+                    authored_ports.insert("text_bounds".to_string(), rewritten);
+                }
             }
         }
 
-        let starts_val = ports.remove("starts_at");
-        if !ports.contains_key("start_at") {
-            if let Some(expr) = starts_val {
-                ports.insert("start_at".to_string(), expr.clone());
-                authored_ports.insert("start_at".to_string(), expr);
-            } else {
-                let default_start_at = Expr::Literal(Literal::Enum("TextStart".to_string(), "Capital".to_string(), elem.span));
-                ports.insert("start_at".to_string(), default_start_at.clone());
-                authored_ports.insert("start_at".to_string(), default_start_at);
-            }
+        if let Some(tb_target) = ports.get("text_bounds").cloned() {
+            let start_at_from_tb = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(tb_target.clone()),
+                member: Ident::new("start_at", elem.span),
+                span: elem.span,
+            });
+            let end_at_from_tb = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(tb_target),
+                member: Ident::new("end_at", elem.span),
+                span: elem.span,
+            });
+            ports.insert("start_at".to_string(), start_at_from_tb.clone());
+            authored_ports.insert("start_at".to_string(), start_at_from_tb);
+            ports.insert("end_at".to_string(), end_at_from_tb.clone());
+            authored_ports.insert("end_at".to_string(), end_at_from_tb);
+        } else {
+            let default_start_at = Expr::Literal(Literal::Enum("TextStart".to_string(), "Capital".to_string(), elem.span));
+            ports.insert("start_at".to_string(), default_start_at.clone());
+            authored_ports.insert("start_at".to_string(), default_start_at);
+            let default_end_at = Expr::Literal(Literal::Enum("TextEnd".to_string(), "Baseline".to_string(), elem.span));
+            ports.insert("end_at".to_string(), default_end_at.clone());
+            authored_ports.insert("end_at".to_string(), default_end_at);
         }
 
         if !ports.contains_key("size") {
@@ -3770,10 +3983,10 @@ fn expand_primitive_element(
                 member: Ident::new("width", elem.span),
                 span: elem.span,
             });
-            let ends_at_expr = if ports.contains_key("ends_at") {
+            let end_at_expr = if ports.contains_key("end_at") {
                 Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(self_ident.clone()),
-                    member: Ident::new("ends_at", elem.span),
+                    member: Ident::new("end_at", elem.span),
                     span: elem.span,
                 })
             } else {
@@ -3796,7 +4009,7 @@ fn expand_primitive_element(
                     weight_expr.clone(),
                     font_expr.clone(),
                     width_expr,
-                    ends_at_expr,
+                    end_at_expr,
                     start_at_expr,
                     line_height_arg,
                 ],
