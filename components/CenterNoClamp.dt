@@ -1,0 +1,70 @@
+// DirectedType Standard Component Library: CenterNoClamp
+// Declarative container that geometrically centers its children along both horizontal and vertical axes
+// without clamping offsets when children exceed container bounds.
+
+// 1. Explicit Spatial Bounds CenterNoClamp
+\Component CenterNoClamp(
+    width: Distance,
+    height: Distance,
+    x: Distance,
+    y: Distance
+) {
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children {
+        x: x + (width - child.width) / 2,
+        y: y + (height - child.height) / 2
+    }
+}
+
+// 2. Explicit Dimensions CenterNoClamp (inherits origin from parent container)
+\Component CenterNoClamp(
+    width: Distance,
+    height: Distance
+) {
+    \alias x = parent.left;
+    \alias y = parent.top;
+    \alias right = parent.left + width;
+    \alias bottom = parent.top + height;
+
+    \Children {
+        x: parent.left + (width - child.width) / 2,
+        y: parent.top + (height - child.height) / 2
+    }
+}
+
+// 3. Fluid Dimensions CenterNoClamp (explicit origin, fills remaining parent space)
+\Component CenterNoClamp(
+    x: Distance,
+    y: Distance
+) {
+    \let resolved_width = parent.width - (2 * (x - parent.left));
+    \let resolved_height = parent.height - (2 * (y - parent.top));
+
+    \alias width = resolved_width;
+    \alias height = resolved_height;
+    \alias right = x + resolved_width;
+    \alias bottom = y + resolved_height;
+
+    \Children {
+        x: x + (resolved_width - child.width) / 2,
+        y: y + (resolved_height - child.height) / 2
+    }
+}
+
+// 4. Fluid Parent-Fitting CenterNoClamp: automatically fits parent container bounds
+\Component CenterNoClamp {
+    \alias width = parent.width;
+    \alias height = parent.height;
+    \alias x = parent.left;
+    \alias y = parent.top;
+    \alias right = parent.right;
+    \alias bottom = parent.bottom;
+
+    \Children {
+        x: parent.left + (parent.width - child.width) / 2,
+        y: parent.top + (parent.height - child.height) / 2
+    }
+}
+

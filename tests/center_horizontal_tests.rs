@@ -48,7 +48,7 @@ fn test_center_horizontal_inside_padding() {
     \use "components/HCenter.dt"
 
     \PadIn(padding_x: 40px) {
-        \HCenter {
+        \HCenterUp {
             \PadOut(padding_y: 50px) {
                 \Rect(width: 480px, height: 200px, color: #3b82f6)
             }

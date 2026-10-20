@@ -1,7 +1,9 @@
 // DirectedType Standard Component Library: VCenter
-// Declarative container that centers its single child vertically within its available height.
+// Declarative container that centers its single child vertically within its available height,
+// taking its off-axis (horizontal) width top-down from its parent.
 // Anchors the child with minimum top alignment when available height is smaller than the child.
 // Caps height on the lower end by the height of its contents.
+\use "components/VCenterUp.dt"
 
 // 1. Explicit Height VCenter
 \Component VCenter(

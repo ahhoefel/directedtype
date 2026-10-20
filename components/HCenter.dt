@@ -1,7 +1,9 @@
 // DirectedType Standard Component Library: HCenter
-// Declarative container that centers its single child horizontally within its available width.
+// Declarative container that centers its single child horizontally within its available width,
+// taking its off-axis (vertical) height top-down from its parent.
 // Anchors the child with minimum left alignment when available width is smaller than the child.
 // Caps width on the lower end by the width of its contents.
+\use "components/HCenterUp.dt"
 
 // 1. Explicit Width HCenter
 \Component HCenter(
@@ -12,8 +14,8 @@
     \assert num_children == 1 as "Should have only one child.";
 
     \alias right = x + width;
-    \alias height = only(children.height);
-    \alias bottom = y + height;
+    \alias height = parent.height;
+    \alias bottom = parent.bottom;
 
     \Children {
         x: x + max(0, (width - child.width) / 2),
@@ -30,11 +32,12 @@
 
     \let available_width = parent.width - (2 * (x - parent.left));
     \let resolved_width = max(available_width, only(children.width));
+    \let resolved_height = parent.height - (2 * (y - parent.top));
 
     \alias width = resolved_width;
     \alias right = x + resolved_width;
-    \alias height = only(children.height);
-    \alias bottom = y + height;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
 
     \Children {
         x: x + max(0, (available_width - child.width) / 2),
@@ -49,12 +52,13 @@
     \assert num_children == 1 as "Should have only one child.";
 
     \let resolved_width = max(parent.width, only(children.width));
+    \let resolved_height = parent.height - (2 * (y - parent.top));
 
     \alias width = resolved_width;
     \alias x = parent.left;
     \alias right = parent.left + resolved_width;
-    \alias height = only(children.height);
-    \alias bottom = y + height;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
 
     \Children {
         x: parent.left + max(0, (parent.width - child.width) / 2),
@@ -72,8 +76,8 @@
     \alias x = parent.left;
     \alias y = parent.top;
     \alias right = parent.left + resolved_width;
-    \alias height = only(children.height);
-    \alias bottom = y + height;
+    \alias height = parent.height;
+    \alias bottom = parent.bottom;
 
     \Children {
         x: parent.left + max(0, (parent.width - child.width) / 2),

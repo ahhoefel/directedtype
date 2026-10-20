@@ -182,3 +182,64 @@ fn test_center_with_card() {
     assert_eq!(card_node.rect.y, (600.0 - card_node.rect.height) / 2.0);
 }
 
+#[test]
+fn test_center_clamps_when_child_exceeds_parent() {
+    let input = r#"
+    \use "components/Center.dt"
+
+    \Center {
+        \Rect(width: 500px, height: 800px, color: #3b82f6)
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        300.0,
+        400.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let center_node = compiled.layout.nodes.iter().find(|n| n.name == "Center").expect("Center found");
+    let rect_node = compiled.layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect found");
+
+    assert_eq!(center_node.rect.width, 500.0);
+    assert_eq!(center_node.rect.height, 800.0);
+    assert_eq!(rect_node.rect.x, 0.0);
+    assert_eq!(rect_node.rect.y, 0.0);
+}
+
+#[test]
+fn test_center_no_clamp_allows_negative_offset() {
+    let input = r#"
+    \use "components/CenterNoClamp.dt"
+
+    \CenterNoClamp {
+        \Rect(width: 500px, height: 800px, color: #3b82f6)
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        300.0,
+        400.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let rect_node = compiled.layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect found");
+
+    // (300 - 500) / 2 = -100, (400 - 800) / 2 = -200
+    assert_eq!(rect_node.rect.x, -100.0);
+    assert_eq!(rect_node.rect.y, -200.0);
+}
+
+

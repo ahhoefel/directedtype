@@ -119,7 +119,7 @@
 }
 
 // Main Page Layout: centered horizontally with outward padding around the card
-\let content = \HCenter {
+\let content = \HCenterUp {
     \PadOut(padding_x: 40px, padding_y: 40px) {
         \AudioMixer(width: 480px)
     }

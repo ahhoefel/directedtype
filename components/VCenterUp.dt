@@ -1,0 +1,84 @@
+// DirectedType Standard Component Library: VCenterUp
+// Declarative container that centers its single child vertically within its available height,
+// taking its off-axis (horizontal) width bottom-up from its child.
+// Anchors the child with minimum top alignment when available height is smaller than the child.
+// Caps height on the lower end by the height of its contents.
+
+// 1. Explicit Height VCenterUp
+\Component VCenterUp(
+    height: Distance,
+    x: Distance: parent.left,
+    y: Distance: parent.top
+) {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \alias width = only(children.width);
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children {
+        x: x,
+        y: y + max(0, (height - child.height) / 2)
+    }
+}
+
+// 2. Fluid Height VCenterUp with explicit origin
+\Component VCenterUp(
+    x: Distance,
+    y: Distance
+) {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \let available_height = parent.height - (2 * (y - parent.top));
+    \let resolved_height = max(available_height, only(children.height));
+
+    \alias width = only(children.width);
+    \alias right = x + width;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
+
+    \Children {
+        x: x,
+        y: y + max(0, (available_height - child.height) / 2)
+    }
+}
+
+// 3. Fluid Parent-Fitting VCenterUp with explicit x
+\Component VCenterUp(
+    x: Distance
+) {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \let resolved_height = max(parent.height, only(children.height));
+
+    \alias width = only(children.width);
+    \alias right = x + width;
+    \alias height = resolved_height;
+    \alias y = parent.top;
+    \alias bottom = parent.top + resolved_height;
+
+    \Children {
+        x: x,
+        y: parent.top + max(0, (parent.height - child.height) / 2)
+    }
+}
+
+// 4. Fluid Parent-Fitting VCenterUp
+\Component VCenterUp {
+    \assert num_children == 1 as "Should have only one child.";
+
+    \let resolved_height = max(parent.height, only(children.height));
+
+    \alias width = only(children.width);
+    \alias height = resolved_height;
+    \alias x = parent.left;
+    \alias y = parent.top;
+    \alias right = x + width;
+    \alias bottom = parent.top + resolved_height;
+
+    \Children {
+        x: parent.left,
+        y: parent.top + max(0, (parent.height - child.height) / 2)
+    }
+}
+

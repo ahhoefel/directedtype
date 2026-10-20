@@ -235,18 +235,18 @@ fn test_vcenter_assertion_rejects_zero_children() {
 
 #[test]
 fn test_nesting_vcenter_and_hcenter() {
-    let input = r#"
+    let input_v_then_h = r#"
     \use "components/VCenter.dt"
-    \use "components/HCenter.dt"
+    \use "components/HCenterUp.dt"
 
     \VCenter {
-        \HCenter {
+        \HCenterUp {
             \Rect(width: 300px, height: 200px, color: #a855f7)
         }
     }
     "#;
 
-    let doc = parse(input).expect("parse ok");
+    let doc = parse(input_v_then_h).expect("parse ok");
     let registry = ComponentRegistry::standard();
     let compiled = CompiledDocument::compile_with_registry(
         &doc,
@@ -256,7 +256,7 @@ fn test_nesting_vcenter_and_hcenter() {
         &directedtype::compiler::FsResolver,
         &registry,
     )
-    .expect("compile ok");
+    .expect("compile ok for VCenter { HCenterUp }");
 
     let rect = compiled
         .layout
@@ -272,6 +272,40 @@ fn test_nesting_vcenter_and_hcenter() {
     assert_eq!(rect.rect.y, 200.0);
     assert_eq!(rect.rect.width, 300.0);
     assert_eq!(rect.rect.height, 200.0);
+
+    let input_h_then_v = r#"
+    \use "components/HCenter.dt"
+    \use "components/VCenterUp.dt"
+
+    \HCenter {
+        \VCenterUp {
+            \Rect(width: 300px, height: 200px, color: #a855f7)
+        }
+    }
+    "#;
+
+    let doc2 = parse(input_h_then_v).expect("parse ok");
+    let compiled2 = CompiledDocument::compile_with_registry(
+        &doc2,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok for HCenter { VCenterUp }");
+
+    let rect2 = compiled2
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Rect")
+        .expect("rect found");
+
+    assert_eq!(rect2.rect.x, 250.0);
+    assert_eq!(rect2.rect.y, 200.0);
+    assert_eq!(rect2.rect.width, 300.0);
+    assert_eq!(rect2.rect.height, 200.0);
 }
 
 #[test]

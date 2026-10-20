@@ -1,5 +1,6 @@
 \use "components/VStack.dt"
 \use "components/Center.dt"
+\use "components/PadOut.dt"
 
 
 \Component Box(x, y, width, height, env font) {
@@ -64,7 +65,7 @@
     \Text(x: x + 2px, y: (y1 + y2)/2, color: color, text: to_fixed(distance_to_float(y2 - y1, px), 2))
 }
 
-\Center{
+\Center {
     \PadOut(padding_y: 30px) {
         \VStack(shrink: true, gap: 50px) {
             \Box(width: 1000px, height: 200px, font: \Font(family: "Arial", size: 120px, line_height: 180px, weight: 700))
