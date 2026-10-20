@@ -1,0 +1,55 @@
+\use "components/HStack.dt"
+\use "components/Center.dt"
+\use "components/PadOut.dt"
+\use "components/TextBounds.dt"
+
+\env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
+
+\Component Box(
+    width: Distance: 320px,
+    x: Distance: parent.left,
+    y: Distance: parent.top,
+    env font,
+    env text_bounds
+) {
+    \alias right = x + width;
+    \alias height = pad.height;
+    \alias bottom = y + height;
+
+    // Background box
+    \Rect(
+        x: self.left,
+        y: self.top,
+        width: self.width,
+        height: self.height,
+        color: #0f172a
+    )
+
+    // Paragraph with 1em padding on all sides
+    \let pad = \PadOut(padding: 1em) {
+        \let t = \Text(
+            width: width - 2em,
+            color: #f8fafc
+        ) {
+            Typography is the craft of endowing human language with a durable visual form. When setting a paragraph in a box with a 1em padding on all sides, vertical metric trimming determines whether the padding is measured optically from the cap height and baseline or from the em-top and line-gap bottom.
+        }
+    }
+}
+
+\Center {
+    \HStack(gap: 32px) {
+        \Box(
+            text_bounds: \TextBounds(
+                start_at: TextStart.Capital,
+                end_at: TextEnd.Baseline
+            )
+        )
+        \Box(
+            text_bounds: \TextBounds(
+                start_at: TextStart.EmTop,
+                end_at: TextEnd.GapBottom
+            )
+        )
+    }
+}
+
