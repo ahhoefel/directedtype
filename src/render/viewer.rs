@@ -178,9 +178,10 @@ pub struct ViewerApp {
     inspector_state: crate::inspector::InspectorState,
     panel_component: crate::inspector::InspectPanelComponent,
 
-    // Scrolling state
+    // Scrolling & zoom state
     scroll_x: f64,
     scroll_y: f64,
+    zoom: f64,
     is_dragging_scrollbar: bool,
     scrollbar_drag_start_y: f64,
     scrollbar_start_scroll_y: f64,
@@ -250,6 +251,7 @@ impl ViewerApp {
             panel_component: crate::inspector::InspectPanelComponent::default(),
             scroll_x: 0.0,
             scroll_y: 0.0,
+            zoom: 1.0,
             is_dragging_scrollbar: false,
             scrollbar_drag_start_y: 0.0,
             scrollbar_start_scroll_y: 0.0,
@@ -306,6 +308,7 @@ impl ViewerApp {
             panel_component: crate::inspector::InspectPanelComponent::default(),
             scroll_x: 0.0,
             scroll_y: 0.0,
+            zoom: 1.0,
             is_dragging_scrollbar: false,
             scrollbar_drag_start_y: 0.0,
             scrollbar_start_scroll_y: 0.0,
@@ -498,6 +501,78 @@ impl ViewerApp {
         }
     }
 
+    /// Returns the current canvas zoom factor (`1.0` = 100%).
+    pub fn zoom(&self) -> f64 {
+        self.zoom
+    }
+
+    /// Sets the canvas zoom factor directly, clamped to `[0.1, 20.0]`.
+    pub fn set_zoom(&mut self, zoom: f64) {
+        self.set_zoom_at(zoom, self.cursor_pos);
+    }
+
+    /// Sets the canvas zoom factor around an optional window coordinate `anchor` (keeping the document
+    /// point under `anchor` stationary), clamped to `[0.1, 20.0]`.
+    pub fn set_zoom_at(&mut self, zoom: f64, anchor: Option<Point>) {
+        let new_zoom = zoom.clamp(0.1, 20.0);
+        let old_zoom = self.zoom.max(0.01);
+        if (new_zoom - old_zoom).abs() < 1e-6 {
+            return;
+        }
+
+        let (vp_w, vp_h) = self.viewport_size();
+        let nav_bar_h = self.nav_bar_height();
+        let (canvas_x, canvas_y) = match anchor {
+            Some(pt) if pt.y >= nav_bar_h && pt.x <= vp_w => (
+                pt.x.clamp(0.0, vp_w),
+                (pt.y - nav_bar_h).clamp(0.0, vp_h),
+            ),
+            _ => (vp_w * 0.5, vp_h * 0.5),
+        };
+
+        let doc_x = self.scroll_x + canvas_x / old_zoom;
+        let doc_y = self.scroll_y + canvas_y / old_zoom;
+
+        self.zoom = new_zoom;
+        self.scroll_x = (doc_x - canvas_x / new_zoom).max(0.0);
+        self.scroll_y = (doc_y - canvas_y / new_zoom).max(0.0);
+        self.clamp_scroll();
+
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Adjusts the current canvas zoom factor by a trackpad pinch magnification `delta`
+    /// around the current cursor position (or viewport center if no cursor is present).
+    pub fn zoom_by(&mut self, delta: f64) {
+        let factor = (1.0 + delta).max(0.05);
+        let target_zoom = (self.zoom * factor).clamp(0.1, 20.0);
+        self.set_zoom_at(target_zoom, self.cursor_pos);
+    }
+
+    /// Resets the canvas zoom factor to `1.0` (100%) and clamps scroll offsets.
+    pub fn reset_zoom(&mut self) {
+        self.pending_scroll = None;
+        self.zoom = 1.0;
+        self.clamp_scroll();
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
+    /// Converts a logical window coordinate `(x, y)` into logical document coordinates,
+    /// accounting for the navigation bar offset, canvas zoom factor, and scroll offset.
+    #[inline]
+    pub fn window_to_doc_point(&self, point: Point) -> Point {
+        let nav_bar_h = self.nav_bar_height();
+        let z = self.zoom.max(0.01);
+        Point::new(
+            point.x / z + self.scroll_x,
+            (point.y - nav_bar_h) / z + self.scroll_y,
+        )
+    }
+
     /// Returns whether the vertical scrollbar is currently being dragged.
     pub fn is_dragging_v_scrollbar(&self) -> bool {
         self.is_dragging_scrollbar
@@ -566,6 +641,9 @@ impl ViewerApp {
         } else {
             win_w
         };
+        let z = self.zoom.max(0.01);
+        let doc_delta_x = delta_x / z;
+        let doc_delta_y = delta_y / z;
 
         if let Some(point) = self.cursor_pos {
             // Ignore scroll gestures on the navigation bar itself
@@ -616,11 +694,14 @@ impl ViewerApp {
                 return;
             }
 
-            let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+            let doc_point = self.window_to_doc_point(point);
             let mut handled = false;
             if let Some(ref hit_res) = self.layout().hit_test(doc_point) {
                 let scroll_event = Event::new(
-                    EventKind::Scroll { delta_x, delta_y },
+                    EventKind::Scroll {
+                        delta_x: doc_delta_x,
+                        delta_y: doc_delta_y,
+                    },
                     doc_point,
                     hit_res.local_point,
                     self.modifiers,
@@ -632,18 +713,18 @@ impl ViewerApp {
             // Window document scrolling occurs only if not handled by an inner container:
             if !handled {
                 let mut changed = false;
-                if self.is_vscroll_enabled() {
+                if self.is_vscroll_enabled() || self.zoom > 1.001 {
                     let max_scroll = self.max_scroll_y(viewport_h);
                     let old_scroll = self.scroll_y;
-                    self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
+                    self.scroll_y = (self.scroll_y - doc_delta_y).clamp(0.0, max_scroll);
                     if (self.scroll_y - old_scroll).abs() > 0.001 {
                         changed = true;
                     }
                 }
-                if self.is_hscroll_enabled() {
+                if self.is_hscroll_enabled() || self.zoom > 1.001 {
                     let max_scroll_x = self.max_scroll_x(canvas_w);
                     let old_scroll_x = self.scroll_x;
-                    self.scroll_x = (self.scroll_x - delta_x).clamp(0.0, max_scroll_x);
+                    self.scroll_x = (self.scroll_x - doc_delta_x).clamp(0.0, max_scroll_x);
                     if (self.scroll_x - old_scroll_x).abs() > 0.001 {
                         changed = true;
                     }
@@ -657,18 +738,18 @@ impl ViewerApp {
         } else {
             // No cursor position known; fall back to scrolling window document
             let mut changed = false;
-            if self.is_vscroll_enabled() {
+            if self.is_vscroll_enabled() || self.zoom > 1.001 {
                 let max_scroll = self.max_scroll_y(viewport_h);
                 let old_scroll = self.scroll_y;
-                self.scroll_y = (self.scroll_y - delta_y).clamp(0.0, max_scroll);
+                self.scroll_y = (self.scroll_y - doc_delta_y).clamp(0.0, max_scroll);
                 if (self.scroll_y - old_scroll).abs() > 0.001 {
                     changed = true;
                 }
             }
-            if self.is_hscroll_enabled() {
+            if self.is_hscroll_enabled() || self.zoom > 1.001 {
                 let max_scroll_x = self.max_scroll_x(canvas_w);
                 let old_scroll_x = self.scroll_x;
-                self.scroll_x = (self.scroll_x - delta_x).clamp(0.0, max_scroll_x);
+                self.scroll_x = (self.scroll_x - doc_delta_x).clamp(0.0, max_scroll_x);
                 if (self.scroll_x - old_scroll_x).abs() > 0.001 {
                     changed = true;
                 }
@@ -685,10 +766,9 @@ impl ViewerApp {
     /// Respects active pointer capture if set, routing moves directly to the captured node.
     pub fn dispatch_cursor_moved(&mut self, point: Point) -> bool {
         self.cursor_pos = Some(point);
-        let nav_bar_h = self.nav_bar_height();
 
         if let Some(target_id) = self.captured_node {
-            let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+            let doc_point = self.window_to_doc_point(point);
             if let Some(target_node) = self.layout().get_node(target_id) {
                 let local_point = Point::new(
                     doc_point.x - target_node.rect.x,
@@ -708,7 +788,7 @@ impl ViewerApp {
             }
         }
 
-        let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+        let doc_point = self.window_to_doc_point(point);
         let hit = self.layout().hit_test(doc_point);
         let new_hovered = hit.as_ref().map(|h| h.target);
 
@@ -763,8 +843,7 @@ impl ViewerApp {
         point: Point,
     ) -> bool {
         self.cursor_pos = Some(point);
-        let nav_bar_h = self.nav_bar_height();
-        let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+        let doc_point = self.window_to_doc_point(point);
         let hit = self.layout().hit_test(doc_point);
 
         match state {
@@ -873,12 +952,26 @@ impl ViewerApp {
 
     /// Computes the maximum vertical scroll offset for a given viewport height.
     pub fn max_scroll_y(&self, viewport_h: f64) -> f64 {
-        (self.content_height() - viewport_h).max(0.0)
+        let z = self.zoom.max(0.01);
+        let visible_h = viewport_h / z;
+        let content_h = if z > 1.001 {
+            self.content_height().max(viewport_h)
+        } else {
+            self.content_height()
+        };
+        (content_h - visible_h).max(0.0)
     }
 
     /// Computes the maximum horizontal scroll offset for a given viewport width.
     pub fn max_scroll_x(&self, viewport_w: f64) -> f64 {
-        (self.content_width() - viewport_w).max(0.0)
+        let z = self.zoom.max(0.01);
+        let visible_w = viewport_w / z;
+        let content_w = if z > 1.001 {
+            self.content_width().max(viewport_w)
+        } else {
+            self.content_width()
+        };
+        (content_w - visible_w).max(0.0)
     }
 
     /// Returns the total logical window dimensions: `(width, height)`.
@@ -963,20 +1056,20 @@ impl ViewerApp {
     /// does not scroll past the boundaries of the document content.
     pub fn clamp_scroll(&mut self) {
         let (vp_w, vp_h) = self.viewport_size();
-        if !self.is_vscroll_enabled() {
+        if !self.is_vscroll_enabled() && self.zoom <= 1.001 {
             self.scroll_y = 0.0;
         } else {
             let content_h = self.content_height();
-            if content_h > 0.0 {
+            if content_h > 0.0 || self.zoom > 1.001 {
                 let max_scroll_y = self.max_scroll_y(vp_h);
                 self.scroll_y = self.scroll_y.clamp(0.0, max_scroll_y);
             }
         }
-        if !self.is_hscroll_enabled() {
+        if !self.is_hscroll_enabled() && self.zoom <= 1.001 {
             self.scroll_x = 0.0;
         } else {
             let content_w = self.content_width();
-            if content_w > 0.0 {
+            if content_w > 0.0 || self.zoom > 1.001 {
                 let max_scroll_x = self.max_scroll_x(vp_w);
                 self.scroll_x = self.scroll_x.clamp(0.0, max_scroll_x);
             }
@@ -2062,7 +2155,7 @@ impl ViewerApp {
         let device_handle = &self.render_cx.devices[surface.dev_id];
 
         let mut scene_opts = self.config.scene_options.clone();
-        scene_opts.scale_factor = window.scale_factor();
+        scene_opts.scale_factor = window.scale_factor() * self.zoom;
         scene_opts.scroll_offset = (self.scroll_x, self.scroll_y);
 
         let layout = current_layout(&self.compiled, &self.static_layout);
@@ -2120,7 +2213,9 @@ impl ViewerApp {
 
         if self.inspect_mode {
             let overlay = crate::inspector::InspectOverlayComponent::default();
-            let overlay_transform = vello::kurbo::Affine::translate((-self.scroll_x, nav_bar_h - self.scroll_y));
+            let overlay_transform = vello::kurbo::Affine::translate((0.0, nav_bar_h))
+                * vello::kurbo::Affine::scale(self.zoom)
+                * vello::kurbo::Affine::translate((-self.scroll_x, -self.scroll_y));
             let panel_w = self.panel_component.width;
             let panel_x = win_w - panel_w;
 
@@ -2196,7 +2291,7 @@ impl ViewerApp {
         }
 
         // Render subtle scrollbar thumbs if document content exceeds viewport
-        let content_h = layout
+        let raw_content_h = layout
             .nodes
             .iter()
             .filter(|n| n.clip.is_none())
@@ -2207,7 +2302,7 @@ impl ViewerApp {
             .map(|v| v.is_truthy())
             .unwrap_or(true);
 
-        let content_w = layout
+        let raw_content_w = layout
             .nodes
             .iter()
             .filter(|n| n.clip.is_none())
@@ -2218,17 +2313,23 @@ impl ViewerApp {
             .map(|v| v.is_truthy())
             .unwrap_or(true);
 
-        let show_v_scrollbar = vscroll_enabled && content_h > canvas_h;
-        let show_h_scrollbar = hscroll_enabled && content_w > canvas_w;
+        let z = self.zoom.max(0.01);
+        let eff_canvas_h = canvas_h / z;
+        let eff_canvas_w = canvas_w / z;
+        let content_h = if z > 1.001 { raw_content_h.max(canvas_h) } else { raw_content_h };
+        let content_w = if z > 1.001 { raw_content_w.max(canvas_w) } else { raw_content_w };
+
+        let show_v_scrollbar = (vscroll_enabled || z > 1.001) && content_h > eff_canvas_h + 0.5;
+        let show_h_scrollbar = (hscroll_enabled || z > 1.001) && content_w > eff_canvas_w + 0.5;
 
         if show_v_scrollbar {
-            let max_scroll = (content_h - canvas_h).max(1.0);
+            let max_scroll = (content_h - eff_canvas_h).max(1.0);
             let track_h = if show_h_scrollbar {
                 (canvas_h - 14.0).max(24.0)
             } else {
                 canvas_h
             };
-            let thumb_h = ((canvas_h / content_h) * track_h).max(24.0).min(track_h);
+            let thumb_h = ((eff_canvas_h / content_h) * track_h).max(24.0).min(track_h);
             let scroll_ratio = (self.scroll_y / max_scroll).clamp(0.0, 1.0);
             let thumb_y = nav_bar_h + scroll_ratio * (track_h - thumb_h);
             let thumb_w = 6.0;
@@ -2259,13 +2360,13 @@ impl ViewerApp {
         }
 
         if show_h_scrollbar {
-            let max_scroll = (content_w - canvas_w).max(1.0);
+            let max_scroll = (content_w - eff_canvas_w).max(1.0);
             let track_w = if show_v_scrollbar {
                 (canvas_w - 14.0).max(24.0)
             } else {
                 canvas_w
             };
-            let thumb_w = ((canvas_w / content_w) * track_w).max(24.0).min(track_w);
+            let thumb_w = ((eff_canvas_w / content_w) * track_w).max(24.0).min(track_w);
             let scroll_ratio = (self.scroll_x / max_scroll).clamp(0.0, 1.0);
             let thumb_x = scroll_ratio * (track_w - thumb_w);
             let thumb_h = 6.0;
@@ -2535,7 +2636,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                 // If pointer is captured by a node, route all movements directly to that node
                 if let Some(target_id) = self.captured_node {
-                    let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+                    let doc_point = self.window_to_doc_point(point);
                     if let Some(target_node) = self.layout().get_node(target_id) {
                         let local_point = Point::new(
                             doc_point.x - target_node.rect.x,
@@ -2596,7 +2697,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                         }
                     }
                     if let Some(old_id) = self.hovered_node.take() {
-                        let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+                        let doc_point = self.window_to_doc_point(point);
                         let leave_event = Event::new(
                             EventKind::PointerLeave,
                             doc_point,
@@ -2622,21 +2723,32 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 } else {
                     win_w
                 };
-                let content_h = self.content_height();
-                let content_w = self.content_width();
-                let show_v = self.is_vscroll_enabled() && content_h > canvas_h;
-                let show_h = self.is_hscroll_enabled() && content_w > canvas_w;
+                let z = self.zoom.max(0.1);
+                let eff_canvas_h = canvas_h / z;
+                let eff_canvas_w = canvas_w / z;
+                let content_h = if z > 1.001 {
+                    self.content_height().max(canvas_h)
+                } else {
+                    self.content_height()
+                };
+                let content_w = if z > 1.001 {
+                    self.content_width().max(canvas_w)
+                } else {
+                    self.content_width()
+                };
+                let show_v = (self.is_vscroll_enabled() || z > 1.001) && content_h > eff_canvas_h + 0.5;
+                let show_h = (self.is_hscroll_enabled() || z > 1.001) && content_w > eff_canvas_w + 0.5;
 
-                if self.is_vscroll_enabled() && self.is_dragging_scrollbar {
-                    if content_h > canvas_h {
+                if (self.is_vscroll_enabled() || z > 1.001) && self.is_dragging_scrollbar {
+                    if content_h > eff_canvas_h {
                         let track_h = if show_h {
                             (canvas_h - 14.0).max(24.0)
                         } else {
                             canvas_h
                         };
-                        let thumb_h = ((canvas_h / content_h) * track_h).max(24.0).min(track_h);
+                        let thumb_h = ((eff_canvas_h / content_h) * track_h).max(24.0).min(track_h);
                         let available_track = (track_h - thumb_h).max(1.0);
-                        let max_scroll = (content_h - canvas_h).max(0.0);
+                        let max_scroll = (content_h - eff_canvas_h).max(0.0);
                         let dy = (point.y - nav_bar_h) - self.scrollbar_drag_start_y;
                         let scroll_delta = (dy / available_track) * max_scroll;
                         self.scroll_y = (self.scrollbar_start_scroll_y + scroll_delta).clamp(0.0, max_scroll);
@@ -2647,16 +2759,16 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     return;
                 }
 
-                if self.is_hscroll_enabled() && self.is_dragging_h_scrollbar {
-                    if content_w > canvas_w {
+                if (self.is_hscroll_enabled() || z > 1.001) && self.is_dragging_h_scrollbar {
+                    if content_w > eff_canvas_w {
                         let track_w = if show_v {
                             (canvas_w - 14.0).max(24.0)
                         } else {
                             canvas_w
                         };
-                        let thumb_w = ((canvas_w / content_w) * track_w).max(24.0).min(track_w);
+                        let thumb_w = ((eff_canvas_w / content_w) * track_w).max(24.0).min(track_w);
                         let available_track = (track_w - thumb_w).max(1.0);
-                        let max_scroll = (content_w - canvas_w).max(0.0);
+                        let max_scroll = (content_w - eff_canvas_w).max(0.0);
                         let dx = point.x - self.scrollbar_drag_start_x;
                         let scroll_delta = (dx / available_track) * max_scroll;
                         self.scroll_x = (self.scrollbar_start_scroll_x + scroll_delta).clamp(0.0, max_scroll);
@@ -2788,7 +2900,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                             }
                         }
                         if let Some(old_id) = self.hovered_node.take() {
-                            let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+                            let doc_point = self.window_to_doc_point(point);
                             let leave_event = Event::new(
                                 EventKind::PointerLeave,
                                 doc_point,
@@ -2844,7 +2956,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                         // Clear canvas hover state when moving into panel
                         if let Some(old_id) = self.hovered_node.take() {
-                            let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+                            let doc_point = self.window_to_doc_point(point);
                             let leave_event = Event::new(
                                 EventKind::PointerLeave,
                                 doc_point,
@@ -2865,7 +2977,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 }
 
                 // Cursor is over the canvas
-                let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+                let doc_point = self.window_to_doc_point(point);
                 let hit = self.layout().hit_test(doc_point);
                 let new_hovered = hit.as_ref().map(|h| h.target);
 
@@ -2965,7 +3077,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     if state == ElementState::Released {
                         if let Some(captured_id) = self.captured_node.take() {
                             self.pressed_node = None;
-                            let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+                            let doc_point = self.window_to_doc_point(point);
                             let hit = self.layout().hit_test(doc_point);
                             if let Some(captured_node) = self.layout().get_node(captured_id) {
                                 let local_point = Point::new(
@@ -3202,16 +3314,27 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
 
                     let canvas_h = (win_h - nav_bar_h).max(1.0);
-                    let content_h = self.content_height();
-                    let content_w = self.content_width();
                     let canvas_w = if self.inspect_mode {
                         (win_w - self.panel_component.width).max(100.0)
                     } else {
                         win_w
                     };
+                    let z = self.zoom.max(0.1);
+                    let eff_canvas_h = canvas_h / z;
+                    let eff_canvas_w = canvas_w / z;
+                    let content_h = if z > 1.001 {
+                        self.content_height().max(canvas_h)
+                    } else {
+                        self.content_height()
+                    };
+                    let content_w = if z > 1.001 {
+                        self.content_width().max(canvas_w)
+                    } else {
+                        self.content_width()
+                    };
 
-                    let show_v = self.is_vscroll_enabled() && content_h > canvas_h;
-                    let show_h = self.is_hscroll_enabled() && content_w > canvas_w;
+                    let show_v = (self.is_vscroll_enabled() || z > 1.001) && content_h > eff_canvas_h + 0.5;
+                    let show_h = (self.is_hscroll_enabled() || z > 1.001) && content_w > eff_canvas_w + 0.5;
 
                     if state == ElementState::Pressed {
                         let v_bottom_limit = if show_h {
@@ -3266,7 +3389,7 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
 
                     // Mouse input is over canvas area
-                    let doc_point = Point::new(point.x + self.scroll_x, (point.y - nav_bar_h) + self.scroll_y);
+                    let doc_point = self.window_to_doc_point(point);
                     let hit = self.layout().hit_test(doc_point);
                     match state {
                         ElementState::Pressed => {
@@ -3386,6 +3509,10 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     }
                 }
             }
+            WindowEvent::PinchGesture { delta, .. } => {
+                self.flush_pending_scroll();
+                self.zoom_by(delta);
+            }
             WindowEvent::MouseWheel { delta, .. } => {
                 let (delta_x, delta_y) = match delta {
                     winit::event::MouseScrollDelta::LineDelta(x, y) => (x as f64 * 20.0, y as f64 * 20.0),
@@ -3398,10 +3525,9 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 self.is_dragging_scrollbar = false;
                 self.is_dragging_h_scrollbar = false;
                 self.inspector_scrollbar_drag = None;
-                let nav_bar_h = self.nav_bar_height();
                 if let Some(old_id) = self.hovered_node.take() {
                     let pt = self.cursor_pos.unwrap_or_default();
-                    let doc_pt = Point::new(pt.x + self.scroll_x, (pt.y - nav_bar_h) + self.scroll_y);
+                    let doc_pt = self.window_to_doc_point(pt);
                     let leave_event = Event::new(
                         EventKind::PointerLeave,
                         doc_pt,
@@ -3546,7 +3672,25 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                     return;
                 }
 
-                // 2. Browser navigation shortcuts:
+                // 2. Browser navigation and zoom shortcuts:
+                if (self.modifiers.meta || self.modifiers.ctrl)
+                    && logical_key == Key::Character("0".into())
+                {
+                    self.reset_zoom();
+                    return;
+                }
+                if (self.modifiers.meta || self.modifiers.ctrl)
+                    && (logical_key == Key::Character("=".into()) || logical_key == Key::Character("+".into()))
+                {
+                    self.set_zoom_at(self.zoom * 1.25, self.cursor_pos);
+                    return;
+                }
+                if (self.modifiers.meta || self.modifiers.ctrl)
+                    && (logical_key == Key::Character("-".into()) || logical_key == Key::Character("_".into()))
+                {
+                    self.set_zoom_at(self.zoom / 1.25, self.cursor_pos);
+                    return;
+                }
                 if (self.modifiers.alt && logical_key == Key::Named(NamedKey::ArrowLeft))
                     || (self.modifiers.meta && logical_key == Key::Character("[".into()))
                 {

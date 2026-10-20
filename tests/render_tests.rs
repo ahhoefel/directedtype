@@ -984,3 +984,43 @@ fn test_text_bounds_demo_compiles_and_renders() {
     assert_eq!(img.width(), 900);
     assert_eq!(img.height(), 600);
 }
+
+#[test]
+fn test_viewer_zoom_and_reset() {
+    use directedtype::render::viewer::{ViewerApp, ViewerConfig};
+    use directedtype::Point;
+
+    let input = r#"\Box(width: 800px, height: 600px) {}"#;
+    let doc = directedtype::parse(input).expect("parse ok");
+    let compiled =
+        directedtype::compiler::CompiledDocument::compile_with_window(&doc, 800.0, 600.0).expect("compile ok");
+    let mut app = ViewerApp::new_with_compiled(
+        compiled,
+        ViewerConfig {
+            width: 800,
+            height: 600,
+            ..Default::default()
+        },
+    );
+
+    assert!((app.zoom() - 1.0).abs() < 1e-6);
+
+    // Zoom in around anchor point (400, 300)
+    app.set_zoom_at(2.0, Some(Point::new(400.0, 300.0)));
+    assert!((app.zoom() - 2.0).abs() < 1e-6);
+    // At 2x zoom anchored at (400, 300), scroll offset should keep document point (400, 300) at window (400, 300):
+    // scroll_x = 400 - 400/2 = 200, scroll_y = 300 - 300/2 = 150
+    assert!((app.scroll_x() - 200.0).abs() < 1e-6);
+    assert!((app.scroll_y() - 150.0).abs() < 1e-6);
+
+    // Pinch gesture zoom_by
+    app.zoom_by(0.5);
+    assert!((app.zoom() - 3.0).abs() < 1e-6);
+
+    // Reset zoom (Cmd+0 behavior)
+    app.reset_zoom();
+    assert!((app.zoom() - 1.0).abs() < 1e-6);
+    assert!((app.scroll_x() - 0.0).abs() < 1e-6);
+    assert!((app.scroll_y() - 0.0).abs() < 1e-6);
+}
+
