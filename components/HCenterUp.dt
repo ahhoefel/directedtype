@@ -10,7 +10,7 @@
     x: Distance: parent.left,
     y: Distance: parent.top
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \alias right = x + width;
     \alias height = only(children.height);
@@ -27,7 +27,7 @@
     x: Distance,
     y: Distance
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \let available_width = parent.width - (2 * (x - parent.left));
     \let resolved_width = max(available_width, only(children.width));
@@ -47,9 +47,10 @@
 \Component HCenterUp(
     y: Distance
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
-    \let resolved_width = max(parent.width, only(children.width));
+    \let available_width = parent.width;
+    \let resolved_width = max(available_width, only(children.width));
 
     \alias width = resolved_width;
     \alias x = parent.left;
@@ -58,16 +59,17 @@
     \alias bottom = y + height;
 
     \Children {
-        x: parent.left + max(0, (parent.width - child.width) / 2),
+        x: x + max(0, (available_width - child.width) / 2),
         y: y
     }
 }
 
 // 4. Fluid Parent-Fitting HCenterUp
 \Component HCenterUp {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
-    \let resolved_width = max(parent.width, only(children.width));
+    \let available_width = parent.width;
+    \let resolved_width = max(available_width, only(children.width));
 
     \alias width = resolved_width;
     \alias x = parent.left;
@@ -77,8 +79,8 @@
     \alias bottom = y + height;
 
     \Children {
-        x: parent.left + max(0, (parent.width - child.width) / 2),
-        y: parent.top
+        x: x + max(0, (available_width - child.width) / 2),
+        y: y
     }
 }
 

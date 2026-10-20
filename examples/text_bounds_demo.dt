@@ -18,10 +18,10 @@
 
     // Background box
     \Rect(
-        x: self.left,
-        y: self.top,
-        width: self.width,
-        height: self.height,
+        x: left,
+        y: top,
+        width: width,
+        height: height,
         color: #0f172a
     )
 

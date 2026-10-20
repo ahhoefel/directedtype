@@ -41,7 +41,7 @@
     \let is_right = align == Align.Right;
 
     \alias right = x + width;
-    \alias height = sum(children.height) + max(0, num_children - 1) * gap;
+    \alias height = sum(children.height) + max(0, children.len - 1) * gap;
     \alias bottom = y + height;
 
     \Children {
@@ -69,12 +69,12 @@
 
     \alias width = max_child_width > 0 ? max_child_width : 0;
     \alias right = x + width;
-    \alias height = sum(children.height) + max(0, num_children - 1) * gap;
+    \alias height = sum(children.height) + max(0, children.len - 1) * gap;
     \alias bottom = y + height;
 
     \Children {
-        x: is_center ? (x + (parent.max_child_width - child.width) / 2) : (
-            is_right ? (x + parent.max_child_width - child.width) : (
+        x: is_center ? (x + (max_child_width - child.width) / 2) : (
+            is_right ? (x + max_child_width - child.width) : (
                 x
             )
         ),

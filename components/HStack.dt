@@ -39,7 +39,7 @@
     \let is_center = align == Align.Center;
     \let is_bottom = align == Align.Bottom;
 
-    \alias width = sum(children.width) + max(0, num_children - 1) * gap;
+    \alias width = sum(children.width) + max(0, children.len - 1) * gap;
     \alias right = x + width;
     \alias bottom = y + height;
 
@@ -71,8 +71,8 @@
 
     \Children {
         x: prev ? prev.right + gap : x,
-        y: is_center ? (y + (parent.max_child_height - child.height) / 2) : (
-            is_bottom ? (y + parent.max_child_height - child.height) : (
+        y: is_center ? (y + (max_child_height - child.height) / 2) : (
+            is_bottom ? (y + max_child_height - child.height) : (
                 y
             )
         )
@@ -90,15 +90,15 @@
     \let is_bottom = align == Align.Bottom;
 
     \alias max_child_height = max(children.height);
-    \alias width = sum(children.width) + max(0, num_children - 1) * gap;
+    \alias width = sum(children.width) + max(0, children.len - 1) * gap;
     \alias right = x + width;
     \alias height = max_child_height > 0 ? max_child_height : 0;
     \alias bottom = y + height;
 
     \Children {
         x: prev ? prev.right + gap : x,
-        y: is_center ? (y + (parent.max_child_height - child.height) / 2) : (
-            is_bottom ? (y + parent.max_child_height - child.height) : (
+        y: is_center ? (y + (max_child_height - child.height) / 2) : (
+            is_bottom ? (y + max_child_height - child.height) : (
                 y
             )
         )

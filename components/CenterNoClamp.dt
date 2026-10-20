@@ -29,8 +29,8 @@
     \alias bottom = parent.top + height;
 
     \Children {
-        x: parent.left + (width - child.width) / 2,
-        y: parent.top + (height - child.height) / 2
+        x: x + (width - child.width) / 2,
+        y: y + (height - child.height) / 2
     }
 }
 
@@ -63,8 +63,8 @@
     \alias bottom = parent.bottom;
 
     \Children {
-        x: parent.left + (parent.width - child.width) / 2,
-        y: parent.top + (parent.height - child.height) / 2
+        x: x + (width - child.width) / 2,
+        y: y + (height - child.height) / 2
     }
 }
 

@@ -7,7 +7,7 @@
     x: Distance: parent.left,
     y: Distance: parent.top
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \let available_width = parent.width - (2 * (x - parent.left));
     \let inner_width = available_width - (2 * padding);
@@ -34,7 +34,7 @@
     x: Distance: parent.left,
     y: Distance: parent.top
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \let available_width = parent.width - (2 * (x - parent.left));
     \let inner_width = available_width - (2 * padding_x);
@@ -60,7 +60,7 @@
     x: Distance: parent.left,
     y: Distance: parent.top
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \let available_width = parent.width - (2 * (x - parent.left));
     \let inner_width = available_width - (2 * padding_x);
@@ -83,7 +83,7 @@
     x: Distance: parent.left,
     y: Distance: parent.top
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \let available_height = parent.height - (2 * (y - parent.top));
     \let inner_height = available_height - (2 * padding_y);

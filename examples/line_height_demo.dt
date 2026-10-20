@@ -7,7 +7,7 @@
 \Component Box(x, y, width, height, env font) {
     \env text_bounds = \TextBounds(start_at: TextStart.EmTop, end_at: TextEnd.GapBottom);
     // Background card (drawn first so it stays behind text and guides)
-    \Rect(x: self.left, y: self.top, width: self.width, height: self.height, color: #0f172a)
+    \Rect(x: left, y: top, width: width, height: height, color: #0f172a)
     // Centered text
     \Center {
         \let t = \Text(
@@ -50,9 +50,9 @@
     \Measurement(x: guide_x + guide_width + 10px, y1: t.y, y2: baseline_y)
     \Measurement(x: guide_x + guide_width + 30px, y1: cap_height_y, y2: descender_y)
     \Measurement(x: guide_x + guide_width + 50px, y1: baseline_y, y2: gap_y)
-    \Measurement(x: guide_x + guide_width/2, y1: self.y, y2: t.y)
-    \Measurement(x: guide_x + guide_width/2, y1: t.bottom, y2: self.bottom)
-    \Measurement(x: self.right + 10px, y1: self.top, y2: self.bottom, color: #000000)
+    \Measurement(x: guide_x + guide_width/2, y1: y, y2: t.y)
+    \Measurement(x: guide_x + guide_width/2, y1: t.bottom, y2: bottom)
+    \Measurement(x: right + 10px, y1: top, y2: bottom, color: #000000)
 
 }
 

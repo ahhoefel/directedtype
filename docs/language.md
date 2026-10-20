@@ -109,29 +109,32 @@ Understanding which implicit variables are in scope at each point in a `.dt` fil
 
 ### 3.1 Summary of Implicit Variables by Scope
 
-| Variable / Keyword | Top-Level Document | `\Component` Body | `\Children { ... }` Block | Element Instance `\Elem(...)` | Description |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| `window` | Yes | Yes | Yes | Yes | The root viewport container node (`NodeId::WINDOW`). |
-| `parent` | Resolves to `window` | Enclosing caller parent | The component instance itself | Immediate parent node | The parent container in the expanded hierarchy. |
-| `self` | Current root node | The component instance | The component instance | Enclosing component (or current node at top level) | Refers to the enclosing component instance being defined. |
-| `child` | Current node | Current node | **Each child** receiving the default | Current node | In `\Children`, refers to the specific child node being configured (e.g., `child.width`). |
-| `prev` | Previous top-level sibling | — | **Previous sibling** of each child | Previous sibling in the same block | Refers to the immediately preceding sibling node (or `None` for the first child). |
-| `children` | — | Direct children passed by caller | — | Direct children inside `{ ... }` | Collection pseudo-variable used in aggregates (`sum(children.height)`) and count queries. |
-| `num_children` | Number of root children | Number of caller children | Number of caller children | Number of direct children | Compile-time `Number` literal equal to the count of direct children. |
-| `children.len` / `children.count` | Same as `num_children` | Same as `num_children` | Same as `num_children` | Same as `num_children` | Alias for `num_children`. |
-| `<param_name>` | — | Component parameter port | Component parameter port | Ambient parent port (if in scope) | Unqualified parameter names resolve directly to `self.<param_name>`. |
-| `<let_name>` | Top-level `\let` binding | Component `\let` / `\alias` / `\state` | Component `\let` / `\alias` / `\state` | Enclosing lexical `\let` bindings | Lexical variable or named node in scope. |
-| `env.<name>` | Top-level `\env` | Bound `\env` in scope | Bound `\env` in scope | Bound `\env` in scope | Accesses an environmental variable down the call tree. |
+| Variable / Keyword | Top-Level Document | `\Component` Signature & Directives (`\let`, `\alias`, `\env`, `\assert`) | `\Children { ... }` Block | Internal Elements in `\Component` | Caller Element Instance `\Elem(...)` | Description |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| `window` | Yes | Yes | Yes | Yes | Yes | The root viewport container node (`NodeId::WINDOW`). |
+| `parent` | Resolves to `window` | Enclosing caller parent | **Error** (use bare component properties) | **Error** (use bare component properties) | Immediate parent container | The enclosing parent container in the expanded hierarchy. |
+| `self.<port>` | **Error** | Shadowed port or `on_*` method only | Shadowed port or `on_*` method only | Shadowed port on component, or `on_*` method on element | `on_*` method on element only | Uncovers a component port shadowed by a local `\let` or `\env`, or binds an `on_*` event to the target element's own method (`self.act`) rather than the enclosing component's method (`act`). |
+| `child` | **Error** | **Error** | **Each child** receiving the default | **Error** | **Error** | Only valid in `\Children { ... }`, where it refers to the specific child node being configured (e.g., `child.width`). |
+| `prev` | Previous top-level sibling | — | **Previous sibling** of each child | Previous sibling in component body | Previous sibling in the same block | Refers to the immediately preceding sibling node (or `None` for the first child). |
+| `children` | — | Direct children passed by caller | Direct children passed by caller | — | Direct children inside `{ ... }` | Collection pseudo-variable used in aggregates (`sum(children.height)`) and `children.len`. |
+| `children.len` | `0` | Number of caller children | Number of caller children | Number of element's children | Number of direct children | Compile-time `Integer` literal equal to the count of direct children. |
+| `<param_name>` | — | Component parameter / port | Component parameter / port | Component parameter / port | — | Unqualified parameter and port names (`x`, `y`, `width`, `height`, `left`, `top`, `right`, `bottom`, `clip`, etc.) resolve directly on the enclosing `\Component`. |
+| `<let_name>` | Top-level `\let` / `\state` | Component `\let` / `\alias` / `\state` | Component `\let` / `\alias` / `\state` | Component `\let` / `\alias` / `\state` | Enclosing lexical `\let` / `\state` bindings | Lexical variable, reactive state, or named node in scope. |
+| `env.<name>` | Top-level `\env` | Bound `\env` in scope | Bound `\env` in scope | Bound `\env` in scope | Bound `\env` in scope | Accesses an environmental variable down the call tree. |
 
-### 3.2 Identifier Resolution Precedence
+### 3.2 Identifier Resolution & `self` Rules
 
-When you write an unqualified identifier `foo` in an expression, the compiler resolves it in the following strict order:
+When you write an unqualified identifier `foo` in an expression, the compiler resolves it in the following strict order without ever implicitly falling back to `parent.foo` or `window.foo`:
 
-1. **Reserved Keywords**: `self`, `parent`, `window`, `prev`, `child`, `num_children` (and `true` / `false`).
-2. **Lexical Scope (`\let`, `\alias`, `\state`)**: Any `\let`, `\alias`, or `\state` declared prior to the expression in the current block (shadowing outer lexical scopes and ambient parent ports).
-3. **Current Component Parameters**: If inside a `\Component`, any parameter declared in the component signature `\Component Name(foo: ...)`.
-4. **Parent Public Ports**: Any public port or `\alias` exposed by the immediate `parent` container.
-5. **Implicit Default Ports on `self`**: Standard spatial ports (`x`, `y`, `width`, `height`, `left`, `top`, `right`, `bottom`, `z`, `clip`).
+1. **Reserved Keywords**: `window`, `parent`, `self`, `child`, `prev`, `children`, `env` (and `true` / `false` / `unset`).
+2. **Lexical Scope (`\let`, `\alias`, `\state`, `\env`)**: Any local binding declared in the current component or block (shadowing component parameters and outer lexical scopes).
+3. **Enclosing Component Ports & Synthesized Boundaries**: Inside a `\Component` (including signature defaults, `\let`, `\alias`, `\env`, `\assert`, `\Children`, and internal elements), any declared parameter or synthesized port (`left`, `top`, `right`, `bottom`, `clip`) of that component.
+4. **Enclosing Component Method (in `on_*` event ports only)**: In an `on_*` callback port (such as `on_click: act`), an unqualified identifier that does not match a local variable or port resolves to the enclosing component's companion method (`Outer.act`).
+
+#### When to Use `self`
+Because component ports and parameters resolve directly as bare identifiers everywhere inside a `\Component`, `self` is **disallowed** except in two specific disambiguation cases:
+1. **Calling a Contained Component's Own Method in `on_*`**: Inside `\Component Foo() { \Bar(on_click: self.act) }`, bare `act` refers to `Foo.act`, whereas `self.act` refers to `Bar.act`.
+2. **Uncovering a Shadowed Port**: When a component port `P` (including `clip`, `left`, `top`, `right`, `bottom`, or a declared parameter) is shadowed by a local `\let P` or `\env P`, `self.P` accesses the component's public port `P` (e.g., `\let clip = \Clip(up: self.clip, ...)` or `\env color = self.color`). Using `self.P` when `P` is **not** shadowed is a compile error.
 
 ### 3.3 The `prev` Sibling Recurrence Pattern
 
@@ -139,11 +142,11 @@ Because layout is a static DAG rather than an imperative loop, sequential flow l
 
 ```dt
 \Children {
-    x: parent.left,
-    y: prev ? prev.bottom + gap : parent.top
+    x: left,
+    y: prev ? prev.bottom + gap : top
 }
 ```
-* For the **first child** (`index == 0`), `prev` does not exist, so `prev ? ... : ...` statically expands to the `else` branch (`parent.top`).
+* For the **first child** (`index == 0`), `prev` does not exist, so `prev ? ... : ...` statically expands to the `else` branch (`top`).
 * For **subsequent children** (`index > 0`), `prev` resolves to the `NodeId` of child `index - 1`, so the expression expands to `child_{i-1}.bottom + gap`.
 
 ### 3.4 Spatial Ports & Automatic Boundary Aliases
@@ -154,10 +157,10 @@ Custom `\Component` definitions do **not** automatically receive `x`, `y`, `widt
 
 | Synthesized Port | Type | Default Equation | Condition for Synthesis on `\Component` |
 | :--- | :--- | :--- | :--- |
-| `left` | `Number` | `x` | `x` is present and `left` is not already defined. |
-| `top` | `Number` | `y` | `y` is present and `top` is not already defined. |
-| `right` | `Number` | `x + width` (or `left + width`) | (`x` or `left`) and `width` are present, and `right` is not already defined. |
-| `bottom` | `Number` | `y + height` (or `top + height`) | (`y` or `top`) and `height` are present, and `bottom` is not already defined. |
+| `left` | `Distance` | `x` | `x` is present and `left` is not already defined. |
+| `top` | `Distance` | `y` | `y` is present and `top` is not already defined. |
+| `right` | `Distance` | `x + width` (or `left + width`) | (`x` or `left`) and `width` are present, and `right` is not already defined. |
+| `bottom` | `Distance` | `y + height` (or `top + height`) | (`y` or `top`) and `height` are present, and `bottom` is not already defined. |
 | `clip` | `Node` (`\Clip`) | `env.clip` or `parent.clip` or `window.clip` | Present on all spatial primitives and components for hardware clip propagation. |
 
 ---
@@ -166,16 +169,17 @@ Custom `\Component` definitions do **not** automatically receive `x`, `y`, `widt
 
 DirectedType provides built-in functions and methods that can be called inside any port equation or `\let` / `\alias` expression without importing any module.
 
-### 4.1 Child Collection Aggregate Functions
+### 4.1 Child Collection Aggregate Functions & `children.len`
 
-Inside a container or `\Component`, `children.<port>` expands to the list of `<port>` values across all direct child nodes.
+Inside a container or `\Component`, `children.<port>` expands to the list of `<port>` values across all direct child nodes, and `children.len` evaluates to the integer count of direct children.
 
-| Function Signature | Return Type | Empty Children (`0` children) | Description |
+| Expression / Function | Return Type | Empty Children (`0` children) | Description |
 | :--- | :--- | :--- | :--- |
-| `sum(children.<port>)` | `Number` | `0` | Sums the specified numeric port across all direct children. |
-| `max(children.<port>)` | `Number` | `0` | Returns the maximum value of `<port>` across all direct children. |
-| `min(children.<port>)` | `Number` | `0` | Returns the minimum value of `<port>` across all direct children. |
-| `only(children.<port>)` | `Any` | **Compile/Eval Error** | Asserts that the node has **exactly 1 child** and returns that single child's `<port>`. Fails if `num_children != 1`. |
+| `children.len` | `Integer` | `0` | Compile-time count of direct children passed to the component or element. |
+| `sum(children.<port>)` | `Number` / `Distance` | `0` | Sums the specified numeric port across all direct children. |
+| `max(children.<port>)` | `Number` / `Distance` | `0` | Returns the maximum value of `<port>` across all direct children. |
+| `min(children.<port>)` | `Number` / `Distance` | `0` | Returns the minimum value of `<port>` across all direct children. |
+| `only(children.<port>)` | `Any` | **Compile/Eval Error** | Asserts that the node has **exactly 1 child** and returns that single child's `<port>`. Fails if `children.len != 1`. |
 
 > [!NOTE]
 > `sum(...)`, `max(...)`, and `min(...)` can also be called with arbitrary comma-separated scalar arguments—or a mix of scalars and `children.<port>`:
@@ -571,7 +575,7 @@ DirectedType solves this cleanly through **compile-time constructor overloading*
     y: Number = parent.top,
     gap: Number = 0
 ) {
-    \alias height = sum(children.height) + max(0, num_children - 1) * gap;
+    \alias height = sum(children.height) + max(0, children.len - 1) * gap;
     ...
 }
 
@@ -583,7 +587,7 @@ DirectedType solves this cleanly through **compile-time constructor overloading*
     gap: Number = 0
 ) {
     \alias width = max(children.width);
-    \alias height = sum(children.height) + max(0, num_children - 1) * gap;
+    \alias height = sum(children.height) + max(0, children.len - 1) * gap;
     ...
 }
 ```
@@ -609,14 +613,14 @@ A component places caller-provided children into its hierarchy using `\Children`
 
 ```dt
 \Children {
-    x: x,
-    y: prev ? prev.bottom + gap : y
+    x: left,
+    y: prev ? prev.bottom + gap : top
 }
 ```
 
 Inside a `\Children { ... }` block:
-* `self` and `parent` refer to the enclosing component instance.
-* `child` refers to the individual child receiving the port (allowing alignment formulas like `x + (width - child.width) / 2`).
+* The enclosing component's parameters, `\let`s, `\alias`es, `\state`s, and synthesized ports (`left`, `top`, `right`, `bottom`, `clip`) are referenced directly as **bare identifiers** (`parent` is not allowed inside `\Children`, and `self.<port>` is only allowed when `<port>` is shadowed by a local `\let` or `\env`).
+* `child` refers to the individual child receiving the port (allowing alignment formulas like `left + (width - child.width) / 2`). `child` is **only** valid inside `\Children { ... }`.
 * `prev` refers to the child's immediately preceding sibling.
 
 ---
@@ -654,7 +658,7 @@ Components can enforce layout invariants and cardinality constraints using `\ass
 
 ```dt
 // Function-style syntax:
-\assert(num_children == 1, "PadIn requires exactly one child element.");
+\assert(children.len == 1, "PadIn requires exactly one child element.");
 
 // Statement-style syntax:
 \assert padding >= 0 as "Padding must be non-negative.";
@@ -681,10 +685,12 @@ To preserve state across dynamic re-compilations or list reordering, an element 
 \Button("save-btn"; x: 20, y: 40) { "Save" }
 ```
 > [!WARNING]
-> Identity key expressions must be pure identity values (literals, non-spatial parameters) and **cannot** depend on spatial layout ports (`x`, `y`, `width`, `height`, `left`, `top`, `right`, `bottom`, `z`, `clip`) or `\let` layout formulas.
+> Identity key expressions must be pure identity values (literals, non-spatial parameters, or `\state` variables) and **cannot** depend on spatial layout ports (`x`, `y`, `width`, `height`, `left`, `top`, `right`, `bottom`, `z`, `clip`) or `\let` layout formulas.
 
 #### Event Handler Ports & Companion Rust Structs (`#[component]`)
-Interactive behavior is implemented in a companion Rust struct annotated with `#[component]` (e.g., `components/Button.rs` alongside `components/Button.dt`). In `.dt`, event ports (`on_click`, `on_scroll`, `on_pointer_down`, `on_pointer_move`, `on_pointer_up`, `on_pointer_enter`, `on_pointer_leave`, `on_focus`, `on_blur`) bind DOM events to methods on `self`:
+Interactive behavior is implemented in a companion Rust struct annotated with `#[component]` (e.g., `components/Button.rs` alongside `components/Button.dt`). In `.dt`, event ports (`on_click`, `on_scroll`, `on_pointer_down`, `on_pointer_move`, `on_pointer_up`, `on_pointer_enter`, `on_pointer_leave`, `on_focus`, `on_blur`) bind DOM events to companion methods:
+* **Unqualified method name (`on_click: act`)**: Binds to the `act` method on the **enclosing `\Component`** being defined.
+* **Qualified `self.<method>` (`on_click: self.act`)**: Binds to the `act` method on the **target component instance** itself (for example, when `\Component Foo() { \Bar(on_click: self.act) }` invokes `Bar.act` instead of `Foo.act`, or in a component's own signature default).
 
 ```dt
 \Component Slider(
@@ -701,4 +707,5 @@ Interactive behavior is implemented in a companion Rust struct annotated with `#
     ...
 }
 ```
+
 

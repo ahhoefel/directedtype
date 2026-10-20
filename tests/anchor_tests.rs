@@ -424,7 +424,7 @@ fn test_focus_and_blur_event_dispatch_and_bubbling() {
     let source = r##"
         \Component FocusTracker {
             \state focused: false;
-            \Rect(x: 0, y: 0, width: 120px, height: 40px, color: "#111111", on_focus: self.handle_focus, on_blur: self.handle_blur)
+            \Rect(x: 0, y: 0, width: 120px, height: 40px, color: "#111111", on_focus: handle_focus, on_blur: handle_blur)
         }
         \FocusTracker
     "##;
@@ -663,7 +663,7 @@ fn test_designer_driven_focus_and_blur_target_styling() {
             \state focused: Boolean = false;
             \let bg_color = focused ? #3b82f6 : #ffffff;
 
-            \Anchor(name: "styled-target", on_focus: self.handle_focus, on_blur: self.handle_blur) {
+            \Anchor(name: "styled-target", on_focus: handle_focus, on_blur: handle_blur) {
                 \Rect(width: 200px, height: 80px, color: bg_color)
             }
         }
@@ -879,7 +879,7 @@ fn test_link_component_custom_on_click_override() {
         \Component CustomPage(env font: Font, x: Distance = 0, y: Distance = 0) {
             \state custom_clicked: Boolean = false;
 
-            \Link(url: "#ignored", link_style: link_default, on_click: self.handle_custom_click) {
+            \Link(url: "#ignored", link_style: link_default, on_click: handle_custom_click) {
                 Custom Action Link
             }
         }

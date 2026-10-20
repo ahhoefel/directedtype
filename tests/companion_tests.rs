@@ -134,7 +134,7 @@ fn test_event_dispatch_self_increment_and_decrement() {
     let input = r#"
     \Component Counter {
         \state count: Float: 0;
-        \Rect(x: 10px, y: 10px, width: 100px + count * 20px, height: 40px, color: #10b981, on_click: self.increment)
+        \Rect(x: 10px, y: 10px, width: 100px + count * 20px, height: 40px, color: #10b981, on_click: increment)
     }
 
     \Counter
@@ -330,7 +330,7 @@ fn test_dom_integration_register_and_dispatch() {
     let input = r#"
     \Component Counter {
         \state count: Float: 0;
-        \Rect(x: 20px, y: 20px, width: 100px + count * 50px, height: 30px, color: #ff0000, on_click: self.increment)
+        \Rect(x: 20px, y: 20px, width: 100px + count * 50px, height: 30px, color: #ff0000, on_click: increment)
     }
 
     \Counter
@@ -385,8 +385,8 @@ fn test_event_propagation_stops_by_default() {
 
     let input = r#"
     \Component Parent {
-        \Rect(x: 0, y: 0, width: 200px, height: 200px, color: #1e293b, on_click: self.on_outer) {
-            \Rect(x: 10px, y: 10px, width: 50px, height: 50px, color: #3b82f6, on_click: self.on_inner)
+        \Rect(x: 0, y: 0, width: 200px, height: 200px, color: #1e293b, on_click: on_outer) {
+            \Rect(x: 10px, y: 10px, width: 50px, height: 50px, color: #3b82f6, on_click: on_inner)
         }
     }
 
@@ -429,7 +429,7 @@ fn test_event_propagation_stops_by_default() {
 fn test_dispatch_error_method_not_found() {
     let input = r#"
     \Component Broken {
-        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: #ff0000, on_click: self.nonexistent)
+        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: #ff0000, on_click: nonexistent)
     }
 
     \Broken
@@ -671,13 +671,13 @@ fn test_click_propagation_stops_by_default() {
 
     let input = r#"
     \Component Parent {
-        \Rect(x: 0, y: 0, width: 200px, height: 200px, color: #1e293b, on_click: self.parent_click) {
+        \Rect(x: 0, y: 0, width: 200px, height: 200px, color: #1e293b, on_click: parent_click) {
             \Child
         }
     }
 
     \Component Child {
-        \Rect(x: 10px, y: 10px, width: 50px, height: 50px, color: #3b82f6, on_click: self.child_click)
+        \Rect(x: 10px, y: 10px, width: 50px, height: 50px, color: #3b82f6, on_click: child_click)
     }
 
     \Parent
@@ -744,13 +744,13 @@ fn test_click_propagation_continue_propagation() {
 
     let input = r#"
     \Component Parent {
-        \Rect(x: 0, y: 0, width: 200px, height: 200px, color: #1e293b, on_click: self.parent_click) {
+        \Rect(x: 0, y: 0, width: 200px, height: 200px, color: #1e293b, on_click: parent_click) {
             \Child
         }
     }
 
     \Component Child {
-        \Rect(x: 10px, y: 10px, width: 50px, height: 50px, color: #3b82f6, on_click: self.child_click)
+        \Rect(x: 10px, y: 10px, width: 50px, height: 50px, color: #3b82f6, on_click: child_click)
     }
 
     \Parent

@@ -57,7 +57,7 @@ fn test_slider_component_drag_and_callback() {
             min: 0,
             max: 100,
             value: 20,
-            on_change: self.set_bass
+            on_change: set_bass
         )
 
         \Slider(
@@ -68,7 +68,7 @@ fn test_slider_component_drag_and_callback() {
             min: 0,
             max: 100,
             value: 80,
-            on_change: self.set_treble
+            on_change: set_treble
         )
     }
 

@@ -8,7 +8,7 @@ use std::path::Path;
 fn test_ctx_window_scroll_to() {
     let source = r##"
         \Component TestComp {
-            \Rect(x: 0, y: 0, width: 100px, height: 100px, color: #1e293b, on_click: self.click)
+            \Rect(x: 0, y: 0, width: 100px, height: 100px, color: #1e293b, on_click: click)
         }
         \TestComp
     "##;

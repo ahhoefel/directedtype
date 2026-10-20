@@ -92,8 +92,8 @@ fn test_headless_render_layout_to_image() {
     let source = r#"
 \Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 16px) {
     \Children {
-        x: parent.left,
-        y: prev ? prev.bottom + gap : parent.top
+        x: left,
+        y: prev ? prev.bottom + gap : top
     }
 }
 

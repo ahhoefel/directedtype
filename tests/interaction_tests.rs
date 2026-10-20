@@ -363,9 +363,9 @@ fn test_pointer_capture_via_context_action_and_companion() {
             width: width,
             height: height,
             color: #3b82f6,
-            on_pointer_down: self.on_down,
-            on_pointer_move: self.on_move,
-            on_pointer_up: self.on_up
+            on_pointer_down: on_down,
+            on_pointer_move: on_move,
+            on_pointer_up: on_up
         )
     }
 
@@ -484,14 +484,14 @@ fn test_component_typed_callback_wiring_and_execution() {
     ) {
         \state value: Float: 0;
         \Rect(
-            x: self.x,
-            y: self.y,
-            width: self.width,
-            height: self.height,
+            x: x,
+            y: y,
+            width: width,
+            height: height,
             color: #333333,
-            on_pointer_down: self.on_pointer_down,
-            on_pointer_move: self.on_pointer_move,
-            on_pointer_up: self.on_pointer_up
+            on_pointer_down: on_pointer_down,
+            on_pointer_move: on_pointer_move,
+            on_pointer_up: on_pointer_up
         )
     }
 
@@ -502,7 +502,7 @@ fn test_component_typed_callback_wiring_and_execution() {
             y: 10px,
             width: 100px,
             height: 20px,
-            on_change: self.set_volume
+            on_change: set_volume
         )
     }
 

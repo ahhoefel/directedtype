@@ -11,7 +11,7 @@
     x: Distance: parent.left,
     y: Distance: parent.top
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \alias right = x + width;
     \alias height = parent.height;
@@ -28,7 +28,7 @@
     x: Distance,
     y: Distance
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \let available_width = parent.width - (2 * (x - parent.left));
     \let resolved_width = max(available_width, only(children.width));
@@ -49,9 +49,10 @@
 \Component HCenter(
     y: Distance
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
-    \let resolved_width = max(parent.width, only(children.width));
+    \let available_width = parent.width;
+    \let resolved_width = max(available_width, only(children.width));
     \let resolved_height = parent.height - (2 * (y - parent.top));
 
     \alias width = resolved_width;
@@ -61,16 +62,17 @@
     \alias bottom = y + resolved_height;
 
     \Children {
-        x: parent.left + max(0, (parent.width - child.width) / 2),
+        x: x + max(0, (available_width - child.width) / 2),
         y: y
     }
 }
 
 // 4. Fluid Parent-Fitting HCenter
 \Component HCenter {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
-    \let resolved_width = max(parent.width, only(children.width));
+    \let available_width = parent.width;
+    \let resolved_width = max(available_width, only(children.width));
 
     \alias width = resolved_width;
     \alias x = parent.left;
@@ -80,7 +82,7 @@
     \alias bottom = parent.bottom;
 
     \Children {
-        x: parent.left + max(0, (parent.width - child.width) / 2),
-        y: parent.top
+        x: x + max(0, (available_width - child.width) / 2),
+        y: y
     }
 }

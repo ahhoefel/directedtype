@@ -622,9 +622,9 @@ fn test_ambient_children_authored_formulas_preserved() {
     let source = r#"
         \Component Flow(x: Distance: 0, y: Distance: 0, width: Distance: parent.width, margin: Distance: 30px, gap: Distance: 20px) {
             \Children {
-                x: parent.left + parent.margin,
-                y: prev ? prev.bottom + gap : parent.top,
-                width: parent.width - (2 * parent.margin)
+                x: left + margin,
+                y: prev ? prev.bottom + gap : top,
+                width: width - (2 * margin)
             }
         }
 
@@ -644,16 +644,16 @@ fn test_ambient_children_authored_formulas_preserved() {
 
     assert_eq!(
         text_node.formulas.get("x").map(|s| s.as_str()),
-        Some("parent.left + parent.margin"),
+        Some("left + margin"),
         "Child node should preserve authored ambient expression for x"
     );
     assert_eq!(
         text_node.formulas.get("y").map(|s| s.as_str()),
-        Some("prev ? prev.bottom + gap : parent.top"),
+        Some("prev ? prev.bottom + gap : top"),
         "Child node should preserve authored ambient expression for y"
     );
     assert!(
-        text_node.formulas.get("width").unwrap().contains("parent.width"),
+        text_node.formulas.get("width").unwrap().contains("width"),
         "Child node should preserve authored ambient expression for width"
     );
 }
@@ -681,14 +681,14 @@ fn test_env_demo_components_authored_formulas() {
     let theme_provider = layout.nodes.iter().find(|n| n.name == "ThemeProvider").unwrap();
     assert_eq!(
         theme_provider.formulas.get("x").map(|s| s.as_str()),
-        Some("parent.left + parent.margin"),
+        Some("left + margin"),
         "ThemeProvider must have authored formula for x"
     );
 
     let ambient_card = layout.nodes.iter().find(|n| n.name == "AmbientCard").unwrap();
     assert_eq!(
         ambient_card.formulas.get("x").map(|s| s.as_str()),
-        Some("parent.left"),
+        Some("left"),
         "AmbientCard must have authored formula for x"
     );
 }
@@ -1707,10 +1707,10 @@ fn test_inspect_component_env_properties() {
 }
 
 \Component ThemeProvider(theme: Theme = Theme.Dark, width: Distance = parent.width) {
-    \env text_color = (self.theme == Theme.Dark) ? #f8fafc : #0f172a
-    \env card_bg = (self.theme == Theme.Dark) ? #1e293b : #e2e8f0
+    \env text_color = (theme == Theme.Dark) ? #f8fafc : #0f172a
+    \env card_bg = (theme == Theme.Dark) ? #1e293b : #e2e8f0
     \env accent_color = #3b82f6
-    \env content_width = self.width - 40px
+    \env content_width = width - 40px
     \Children
 }
 

@@ -472,7 +472,7 @@ fn test_dom_insert_before_dynamic_flow_recurrence() {
         \Component Flow(y: Distance: 0, gap: Distance: 20px) {
             \Children {
                 x: 0,
-                y: prev ? prev.bottom + gap : parent.top,
+                y: prev ? prev.bottom + gap : top,
                 width: 200px
             }
         }

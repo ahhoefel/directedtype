@@ -18,7 +18,7 @@
         font,
         item_gap
     }
-    \alias height = sum(children.height) + max(0, num_children-1) * gap;
+    \alias height = sum(children.height) + max(0, children.len - 1) * gap;
 }
 
 \Component Item(x,y, width, index: Integer, item_gap, bullet_type: BulletType, bullet: String: "•", env font) {

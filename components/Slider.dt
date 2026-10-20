@@ -20,43 +20,43 @@
 
     // Inactive track background
     \Rect(
-        x: self.x,
-        y: self.y + (self.height - self.track_height) / 2,
-        width: self.width,
-        height: self.track_height,
-        radius: self.track_height / 2,
-        color: self.track_color
+        x: x,
+        y: y + (height - track_height) / 2,
+        width: width,
+        height: track_height,
+        radius: track_height / 2,
+        color: track_color
     )
 
     // Active fill track
     \Rect(
-        x: self.x,
-        y: self.y + (self.height - self.track_height) / 2,
-        width: max(0, min(self.width, (current_value - self.min) / max(1, self.max - self.min) * (self.width - self.thumb_size) + self.thumb_size / 2)),
-        height: self.track_height,
-        radius: self.track_height / 2,
-        color: self.fill_color
+        x: x,
+        y: y + (height - track_height) / 2,
+        width: max(0, min(width, (current_value - min) / max(1, max - min) * (width - thumb_size) + thumb_size / 2)),
+        height: track_height,
+        radius: track_height / 2,
+        color: fill_color
     )
 
     // Draggable thumb knob
     \Rect(
-        x: self.x + max(0, min(self.width - self.thumb_size, (current_value - self.min) / max(1, self.max - self.min) * (self.width - self.thumb_size))),
-        y: self.y + (self.height - self.thumb_size) / 2,
-        width: self.thumb_size,
-        height: self.thumb_size,
-        radius: self.thumb_size / 2,
-        color: self.thumb_color
+        x: x + max(0, min(width - thumb_size, (current_value - min) / max(1, max - min) * (width - thumb_size))),
+        y: y + (height - thumb_size) / 2,
+        width: thumb_size,
+        height: thumb_size,
+        radius: thumb_size / 2,
+        color: thumb_color
     )
 
     // Full interactive hit area covering slider bounds
     \Rect(
-        x: self.x,
-        y: self.y,
-        width: self.width,
-        height: self.height,
+        x: x,
+        y: y,
+        width: width,
+        height: height,
         color: #00000000,
-        on_pointer_down: self.on_pointer_down,
-        on_pointer_move: self.on_pointer_move,
-        on_pointer_up: self.on_pointer_up
+        on_pointer_down: on_pointer_down,
+        on_pointer_move: on_pointer_move,
+        on_pointer_up: on_pointer_up
     )
 }

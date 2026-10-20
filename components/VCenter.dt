@@ -11,7 +11,7 @@
     x: Distance: parent.left,
     y: Distance: parent.top
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \alias width = parent.width;
     \alias right = parent.right;
@@ -28,7 +28,7 @@
     x: Distance,
     y: Distance
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \let available_height = parent.height - (2 * (y - parent.top));
     \let resolved_height = max(available_height, only(children.height));
@@ -49,10 +49,11 @@
 \Component VCenter(
     x: Distance
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
+    \let available_height = parent.height;
     \let resolved_width = parent.width - (2 * (x - parent.left));
-    \let resolved_height = max(parent.height, only(children.height));
+    \let resolved_height = max(available_height, only(children.height));
 
     \alias width = resolved_width;
     \alias right = x + resolved_width;
@@ -62,15 +63,16 @@
 
     \Children {
         x: x,
-        y: parent.top + max(0, (parent.height - child.height) / 2)
+        y: y + max(0, (available_height - child.height) / 2)
     }
 }
 
 // 4. Fluid Parent-Fitting VCenter
 \Component VCenter {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
-    \let resolved_height = max(parent.height, only(children.height));
+    \let available_height = parent.height;
+    \let resolved_height = max(available_height, only(children.height));
 
     \alias width = parent.width;
     \alias height = resolved_height;
@@ -80,7 +82,7 @@
     \alias bottom = parent.top + resolved_height;
 
     \Children {
-        x: parent.left,
-        y: parent.top + max(0, (parent.height - child.height) / 2)
+        x: x,
+        y: y + max(0, (available_height - child.height) / 2)
     }
 }

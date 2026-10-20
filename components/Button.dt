@@ -31,7 +31,7 @@
         radius: style.radius,
         border_color: border_color,
         border_width: style.border_width,
-        on_click: self.click
+        on_click: click
     ) {
         \Center {
             \Text(
@@ -74,7 +74,7 @@
         radius: style.radius,
         border_color: border_color,
         border_width: style.border_width,
-        on_click: self.click
+        on_click: click
     ) {
         \Center {
             \Text(
@@ -145,7 +145,7 @@
         radius: 8px,
         border_color: border_color,
         border_width: default_border_w,
-        on_click: self.click
+        on_click: click
     ) {
         \Center {
             \Text(
@@ -219,7 +219,7 @@
         radius: 8px,
         border_color: border_color,
         border_width: default_border_w,
-        on_click: self.click
+        on_click: click
     ) {
         \Center {
             \Text(

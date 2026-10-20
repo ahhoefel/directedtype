@@ -32,8 +32,8 @@ fn test_expand_flow_recurrence_and_graph() {
     \Component Paragraph(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 20px) {}
     \Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 16px) {
       \Children {
-        x: parent.left,
-        y: prev ? prev.bottom + gap : parent.top
+        x: left,
+        y: prev ? prev.bottom + gap : top
       }
     }
 
@@ -74,7 +74,7 @@ fn test_expand_flow_recurrence_and_graph() {
     assert_eq!(para_node.prev_sibling, Some(header_id));
 
     // 1. Verify Header (Child 0) Base-Case Expansion:
-    // x: parent.left -> __node_0.left
+    // x: left -> __node_0.left
     match header_node.ports.get("x").unwrap() {
         Expr::MemberAccess(m) => {
             assert_eq!(m.member.as_str(), "left");
@@ -86,7 +86,7 @@ fn test_expand_flow_recurrence_and_graph() {
         _ => panic!("Expected MemberAccess for Header.x"),
     }
 
-    // y: parent.top -> __node_0.top (since prev is None, base case was chosen)
+    // y: top -> __node_0.top (since prev is None, base case was chosen)
     match header_node.ports.get("y").unwrap() {
         Expr::MemberAccess(m) => {
             assert_eq!(m.member.as_str(), "top");
@@ -99,7 +99,7 @@ fn test_expand_flow_recurrence_and_graph() {
     }
 
     // 2. Verify Paragraph (Child 1) Recurrence Step Expansion:
-    // x: parent.left -> __node_0.left
+    // x: left -> __node_0.left
     // y: prev.bottom + gap -> __node_1.bottom + __node_0.gap
     let para_y = para_node.ports.get("y").unwrap();
     match para_y {
@@ -171,7 +171,7 @@ fn test_precedence_explicit_overrides_ambient() {
     \Component Paragraph(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 20px) {}
     \Component Flow(x: Distance: 0, gap: Distance: 16px) {
       \Children {
-        x: parent.left
+        x: left
       }
     }
 
@@ -300,8 +300,8 @@ fn test_topological_sort_acyclic() {
     \Component Paragraph(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 20px) {}
     \Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 16px) {
       \Children {
-        x: parent.left,
-        y: prev ? prev.bottom + gap : parent.top
+        x: left,
+        y: prev ? prev.bottom + gap : top
       }
     }
 
@@ -348,7 +348,7 @@ fn test_cycle_detection_fit_content_paradox() {
     \Component Button(width: Distance) {}
     \Component ParadoxBox(width: max(children.width)) {
       \Children {
-        width: parent.width
+        width: width
       }
     }
 
@@ -439,8 +439,8 @@ fn test_end_to_end_flow_math_evaluation() {
     let input = r#"
     \Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 16px) {
       \Children {
-        x: parent.left,
-        y: prev ? prev.bottom + gap : parent.top
+        x: left,
+        y: prev ? prev.bottom + gap : top
       }
     }
 
@@ -652,8 +652,8 @@ fn test_parley_text_height_wrapping_multiline() {
     let input = r#"
     \Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 24px) {
         \Children {
-            x: parent.left,
-            y: prev ? prev.bottom + gap : parent.top,
+            x: left,
+            y: prev ? prev.bottom + gap : top,
             width: 320px
         }
     }
@@ -902,7 +902,7 @@ fn test_lexical_scope_shadowing() {
     let input = r#"
     \Component ShadowBox(x: Distance: 10px) {
       \let x = self.x + 40px
-      \Rect(x: x, y: parent.x, width: 100px, height: 40px, color: #000)
+      \Rect(x: x, y: self.x, width: 100px, height: 40px, color: #000)
     }
 
     \ShadowBox()
@@ -914,7 +914,7 @@ fn test_lexical_scope_shadowing() {
     let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
     // `x: x` resolves to shadowed `let x = 10 + 40 = 50`
     assert_eq!(rect.rect.x, 50.0);
-    // `y: parent.x` resolves to component port `ShadowBox.x = 10`
+    // `y: self.x` resolves to unshadowed component port `ShadowBox.x = 10`
     assert_eq!(rect.rect.y, 10.0);
 }
 
@@ -924,7 +924,7 @@ fn test_lexical_scope_in_children_directive() {
     \Component FlowWithMargin(x: Distance: 0) {
       \let margin = 35px
       \Children {
-        x: parent.left + margin,
+        x: left + margin,
         y: 0
       }
     }
@@ -938,7 +938,7 @@ fn test_lexical_scope_in_children_directive() {
     let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
 
     let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
-    // parent.left (0) + margin (35) = 35
+    // left (0) + margin (35) = 35
     assert_eq!(rect.rect.x, 35.0);
 }
 
@@ -1032,7 +1032,7 @@ fn test_visibility_parent_explicit_push_via_children_directive() {
     \Component CustomCard(x: Distance: 0) {
       \let card_padding = 16px
       \Children {
-        x: parent.left + card_padding,
+        x: left + card_padding,
         y: 0
       }
     }
@@ -1046,7 +1046,7 @@ fn test_visibility_parent_explicit_push_via_children_directive() {
     let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
 
     let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
-    // parent.left (0) + card_padding (16) = 16
+    // left (0) + card_padding (16) = 16
     assert_eq!(rect.rect.x, 16.0);
 }
 
@@ -1056,7 +1056,7 @@ fn test_visibility_child_retains_caller_lexical_scope() {
     \Component CustomCard(x: Distance: 0) {
       \let internal_padding = 10px
       \Children {
-        x: parent.left + internal_padding,
+        x: left + internal_padding,
         y: 0
       }
     }
@@ -1084,7 +1084,7 @@ fn test_visibility_parent_private_local_does_not_shadow_caller_local() {
     \Component CustomCard(x: Distance: 0) {
       \let my_size = 999px
       \Children {
-        x: parent.left,
+        x: left,
         y: 0
       }
     }
@@ -1110,7 +1110,7 @@ fn test_visibility_child_explicit_parent_port_bypasses_internal_shadow() {
     \Component CustomCard(x: Distance: 0, clip_offset: Distance = 5px) {
       \let clip_offset = 100px // internal shadow
       \Children {
-        x: parent.left,
+        x: left,
         y: 0
       }
     }
@@ -1298,7 +1298,7 @@ fn test_box_and_clip_non_drawing_primitives() {
 fn test_clip_with_box_inline_expansion() {
     let input = r##"
     \Component ScrollView(x: Distance: 0, y: Distance: 0, width: Distance: 0, height: Distance: 0) {
-        \let clip = \Clip(up: self.clip, box: \Box(x: self.left + 5px, y: self.top + 5px, width: self.width - 10px, height: self.height - 10px))
+        \let clip = \Clip(up: self.clip, box: \Box(x: left + 5px, y: top + 5px, width: width - 10px, height: height - 10px))
         \Rect(clip: clip, x: 0, y: 0, width: 300px, height: 300px, color: #ff0000)
     }
 
@@ -1420,10 +1420,10 @@ fn test_children_directive_ambient_clip() {
 fn test_dom_tree_formatting() {
     let input = r#"
     \Component Card(x: Distance: 0, y: Distance: 0, bg: Color: #1e293b, width: 300px, height: 150px) {
-        \Rect(x: parent.left, y: parent.top, width: parent.width, height: parent.height, color: parent.bg)
+        \Rect(x: left, y: top, width: width, height: height, color: bg)
         \Children {
-            x: parent.left + 16px,
-            y: prev ? prev.bottom + 8px : parent.top + 16px
+            x: left + 16px,
+            y: prev ? prev.bottom + 8px : top + 16px
         }
     }
 
@@ -1459,7 +1459,7 @@ fn test_parse_env_syntax_and_tombstones() {
         \env local_env = #ff0000;
         \env hole_env;
 
-        \Rect(color: self.color)
+        \Rect(color: color)
         \Children
     }
     "#;
@@ -1535,7 +1535,7 @@ fn test_env_auto_propagation_bypassing_middleman() {
     }
 
     \Component Button(env color: Color: #000000) {
-        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: self.color)
+        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
     \Theme(color: #123456) {
@@ -1601,7 +1601,7 @@ fn test_env_4_tier_precedence_order() {
     }
 
     \Component Button(env color: Color: #111111) {
-        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: self.color)
+        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
     \Theme(color: #222222) {
@@ -1656,7 +1656,7 @@ fn test_env_interceptor() {
     }
 
     \Component Button(env color: Color: #000000) {
-        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: self.color)
+        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
     \Surface(color: #123456) {
@@ -1674,12 +1674,12 @@ fn test_env_interceptor() {
 fn test_env_translator_provider() {
     let input = r#"
     \Component ThemeProvider(theme: String) {
-        \env color = (self.theme == "dark") ? #000000 : #ffffff
+        \env color = (theme == "dark") ? #000000 : #ffffff
         \Children
     }
 
     \Component Button(env color: Color: #888888) {
-        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: self.color)
+        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
     \ThemeProvider(theme: "dark") {
@@ -1703,7 +1703,7 @@ fn test_env_shield_swallower() {
     }
 
     \Component Button(env color: Color: #888888) {
-        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: self.color)
+        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
     \AlertBadge(color: #ff0000) {
@@ -1726,7 +1726,7 @@ fn test_let_tombstone_firewall() {
     }
 
     \Component Button(env color: Color: #888888) {
-        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: self.color)
+        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
     \Shield(color: #ff0000) {
@@ -1754,7 +1754,7 @@ fn test_env_tombstone_hole() {
     }
 
     \Component Button(env color: Color: #888888) {
-        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: self.color)
+        \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
     \Theme(color: #123456) {
@@ -2598,8 +2598,8 @@ fn test_raw_text_passed_directly_to_component_children() {
     \Component Card(x: Distance: 0, y: Distance: 0, padding_x: Distance: 24px, padding_y: Distance: 18px) {
         \Rect(x: 10px, y: 10px, width: 300px, height: 100px, color: #1e293b)
         \Children {
-            x: parent.left + padding_x,
-            y: parent.top + padding_y
+            x: left + padding_x,
+            y: top + padding_y
         }
     }
 
@@ -2611,8 +2611,8 @@ fn test_raw_text_passed_directly_to_component_children() {
 
     let text_node = layout.nodes.iter().find(|n| n.name == "Text").expect("Text node found");
     assert_eq!(text_node.text_content.as_deref(), Some("Hello world!"));
-    assert_eq!(text_node.rect.x, 24.0); // parent.left (0) + 24
-    assert_eq!(text_node.rect.y, 18.0); // parent.top (0) + 18
+    assert_eq!(text_node.rect.x, 24.0); // left (0) + 24
+    assert_eq!(text_node.rect.y, 18.0); // top (0) + 18
 }
 
 #[test]
@@ -2892,7 +2892,7 @@ fn test_overload_card_in_hstack_no_cycle() {
         \alias right = x + width;
         \Rect(x: 0, y: 0, width: width, height: 60px, color: #000000)
         \Children {
-            x: prev ? prev.right + 10px : parent.left
+            x: prev ? prev.right + 10px : left
         }
     }
 
@@ -3749,5 +3749,175 @@ fn test_font_em_top_line_gap_and_gap_bottom_with_text_start_end() {
     assert!((r.rect.width - (descent + r.rect.y)).abs() < 1e-4);
 }
 
+#[test]
+fn test_children_len_and_removed_child_count_aliases() {
+    // 1. children.len works in signature default, \let, and \Children
+    let valid = r#"
+    \Component EqualCols(x: Distance: 0, y: Distance: 0, width: Distance: 300px, count: Integer = children.len) {
+        \let n = children.len;
+        \Children {
+            x: prev ? prev.right : left,
+            y: top,
+            width: width / children.len
+        }
+    }
+    \EqualCols {
+        \Rect(height: 20px, color: #111111)
+        \Rect(height: 20px, color: #222222)
+        \Rect(height: 20px, color: #333333)
+    }
+    "#;
+    let doc = parse(valid).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("children.len should evaluate");
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 3);
+    assert_eq!(rects[0].rect.width, 100.0);
+    assert_eq!(rects[1].rect.x, 100.0);
+    assert_eq!(rects[2].rect.x, 200.0);
 
+    // 2. Removed aliases (num_children, children.count, parent.num_children) must fail
+    let bad_num_children = r#"
+    \Component Bad(width: Distance: 100px) {
+        \Children { width: width / num_children }
+    }
+    \Bad { \Rect(x: 0, y: 0, height: 10px, color: #000) }
+    "#;
+    assert!(directedtype::evaluate_document(&parse(bad_num_children).unwrap()).is_err());
 
+    let bad_children_count = r#"
+    \Component Bad(width: Distance: 100px) {
+        \Children { width: width / children.count }
+    }
+    \Bad { \Rect(x: 0, y: 0, height: 10px, color: #000) }
+    "#;
+    let err_count = directedtype::evaluate_document(&parse(bad_children_count).unwrap()).unwrap_err();
+    assert!(err_count.to_string().contains("use 'children.len' for the child count"));
+}
+
+#[test]
+fn test_child_restricted_to_children_block() {
+    let bad_child = r#"
+    \Component Bad(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 100px) {
+        \Rect(x: x, y: y, width: child.width, height: height, color: #000)
+        \Children {}
+    }
+    \Bad { \Rect(x: 0, y: 0, width: 50px, height: 50px, color: #111) }
+    "#;
+    let err = directedtype::evaluate_document(&parse(bad_child).unwrap()).unwrap_err();
+    assert!(
+        err.to_string().contains("'child' can only be used inside a '\\Children { ... }' block"),
+        "Unexpected error: {}",
+        err
+    );
+}
+
+#[test]
+fn test_parent_disallowed_in_children_and_internal_elements() {
+    // 1. Allowed in component parameter default and \let
+    let valid_parent = r#"
+    \Component FillBox(x: Distance = parent.left, y: Distance = parent.top) {
+        \let w = parent.width;
+        \let h = parent.height;
+        \Rect(x: x, y: y, width: w, height: h, color: #000)
+    }
+    \FillBox()
+    "#;
+    directedtype::evaluate_document(&parse(valid_parent).unwrap())
+        .expect("parent in signature default and \\let should succeed");
+
+    // 2. Disallowed inside \Children
+    let bad_children = r#"
+    \Component Bad(x: Distance: 0, y: Distance: 0) {
+        \Children { x: parent.left }
+    }
+    \Bad { \Rect(y: 0, width: 10px, height: 10px, color: #000) }
+    "#;
+    let err_children = directedtype::evaluate_document(&parse(bad_children).unwrap()).unwrap_err();
+    assert!(
+        err_children.to_string().contains("Cannot use 'parent' inside a '\\Children' block"),
+        "Unexpected error: {}",
+        err_children
+    );
+
+    // 3. Disallowed on internal element inside component body
+    let bad_internal = r#"
+    \Component Bad(x: Distance: 0, y: Distance: 0) {
+        \Rect(x: parent.left, y: y, width: 10px, height: 10px, color: #000)
+    }
+    \Bad()
+    "#;
+    let err_internal = directedtype::evaluate_document(&parse(bad_internal).unwrap()).unwrap_err();
+    assert!(
+        err_internal.to_string().contains("Cannot use 'parent' inside a '\\Children' block or internal component element"),
+        "Unexpected error: {}",
+        err_internal
+    );
+}
+
+#[test]
+fn test_self_requires_shadowed_port_or_event_handler() {
+    // 1. Unshadowed self.<port> produces a clear compile error
+    let unshadowed = r#"
+    \Component Bad(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 50px) {
+        \Rect(x: x, y: y, width: width, height: self.bottom, color: #000)
+    }
+    \Bad()
+    "#;
+    let err = directedtype::evaluate_document(&parse(unshadowed).unwrap()).unwrap_err();
+    assert!(
+        err.to_string().contains("Cannot use 'self.bottom' because port 'bottom' is not shadowed by a local '\\let' or '\\env' binding; use 'bottom' directly"),
+        "Unexpected error: {}",
+        err
+    );
+
+    // 2. Shadowed port via \let or \env allows self.<port>
+    let shadowed = r#"
+    \Component Good(x: Distance: 10px, y: Distance: 20px, width: Distance: 100px, height: Distance: 50px, color: Color: #123456) {
+        \let bottom = 999px;
+        \env color = self.color;
+        \Rect(x: x, y: y, width: width, height: self.bottom - y, color: color)
+    }
+    \Good()
+    "#;
+    let layout = directedtype::evaluate_document(&parse(shadowed).unwrap())
+        .expect("Shadowed self.bottom and self.color should succeed");
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    // self.bottom is y (20) + height (50) = 70; height = 70 - 20 = 50
+    assert_eq!(rect.rect.height, 50.0);
+
+    // 3. Event handlers on contained components distinguish bare `act` (enclosing component) vs `self.act` (contained component)
+    let callbacks = r#"
+    \Component Inner(x: Distance: 0, y: Distance: 0, width: Distance: 50px, height: Distance: 20px, on_click: Callback = self.act) {
+        \Rect(x: x, y: y, width: width, height: height, color: #111)
+    }
+    \Component Outer(x: Distance: 0, y: Distance: 0) {
+        \Inner(x: x, y: y, on_click: act)
+        \Inner(x: x, y: y + 30px, on_click: self.act)
+    }
+    \Outer()
+    "#;
+    let layout_cb = directedtype::evaluate_document(&parse(callbacks).unwrap())
+        .expect("Event handlers with bare act and self.act should compile");
+    let inners: Vec<_> = layout_cb.nodes.iter().filter(|n| n.name == "Inner").collect();
+    let outer = layout_cb.nodes.iter().find(|n| n.name == "Outer").unwrap();
+    assert_eq!(inners.len(), 2);
+
+    // First Inner had `on_click: act` -> bound to Outer's NodeId
+    assert_eq!(
+        inners[0].event_handlers.get("on_click"),
+        Some(&directedtype::component::EventHandlerBinding {
+            name: "on_click".to_string(),
+            target: directedtype::component::EventHandlerTarget::Component(outer.id),
+            method: "act".to_string(),
+        })
+    );
+    // Second Inner had `on_click: self.act` -> bound to Second Inner's NodeId
+    assert_eq!(
+        inners[1].event_handlers.get("on_click"),
+        Some(&directedtype::component::EventHandlerBinding {
+            name: "on_click".to_string(),
+            target: directedtype::component::EventHandlerTarget::Component(inners[1].id),
+            method: "act".to_string(),
+        })
+    );
+}

@@ -19,7 +19,7 @@
     \state focused: Boolean = false;
 
     \alias right = x + width;
-    \alias height = sum(children.height) + max(0, num_children - 1) * gap + (2 * style.padding_y);
+    \alias height = sum(children.height) + max(0, children.len - 1) * gap + (2 * style.padding_y);
     \alias bottom = y + height;
 
     \let current_bg = focused ? focused_bg : style.bg;
@@ -40,8 +40,8 @@
     \let inner_width = width - (2 * style.padding_x);
 
     \Children {
-        x: parent.left + style.padding_x,
-        y: prev ? prev.bottom + gap : parent.top + style.padding_y,
+        x: left + style.padding_x,
+        y: prev ? prev.bottom + gap : top + style.padding_y,
         width: inner_width
     }
 }
@@ -64,7 +64,7 @@
 
     \alias right = x + resolved_width;
     \alias width = resolved_width;
-    \alias height = sum(children.height) + max(0, num_children - 1) * gap + (2 * style.padding_y);
+    \alias height = sum(children.height) + max(0, children.len - 1) * gap + (2 * style.padding_y);
     \alias bottom = y + height;
 
     \let current_bg = focused ? focused_bg : style.bg;
@@ -85,8 +85,8 @@
     \let inner_width = resolved_width - (2 * style.padding_x);
 
     \Children {
-        x: parent.left + style.padding_x,
-        y: prev ? prev.bottom + gap : parent.top + style.padding_y,
+        x: left + style.padding_x,
+        y: prev ? prev.bottom + gap : top + style.padding_y,
         width: inner_width
     }
 }

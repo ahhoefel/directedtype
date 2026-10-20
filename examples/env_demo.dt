@@ -3,15 +3,15 @@
 
 \Component Flow(
     x: parent.x, 
-    y: parent.y + self.margin, 
+    y: parent.y + margin, 
     gap: Distance: 20px, 
     width: Distance: min(max(window.width, 400px), 700px), 
     margin: Distance: 30px
 ) {
     \Children {
-        x: parent.left + parent.margin,
-        y: prev ? prev.bottom + gap : parent.top,
-        width: parent.width - (2 * parent.margin)
+        x: left + margin,
+        y: prev ? prev.bottom + gap : top,
+        width: width - (2 * margin)
     }
 }
 
@@ -28,13 +28,13 @@
     width: Distance: parent.width,
     height: Distance: sum(children.height)
 ) {
-    \env text_color = (self.theme == Theme.Dark) ? #f8fafc : #0f172a
-    \env card_bg = (self.theme == Theme.Dark) ? #1e293b : #e2e8f0
+    \env text_color = (theme == Theme.Dark) ? #f8fafc : #0f172a
+    \env card_bg = (theme == Theme.Dark) ? #1e293b : #e2e8f0
     \env accent_color = #3b82f6
     \Children {
-        x: parent.left,
-        y: prev ? prev.bottom + 20px : parent.top,
-        width: parent.width
+        x: left,
+        y: prev ? prev.bottom + 20px : top,
+        width: width
     }
 }
 
@@ -46,11 +46,11 @@
     width: Distance: parent.width,
     height: sum(children.height)
 ) {
-    \env accent_color = self.new_accent
+    \env accent_color = new_accent
     \Children {
-        x: parent.left,
-        y: parent.top,
-        width: parent.width
+        x: left,
+        y: top,
+        width: width
     }
 }
 
@@ -69,14 +69,14 @@
     \let text_color;
     // Local let shadows env parameter, creating a firewall that stops accent propagation
     \let accent_color = #94a3b8;
-    \Rect(x: parent.left, y: parent.top, width: parent.width, height: 36px, color: accent_color, radius: 8px)
-    \Text(x: parent.left + 12px, y: parent.top + 10px, size: 13px, weight: 600, color: #ffffff) {
+    \Rect(x: left, y: top, width: width, height: 36px, color: accent_color, radius: 8px)
+    \Text(x: left + 12px, y: top + 10px, size: 13px, weight: 600, color: #ffffff) {
         Shield / Swallower Firewall: stopped env propagation below
     }
     \Children {
-        x: parent.left,
-        y: parent.top + 50px,
-        width: parent.width
+        x: left,
+        y: top + 50px,
+        width: width
     }
 }
 
@@ -91,29 +91,29 @@
     \env accent_color: Color: #2563eb
 ) {
     \Rect(
-        x: parent.left,
-        y: parent.top,
-        width: parent.width,
-        height: parent.height,
-        color: parent.card_bg,
+        x: left,
+        y: top,
+        width: width,
+        height: height,
+        color: card_bg,
         radius: 10px,
         border_width: 2px,
-        border_color: parent.accent_color
+        border_color: accent_color
     )
     \Text(
-        x: parent.left + 16px,
-        y: parent.top + 20px,
+        x: left + 16px,
+        y: top + 20px,
         size: 16px,
         weight: 600,
-        color: parent.text_color
+        color: text_color
     ) {
         Environmental Scoping Active
     }
     \Text(
-        x: parent.left + 16px,
-        y: parent.top + 48px,
+        x: left + 16px,
+        y: top + 48px,
         size: 14px,
-        color: parent.accent_color
+        color: accent_color
     ) {
         Accent border color inherited via env propagation
     }
@@ -130,29 +130,29 @@
     accent_color: Color: #009900
 ) {
     \Rect(
-        x: parent.left,
-        y: parent.top,
-        width: parent.width,
-        height: parent.height,
-        color: parent.card_bg,
+        x: left,
+        y: top,
+        width: width,
+        height: height,
+        color: card_bg,
         radius: 10px,
         border_width: 2px,
-        border_color: parent.accent_color
+        border_color: accent_color
     )
     \Text(
-        x: parent.left + 16px,
-        y: parent.top + 20px,
+        x: left + 16px,
+        y: top + 20px,
         size: 16px,
         weight: 600,
-        color: parent.text_color
+        color: text_color
     ) {
         No environmental scoping.
     }
     \Text(
-        x: parent.left + 16px,
-        y: parent.top + 48px,
+        x: left + 16px,
+        y: top + 48px,
         size: 14px,
-        color: parent.accent_color
+        color: accent_color
     ) {
         Accent color not taken from environment. card_bg set from env.card_bg.
     }

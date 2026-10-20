@@ -8,7 +8,7 @@
     x: Distance: parent.left,
     y: Distance: parent.top
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \alias width = only(children.width) + (2 * padding);
     \alias height = only(children.height) + (2 * padding);
@@ -28,7 +28,7 @@
     x: Distance: parent.left,
     y: Distance: parent.top
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \alias width = only(children.width) + (2 * padding_x);
     \alias height = only(children.height) + (2 * padding_y);
@@ -47,7 +47,7 @@
     x: Distance: parent.left,
     y: Distance: parent.top
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \alias width = only(children.width) + (2 * padding_x);
     \alias height = only(children.height);
@@ -66,7 +66,7 @@
     x: Distance: parent.left,
     y: Distance: parent.top
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \alias width = only(children.width);
     \alias height = only(children.height) + (2 * padding_y);

@@ -11,7 +11,7 @@
     x: Distance,
     y: Distance
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \alias right = x + width;
     \alias bottom = y + height;
@@ -27,7 +27,7 @@
     width: Distance,
     height: Distance
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \alias x = parent.left;
     \alias y = parent.top;
@@ -35,8 +35,8 @@
     \alias bottom = parent.top + height;
 
     \Children {
-        x: parent.left + max(0, (width - child.width) / 2),
-        y: parent.top + max(0, (height - child.height) / 2)
+        x: x + max(0, (width - child.width) / 2),
+        y: y + max(0, (height - child.height) / 2)
     }
 }
 
@@ -45,7 +45,7 @@
     x: Distance,
     y: Distance
 ) {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
     \let available_width = parent.width - (2 * (x - parent.left));
     \let available_height = parent.height - (2 * (y - parent.top));
@@ -65,10 +65,12 @@
 
 // 4. Fluid Parent-Fitting Center: automatically fits parent container bounds
 \Component Center {
-    \assert num_children == 1 as "Should have only one child.";
+    \assert children.len == 1 as "Should have only one child.";
 
-    \let resolved_width = max(parent.width, only(children.width));
-    \let resolved_height = max(parent.height, only(children.height));
+    \let available_width = parent.width;
+    \let available_height = parent.height;
+    \let resolved_width = max(available_width, only(children.width));
+    \let resolved_height = max(available_height, only(children.height));
 
     \alias width = resolved_width;
     \alias height = resolved_height;
@@ -78,7 +80,7 @@
     \alias bottom = parent.top + resolved_height;
 
     \Children {
-        x: parent.left + max(0, (parent.width - child.width) / 2),
-        y: parent.top + max(0, (parent.height - child.height) / 2)
+        x: x + max(0, (available_width - child.width) / 2),
+        y: y + max(0, (available_height - child.height) / 2)
     }
 }

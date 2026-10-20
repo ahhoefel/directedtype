@@ -13,34 +13,34 @@
 ) {
     // 1. Background frame
     \Rect(
-        x: parent.left,
-        y: parent.top,
-        width: parent.width,
-        height: parent.height,
-        color: parent.bg_color,
-        radius: parent.radius,
+        x: left,
+        y: top,
+        width: width,
+        height: height,
+        color: bg_color,
+        radius: radius,
         border_width: 2px,
-        border_color: parent.border_color
+        border_color: border_color
     )
 
     // 2. Hardware clip node defining the rounded geometry
     \let clip = \Clip(
         up: self.clip, 
         box: \Box(
-            x: self.left, 
-            y: self.top, 
-            width: self.width, 
-            height: self.height, 
-            radius: self.radius
+            x: left, 
+            y: top, 
+            width: width, 
+            height: height, 
+            radius: radius
         )
     )
 
     // 3. Children inherit the clip context ambiently
     \Children {
         clip: clip,
-        x: parent.left + 24px,
-        y: prev ? prev.bottom + 12px : parent.top + 24px,
-        width: parent.width - 48px
+        x: left + 24px,
+        y: prev ? prev.bottom + 12px : top + 24px,
+        width: width - 48px
     }
 }
 

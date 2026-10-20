@@ -121,16 +121,16 @@
         }
 
         // Reactive Progress Gauge
-        \Rect(width: 312px, height: 8px, color: #0f172a, radius: 4px) {
+        \let gauge_bg = \Rect(width: 312px, height: 8px, color: #0f172a, radius: 4px) {
             \Rect(
-                x: parent.left,
-                y: parent.top,
+                x: gauge_bg.left,
+                y: gauge_bg.top,
                 width: min(bar_width, 312px),
                 height: 8px,
                 color: is_max ? #ef4444 : #3b82f6,
                 radius: 4px
             )
-        }
+        };
 
         // Interactive Button Row: [-], [+], [Reset] via HStack
         \HStack(gap: 16px) {
@@ -139,21 +139,21 @@
                 width: 72px,
                 label: "-",
                 disabled: is_zero,
-                on_click: self.decrement
+                on_click: decrement
             )
 
             \Button(
                 style: counter_btn_increment,
                 width: 72px,
                 label: "+",
-                on_click: self.increment
+                on_click: increment
             )
 
             \Button(
                 style: counter_btn_reset,
                 width: 136px,
                 label: "Reset",
-                on_click: self.reset
+                on_click: reset
             )
         }
     }

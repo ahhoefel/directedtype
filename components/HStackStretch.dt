@@ -27,7 +27,7 @@
     y: Distance: parent.top,
     gap: Distance: 0
 ) {
-    \alias width = sum(children.width) + max(0, num_children - 1) * gap;
+    \alias width = sum(children.width) + max(0, children.len - 1) * gap;
     \alias right = x + width;
     \alias bottom = y + height;
 

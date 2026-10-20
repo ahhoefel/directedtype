@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Clone)]
 pub enum LexicalBinding {
     Expr(Expr),
+    State(Expr),
     Node(NodeId),
     Uninitialized,
 }
@@ -31,6 +32,11 @@ pub struct ScopeContext<'a> {
     pub parent_name: Option<&'a str>,
     pub prev_sibling: Option<NodeId>,
     pub child_ids: &'a [NodeId],
+    pub num_children: usize,
+    pub child_node: Option<NodeId>,
+    pub allow_parent: bool,
+    pub shadowed_ports: Option<&'a HashSet<String>>,
+    pub is_event_port: bool,
     pub parent_ports: &'a [String],
     pub current_ports: &'a [String],
     pub lexical_scope: &'a HashMap<String, LexicalBinding>,
@@ -220,12 +226,6 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
             if !window_scope_ports.contains(&name) {
                 window_scope_ports.push(name.clone());
             }
-            let window_ref = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), port.span))),
-                member: port.name.clone(),
-                span: port.span,
-            });
-            global_scope.insert(name.clone(), LexicalBinding::Expr(window_ref));
             expanded_doc.window_ports.insert(name, port.expr.clone());
         }
     }
@@ -259,7 +259,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                 member: s.name.clone(),
                 span: s.span,
             });
-            global_scope.insert(name.clone(), LexicalBinding::Expr(window_ref));
+            global_scope.insert(name.clone(), LexicalBinding::State(window_ref));
             let type_name = s.type_annotation.as_ref().map(|t| t.name.as_str().to_string());
             expanded_doc.window_state_vars.insert(name.clone(), type_name);
             expanded_doc.window_ports.insert(name, default_expr);
@@ -301,8 +301,13 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             parent_name: None,
                             prev_sibling: None,
                             child_ids: &empty_children,
+                            num_children: 0,
+                            child_node: None,
+                            allow_parent: true,
+                            shadowed_ports: None,
+                            is_event_port: false,
                             parent_ports: &empty_ports,
-                            current_ports: &window_scope_ports,
+                            current_ports: &empty_ports,
                             lexical_scope: &global_scope,
                             env_scope: &global_env_scope,
                             node_fonts: &node_fonts,
@@ -336,8 +341,13 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                                 parent_name: None,
                                 prev_sibling: None,
                                 child_ids: &empty_children,
+                                num_children: 0,
+                                child_node: None,
+                                allow_parent: true,
+                                shadowed_ports: None,
+                                is_event_port: false,
                                 parent_ports: &empty_ports,
-                                current_ports: &window_scope_ports,
+                                current_ports: &empty_ports,
                                 lexical_scope: &global_scope,
                                 env_scope: &global_env_scope,
                                 node_fonts: &node_fonts,
@@ -373,8 +383,13 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         parent_name: None,
         prev_sibling: None,
         child_ids: &empty_children,
+        num_children: 0,
+        child_node: None,
+        allow_parent: true,
+        shadowed_ports: None,
+        is_event_port: false,
         parent_ports: &empty_ports,
-        current_ports: &window_scope_ports,
+        current_ports: &empty_ports,
         lexical_scope: &global_scope,
         env_scope: &global_env_scope,
         node_fonts: &node_fonts,
@@ -406,6 +421,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         lexical_scope: &global_scope,
                         env_scope: &global_env_scope,
                         enclosing_component_id: None,
+                        shadowed_ports: None,
                         is_let: true,
                         ambient_authored_ports: None,
                         enums: &enums,
@@ -437,8 +453,13 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             parent_name: None,
                             prev_sibling: None,
                             child_ids: &empty_children,
+                            num_children: 0,
+                            child_node: None,
+                            allow_parent: true,
+                            shadowed_ports: None,
+                            is_event_port: false,
                             parent_ports: &empty_ports,
-                            current_ports: &window_scope_ports,
+                            current_ports: &empty_ports,
                             lexical_scope: &*scope_borrow,
                             env_scope: &global_env_scope,
                             node_fonts: &node_fonts,
@@ -471,6 +492,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                     lexical_scope: &global_scope,
                     env_scope: &global_env_scope,
                     enclosing_component_id: None,
+                    shadowed_ports: None,
                     is_let: false,
                     ambient_authored_ports: None,
                     enums: &enums,
@@ -492,8 +514,13 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             parent_name: None,
                             prev_sibling: None,
                             child_ids: &empty_children,
+                            num_children: 0,
+                            child_node: None,
+                            allow_parent: true,
+                            shadowed_ports: None,
+                            is_event_port: false,
                             parent_ports: &empty_ports,
-                            current_ports: &window_scope_ports,
+                            current_ports: &empty_ports,
                             lexical_scope: &*scope_borrow,
                             env_scope: &global_env_scope,
                             node_fonts: &node_fonts,
@@ -523,6 +550,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         lexical_scope: &global_scope,
                         env_scope: &global_env_scope,
                         enclosing_component_id: None,
+                        shadowed_ports: None,
                         is_let: true,
                         ambient_authored_ports: None,
                         enums: &enums,
@@ -552,8 +580,13 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         parent_name: None,
         prev_sibling: None,
         child_ids: &empty_children,
+        num_children: 0,
+        child_node: None,
+        allow_parent: true,
+        shadowed_ports: None,
+        is_event_port: false,
         parent_ports: &empty_ports,
-        current_ports: &window_scope_ports,
+        current_ports: &empty_ports,
         lexical_scope: &*final_global_scope,
         env_scope: &global_env_scope,
         node_fonts: &node_fonts,
@@ -586,6 +619,7 @@ struct InstanceContext<'a> {
     pub parent_ports: &'a [String],
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
     pub enclosing_component_id: Option<NodeId>,
+    pub shadowed_ports: Option<&'a HashSet<String>>,
     pub enums: &'a HashMap<String, EnumDef>,
     pub active_scope_id: ScopeId,
 }
@@ -680,7 +714,7 @@ fn resolve_forward_scope_refs(expr: &Expr, scope: &HashMap<String, LexicalBindin
                     LexicalBinding::Node(node_id) => {
                         Expr::Ident(Ident::new(node_id.canonical_name(), id.span))
                     }
-                    LexicalBinding::Expr(e) => e.clone(),
+                    LexicalBinding::Expr(e) | LexicalBinding::State(e) => e.clone(),
                     LexicalBinding::Uninitialized => expr.clone(),
                 }
             } else {
@@ -751,6 +785,7 @@ struct ElementContext<'a> {
     pub lexical_scope: &'a RefCell<HashMap<String, LexicalBinding>>,
     pub env_scope: &'a HashMap<String, EnvEntry>,
     pub enclosing_component_id: Option<NodeId>,
+    pub shadowed_ports: Option<&'a HashSet<String>>,
     pub is_let: bool,
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
     pub enums: &'a HashMap<String, EnumDef>,
@@ -888,6 +923,11 @@ fn expand_element(
             parent_name: ctx.parent_name,
             prev_sibling: ctx.prev_sibling_id,
             child_ids: &empty_children,
+            num_children: 0,
+            child_node: None,
+            allow_parent: ctx.enclosing_component_id.is_none(),
+            shadowed_ports: ctx.shadowed_ports,
+            is_event_port: false,
             parent_ports: ctx.parent_ports,
             current_ports: &empty_ports,
             lexical_scope: &*ctx.lexical_scope.borrow(),
@@ -965,6 +1005,7 @@ fn expand_element(
             parent_ports: ctx.parent_ports,
             ambient_authored_ports: ctx.ambient_authored_ports,
             enclosing_component_id: ctx.enclosing_component_id,
+            shadowed_ports: ctx.shadowed_ports,
             enums: ctx.enums,
             active_scope_id: ctx.active_scope_id,
         };
@@ -1159,6 +1200,18 @@ fn expand_component_instance(
         }
     }
 
+    let mut comp_shadowed_ports: HashSet<String> = HashSet::new();
+    for p in comp_def
+        .params
+        .iter()
+        .map(|p| p.name.as_str())
+        .chain(["clip", "left", "top", "right", "bottom"])
+    {
+        if all_let_names.contains(p) || declared_envs.contains_key(p) {
+            comp_shadowed_ports.insert(p.to_string());
+        }
+    }
+
     // Validate that caller does not attempt to override immutable alias ports or set private state / let / env
     for port in &instance.ports {
         let name = port.name.as_str();
@@ -1208,22 +1261,25 @@ fn expand_component_instance(
         comp_ports.insert(state_name.clone(), default_expr);
     }
     for (let_name, l) in &declared_lets {
-        if !comp_def.params.iter().any(|p| p.name.as_str() == let_name) {
+        if !comp_shadowed_ports.contains(let_name) {
             if let Some(LetValue::Expr(raw_expr)) = &l.value {
                 comp_ports.insert(let_name.clone(), raw_expr.clone());
             }
         }
     }
     for (env_name, e) in &declared_envs {
-        if let Some(raw_expr) = &e.value {
-            if !matches!(raw_expr, Expr::Node(_)) {
-                comp_ports.insert(env_name.clone(), raw_expr.clone());
+        if !comp_shadowed_ports.contains(env_name) {
+            if let Some(raw_expr) = &e.value {
+                if !matches!(raw_expr, Expr::Node(_)) {
+                    comp_ports.insert(env_name.clone(), raw_expr.clone());
+                }
             }
         }
     }
 
     // Map explicit arguments passed to the component (Tier 4)
     let mut explicit_ports = HashMap::new();
+    let mut already_rewritten_ports: HashSet<String> = HashSet::new();
     let empty_ports: [String; 0] = [];
     let empty_children: [NodeId; 0] = [];
 
@@ -1237,6 +1293,11 @@ fn expand_component_instance(
                 parent_name: ctx.parent_name,
                 prev_sibling: ctx.prev_sibling_id,
                 child_ids: &empty_children,
+                num_children: 0,
+                child_node: None,
+                allow_parent: ctx.enclosing_component_id.is_none(),
+                shadowed_ports: ctx.shadowed_ports,
+                is_event_port: false,
                 parent_ports: ctx.parent_ports,
                 current_ports: &empty_ports,
                 lexical_scope: &*caller_scope_borrow,
@@ -1269,7 +1330,8 @@ fn expand_component_instance(
                     parent_ports: ctx.parent_ports,
                     lexical_scope,
                     env_scope: caller_env_scope,
-                    enclosing_component_id: None,
+                    enclosing_component_id: ctx.enclosing_component_id,
+                    shadowed_ports: ctx.shadowed_ports,
                     is_let: false,
                     ambient_authored_ports: None,
                     enums: ctx.enums,
@@ -1291,6 +1353,11 @@ fn expand_component_instance(
                     parent_name: ctx.parent_name,
                     prev_sibling: ctx.prev_sibling_id,
                     child_ids: &empty_children,
+                    num_children: 0,
+                    child_node: None,
+                    allow_parent: ctx.enclosing_component_id.is_none(),
+                    shadowed_ports: ctx.shadowed_ports,
+                    is_event_port: name.starts_with("on_"),
                     parent_ports: ctx.parent_ports,
                     current_ports: &empty_ports,
                     lexical_scope: &*caller_scope_borrow,
@@ -1331,7 +1398,8 @@ fn expand_component_instance(
                         parent_ports: ctx.parent_ports,
                         lexical_scope,
                         env_scope: caller_env_scope,
-                        enclosing_component_id: None,
+                        enclosing_component_id: Some(ctx.comp_node_id),
+                        shadowed_ports: Some(&comp_shadowed_ports),
                         is_let: false,
                         ambient_authored_ports: None,
                         enums: ctx.enums,
@@ -1351,6 +1419,7 @@ fn expand_component_instance(
 
         // Tier 4: Explicit caller argument
         if let Some(explicit_expr) = explicit_ports.remove(&name) {
+            already_rewritten_ports.insert(name.clone());
             comp_ports.insert(name, explicit_expr);
         }
         // Tier 2: Lexical Environment (caller_env_scope) - only for env parameters
@@ -1358,6 +1427,7 @@ fn expand_component_instance(
             if let Some(env_entry) = caller_env_scope.get(&name) {
                 match env_entry {
                     EnvEntry::Bound(env_expr) => {
+                        already_rewritten_ports.insert(name.clone());
                         comp_ports.insert(name, env_expr.clone());
                     }
                     EnvEntry::Tombstone => {
@@ -1411,6 +1481,7 @@ fn expand_component_instance(
         if !comp_scope_ports.contains(&name) {
             comp_scope_ports.push(name.clone());
         }
+        already_rewritten_ports.insert(name.clone());
         comp_ports.insert(name, expr);
     }
 
@@ -1447,6 +1518,11 @@ fn expand_component_instance(
                     parent_name: ctx.parent_name,
                     prev_sibling: ctx.prev_sibling_id,
                     child_ids: &empty_children,
+                    num_children: 0,
+                    child_node: None,
+                    allow_parent: true,
+                    shadowed_ports: Some(&comp_shadowed_ports),
+                    is_event_port: false,
                     parent_ports: ctx.parent_ports,
                     current_ports: &empty_ports,
                     lexical_scope: &*caller_scope_borrow,
@@ -1467,6 +1543,11 @@ fn expand_component_instance(
                 parent_name: ctx.parent_name,
                 prev_sibling: ctx.prev_sibling_id,
                 child_ids: &empty_children,
+                num_children: 0,
+                child_node: None,
+                allow_parent: true,
+                shadowed_ports: Some(&comp_shadowed_ports),
+                is_event_port: false,
                 parent_ports: ctx.parent_ports,
                 current_ports: &empty_ports,
                 lexical_scope: &*caller_scope_borrow,
@@ -1491,6 +1572,7 @@ fn expand_component_instance(
     // Default clip port if not explicitly declared
     if !comp_ports.contains_key("clip") {
         if let Some(EnvEntry::Bound(clip_expr)) = caller_env_scope.get("clip") {
+            already_rewritten_ports.insert("clip".to_string());
             comp_ports.insert("clip".to_string(), clip_expr.clone());
         } else {
             let default_clip_expr = if let Some(parent) = ctx.parent_id {
@@ -1514,6 +1596,7 @@ fn expand_component_instance(
                     span: instance.span,
                 })
             };
+            already_rewritten_ports.insert("clip".to_string());
             comp_ports.insert("clip".to_string(), default_clip_expr);
         }
     }
@@ -1566,14 +1649,52 @@ fn expand_component_instance(
             }
         }
     }
+    let num_consumer_children = consumer_child_nodes.len();
 
     // 3. Expand component body items in declaration order (Painter's Algorithm)
     let mut all_children_ids = Vec::new();
     let mut instantiated_children_ids = Vec::new();
     let mut last_child_id: Option<NodeId> = None;
     let mut local_scope: HashMap<String, LexicalBinding> = lexical_scope.borrow().clone();
+    let mut populated_comp_ports: HashSet<String> = HashSet::new();
     for param in &comp_def.params {
         let name = param.name.as_str().to_string();
+        populated_comp_ports.insert(name.clone());
+        if name.starts_with("on_") {
+            if let Some(expr) = comp_ports.get(&name).cloned() {
+                if !already_rewritten_ports.contains(&name) {
+                    let empty_scope = HashMap::new();
+                    let event_default_ctx = ScopeContext {
+                        current_node: ctx.comp_node_id,
+                        parent_node: ctx.parent_id,
+                        parent_name: ctx.parent_name,
+                        prev_sibling: ctx.prev_sibling_id,
+                        child_ids: &empty_children,
+                        num_children: num_consumer_children,
+                        child_node: None,
+                        allow_parent: true,
+                        shadowed_ports: Some(&comp_shadowed_ports),
+                        is_event_port: true,
+                        parent_ports: ctx.parent_ports,
+                        current_ports: &comp_scope_ports,
+                        lexical_scope: &empty_scope,
+                        env_scope: caller_env_scope,
+                        node_fonts: &*node_fonts,
+                        enclosing_component: Some(ctx.comp_node_id),
+                        comp_ports: None,
+                        declared_state_names: None,
+                        enums: ctx.enums,
+                    };
+                    let rewritten = rewrite_expr(&expr, &event_default_ctx)?;
+                    already_rewritten_ports.insert(name.clone());
+                    comp_ports.insert(name.clone(), rewritten.clone());
+                    local_scope.insert(name, LexicalBinding::Expr(rewritten));
+                } else {
+                    local_scope.insert(name, LexicalBinding::Expr(expr));
+                }
+                continue;
+            }
+        }
         if let Some(expr) = comp_ports.get(&name) {
             if let Expr::Ident(id) = expr {
                 if let Some(node_id) = NodeId::from_canonical_name(id.as_str()) {
@@ -1592,7 +1713,8 @@ fn expand_component_instance(
         );
     }
     for (let_name, let_binding) in &declared_lets {
-        if !comp_def.params.iter().any(|p| p.name.as_str() == let_name) {
+        if !comp_shadowed_ports.contains(let_name) {
+            populated_comp_ports.insert(let_name.clone());
             local_scope.insert(
                 let_name.clone(),
                 LexicalBinding::Expr(Expr::MemberAccess(MemberAccessExpr {
@@ -1604,6 +1726,24 @@ fn expand_component_instance(
                     span: let_binding.name.span,
                 })),
             );
+        }
+    }
+    for port_name in &comp_scope_ports {
+        if !populated_comp_ports.contains(port_name) {
+            let member_expr = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::new(
+                    ctx.comp_node_id.canonical_name(),
+                    instance.span,
+                ))),
+                member: Ident::new(port_name.clone(), instance.span),
+                span: instance.span,
+            });
+            let binding = if declared_state_names.contains(port_name) {
+                LexicalBinding::State(member_expr)
+            } else {
+                LexicalBinding::Expr(member_expr)
+            };
+            local_scope.insert(port_name.clone(), binding);
         }
     }
 
@@ -1734,10 +1874,7 @@ fn expand_component_instance(
             if let_binding.value.is_none() {
                 local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Uninitialized);
             } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
-                let is_param_shadow = comp_def
-                    .params
-                    .iter()
-                    .any(|p| p.name.as_str() == let_binding.name.as_str());
+                let is_param_shadow = comp_shadowed_ports.contains(let_binding.name.as_str());
                 if is_param_shadow {
                     let scope_ctx = ScopeContext {
                         current_node: ctx.comp_node_id,
@@ -1745,6 +1882,11 @@ fn expand_component_instance(
                         parent_name: ctx.parent_name,
                         prev_sibling: ctx.prev_sibling_id,
                         child_ids: &empty_children,
+                        num_children: num_consumer_children,
+                        child_node: None,
+                        allow_parent: true,
+                        shadowed_ports: Some(&comp_shadowed_ports),
+                        is_event_port: false,
                         parent_ports: ctx.parent_ports,
                         current_ports: &comp_scope_ports,
                         lexical_scope: &local_scope,
@@ -1781,6 +1923,11 @@ fn expand_component_instance(
                             parent_name: ctx.parent_name,
                             prev_sibling: ctx.prev_sibling_id,
                             child_ids: &empty_children,
+                            num_children: num_consumer_children,
+                            child_node: None,
+                            allow_parent: true,
+                            shadowed_ports: Some(&comp_shadowed_ports),
+                            is_event_port: false,
                             parent_ports: ctx.parent_ports,
                             current_ports: &comp_scope_ports,
                             lexical_scope: &local_scope,
@@ -1839,6 +1986,7 @@ fn expand_component_instance(
                         lexical_scope: &local_scope,
                         env_scope: &internal_body_env_scope,
                         enclosing_component_id: Some(ctx.comp_node_id),
+                        shadowed_ports: Some(&comp_shadowed_ports),
                         is_let: true,
                         ambient_authored_ports: None,
                         enums: ctx.enums,
@@ -1859,10 +2007,7 @@ fn expand_component_instance(
                         node_fonts.insert(node_id, node_id);
                     }
                 } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
-                    let is_param_shadow = comp_def
-                        .params
-                        .iter()
-                        .any(|p| p.name.as_str() == let_binding.name.as_str());
+                    let is_param_shadow = comp_shadowed_ports.contains(let_binding.name.as_str());
                     if is_param_shadow {
                         let rewritten = {
                             let scope_borrow = local_scope.borrow();
@@ -1872,6 +2017,11 @@ fn expand_component_instance(
                                 parent_name: ctx.parent_name,
                                 prev_sibling: ctx.prev_sibling_id,
                                 child_ids: &instantiated_children_ids,
+                                num_children: num_consumer_children,
+                                child_node: None,
+                                allow_parent: true,
+                                shadowed_ports: Some(&comp_shadowed_ports),
+                                is_event_port: false,
                                 parent_ports: ctx.parent_ports,
                                 current_ports: &comp_scope_ports,
                                 lexical_scope: &*scope_borrow,
@@ -1920,6 +2070,7 @@ fn expand_component_instance(
                                 lexical_scope: &local_scope,
                                 env_scope: &internal_body_env_scope,
                                 enclosing_component_id: Some(ctx.comp_node_id),
+                                shadowed_ports: Some(&comp_shadowed_ports),
                                 is_let: false,
                                 ambient_authored_ports: None,
                                 enums: ctx.enums,
@@ -1942,7 +2093,9 @@ fn expand_component_instance(
                             let bound_expr = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
                             children_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(bound_expr.clone()));
                             internal_body_env_scope.insert(env_binding.name.as_str().to_string(), EnvEntry::Bound(bound_expr.clone()));
-                            comp_ports.insert(env_binding.name.as_str().to_string(), bound_expr);
+                            if !comp_shadowed_ports.contains(env_binding.name.as_str()) {
+                                comp_ports.insert(env_binding.name.as_str().to_string(), bound_expr);
+                            }
                             if elem.name.as_str() == "Font" {
                                 node_fonts.insert(node_id, node_id);
                                 if env_binding.name.as_str() == "font" {
@@ -1960,6 +2113,11 @@ fn expand_component_instance(
                                     parent_name: ctx.parent_name,
                                     prev_sibling: ctx.prev_sibling_id,
                                     child_ids: &instantiated_children_ids,
+                                    num_children: num_consumer_children,
+                                    child_node: None,
+                                    allow_parent: true,
+                                    shadowed_ports: Some(&comp_shadowed_ports),
+                                    is_event_port: false,
                                     parent_ports: ctx.parent_ports,
                                     current_ports: &comp_scope_ports,
                                     lexical_scope: &*scope_borrow,
@@ -1996,6 +2154,7 @@ fn expand_component_instance(
                     lexical_scope: &local_scope,
                     env_scope: &internal_body_env_scope,
                     enclosing_component_id: Some(ctx.comp_node_id),
+                    shadowed_ports: Some(&comp_shadowed_ports),
                     is_let: false,
                     ambient_authored_ports: None,
                     enums: ctx.enums,
@@ -2036,6 +2195,7 @@ fn expand_component_instance(
                                             lexical_scope,
                                             env_scope: &children_env_scope,
                                             enclosing_component_id: ctx.enclosing_component_id,
+                                            shadowed_ports: ctx.shadowed_ports,
                                             is_let: false,
                                             ambient_authored_ports: None,
                                             enums: ctx.enums,
@@ -2072,6 +2232,11 @@ fn expand_component_instance(
                                                 parent_name: ctx.parent_name,
                                                 prev_sibling: ctx.prev_sibling_id,
                                                 child_ids: &empty_children,
+                                                num_children: 0,
+                                                child_node: None,
+                                                allow_parent: ctx.enclosing_component_id.is_none(),
+                                                shadowed_ports: ctx.shadowed_ports,
+                                                is_event_port: false,
                                                 parent_ports: ctx.parent_ports,
                                                 current_ports: &empty_ports,
                                                 lexical_scope: &*scope_borrow,
@@ -2113,24 +2278,30 @@ fn expand_component_instance(
                             ambient_scope_ports.push(let_name.clone());
                         }
                     }
-                    let ambient_scope_ctx = ScopeContext {
+                    let mut ambient_scope_ctx = ScopeContext {
                         current_node: child_node_id,
                         parent_node: Some(ctx.comp_node_id),
                         parent_name: Some(comp_def.name.as_str()),
                         prev_sibling: last_consumer_child_id,
                         child_ids: &empty_children,
+                        num_children: num_consumer_children,
+                        child_node: Some(child_node_id),
+                        allow_parent: false,
+                        shadowed_ports: Some(&comp_shadowed_ports),
+                        is_event_port: false,
                         parent_ports: &ambient_scope_ports,
                         current_ports: &empty_ports,
                         lexical_scope: &*local_scope.borrow(),
                         env_scope: &children_env_scope,
                         node_fonts: &*node_fonts,
-                        enclosing_component: None,
+                        enclosing_component: Some(ctx.comp_node_id),
                         comp_ports: Some(&comp_ports),
                         declared_state_names: Some(&declared_state_names),
                         enums: ctx.enums,
                     };
 
                     for ambient in &dir.ports {
+                        ambient_scope_ctx.is_event_port = ambient.name.as_str().starts_with("on_");
                         let rewritten = rewrite_expr(&ambient.expr, &ambient_scope_ctx)?;
                         merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
                         authored_ambient_ports.insert(ambient.name.as_str().to_string(), ambient.expr.clone());
@@ -2161,6 +2332,7 @@ fn expand_component_instance(
                         lexical_scope, // Pass caller's lexical scope to preserve encapsulation
                         env_scope: &children_env_scope,
                         enclosing_component_id: ctx.enclosing_component_id,
+                        shadowed_ports: ctx.shadowed_ports,
                         is_let: var_name.is_some(),
                         ambient_authored_ports: Some(&authored_ambient_ports),
                         enums: ctx.enums,
@@ -2209,12 +2381,17 @@ fn expand_component_instance(
         parent_name: ctx.parent_name,
         prev_sibling: ctx.prev_sibling_id,
         child_ids: &instantiated_children_ids,
+        num_children: num_consumer_children,
+        child_node: None,
+        allow_parent: true,
+        shadowed_ports: Some(&comp_shadowed_ports),
+        is_event_port: false,
         parent_ports: ctx.parent_ports,
         current_ports: &comp_scope_ports,
         lexical_scope: &final_local_scope,
         env_scope: &internal_body_env_scope,
         node_fonts: &*node_fonts,
-        enclosing_component: ctx.enclosing_component_id,
+        enclosing_component: Some(ctx.comp_node_id),
         comp_ports: Some(&comp_ports),
         declared_state_names: Some(&declared_state_names),
         enums: ctx.enums,
@@ -2222,10 +2399,15 @@ fn expand_component_instance(
 
     let mut rewritten_ports = HashMap::new();
     for (port_name, port_expr) in &comp_ports {
-        rewritten_ports.insert(port_name.clone(), rewrite_expr(port_expr, &scope_ctx)?);
-    }
-    for expr in rewritten_ports.values_mut() {
-        *expr = resolve_forward_scope_refs(expr, &final_local_scope);
+        if already_rewritten_ports.contains(port_name) {
+            rewritten_ports.insert(port_name.clone(), port_expr.clone());
+        } else {
+            let mut port_scope_ctx = scope_ctx.clone();
+            port_scope_ctx.is_event_port = port_name.starts_with("on_");
+            let mut rw = rewrite_expr(port_expr, &port_scope_ctx)?;
+            rw = resolve_forward_scope_refs(&rw, &final_local_scope);
+            rewritten_ports.insert(port_name.clone(), rw);
+        }
     }
 
     // Validate parameter types and coerce 0 -> 0px (for Distance) or Integer -> Float (for Float)
@@ -2353,7 +2535,7 @@ fn expand_component_instance(
         comp_authored_ports.insert(state_name.clone(), default_expr);
     }
     for (let_name, l) in &declared_lets {
-        if !comp_def.params.iter().any(|p| p.name.as_str() == let_name) {
+        if !comp_shadowed_ports.contains(let_name) {
             if let Some(LetValue::Expr(raw_expr)) = &l.value {
                 comp_authored_ports.insert(let_name.clone(), raw_expr.clone());
             }
@@ -2379,6 +2561,11 @@ fn expand_component_instance(
         parent_name: ctx.parent_name,
         prev_sibling: ctx.prev_sibling_id,
         child_ids: &instantiated_children_ids,
+        num_children: num_consumer_children,
+        child_node: None,
+        allow_parent: true,
+        shadowed_ports: Some(&comp_shadowed_ports),
+        is_event_port: false,
         parent_ports: ctx.parent_ports,
         current_ports: &comp_scope_ports,
         lexical_scope: &final_local_scope,
@@ -2691,6 +2878,7 @@ fn expand_primitive_element(
                         lexical_scope: ctx.lexical_scope,
                         env_scope: ctx.env_scope,
                         enclosing_component_id: ctx.enclosing_component_id,
+                        shadowed_ports: ctx.shadowed_ports,
                         is_let: false,
                         ambient_authored_ports: None,
                         enums: ctx.enums,
@@ -2709,7 +2897,7 @@ fn expand_primitive_element(
                             child.ports.push(PortBinding {
                                 name: Ident::new("x", child.span),
                                 expr: Expr::MemberAccess(MemberAccessExpr {
-                                    target: Box::new(Expr::Ident(Ident::new("parent", child.span))),
+                                    target: Box::new(Expr::Ident(Ident::new(node_id.canonical_name(), child.span))),
                                     member: Ident::new("left", child.span),
                                     span: child.span,
                                 }),
@@ -2720,7 +2908,7 @@ fn expand_primitive_element(
                             child.ports.push(PortBinding {
                                 name: Ident::new("y", child.span),
                                 expr: Expr::MemberAccess(MemberAccessExpr {
-                                    target: Box::new(Expr::Ident(Ident::new("parent", child.span))),
+                                    target: Box::new(Expr::Ident(Ident::new(node_id.canonical_name(), child.span))),
                                     member: Ident::new("top", child.span),
                                     span: child.span,
                                 }),
@@ -2823,6 +3011,7 @@ fn expand_primitive_element(
                             lexical_scope: ctx.lexical_scope,
                             env_scope: ctx.env_scope,
                             enclosing_component_id: ctx.enclosing_component_id,
+                            shadowed_ports: ctx.shadowed_ports,
                             is_let: true,
                             ambient_authored_ports: None,
                             enums: ctx.enums,
@@ -2841,7 +3030,7 @@ fn expand_primitive_element(
                                 child.ports.push(PortBinding {
                                     name: Ident::new("x", child.span),
                                     expr: Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::new("parent", child.span))),
+                                        target: Box::new(Expr::Ident(Ident::new(node_id.canonical_name(), child.span))),
                                         member: Ident::new("left", child.span),
                                         span: child.span,
                                     }),
@@ -2852,7 +3041,7 @@ fn expand_primitive_element(
                                 child.ports.push(PortBinding {
                                     name: Ident::new("y", child.span),
                                     expr: Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::new("parent", child.span))),
+                                        target: Box::new(Expr::Ident(Ident::new(node_id.canonical_name(), child.span))),
                                         member: Ident::new("top", child.span),
                                         span: child.span,
                                     }),
@@ -2973,6 +3162,7 @@ fn expand_primitive_element(
                                         lexical_scope: ctx.lexical_scope,
                                         env_scope: ctx.env_scope,
                                         enclosing_component_id: ctx.enclosing_component_id,
+                                        shadowed_ports: ctx.shadowed_ports,
                                         is_let: false,
                                         ambient_authored_ports: None,
                                         enums: ctx.enums,
@@ -3025,6 +3215,7 @@ fn expand_primitive_element(
                                             lexical_scope: ctx.lexical_scope,
                                             env_scope: ctx.env_scope,
                                             enclosing_component_id: ctx.enclosing_component_id,
+                                            shadowed_ports: ctx.shadowed_ports,
                                             is_let: true,
                                             ambient_authored_ports: None,
                                             enums: ctx.enums,
@@ -3090,6 +3281,7 @@ fn expand_primitive_element(
                     lexical_scope: ctx.lexical_scope,
                     env_scope: ctx.env_scope,
                     enclosing_component_id: ctx.enclosing_component_id,
+                    shadowed_ports: ctx.shadowed_ports,
                     is_let: ctx.is_let,
                     ambient_authored_ports: None,
                     enums: ctx.enums,
@@ -3117,6 +3309,7 @@ fn expand_primitive_element(
     let current_node = node_id;
     let parent_node = ctx.parent_id;
     let current_ports = &empty_ports;
+    let num_children = child_ids.len();
 
     // First, determine if this element has a font node (explicitly or ambiently)
     let mut font_node_id = None;
@@ -3128,6 +3321,11 @@ fn expand_primitive_element(
             parent_name: ctx.parent_name,
             prev_sibling: ctx.prev_sibling_id,
             child_ids: &child_ids,
+            num_children,
+            child_node: None,
+            allow_parent: ctx.enclosing_component_id.is_none(),
+            shadowed_ports: ctx.shadowed_ports,
+            is_event_port: false,
             parent_ports: ctx.parent_ports,
             current_ports,
             lexical_scope: &*lexical_borrow,
@@ -3151,6 +3349,11 @@ fn expand_primitive_element(
                 parent_name: ctx.parent_name,
                 prev_sibling: ctx.prev_sibling_id,
                 child_ids: &child_ids,
+                num_children,
+                child_node: None,
+                allow_parent: ctx.enclosing_component_id.is_none(),
+                shadowed_ports: ctx.shadowed_ports,
+                is_event_port: false,
                 parent_ports: ctx.parent_ports,
                 current_ports,
                 lexical_scope: &*lexical_borrow,
@@ -3188,6 +3391,11 @@ fn expand_primitive_element(
         parent_name: ctx.parent_name,
         prev_sibling: ctx.prev_sibling_id,
         child_ids: &child_ids,
+        num_children,
+        child_node: None,
+        allow_parent: ctx.enclosing_component_id.is_none(),
+        shadowed_ports: ctx.shadowed_ports,
+        is_event_port: false,
         parent_ports: ctx.parent_ports,
         current_ports,
         lexical_scope: &*lexical_borrow,
@@ -3238,7 +3446,9 @@ fn expand_primitive_element(
         }
 
         if port_name.starts_with("on_") {
-            let rewritten = rewrite_expr(&expr, &scope_ctx)?;
+            let mut event_scope_ctx = scope_ctx.clone();
+            event_scope_ctx.is_event_port = true;
+            let rewritten = rewrite_expr(&expr, &event_scope_ctx)?;
             if let Some(binding) = extract_event_binding(&port_name, &rewritten) {
                 event_handlers.insert(port_name, binding);
                 continue;
@@ -4244,7 +4454,7 @@ fn infer_expr_literal_for_typecheck<'a>(
             if member == "dpi" {
                 return Some(Literal::Float(96.0, m.span));
             }
-            if member == "weight" || member == "z" || member == "num_children" || member == "len" || member == "count" {
+            if member == "weight" || member == "z" || member == "len" {
                 return Some(Literal::Integer(0, m.span));
             }
             None
@@ -4347,9 +4557,6 @@ fn resolve_ident_or_member_to_literal<'a>(
         Expr::Literal(lit) => Some(lit.clone()),
         Expr::Paren(inner, _) => resolve_ident_or_member_to_literal(inner, ctx),
         Expr::Ident(id) => {
-            if id.as_str() == "num_children" {
-                return Some(Literal::Integer(ctx.child_ids.len() as i64, id.span));
-            }
             if let Some(comp_ports) = ctx.comp_ports {
                 if let Some(port_expr) = comp_ports.get(id.as_str()) {
                     match port_expr {
@@ -4371,13 +4578,16 @@ fn resolve_ident_or_member_to_literal<'a>(
                     }
                 }
             }
-            if let Some(LexicalBinding::Expr(e)) = ctx.lexical_scope.get(id.as_str()) {
+            if let Some(LexicalBinding::Expr(e) | LexicalBinding::State(e)) = ctx.lexical_scope.get(id.as_str()) {
                 return resolve_ident_or_member_to_literal(e, ctx);
             }
             None
         }
         Expr::MemberAccess(m) => {
             if let Expr::Ident(target_id) = m.target.as_ref() {
+                if target_id.as_str() == "children" && m.member.as_str() == "len" {
+                    return Some(Literal::Integer(ctx.num_children as i64, m.span));
+                }
                 if let Some(enum_def) = ctx.enums.get(target_id.as_str()) {
                     if enum_def.has_variant(m.member.as_str()) {
                         return Some(Literal::Enum(
@@ -4534,15 +4744,16 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 });
             }
 
-            // Check lexical scope first (let bindings shadow ambient parent ports)
+            // Check lexical scope first (let bindings, component ports, named nodes)
             if id.as_str() != "self"
                 && id.as_str() != "parent"
                 && id.as_str() != "window"
                 && id.as_str() != "prev"
+                && id.as_str() != "child"
             {
                 if let Some(binding) = ctx.lexical_scope.get(id.as_str()) {
                     match binding {
-                        LexicalBinding::Expr(e) => return Ok(e.clone()),
+                        LexicalBinding::Expr(e) | LexicalBinding::State(e) => return Ok(e.clone()),
                         LexicalBinding::Node(node_id) => {
                             return Ok(Expr::Ident(Ident::new(node_id.canonical_name(), id.span)));
                         }
@@ -4556,7 +4767,27 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
             }
 
-            // Check if it's a port on the current node (e.g. component parameter in let expression)
+            // In an event port (on_*), a bare method name that wasn't in lexical_scope
+            // resolves to the enclosing component's method (or current_node if in signature default).
+            if ctx.is_event_port
+                && id.as_str() != "unset"
+                && id.as_str() != "None"
+                && id.as_str() != "self"
+                && id.as_str() != "parent"
+                && id.as_str() != "window"
+                && id.as_str() != "prev"
+                && id.as_str() != "child"
+                && NodeId::from_canonical_name(id.as_str()).is_none()
+            {
+                let target_id = ctx.enclosing_component.unwrap_or(ctx.current_node);
+                return Ok(Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(Expr::Ident(Ident::new(target_id.canonical_name(), id.span))),
+                    member: id.clone(),
+                    span: id.span,
+                }));
+            }
+
+            // Check if it's a port on the current node (e.g. component parameter in default expression)
             if ctx.current_ports.iter().any(|p| p == id.as_str()) {
                 return Ok(Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::new(ctx.current_node.canonical_name(), id.span))),
@@ -4565,27 +4796,32 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }));
             }
 
-            // Check if it's a port on the parent container in scope
-            if ctx.parent_ports.iter().any(|p| p == id.as_str()) {
-                if let Some(parent) = ctx.parent_node {
-                    return Ok(Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::new(parent.canonical_name(), id.span))),
-                        member: id.clone(),
-                        span: id.span,
-                    }));
-                }
-            }
             if id.as_str() == "window" {
                 return Ok(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), id.span)));
             }
             if id.as_str() == "self" {
-                let self_id = ctx.enclosing_component.unwrap_or(ctx.current_node);
-                return Ok(Expr::Ident(Ident::new(self_id.canonical_name(), id.span)));
+                return Err(CompileError::Custom {
+                    message: "Bare 'self' is not allowed; use 'self.<method>' in an event handler or 'self.<port>' to access a shadowed component port".to_string(),
+                    span: id.span,
+                });
             }
             if id.as_str() == "child" {
-                return Ok(Expr::Ident(Ident::new(ctx.current_node.canonical_name(), id.span)));
+                if let Some(cid) = ctx.child_node {
+                    return Ok(Expr::Ident(Ident::new(cid.canonical_name(), id.span)));
+                } else {
+                    return Err(CompileError::Custom {
+                        message: "'child' can only be used inside a '\\Children { ... }' block".to_string(),
+                        span: id.span,
+                    });
+                }
             }
             if id.as_str() == "parent" {
+                if !ctx.allow_parent {
+                    return Err(CompileError::Custom {
+                        message: "Cannot use 'parent' inside a '\\Children' block or internal component element; reference component properties directly".to_string(),
+                        span: id.span,
+                    });
+                }
                 if let Some(parent) = ctx.parent_node {
                     return Ok(Expr::Ident(Ident::new(parent.canonical_name(), id.span)));
                 }
@@ -4596,7 +4832,10 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
             }
             if id.as_str() == "num_children" {
-                return Ok(Expr::Literal(Literal::Integer(ctx.child_ids.len() as i64, id.span)));
+                return Err(CompileError::Custom {
+                    message: "'num_children' is no longer supported; use 'children.len' instead".to_string(),
+                    span: id.span,
+                });
             }
             Ok(expr.clone())
         }
@@ -4685,13 +4924,20 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 _ => None,
             };
 
-            // Enum variant access: EnumName.VariantName
+            // Enum variant access and children.len
             if let Some(target_name) = &target_ident_name {
-                if target_name == "children" && (m.member.as_str() == "len" || m.member.as_str() == "count") {
-                    return Ok(Expr::Literal(Literal::Integer(ctx.child_ids.len() as i64, m.span)));
-                }
-                if (target_name == "self" || target_name == "parent") && m.member.as_str() == "num_children" {
-                    return Ok(Expr::Literal(Literal::Integer(ctx.child_ids.len() as i64, m.span)));
+                if target_name == "children" {
+                    if m.member.as_str() == "len" {
+                        return Ok(Expr::Literal(Literal::Integer(ctx.num_children as i64, m.span)));
+                    } else {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Cannot access 'children.{}' outside of an aggregation function; use 'children.len' for the child count",
+                                m.member
+                            ),
+                            span: m.span,
+                        });
+                    }
                 }
                 if let Some(enum_def) = ctx.enums.get(target_name) {
                     let variant_name = m.member.as_str();
@@ -4729,13 +4975,47 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             // Resolve target (parent, window, prev, self, child, or named node in lexical scope)
             let resolved_target = if let Some(target_name) = &target_ident_name {
                 if target_name == "self" {
-                    let self_id = ctx.enclosing_component.unwrap_or(ctx.current_node);
-                    Expr::Ident(Ident::new(self_id.canonical_name(), m.target.span()))
+                    if ctx.is_event_port {
+                        Expr::Ident(Ident::new(ctx.current_node.canonical_name(), m.target.span()))
+                    } else if let (Some(comp_id), Some(shadowed)) = (ctx.enclosing_component, ctx.shadowed_ports) {
+                        if shadowed.contains(m.member.as_str()) {
+                            Expr::Ident(Ident::new(comp_id.canonical_name(), m.target.span()))
+                        } else {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Cannot use 'self.{}' because port '{}' is not shadowed by a local '\\let' or '\\env' binding; use '{}' directly",
+                                    m.member, m.member, m.member
+                                ),
+                                span: m.span,
+                            });
+                        }
+                    } else {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Cannot use 'self.{}' outside of a component; 'self' is only allowed in event handlers or to access a shadowed component port",
+                                m.member
+                            ),
+                            span: m.span,
+                        });
+                    }
                 } else if target_name == "child" {
-                    Expr::Ident(Ident::new(ctx.current_node.canonical_name(), m.target.span()))
+                    if let Some(cid) = ctx.child_node {
+                        Expr::Ident(Ident::new(cid.canonical_name(), m.target.span()))
+                    } else {
+                        return Err(CompileError::Custom {
+                            message: "'child' can only be used inside a '\\Children { ... }' block".to_string(),
+                            span: m.target.span(),
+                        });
+                    }
                 } else if let Some(LexicalBinding::Node(node_id)) = ctx.lexical_scope.get(target_name) {
                     Expr::Ident(Ident::new(node_id.canonical_name(), m.target.span()))
                 } else if target_name == "parent" {
+                    if !ctx.allow_parent {
+                        return Err(CompileError::Custom {
+                            message: "Cannot use 'parent' inside a '\\Children' block or internal component element; reference component properties directly".to_string(),
+                            span: m.target.span(),
+                        });
+                    }
                     if let Some(parent) = ctx.parent_node {
                         if !ctx.parent_ports.is_empty() && !ctx.parent_ports.contains(&m.member.as_str().to_string()) {
                             let parent_name = ctx.parent_name.unwrap_or("unknown");
@@ -4854,7 +5134,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             for arg in &call.args {
                 if let Expr::MemberAccess(m) = arg {
                     if let Expr::Ident(target_id) = m.target.as_ref() {
-                        if target_id.as_str() == "children" {
+                        if target_id.as_str() == "children" && m.member.as_str() != "len" {
                             had_children = true;
                             for &child_id in ctx.child_ids {
                                 let child_access = Expr::MemberAccess(MemberAccessExpr {
@@ -5026,7 +5306,10 @@ fn validate_key_expr(
                     span: id.span,
                 });
             }
-            if lexical_scope.contains_key(name) {
+            if matches!(
+                lexical_scope.get(name),
+                Some(LexicalBinding::Expr(_) | LexicalBinding::Node(_) | LexicalBinding::Uninitialized)
+            ) {
                 return Err(CompileError::InvalidComponentKeyDependency {
                     node: node_name.to_string(),
                     name: name.to_string(),
@@ -5044,7 +5327,10 @@ fn validate_key_expr(
                     span: m.span,
                 });
             }
-            if lexical_scope.contains_key(member_name) {
+            if matches!(
+                lexical_scope.get(member_name),
+                Some(LexicalBinding::Expr(_) | LexicalBinding::Node(_) | LexicalBinding::Uninitialized)
+            ) {
                 return Err(CompileError::InvalidComponentKeyDependency {
                     node: node_name.to_string(),
                     name: member_name.to_string(),
