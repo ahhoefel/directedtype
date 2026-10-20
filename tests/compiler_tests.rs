@@ -7,8 +7,29 @@ use directedtype::Value;
 use pretty_assertions::assert_eq;
 
 #[test]
+fn test_undefined_component_error() {
+    let input = r#"
+    \PadOut(padding_y: 30px) {
+        \Text(size: 16px) { Hello }
+    }
+    "#;
+    let doc = parse(input).expect("Failed to parse");
+    let err = compile_to_graph(&doc).expect_err("Undefined component should fail");
+    match err {
+        CompileError::UndefinedComponent { name, .. } => {
+            assert_eq!(name, "PadOut");
+        }
+        other => panic!("Expected UndefinedComponent, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_expand_flow_recurrence_and_graph() {
     let input = r#"
+    \Component Header(x: Distance: 0, y: Distance: 0, size: Distance: 32px, width: Distance: 100px) {
+      \alias height = size;
+    }
+    \Component Paragraph(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 20px) {}
     \Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 16px) {
       \Children {
         x: parent.left,
@@ -147,6 +168,7 @@ fn test_expand_flow_recurrence_and_graph() {
 #[test]
 fn test_precedence_explicit_overrides_ambient() {
     let input = r#"
+    \Component Paragraph(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 20px) {}
     \Component Flow(x: Distance: 0, gap: Distance: 16px) {
       \Children {
         x: parent.left
@@ -174,6 +196,7 @@ fn test_precedence_explicit_overrides_ambient() {
 #[test]
 fn test_expand_shaded_box_intrinsic_children_width() {
     let input = r#"
+    \Component Button(x: Distance: 0, y: Distance: 0, width: Distance, height: Distance: 40px) {}
     \Component ShadedBox(bg_color: Color, width: max(children.width) + 32px) {
       \Rect(
         x: x,
@@ -271,6 +294,10 @@ fn test_text_wrapping_default_height() {
 #[test]
 fn test_topological_sort_acyclic() {
     let input = r#"
+    \Component Header(x: Distance: 0, y: Distance: 0, size: Distance: 32px, width: Distance: 100px) {
+      \alias height = size;
+    }
+    \Component Paragraph(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 20px) {}
     \Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 16px) {
       \Children {
         x: parent.left,
@@ -318,6 +345,7 @@ fn test_cycle_detection_fit_content_paradox() {
     // The "fit-content paradox" from SPEC.md and PDF:
     // Container width depends on child width, while child width depends on container width.
     let input = r#"
+    \Component Button(width: Distance) {}
     \Component ParadoxBox(width: max(children.width)) {
       \Children {
         width: parent.width
@@ -417,8 +445,8 @@ fn test_end_to_end_flow_math_evaluation() {
     }
 
     \Flow(gap: 24px) {
-      \Header(size: 32px) { Welcome to DAG-UI }
-      \Paragraph { This layout is mathematically provable. }
+      \Text(size: 32px) { Welcome to DAG-UI }
+      \Text(size: 16px) { This layout is mathematically provable. }
     }
     "#;
 
@@ -433,19 +461,19 @@ fn test_end_to_end_flow_math_evaluation() {
     assert_eq!(flow.rect.x, 0.0);
     assert_eq!(flow.rect.y, 0.0);
 
-    // Node 1: Header
+    // Node 1: Header Text
     let expected_header_h = directedtype::compiler::text::measure_font_metrics(32.0, 400.0, None).cap_height;
     let header = &layout.nodes[1];
-    assert_eq!(header.name, "Header");
+    assert_eq!(header.name, "Text");
     assert_eq!(header.rect.x, 0.0);
     assert_eq!(header.rect.y, 0.0);
     assert_eq!(header.rect.height, expected_header_h);
     assert_eq!(header.text_content.as_deref(), Some("Welcome to DAG-UI"));
 
-    // Node 2: Paragraph
+    // Node 2: Paragraph Text
     // Paragraph y = Header.bottom + gap
     let para = &layout.nodes[2];
-    assert_eq!(para.name, "Paragraph");
+    assert_eq!(para.name, "Text");
     assert_eq!(para.rect.x, 0.0);
     assert_eq!(para.rect.y, expected_header_h + 24.0);
     assert_eq!(
@@ -457,6 +485,7 @@ fn test_end_to_end_flow_math_evaluation() {
 #[test]
 fn test_end_to_end_shaded_box_bottom_up_evaluation() {
     let input = r#"
+    \Component Button(x: Distance: 0, y: Distance: 0, width: Distance, height: Distance: 40px) {}
     \Component ShadedBox(x: Distance: 0, y: Distance: 0, height: Distance: 0, bg_color: Color, width: max(children.width) + 32px) {
       \Rect(
         x: x,

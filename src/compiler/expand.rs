@@ -2354,6 +2354,21 @@ fn expand_primitive_element(
     doc: &mut ExpandedDocument,
     node_fonts: &mut HashMap<NodeId, NodeId>,
 ) -> Result<(), CompileError> {
+    let is_inline_span = ctx
+        .parent_id
+        .is_some_and(|p| doc.get_node(p).is_some_and(|n| n.name == "Text"));
+
+    if !matches!(
+        elem.name.as_str(),
+        "Rect" | "Text" | "Font" | "Clip" | "Box" | "Anchor" | "AnchorScope"
+    ) && !(is_inline_span && elem.name.as_str() == "Link")
+    {
+        return Err(CompileError::UndefinedComponent {
+            name: elem.name.as_str().to_string(),
+            span: elem.name.span,
+        });
+    }
+
     // Validate that caller does not attempt to override immutable spatial alias ports
     for port in &elem.ports {
         let is_purely_ambient = ctx.ambient_authored_ports.is_some_and(|a| a.contains_key(port.name.as_str()));

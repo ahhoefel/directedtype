@@ -675,10 +675,10 @@ fn test_named_import_unimported_component_rejected() {
     .expect_err("Unimported component should not be in scope");
 
     match err {
-        CompileError::MissingPort { node, .. } => {
-            assert_eq!(node, "SecretWidget");
+        CompileError::UndefinedComponent { name, .. } => {
+            assert_eq!(name, "SecretWidget");
         }
-        other => panic!("Expected MissingPort error on SecretWidget, got {:?}", other),
+        other => panic!("Expected UndefinedComponent error on SecretWidget, got {:?}", other),
     }
 }
 
