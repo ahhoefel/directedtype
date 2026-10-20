@@ -39,11 +39,11 @@
         border_width: 1px
     )
 
-    \Rect(x: guide_x, y: baseline_y, width: guide_width, height: 1px, color: #ef4444)
-    \Rect(x: guide_x, y: cap_height_y, width: guide_width, height: 1px, color: #22c55e)
-    \Rect(x: guide_x, y: x_height_y, width: guide_width, height: 1px, color: #f97316)
-    \Rect(x: guide_x, y: descender_y, width: guide_width, height: 1px, color: #a855f7)
-    \Rect(x: guide_x, y: gap_y, width: guide_width, height: 1px, color: #0b52c3)
+    \HLine(x: guide_x, y: baseline_y, length: guide_width, color: #ef4444)
+    \HLine(x: guide_x, y: cap_height_y, length: guide_width, color: #22c55e)
+    \HLine(x: guide_x, y: x_height_y, length: guide_width, color: #f97316)
+    \HLine(x: guide_x, y: descender_y, length: guide_width, color: #a855f7)
+    \HLine(x: guide_x, y: gap_y, length: guide_width, color: #0b52c3)
 
 
     \Measurement(x: guide_x - 10px, y1: t.top, y2: t.bottom)
@@ -58,10 +58,14 @@
 
 \Component Measurement(x, y1, y2, arm: 5px, color: #ffffff) {
     \env font = \Font(family: "Arial", size: 10px);
-    \Rect(x: x, y: y1, width: 1px, height: y2 - y1, color: #ef4444)
-    \Rect(x: x-arm, y: y1, width: 2*arm, height: 1px, color: #ef4444)
-    \Rect(x: x-arm, y: y2, width: 2*arm, height: 1px, color: #ef4444)
+    \Rect(x: x-0.5px, y: y1, width: 1px, height: y2 - y1, color: #ef4444)
+    \Rect(x: x-arm, y: y1-0.5px, width: 2*arm, height: 1px, color: #ef4444)
+    \Rect(x: x-arm, y: y2-0.5px, width: 2*arm, height: 1px, color: #ef4444)
     \Text(x: x + 2px, y: (y1 + y2)/2, color: color, text: to_fixed(distance_to_float(y2 - y1, px), 2))
+}
+
+\Component HLine(x, y, length, thickness: Distance: 1px, color) {
+    \Rect(x, y: y - thickness/2, width: length, height: thickness, color)
 }
 
 \Center {
