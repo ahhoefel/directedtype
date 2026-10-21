@@ -1,8 +1,8 @@
-\Component Foo(env color) {
+\Component Foo(env color: Color) {
     \Children
 }
 
-\Component Bar(env color) {
+\Component Bar(env color: Color) {
     \Children {
         color: color
     }

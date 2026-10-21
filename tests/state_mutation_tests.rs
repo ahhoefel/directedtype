@@ -9,8 +9,8 @@ use directedtype::Value;
 #[test]
 fn test_compiled_document_set_state_updates_downstream_dag() {
     let input = r#"
-    \Component Counter(multiplier: Distance: 10px) {
-        \state count: 0;
+    \Component Counter(multiplier: Distance = 10px) {
+        \state count: Integer = 0;
         \Rect(x: 0, y: 0, width: count * multiplier, height: 30px, color: #00FF00)
     }
 
@@ -56,8 +56,8 @@ fn test_compiled_document_set_state_updates_downstream_dag() {
 #[test]
 fn test_compiled_document_not_a_state_variable_error() {
     let input = r#"
-    \Component Counter(multiplier: Distance: 10px) {
-        \state count: 0;
+    \Component Counter(multiplier: Distance = 10px) {
+        \state count: Integer = 0;
         \Rect(x: 0, y: 0, width: count * multiplier, height: 30px, color: #00FF00)
     }
 
@@ -86,7 +86,7 @@ fn test_compiled_document_not_a_state_variable_error() {
 fn test_compiled_document_type_mismatch_error() {
     let input = r#"
     \Component Counter {
-        \state count: Integer: 0;
+        \state count: Integer = 0;
         \Rect(x: 0, y: 0, width: count * 10px, height: 30px, color: #00FF00)
     }
 
@@ -114,8 +114,8 @@ fn test_compiled_document_type_mismatch_error() {
 #[test]
 fn test_compiled_document_set_state_by_structured_key() {
     let input = r#"
-    \Component Cell(is_selected: Boolean: false) {
-        \state active: false;
+    \Component Cell(is_selected: Boolean = false) {
+        \state active: Boolean = false;
         \Rect(x: 0, y: 0, width: 50px, height: 50px, color: (active || is_selected) ? #00FF00 : #FF0000)
     }
 
@@ -178,7 +178,7 @@ fn test_compiled_document_set_state_by_structured_key() {
 fn test_state_mutation_updates_dependent_component_key() {
     let input = r#"
     \Component Master {
-        \state cursor_idx: 0;
+        \state cursor_idx: Integer = 0;
         \Rect(cursor_idx; x: cursor_idx * 100px, y: 0, width: 80px, height: 40px, color: #0000FF)
     }
 
@@ -213,7 +213,7 @@ fn test_state_mutation_updates_dependent_component_key() {
 fn test_multi_level_transitive_dependency_propagation() {
     let input = r#"
     \Component Pipeline {
-        \state base: 10px;
+        \state base: Distance = 10px;
         \Rect(x: 0, y: 0, width: base * 2, height: 20px, color: #FFFFFF)
         \Rect(x: prev.right + 10px, y: 0, width: prev.width + 5px, height: 20px, color: #FFFFFF)
     }
@@ -257,8 +257,8 @@ fn test_multi_level_transitive_dependency_propagation() {
 #[test]
 fn test_dom_set_state_microsecond_incremental_update() {
     let input = r#"
-    \Component Counter(multiplier: Distance: 10px) {
-        \state count: 0;
+    \Component Counter(multiplier: Distance = 10px) {
+        \state count: Integer = 0;
         \Rect(x: 0, y: 0, width: count * multiplier, height: 35px, color: #0000FF)
     }
 
@@ -305,8 +305,8 @@ fn test_dom_set_state_by_key() {
         \Children
     }
 
-    \Component Button(label: String: "OK") {
-        \state pressed: false;
+    \Component Button(label: String = "OK") {
+        \state pressed: Boolean = false;
         \Rect(x: 0, y: 0, width: pressed ? 120px : 100px, height: 40px, color: #222222)
     }
 
@@ -342,7 +342,7 @@ fn test_dom_set_state_by_key() {
 fn test_dom_structural_mutation_preserves_state() {
     let input = r#"
     \Component Counter {
-        \state count: 0;
+        \state count: Integer = 0;
         \Rect(x: 0, y: 0, width: count * 10px, height: 30px, color: #00FF00)
     }
 
@@ -385,8 +385,8 @@ fn test_dom_structural_mutation_preserves_state() {
 fn test_transaction_batching_state_mutations() {
     let input = r#"
     \Component DualCounter {
-        \state a: 10px;
-        \state b: 20px;
+        \state a: Distance = 10px;
+        \state b: Distance = 20px;
         \Rect(x: 0, y: 0, width: a + b, height: 40px, color: #000)
     }
 

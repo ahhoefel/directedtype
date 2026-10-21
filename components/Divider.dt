@@ -5,8 +5,8 @@
 \Component Divider(
     x: Distance,
     y: Distance,
-    color: Color: #334155,
-    thickness: Distance: 1px
+    color: Color = #334155,
+    thickness: Distance = 1px
 ) {
     \let resolved_width = parent.width;
 
@@ -29,8 +29,8 @@
     width: Distance,
     x: Distance,
     y: Distance,
-    color: Color: #334155,
-    thickness: Distance: 1px
+    color: Color = #334155,
+    thickness: Distance = 1px
 ) {
     \alias right = x + width;
     \alias bottom = y + thickness;

@@ -8,8 +8,8 @@
 // 1. Explicit Width HCenter
 \Component HCenter(
     width: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top
+    x: Distance = parent.left,
+    y: Distance = parent.top
 ) {
     \assert children.len == 1 as "Should have only one child.";
 

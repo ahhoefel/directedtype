@@ -14,7 +14,7 @@
     border_width: Distance = 0,
     scrollbar_color: Color = #64748b80,
     scrollbar_width: Distance = 6px,
-    on_scroll = self.on_scroll
+    on_scroll: Handler = self.on_scroll
 ) {
     \state scroll_y: Distance = 0;
     \state scroll_x: Distance = 0;

@@ -1,14 +1,14 @@
 /// Reusable DTML component definition for the translucent bounding box highlight.
 pub const INSPECT_HIGHLIGHT_DTML: &str = r#"
 \Component InspectHighlight(
-    x: Distance: 0,
-    y: Distance: 0,
-    width: Distance: 100px,
-    height: Distance: 100px,
-    fill_color: Color: #38bdf820,
-    border_color: Color: #38bdf8,
-    border_width: Distance: 1.5px,
-    z: Integer: 9990
+    x: Distance = 0,
+    y: Distance = 0,
+    width: Distance = 100px,
+    height: Distance = 100px,
+    fill_color: Color = #38bdf820,
+    border_color: Color = #38bdf8,
+    border_width: Distance = 1.5px,
+    z: Integer = 9990
 ) {
     \Rect(
         x: x,
@@ -26,14 +26,14 @@ pub const INSPECT_HIGHLIGHT_DTML: &str = r#"
 /// Reusable DTML component definition for the floating coordinate/tag badge.
 pub const INSPECT_BADGE_DTML: &str = r#"
 \Component InspectBadge(
-    target_x: Distance: 0,
-    target_y: Distance: 0,
-    target_w: Distance: 100px,
-    target_h: Distance: 50px,
-    label: String: "",
-    bg_color: Color: #0f172a,
-    text_color: Color: #38bdf8,
-    z: Integer: 9999
+    target_x: Distance = 0,
+    target_y: Distance = 0,
+    target_w: Distance = 100px,
+    target_h: Distance = 50px,
+    label: String = "",
+    bg_color: Color = #0f172a,
+    text_color: Color = #38bdf8,
+    z: Integer = 9999
 ) {
     \Rect(
         x: max(target_x, 4px),
@@ -57,12 +57,12 @@ pub const INSPECT_BADGE_DTML: &str = r#"
 /// Reusable DTML component definition for visual clip context bounds.
 pub const INSPECT_CLIP_GUIDE_DTML: &str = r#"
 \Component InspectClipGuide(
-    x: Distance: 0,
-    y: Distance: 0,
-    width: Distance: 100px,
-    height: Distance: 100px,
-    stroke_color: Color: #a855f7,
-    z: Integer: 9980
+    x: Distance = 0,
+    y: Distance = 0,
+    width: Distance = 100px,
+    height: Distance = 100px,
+    stroke_color: Color = #a855f7,
+    z: Integer = 9980
 ) {
     \Rect(
         x: x,
@@ -84,13 +84,13 @@ pub const INSPECT_OVERLAY_DTML: &str = r#"
     target_y: Distance,
     target_w: Distance,
     target_h: Distance,
-    label: String: "",
-    is_selected: Bool: false,
-    has_clip: Bool: false,
-    clip_x: Distance: 0,
-    clip_y: Distance: 0,
-    clip_w: Distance: 0,
-    clip_h: Distance: 0
+    label: String = "",
+    is_selected: Boolean = false,
+    has_clip: Boolean = false,
+    clip_x: Distance = 0,
+    clip_y: Distance = 0,
+    clip_w: Distance = 0,
+    clip_h: Distance = 0
 ) {
     \InspectHighlight(
         x: target_x,

@@ -312,7 +312,9 @@ pub fn build_variable_graph_with_window(
         }
 
         for (port_name, expr) in ports {
-            if port_name.starts_with("on_") {
+            if port_name.starts_with("on_")
+                || node.port_types.get(&port_name).map(|s| s.as_str()) == Some("Handler")
+            {
                 continue;
             }
             let var_id = VarId::new(node.id, port_name);

@@ -6,7 +6,7 @@ use pretty_assertions::assert_eq;
 #[test]
 fn test_spec_shaded_box_component() {
     let input = r#"
-    \Component ShadedBox(bg_color: Color, width: max(children.width) + 32) {
+    \Component ShadedBox(bg_color: Color, width: Distance = max(children.width) + 32) {
       \Rect(
         x: x,
         y: y,
@@ -38,9 +38,12 @@ fn test_spec_shaded_box_component() {
             );
             assert!(comp.params[0].default_edge.is_none());
 
-            // Param 2: width: max(children.width) + 32
+            // Param 2: width: Distance = max(children.width) + 32
             assert_eq!(comp.params[1].name.as_str(), "width");
-            assert!(comp.params[1].type_annotation.is_none());
+            assert_eq!(
+                comp.params[1].type_annotation.as_ref().map(|t| t.name.as_str()),
+                Some("Distance")
+            );
             match &comp.params[1].default_edge {
                 Some(Expr::Binary(bin)) => {
                     assert_eq!(bin.op, BinaryOp::Add);
@@ -100,7 +103,7 @@ fn test_spec_shaded_box_component() {
 #[test]
 fn test_spec_flow_component() {
     let input = r#"
-    \Component Flow(gap: Distance: 16px) {
+    \Component Flow(gap: Distance = 16px) {
       \Children {
         x: parent.left,
         y: prev ? prev.bottom + gap : parent.top
@@ -453,7 +456,7 @@ fn test_unescaped_brace_in_text_error() {
 fn test_full_document_with_components_and_nodes() {
     let input = r#"
     // Component definition
-    \Component Flow(gap: Number: 16) {
+    \Component Flow(gap: Float = 16) {
       \Children {
         x: parent.left,
         y: prev ? prev.bottom + gap : parent.top
@@ -532,8 +535,8 @@ fn test_parse_let_bindings() {
     let input = r#"
     \let global_gap = 24;
 
-    \Component Card(padding: Number = 16) {
-      \let inset: Number = padding * 2;
+    \Component Card(padding: Float = 16) {
+      \let inset: Float = padding * 2;
       \let mask = \Rect(width: 100, height: 50)
       \Rect(x: mask.right + inset)
     }
@@ -562,7 +565,7 @@ fn test_parse_let_bindings() {
             match &c.body[0] {
                 ComponentBodyItem::Let(l) => {
                     assert_eq!(l.name.as_str(), "inset");
-                    assert_eq!(l.type_annotation.as_ref().unwrap().name.as_str(), "Number");
+                    assert_eq!(l.type_annotation.as_ref().unwrap().name.as_str(), "Float");
                 }
                 _ => panic!("Expected ComponentBodyItem::Let"),
             }
@@ -669,7 +672,7 @@ fn test_parse_env_declarations_and_uninitialized_tombstones() {
     \let uninit_let;
     \env uninit_env;
 
-    \Component Card(env padding: Number: 16, border: Number: 1) {
+    \Component Card(env padding: Float = 16, border: Float = 1) {
         \let private_state;
         \env local_env = #ffffff;
         \env hole_env;
@@ -811,10 +814,10 @@ fn test_parse_env_member_access() {
 #[test]
 fn test_parse_alias_bindings() {
     let input = r#"
-    \Component Card(width: 100, height: 50) {
+    \Component Card(width: Distance = 100px, height: Distance = 50px) {
         \alias right = x + width;
-        \alias bottom: y + height;
-        \alias center_x: Number = (x + right) / 2;
+        \alias bottom = y + height;
+        \alias center_x: Distance = (x + right) / 2;
         \Rect(x: x, y: y, width: width, height: height)
     }
     "#;
@@ -872,7 +875,7 @@ fn test_parse_alias_bindings() {
             match &c.body[2] {
                 ComponentBodyItem::Alias(a) => {
                     assert_eq!(a.name.as_str(), "center_x");
-                    assert_eq!(a.type_annotation.as_ref().unwrap().name.as_str(), "Number");
+                    assert_eq!(a.type_annotation.as_ref().unwrap().name.as_str(), "Distance");
                     match &a.value {
                         Expr::Binary(b) => {
                             assert_eq!(b.op, BinaryOp::Div);
@@ -1018,14 +1021,14 @@ fn test_parse_port_shorthand_property_names() {
 #[test]
 fn test_parse_state_bindings_in_component_and_toplevel() {
     let source = r#"
-    \state global_count: Number = 42;
+    \state global_count: Integer = 42;
 
-    \Component Counter(initial: Number: 0) {
-        \state count: Number: initial;
+    \Component Counter(initial: Integer = 0) {
+        \state count: Integer = initial;
         \state is_open: Boolean;
         \state label: String = "Active";
-        \state user_name;
-        \state bio = "Loading " + initial;
+        \state user_name: String;
+        \state bio: String = "Loading " + initial;
 
         \Rect(width: 100, height: 40)
     }
@@ -1038,7 +1041,7 @@ fn test_parse_state_bindings_in_component_and_toplevel() {
     match &doc.items[0] {
         Item::State(s) => {
             assert_eq!(s.name.as_str(), "global_count");
-            assert_eq!(s.type_annotation.as_ref().unwrap().name.as_str(), "Number");
+            assert_eq!(s.type_annotation.as_ref().unwrap().name.as_str(), "Integer");
             match &s.default {
                 Some(Expr::Literal(Literal::Integer(n, _))) => assert_eq!(*n, 42),
                 _ => panic!("Expected Expr::Literal integer for global_count"),
@@ -1053,11 +1056,11 @@ fn test_parse_state_bindings_in_component_and_toplevel() {
             assert_eq!(c.name.as_str(), "Counter");
             assert_eq!(c.body.len(), 6);
 
-            // state count: Number: initial;
+            // state count: Integer = initial;
             match &c.body[0] {
                 ComponentBodyItem::State(s) => {
                     assert_eq!(s.name.as_str(), "count");
-                    assert_eq!(s.type_annotation.as_ref().unwrap().name.as_str(), "Number");
+                    assert_eq!(s.type_annotation.as_ref().unwrap().name.as_str(), "Integer");
                     match &s.default {
                         Some(Expr::Ident(id)) => assert_eq!(id.as_str(), "initial"),
                         _ => panic!("Expected Expr::Ident for initial"),
@@ -1089,21 +1092,21 @@ fn test_parse_state_bindings_in_component_and_toplevel() {
                 _ => panic!("Expected ComponentBodyItem::State for label"),
             }
 
-            // state user_name;
+            // state user_name: String;
             match &c.body[3] {
                 ComponentBodyItem::State(s) => {
                     assert_eq!(s.name.as_str(), "user_name");
-                    assert!(s.type_annotation.is_none());
+                    assert_eq!(s.type_annotation.as_ref().unwrap().name.as_str(), "String");
                     assert!(s.default.is_none());
                 }
                 _ => panic!("Expected ComponentBodyItem::State for user_name"),
             }
 
-            // state bio = "Loading " + initial;
+            // state bio: String = "Loading " + initial;
             match &c.body[4] {
                 ComponentBodyItem::State(s) => {
                     assert_eq!(s.name.as_str(), "bio");
-                    assert!(s.type_annotation.is_none());
+                    assert_eq!(s.type_annotation.as_ref().unwrap().name.as_str(), "String");
                     match &s.default {
                         Some(Expr::Binary(b)) => assert_eq!(b.op, BinaryOp::Add),
                         _ => panic!("Expected Expr::Binary for bio default"),
@@ -1164,7 +1167,7 @@ fn test_parse_use_mixed_with_components_and_nodes() {
     \use "./Button.dt" as ActionButton;
 
     \Component App {
-        \state active: Boolean: true;
+        \state active: Boolean = true;
         \ActionButton { "Click" }
     }
 
@@ -1319,7 +1322,7 @@ fn test_bare_keywords_rejected_in_component_body() {
     let cases = [
         ("\\Component Foo { let x = 10; }", "let"),
         ("\\Component Foo { alias y = 10; }", "alias"),
-        ("\\Component Foo { state z = 10; }", "state"),
+        ("\\Component Foo { state z: Integer = 10; }", "state"),
         ("\\Component Foo { env e = 10; }", "env"),
     ];
 
@@ -1337,7 +1340,7 @@ fn test_bare_keywords_rejected_in_component_body() {
 fn test_bare_keywords_rejected_at_document_root() {
     let cases = [
         ("let x = 10;", "let"),
-        ("state z = 10;", "state"),
+        ("state z: Integer = 10;", "state"),
         ("env e = 10;", "env"),
     ];
 
@@ -1356,11 +1359,11 @@ fn test_backslash_keywords_accepted() {
     let src = r#"
     \let doc_val = 100;
     \env doc_theme = "light";
-    \state doc_state = 1;
+    \state doc_state: Integer = 1;
 
-    \Component MyComp(\env param_env: String, normal_param: Number) {
+    \Component MyComp(env param_env: String, normal_param: Float) {
         \let local_val = 200;
-        \state local_state = 2;
+        \state local_state: Integer = 2;
         \env local_env = "dark";
         \alias local_alias = local_val + 50;
 
@@ -1439,4 +1442,26 @@ fn test_parse_named_use_errors() {
     assert!(err3.to_string().contains("string literal file path"));
 }
 
-
+#[test]
+fn test_strict_type_and_value_syntax_rules() {
+    // 1. Untyped component parameters are rejected
+    assert!(parse(r#"\Component Foo(x) {}"#).is_err());
+    assert!(parse(r#"\Component Foo(x = 10px) {}"#).is_err());
+    // 2. Colon for default value on component parameter is rejected
+    assert!(parse(r#"\Component Foo(x: Distance: 10px) {}"#).is_err());
+    // 3. \env (with backslash) in component parameter list is rejected
+    assert!(parse(r#"\Component Foo(\env font: Font) {}"#).is_err());
+    // 4. Untyped \state is rejected
+    assert!(parse(r#"\state count = 0;"#).is_err());
+    assert!(parse(r#"\state count;"#).is_err());
+    // 5. Colon for default value on \state is rejected
+    assert!(parse(r#"\state count: Integer: 0;"#).is_err());
+    // 6. Colon for value on \let, \env, \alias without type is rejected
+    assert!(parse(r#"\let x: 10px;"#).is_err());
+    assert!(parse(r#"\env x: 10px;"#).is_err());
+    assert!(parse(r#"\Component Foo(x: Distance = 0) { \alias right: x + 10px; }"#).is_err());
+    // 7. Colon for value on \let, \env, \alias with type is rejected
+    assert!(parse(r#"\let x: Distance: 10px;"#).is_err());
+    assert!(parse(r#"\env x: Distance: 10px;"#).is_err());
+    assert!(parse(r#"\Component Foo(x: Distance = 0) { \alias right: Distance: x + 10px; }"#).is_err());
+}

@@ -23,13 +23,13 @@
 )
 
 \Component AudioMixer(
-    width: Distance: 480px,
-    x: Distance: parent.left,
-    y: Distance: parent.top
+    width: Distance = 480px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
 ) {
-    \state master: Float: 75;
-    \state bass: Float: 40;
-    \state treble: Float: 60;
+    \state master: Float = 75;
+    \state bass: Float = 40;
+    \state treble: Float = 60;
 
     \alias height = card.height;
     \alias right = card.right;

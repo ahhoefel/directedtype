@@ -6,11 +6,11 @@
 \env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
 
 \Component Box(
-    width: Distance: 320px,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    env font,
-    env text_bounds
+    width: Distance = 320px,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    env font: Font,
+    env text_bounds: TextBounds
 ) {
     \alias right = x + width;
     \alias height = pad.height;

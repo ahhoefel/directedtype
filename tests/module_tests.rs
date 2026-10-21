@@ -35,7 +35,7 @@ fn test_basic_module_import_and_layout() {
     resolver.insert(
         "components/Button.dt",
         r#"
-        \Component Button(width: Distance: 120px, height: Distance: 40px) {
+        \Component Button(width: Distance = 120px, height: Distance = 40px) {
             \Rect(x: 0, y: 0, width: width, height: height, color: #1E293B)
         }
         "#,
@@ -69,7 +69,7 @@ fn test_aliased_module_import() {
     resolver.insert(
         "widgets/Button.dt",
         r#"
-        \Component Button(width: Distance: 100px, height: Distance: 30px) {
+        \Component Button(width: Distance = 100px, height: Distance = 30px) {
             \Rect(x: 0, y: 0, width: width, height: height, color: #2563EB)
         }
         "#,
@@ -105,7 +105,7 @@ fn test_transitive_imports() {
     resolver.insert(
         "ui/Icon.dt",
         r#"
-        \Component Icon(size: Distance: 16px) {
+        \Component Icon(size: Distance = 16px) {
             \Rect(x: 0, y: 0, width: size, height: size, color: #E2E8F0)
         }
         "#,
@@ -149,7 +149,7 @@ fn test_transitive_imports_with_alias() {
     resolver.insert(
         "ui/Icon.dt",
         r#"
-        \Component Icon(size: Distance: 16px) {
+        \Component Icon(size: Distance = 16px) {
             \Rect(x: 0, y: 0, width: size, height: size, color: #E2E8F0)
         }
         "#,
@@ -195,7 +195,7 @@ fn test_diamond_dependency_resolution() {
     resolver.insert(
         "core/Base.dt",
         r#"
-        \Component BaseBox(dim: Distance: 50px) {
+        \Component BaseBox(dim: Distance = 50px) {
             \Rect(x: 0, y: 0, width: dim, height: dim, color: #000)
         }
         "#,
@@ -383,8 +383,8 @@ fn test_imported_component_with_state_and_structured_key() {
     resolver.insert(
         "Counter.dt",
         r#"
-        \Component Counter(multiplier: Distance: 10px) {
-            \state count: 42;
+        \Component Counter(multiplier: Distance = 10px) {
+            \state count: Integer = 42;
             \Rect(x: 0, y: 0, width: count * multiplier, height: 30px, color: #0F0)
         }
         "#,
@@ -432,7 +432,7 @@ fn test_fs_resolver_disk_import() {
     std::fs::write(
         &comp_file,
         r#"
-        \Component DiskWidget(w: Distance: 180px) {
+        \Component DiskWidget(w: Distance = 180px) {
             \Rect(x: 0, y: 0, width: w, height: 45px, color: #3B82F6)
         }
         "#,
@@ -607,10 +607,10 @@ fn test_named_import_components_and_layout() {
     resolver.insert(
         "ui/Widgets.dt",
         r#"
-        \Component PrimaryButton(width: Distance: 100px) {
+        \Component PrimaryButton(width: Distance = 100px) {
             \Rect(x: 0, y: 0, width: width, height: 40px, color: #2563EB)
         }
-        \Component SecondaryButton(width: Distance: 80px) {
+        \Component SecondaryButton(width: Distance = 80px) {
             \Rect(x: 0, y: 0, width: width, height: 35px, color: #64748B)
         }
         \Component SecretWidget() {
@@ -833,7 +833,7 @@ fn test_transitive_enum_not_automatically_imported() {
         r#"
         \use { Align } from "./Align.dt";
 
-        \Component Card(align: Align: Align.Center) {
+        \Component Card(align: Align = Align.Center) {
             \Rect(x: 0, y: 0, width: 100px, height: 50px, color: #000)
         }
         "#,

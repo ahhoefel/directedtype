@@ -239,7 +239,7 @@ fn test_window_disallows_duplicate_or_reserved_ports() {
 
     // Conflict with state
     let input_state = r#"
-    \state vscroll = false;
+    \state vscroll: Boolean = false;
     \Window(vscroll: true)
     "#;
     let doc_state = parse(input_state).expect("parse ok");

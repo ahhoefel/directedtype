@@ -5,8 +5,8 @@
 // 1. 2D Uniform Outward Padding
 \Component PadOut(
     padding: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top
+    x: Distance = parent.left,
+    y: Distance = parent.top
 ) {
     \assert children.len == 1 as "Should have only one child.";
 
@@ -25,8 +25,8 @@
 \Component PadOut(
     padding_x: Distance,
     padding_y: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top
+    x: Distance = parent.left,
+    y: Distance = parent.top
 ) {
     \assert children.len == 1 as "Should have only one child.";
 
@@ -44,8 +44,8 @@
 // 3. 1D Horizontal Outward Padding (vertical is child's height)
 \Component PadOut(
     padding_x: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top
+    x: Distance = parent.left,
+    y: Distance = parent.top
 ) {
     \assert children.len == 1 as "Should have only one child.";
 
@@ -63,8 +63,8 @@
 // 4. 1D Vertical Outward Padding (horizontal is child's width)
 \Component PadOut(
     padding_y: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top
+    x: Distance = parent.left,
+    y: Distance = parent.top
 ) {
     \assert children.len == 1 as "Should have only one child.";
 

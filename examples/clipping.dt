@@ -3,13 +3,13 @@
 
 // A rounded viewport container that establishes a GPU hardware clip boundary
 \Component ScrollView(
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    width: Distance: 320px, 
-    height: Distance: 190px, 
-    radius: Distance: 16px,
-    bg_color: Color: #0f172a,
-    border_color: Color: #3b82f6
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = 320px, 
+    height: Distance = 190px, 
+    radius: Distance = 16px,
+    bg_color: Color = #0f172a,
+    border_color: Color = #3b82f6
 ) {
     // 1. Background frame
     \Rect(

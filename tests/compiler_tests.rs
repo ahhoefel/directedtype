@@ -26,11 +26,11 @@ fn test_undefined_component_error() {
 #[test]
 fn test_expand_flow_recurrence_and_graph() {
     let input = r#"
-    \Component Header(x: Distance: 0, y: Distance: 0, size: Distance: 32px, width: Distance: 100px) {
+    \Component Header(x: Distance = 0, y: Distance = 0, size: Distance = 32px, width: Distance = 100px) {
       \alias height = size;
     }
-    \Component Paragraph(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 20px) {}
-    \Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 16px) {
+    \Component Paragraph(x: Distance = 0, y: Distance = 0, width: Distance = 100px, height: Distance = 20px) {}
+    \Component Flow(x: Distance = 0, y: Distance = 0, gap: Distance = 16px) {
       \Children {
         x: left,
         y: prev ? prev.bottom + gap : top
@@ -168,8 +168,8 @@ fn test_expand_flow_recurrence_and_graph() {
 #[test]
 fn test_precedence_explicit_overrides_ambient() {
     let input = r#"
-    \Component Paragraph(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 20px) {}
-    \Component Flow(x: Distance: 0, gap: Distance: 16px) {
+    \Component Paragraph(x: Distance = 0, y: Distance = 0, width: Distance = 100px, height: Distance = 20px) {}
+    \Component Flow(x: Distance = 0, gap: Distance = 16px) {
       \Children {
         x: left
       }
@@ -196,8 +196,8 @@ fn test_precedence_explicit_overrides_ambient() {
 #[test]
 fn test_expand_shaded_box_intrinsic_children_width() {
     let input = r#"
-    \Component Button(x: Distance: 0, y: Distance: 0, width: Distance, height: Distance: 40px) {}
-    \Component ShadedBox(bg_color: Color, width: max(children.width) + 32px) {
+    \Component Button(x: Distance = 0, y: Distance = 0, width: Distance, height: Distance = 40px) {}
+    \Component ShadedBox(x: Distance = 0, y: Distance = 0, height: Distance = 0, bg_color: Color, width: Distance = max(children.width) + 32px) {
       \Rect(
         x: x,
         y: y,
@@ -294,11 +294,11 @@ fn test_text_wrapping_default_height() {
 #[test]
 fn test_topological_sort_acyclic() {
     let input = r#"
-    \Component Header(x: Distance: 0, y: Distance: 0, size: Distance: 32px, width: Distance: 100px) {
+    \Component Header(x: Distance = 0, y: Distance = 0, size: Distance = 32px, width: Distance = 100px) {
       \alias height = size;
     }
-    \Component Paragraph(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 20px) {}
-    \Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 16px) {
+    \Component Paragraph(x: Distance = 0, y: Distance = 0, width: Distance = 100px, height: Distance = 20px) {}
+    \Component Flow(x: Distance = 0, y: Distance = 0, gap: Distance = 16px) {
       \Children {
         x: left,
         y: prev ? prev.bottom + gap : top
@@ -346,7 +346,7 @@ fn test_cycle_detection_fit_content_paradox() {
     // Container width depends on child width, while child width depends on container width.
     let input = r#"
     \Component Button(width: Distance) {}
-    \Component ParadoxBox(width: max(children.width)) {
+    \Component ParadoxBox(width: Distance = max(children.width)) {
       \Children {
         width: width
       }
@@ -437,7 +437,7 @@ fn test_multi_node_cycle_detection() {
 #[test]
 fn test_end_to_end_flow_math_evaluation() {
     let input = r#"
-    \Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 16px) {
+    \Component Flow(x: Distance = 0, y: Distance = 0, gap: Distance = 16px) {
       \Children {
         x: left,
         y: prev ? prev.bottom + gap : top
@@ -485,8 +485,8 @@ fn test_end_to_end_flow_math_evaluation() {
 #[test]
 fn test_end_to_end_shaded_box_bottom_up_evaluation() {
     let input = r#"
-    \Component Button(x: Distance: 0, y: Distance: 0, width: Distance, height: Distance: 40px) {}
-    \Component ShadedBox(x: Distance: 0, y: Distance: 0, height: Distance: 0, bg_color: Color, width: max(children.width) + 32px) {
+    \Component Button(x: Distance = 0, y: Distance = 0, width: Distance, height: Distance = 40px) {}
+    \Component ShadedBox(x: Distance = 0, y: Distance = 0, height: Distance = 0, bg_color: Color, width: Distance = max(children.width) + 32px) {
       \Rect(
         x: x,
         y: y,
@@ -650,7 +650,7 @@ fn test_responsive_flow_clamped_formula() {
 #[test]
 fn test_parley_text_height_wrapping_multiline() {
     let input = r#"
-    \Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 24px) {
+    \Component Flow(x: Distance = 0, y: Distance = 0, gap: Distance = 24px) {
         \Children {
             x: left,
             y: prev ? prev.bottom + gap : top,
@@ -820,7 +820,7 @@ fn test_precedence_3_tier_hierarchy() {
     // Tier 2: Ambient parent (\Children { width: 200px })
     // Tier 3: Explicit instance override (width: 300px)
     let input = r#"
-    \Component Button(width: Distance: 100px) {
+    \Component Button(width: Distance = 100px) {
       \Rect(x: 0, y: 0, width: width, height: 40px, color: #000)
     }
 
@@ -854,7 +854,7 @@ fn test_precedence_3_tier_hierarchy() {
 #[test]
 fn test_lexical_scope_expression_let() {
     let input = r#"
-    \Component Card(padding: Distance: 16px) {
+    \Component Card(padding: Distance = 16px) {
       \let inset = padding * 2
       \Rect(x: 0, y: 0, width: 400px - inset, height: 50px, color: #000)
     }
@@ -900,7 +900,7 @@ fn test_lexical_scope_node_let() {
 #[test]
 fn test_lexical_scope_shadowing() {
     let input = r#"
-    \Component ShadowBox(x: Distance: 10px) {
+    \Component ShadowBox(x: Distance = 10px) {
       \let x = self.x + 40px
       \Rect(x: x, y: self.x, width: 100px, height: 40px, color: #000)
     }
@@ -921,7 +921,7 @@ fn test_lexical_scope_shadowing() {
 #[test]
 fn test_lexical_scope_in_children_directive() {
     let input = r#"
-    \Component FlowWithMargin(x: Distance: 0) {
+    \Component FlowWithMargin(x: Distance = 0) {
       \let margin = 35px
       \Children {
         x: left + margin,
@@ -1029,7 +1029,7 @@ fn test_visibility_child_cannot_access_parent_private_local_via_bare_ident() {
 #[test]
 fn test_visibility_parent_explicit_push_via_children_directive() {
     let input = r#"
-    \Component CustomCard(x: Distance: 0) {
+    \Component CustomCard(x: Distance = 0) {
       \let card_padding = 16px
       \Children {
         x: left + card_padding,
@@ -1053,7 +1053,7 @@ fn test_visibility_parent_explicit_push_via_children_directive() {
 #[test]
 fn test_visibility_child_retains_caller_lexical_scope() {
     let input = r#"
-    \Component CustomCard(x: Distance: 0) {
+    \Component CustomCard(x: Distance = 0) {
       \let internal_padding = 10px
       \Children {
         x: left + internal_padding,
@@ -1081,7 +1081,7 @@ fn test_visibility_child_retains_caller_lexical_scope() {
 #[test]
 fn test_visibility_parent_private_local_does_not_shadow_caller_local() {
     let input = r#"
-    \Component CustomCard(x: Distance: 0) {
+    \Component CustomCard(x: Distance = 0) {
       \let my_size = 999px
       \Children {
         x: left,
@@ -1107,7 +1107,7 @@ fn test_visibility_parent_private_local_does_not_shadow_caller_local() {
 #[test]
 fn test_visibility_child_explicit_parent_port_bypasses_internal_shadow() {
     let input = r#"
-    \Component CustomCard(x: Distance: 0, clip_offset: Distance = 5px) {
+    \Component CustomCard(x: Distance = 0, clip_offset: Distance = 5px) {
       \let clip_offset = 100px // internal shadow
       \Children {
         x: left,
@@ -1215,7 +1215,7 @@ fn test_forbidden_parent_port_on_element() {
 #[test]
 fn test_forbidden_parent_port_on_component_param() {
     let input = r#"
-    \Component Container(parent: Distance, width: 100px) {
+    \Component Container(parent: Distance, width: Distance = 100px) {
         \Rect(width: self.width)
     }
     \Container()
@@ -1297,7 +1297,7 @@ fn test_box_and_clip_non_drawing_primitives() {
 #[test]
 fn test_clip_with_box_inline_expansion() {
     let input = r##"
-    \Component ScrollView(x: Distance: 0, y: Distance: 0, width: Distance: 0, height: Distance: 0) {
+    \Component ScrollView(x: Distance = 0, y: Distance = 0, width: Distance = 0, height: Distance = 0) {
         \let clip = \Clip(up: self.clip, box: \Box(x: left + 5px, y: top + 5px, width: width - 10px, height: height - 10px))
         \Rect(clip: clip, x: 0, y: 0, width: 300px, height: 300px, color: #ff0000)
     }
@@ -1419,7 +1419,7 @@ fn test_children_directive_ambient_clip() {
 #[test]
 fn test_dom_tree_formatting() {
     let input = r#"
-    \Component Card(x: Distance: 0, y: Distance: 0, bg: Color: #1e293b, width: 300px, height: 150px) {
+    \Component Card(x: Distance = 0, y: Distance = 0, bg: Color = #1e293b, width: Distance = 300px, height: Distance = 150px) {
         \Rect(x: left, y: top, width: width, height: height, color: bg)
         \Children {
             x: left + 16px,
@@ -1453,7 +1453,7 @@ fn test_parse_env_syntax_and_tombstones() {
     \let uninit_local;
     \env uninit_env;
 
-    \Component Box(width: Distance, env theme: String, color: Color: #ffffff) {
+    \Component Box(width: Distance, env theme: String, color: Color = #ffffff) {
         \let private_gap;
         \let shadow_val = 10;
         \env local_env = #ff0000;
@@ -1534,7 +1534,7 @@ fn test_env_auto_propagation_bypassing_middleman() {
         \Children
     }
 
-    \Component Button(env color: Color: #000000) {
+    \Component Button(env color: Color = #000000) {
         \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
@@ -1600,7 +1600,7 @@ fn test_env_4_tier_precedence_order() {
         }
     }
 
-    \Component Button(env color: Color: #111111) {
+    \Component Button(env color: Color = #111111) {
         \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
@@ -1655,7 +1655,7 @@ fn test_env_interceptor() {
         \Children
     }
 
-    \Component Button(env color: Color: #000000) {
+    \Component Button(env color: Color = #000000) {
         \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
@@ -1678,7 +1678,7 @@ fn test_env_translator_provider() {
         \Children
     }
 
-    \Component Button(env color: Color: #888888) {
+    \Component Button(env color: Color = #888888) {
         \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
@@ -1702,7 +1702,7 @@ fn test_env_shield_swallower() {
         \Children
     }
 
-    \Component Button(env color: Color: #888888) {
+    \Component Button(env color: Color = #888888) {
         \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
@@ -1725,7 +1725,7 @@ fn test_let_tombstone_firewall() {
         \Children
     }
 
-    \Component Button(env color: Color: #888888) {
+    \Component Button(env color: Color = #888888) {
         \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
@@ -1753,7 +1753,7 @@ fn test_env_tombstone_hole() {
         \Children
     }
 
-    \Component Button(env color: Color: #888888) {
+    \Component Button(env color: Color = #888888) {
         \Rect(x: 0, y: 0, width: 100px, height: 100px, color: color)
     }
 
@@ -1816,11 +1816,11 @@ fn test_env_clip_universal_base_trait() {
 #[test]
 fn test_env_does_not_bind_to_non_env_parameter_missing_port_error() {
     let input = r#"
-    \Component Foo(env color) {
+    \Component Foo(env color: Color) {
         \Children
     }
 
-    \Component Bar(color) {
+    \Component Bar(color: Color) {
         \Children {
             color: color
         }
@@ -2207,7 +2207,7 @@ fn test_font_metrics_algebraic_calculations() {
 #[test]
 fn test_component_custom_alias_declaration_and_evaluation() {
     let input = r#"
-    \Component Card(x: 10px, y: 20px, width: 100px, height: 50px) {
+    \Component Card(x: Distance = 10px, y: Distance = 20px, width: Distance = 100px, height: Distance = 50px) {
         \alias right = x + width;
         \alias bottom = y + height;
         \Rect(x: x, y: y, width: width, height: height, color: #ff0000)
@@ -2256,7 +2256,7 @@ fn test_component_custom_alias_declaration_and_evaluation() {
 #[test]
 fn test_component_immutable_alias_error() {
     let input = r#"
-    \Component Card(width: 100px, height: 50px) {
+    \Component Card(x: Distance = 0, y: Distance = 0, width: Distance = 100px, height: Distance = 50px) {
         \alias right = x + width;
         \Rect(x: x, y: y, width: width, height: height, color: #ff0000)
     }
@@ -2295,7 +2295,7 @@ fn test_primitive_immutable_alias_error() {
 #[test]
 fn test_alias_interdependency_and_downstream_dependency() {
     let input = r#"
-    \Component Card(x: 10px, width: 100px) {
+    \Component Card(x: Distance = 10px, width: Distance = 100px) {
         \alias right = x + width;
         \alias center_x = (x + right) / 2;
         \Rect(x: x, y: 0, width: width, height: 50px, color: #00ff00)
@@ -2323,7 +2323,7 @@ fn test_alias_interdependency_and_downstream_dependency() {
 fn test_duplicate_alias_error() {
     // Alias shadows parameter
     let input1 = r#"
-    \Component Card(width: 100px) {
+    \Component Card(width: Distance = 100px) {
         \alias width = 200px;
         \Rect(x: 0, y: 0, width: width, height: 50px, color: #ff0000)
     }
@@ -2338,7 +2338,7 @@ fn test_duplicate_alias_error() {
 
     // Duplicate alias declarations
     let input2 = r#"
-    \Component Card(w: 100px) {
+    \Component Card(w: Distance = 100px) {
         \alias right = w;
         \alias right = w + 10px;
         \Rect(x: 0, y: 0, width: w, height: 50px, color: #ff0000)
@@ -2439,7 +2439,7 @@ fn test_component_key_purity_rejects_lexical_let_formula_error() {
 fn test_component_private_state_port_rejected() {
     let input = r#"
     \Component Counter {
-        \state count: Integer: 0;
+        \state count: Integer = 0;
         \Rect(x: 0, y: 0, width: 100px, height: 40px, color: #000000)
     }
     \Counter(count: 10)
@@ -2459,8 +2459,8 @@ fn test_component_private_state_port_rejected() {
 fn test_component_state_evaluates_initial_defaults_in_layout_dag() {
     let input = r#"
     \Component Counter {
-        \state count: Integer: 5;
-        \state is_active: Boolean: true;
+        \state count: Integer = 5;
+        \state is_active: Boolean = true;
         \Rect(
             x: 0,
             y: 0,
@@ -2503,7 +2503,7 @@ fn test_component_state_evaluates_initial_defaults_in_layout_dag() {
 #[test]
 fn test_top_level_state_evaluates_in_window() {
     let input = r#"
-    \state global_margin: Distance: 30px;
+    \state global_margin: Distance = 30px;
     \Rect(x: global_margin, y: global_margin, width: 200px, height: 100px, color: #ff0000)
     "#;
     let doc = parse(input).expect("parse ok");
@@ -2524,7 +2524,7 @@ fn test_top_level_state_evaluates_in_window() {
 fn test_structured_key_lookup_and_evaluation() {
     let input = r#"
     \Component TableView {
-        \state selected_row: Integer: 1;
+        \state selected_row: Integer = 1;
         \Rect("header"; x: 0, y: 0, width: 100px, height: 30px, color: #ffffff)
         \Rect(0, 0; x: 0, y: 30px, width: 50px, height: 30px, color: #ffffff)
         \Rect(selected_row, 0; x: 0, y: 60px, width: 50px, height: 30px, color: #ffffff)
@@ -2562,7 +2562,7 @@ fn test_structured_key_lookup_and_evaluation() {
 fn test_state_reserved_parent_and_duplicate_error() {
     let input_reserved = r#"
     \Component TestComp {
-        \state parent: Integer: 0;
+        \state parent: Integer = 0;
         \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #ff0000)
     }
     \TestComp
@@ -2576,8 +2576,8 @@ fn test_state_reserved_parent_and_duplicate_error() {
 
     let input_dup = r#"
     \Component TestComp {
-        \state count: Integer: 0;
-        \state count: Integer: 1;
+        \state count: Integer = 0;
+        \state count: Integer = 1;
         \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #ff0000)
     }
     \TestComp
@@ -2595,7 +2595,7 @@ fn test_raw_text_passed_directly_to_component_children() {
     let input = r#"
     \env font = \Font(size: 16px);
 
-    \Component Card(x: Distance: 0, y: Distance: 0, padding_x: Distance: 24px, padding_y: Distance: 18px) {
+    \Component Card(x: Distance = 0, y: Distance = 0, padding_x: Distance = 24px, padding_y: Distance = 18px) {
         \Rect(x: 10px, y: 10px, width: 300px, height: 100px, color: #1e293b)
         \Children {
             x: left + padding_x,
@@ -2618,7 +2618,7 @@ fn test_raw_text_passed_directly_to_component_children() {
 #[test]
 fn test_component_def_param_helpers() {
     let input = r#"
-    \Component TestComp(a: String, b: Distance: 10px, c: Color) {
+    \Component TestComp(a: String, b: Distance = 10px, c: Color) {
         \Rect(width: 100px, height: 100px)
     }
     "#;
@@ -2685,10 +2685,10 @@ fn test_overload_error_formatting() {
 #[test]
 fn test_overload_definition_time_ambiguity_rejected() {
     let input = r#"
-    \Component Card(text: String, width: Distance: 0) {
+    \Component Card(text: String, width: Distance = 0) {
         \Rect(width: width, height: 100px)
     }
-    \Component Card(text: String, height: Distance: 0) {
+    \Component Card(text: String, height: Distance = 0) {
         \Rect(width: 100px, height: height)
     }
     \Card(text: "Hello")
@@ -2707,7 +2707,7 @@ fn test_overload_definition_time_ambiguity_rejected() {
 #[test]
 fn test_overload_subset_ambiguity_rejected() {
     let input = r#"
-    \Component Box(width: Distance: 100px) {
+    \Component Box(width: Distance = 100px) {
         \Rect(width: width, height: 100px)
     }
     \Component Box() {
@@ -2751,10 +2751,10 @@ fn test_overload_duplicate_signature_rejected() {
 #[test]
 fn test_overload_non_overlapping_defaults_allowed() {
     let input = r#"
-    \Component Card(text: String: "Default", width: Distance) {
+    \Component Card(text: String = "Default", width: Distance) {
         \Rect(x: 0, y: 0, width: width, height: 50px, color: #111111)
     }
-    \Component Card(text: String: "Default", height: Distance) {
+    \Component Card(text: String = "Default", height: Distance) {
         \Rect(x: 0, y: 0, width: 50px, height: height, color: #222222)
     }
 
@@ -2802,8 +2802,8 @@ fn test_overload_dom_integration() {
     use directedtype::dom::Dom;
 
     let valid_input = r#"
-    \Component Card(width: Distance) { \Rect(width: width, height: 50px) }
-    \Component Card(height: Distance) { \Rect(width: 50px, height: height) }
+    \Component Card(width: Distance) { \Rect(x: 0, y: 0, width: width, height: 50px, color: #000) }
+    \Component Card(height: Distance) { \Rect(x: 0, y: 0, width: 50px, height: height, color: #000) }
     \Card(width: 100px)
     "#;
     let doc = parse(valid_input).expect("Failed to parse");
@@ -2814,8 +2814,8 @@ fn test_overload_dom_integration() {
     assert_eq!(comp_count, 2, "Roundtripped document should preserve both overloads");
 
     let invalid_input = r#"
-    \Component Card(width: Distance: 10px) { \Rect(width: width, height: 50px) }
-    \Component Card(height: Distance: 20px) { \Rect(width: 50px, height: height) }
+    \Component Card(width: Distance = 10px) { \Rect(x: 0, y: 0, width: width, height: 50px, color: #000) }
+    \Component Card(height: Distance = 20px) { \Rect(x: 0, y: 0, width: 50px, height: height, color: #000) }
     "#;
     let doc_bad = parse(invalid_input).expect("Failed to parse");
     assert!(Dom::from_document(&doc_bad).is_err(), "Dom should reject ambiguous overloads");
@@ -2887,7 +2887,7 @@ fn test_overload_env_parameter_satisfaction() {
 #[test]
 fn test_overload_card_in_hstack_no_cycle() {
     let input = r#"
-    \Component HBox(x: Distance: 0) {
+    \Component HBox(x: Distance = 0) {
         \alias width = max(children.right);
         \alias right = x + width;
         \Rect(x: 0, y: 0, width: width, height: 60px, color: #000000)
@@ -2896,12 +2896,12 @@ fn test_overload_card_in_hstack_no_cycle() {
         }
     }
 
-    \Component Card(x: Distance: 0, y: Distance: 0, width: Distance) {
+    \Component Card(x: Distance = 0, y: Distance = 0, width: Distance) {
         \alias right = x + width;
         \Rect(x: x, y: y, width: width, height: 50px, color: #111111)
     }
 
-    \Component Card(x: Distance: 0, y: Distance: 0) {
+    \Component Card(x: Distance = 0, y: Distance = 0) {
         \let resolved_width = parent.width;
         \alias right = x + resolved_width;
         \Rect(x: x, y: y, width: resolved_width, height: 50px, color: #222222)
@@ -3606,7 +3606,7 @@ fn test_integer_vs_number_vs_distance_typing_and_conversions() {
     let input = r#"
     \Component TypedBox(
         count: Integer = 3,
-        scale: Number = 1.5,
+        scale: Float = 1.5,
         pad: Distance = 8px
     ) {
         \let int_div = 7 / 2;
@@ -3753,7 +3753,7 @@ fn test_font_em_top_line_gap_and_gap_bottom_with_text_start_end() {
 fn test_children_len_and_removed_child_count_aliases() {
     // 1. children.len works in signature default, \let, and \Children
     let valid = r#"
-    \Component EqualCols(x: Distance: 0, y: Distance: 0, width: Distance: 300px, count: Integer = children.len) {
+    \Component EqualCols(x: Distance = 0, y: Distance = 0, width: Distance = 300px, count: Integer = children.len) {
         \let n = children.len;
         \Children {
             x: prev ? prev.right : left,
@@ -3777,7 +3777,7 @@ fn test_children_len_and_removed_child_count_aliases() {
 
     // 2. Removed aliases (num_children, children.count, parent.num_children) must fail
     let bad_num_children = r#"
-    \Component Bad(width: Distance: 100px) {
+    \Component Bad(width: Distance = 100px) {
         \Children { width: width / num_children }
     }
     \Bad { \Rect(x: 0, y: 0, height: 10px, color: #000) }
@@ -3785,7 +3785,7 @@ fn test_children_len_and_removed_child_count_aliases() {
     assert!(directedtype::evaluate_document(&parse(bad_num_children).unwrap()).is_err());
 
     let bad_children_count = r#"
-    \Component Bad(width: Distance: 100px) {
+    \Component Bad(width: Distance = 100px) {
         \Children { width: width / children.count }
     }
     \Bad { \Rect(x: 0, y: 0, height: 10px, color: #000) }
@@ -3797,7 +3797,7 @@ fn test_children_len_and_removed_child_count_aliases() {
 #[test]
 fn test_child_restricted_to_children_block() {
     let bad_child = r#"
-    \Component Bad(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 100px) {
+    \Component Bad(x: Distance = 0, y: Distance = 0, width: Distance = 100px, height: Distance = 100px) {
         \Rect(x: x, y: y, width: child.width, height: height, color: #000)
         \Children {}
     }
@@ -3827,7 +3827,7 @@ fn test_parent_disallowed_in_children_and_internal_elements() {
 
     // 2. Disallowed inside \Children
     let bad_children = r#"
-    \Component Bad(x: Distance: 0, y: Distance: 0) {
+    \Component Bad(x: Distance = 0, y: Distance = 0) {
         \Children { x: parent.left }
     }
     \Bad { \Rect(y: 0, width: 10px, height: 10px, color: #000) }
@@ -3841,7 +3841,7 @@ fn test_parent_disallowed_in_children_and_internal_elements() {
 
     // 3. Disallowed on internal element inside component body
     let bad_internal = r#"
-    \Component Bad(x: Distance: 0, y: Distance: 0) {
+    \Component Bad(x: Distance = 0, y: Distance = 0) {
         \Rect(x: parent.left, y: y, width: 10px, height: 10px, color: #000)
     }
     \Bad()
@@ -3858,7 +3858,7 @@ fn test_parent_disallowed_in_children_and_internal_elements() {
 fn test_self_requires_shadowed_port_or_event_handler() {
     // 1. Unshadowed self.<port> produces a clear compile error
     let unshadowed = r#"
-    \Component Bad(x: Distance: 0, y: Distance: 0, width: Distance: 100px, height: Distance: 50px) {
+    \Component Bad(x: Distance = 0, y: Distance = 0, width: Distance = 100px, height: Distance = 50px) {
         \Rect(x: x, y: y, width: width, height: self.bottom, color: #000)
     }
     \Bad()
@@ -3872,7 +3872,7 @@ fn test_self_requires_shadowed_port_or_event_handler() {
 
     // 2. Shadowed port via \let or \env allows self.<port>
     let shadowed = r#"
-    \Component Good(x: Distance: 10px, y: Distance: 20px, width: Distance: 100px, height: Distance: 50px, color: Color: #123456) {
+    \Component Good(x: Distance = 10px, y: Distance = 20px, width: Distance = 100px, height: Distance = 50px, color: Color = #123456) {
         \let bottom = 999px;
         \env color = self.color;
         \Rect(x: x, y: y, width: width, height: self.bottom - y, color: color)
@@ -3887,10 +3887,10 @@ fn test_self_requires_shadowed_port_or_event_handler() {
 
     // 3. Event handlers on contained components distinguish bare `act` (enclosing component) vs `self.act` (contained component)
     let callbacks = r#"
-    \Component Inner(x: Distance: 0, y: Distance: 0, width: Distance: 50px, height: Distance: 20px, on_click: Callback = self.act) {
+    \Component Inner(x: Distance = 0, y: Distance = 0, width: Distance = 50px, height: Distance = 20px, on_click: Handler = self.act) {
         \Rect(x: x, y: y, width: width, height: height, color: #111)
     }
-    \Component Outer(x: Distance: 0, y: Distance: 0) {
+    \Component Outer(x: Distance = 0, y: Distance = 0) {
         \Inner(x: x, y: y, on_click: act)
         \Inner(x: x, y: y + 30px, on_click: self.act)
     }
@@ -3921,3 +3921,57 @@ fn test_self_requires_shadowed_port_or_event_handler() {
         })
     );
 }
+
+#[test]
+fn test_strict_static_typing_and_number_removal() {
+    // 1. `Number` type annotation is rejected with helpful guidance
+    let bad_number = r#"
+    \Component Box(scale: Number = 1.0) {
+        \Rect(x: 0, y: 0, width: 10px * scale, height: 10px, color: #000)
+    }
+    \Box()
+    "#;
+    let err_num = directedtype::evaluate_document(&parse(bad_number).unwrap()).unwrap_err();
+    assert!(
+        err_num.to_string().contains("Type 'Number' has been removed"),
+        "Expected Number removal error, got: {}",
+        err_num
+    );
+
+    // 2. Local \let without explicit type infers type from expression and type-checks downstream usage
+    let bad_inferred_let = r#"
+    \let spacing = 12px;
+    \let bad_sum = spacing + 5.0;
+    \Rect(x: bad_sum, y: 0, width: 10px, height: 10px, color: #000)
+    "#;
+    let err_let = directedtype::evaluate_document(&parse(bad_inferred_let).unwrap()).unwrap_err();
+    assert!(
+        matches!(err_let, CompileError::TypeMismatch { .. }),
+        "Expected compile-time TypeMismatch for Distance + Float, got: {:?}",
+        err_let
+    );
+
+    // 3. Explicit type mismatch on \let, \env, \alias is caught at compile time
+    let bad_let_annot = r#"
+    \let count: Integer = 10px;
+    \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+    "#;
+    let err_annot = directedtype::evaluate_document(&parse(bad_let_annot).unwrap()).unwrap_err();
+    assert!(
+        matches!(err_annot, CompileError::TypeMismatch { .. }),
+        "Expected TypeMismatch for \\let count: Integer = 10px, got: {:?}",
+        err_annot
+    );
+
+    // 4. Handler and ViewPort types work as expected
+    let valid_handler_viewport = r#"
+    \Component ViewBox(viewport: ViewPort = window, on_click: Handler = unset) {
+        \Rect(x: viewport.left, y: viewport.top, width: 100px, height: 50px, color: #000, on_click: on_click)
+    }
+    \ViewBox(viewport: window)
+    "#;
+    let layout = directedtype::evaluate_document(&parse(valid_handler_viewport).unwrap())
+        .expect("ViewPort and Handler types should compile and evaluate");
+    assert_eq!(layout.nodes.len(), 2);
+}
+

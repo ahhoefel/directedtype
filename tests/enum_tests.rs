@@ -13,7 +13,7 @@ fn test_enum_declaration_and_variant_usage() {
         Right,
     }
 
-    \Component Box(align: Align: Align.Left, x: Distance: 0, y: Distance: 0) {
+    \Component Box(align: Align = Align.Left, x: Distance = 0, y: Distance = 0) {
         \let is_center = align == Align.Center;
         \let is_right = align == Align.Right;
         \alias offset = is_center ? 50px : (is_right ? 100px : 0);
@@ -188,7 +188,7 @@ fn test_enum_import_and_aliased_import() {
     \use "types/align.dt"
     \use "types/align.dt" as Layout
 
-    \Component Card(align: Align: Align.Start, sub_align: Layout: Layout.Middle) {
+    \Component Card(align: Align = Align.Start, sub_align: Layout = Layout.Middle) {
         \let is_middle = sub_align == Layout.Middle;
         \alias w = is_middle ? 200px : 100px;
         \Rect(x: 0, y: 0, width: w, height: 50px, color: #ffffff)

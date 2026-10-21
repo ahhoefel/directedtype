@@ -90,7 +90,7 @@ fn save_golden_or_preview(img: &image::RgbaImage, name: &str) {
 #[test]
 fn test_headless_render_layout_to_image() {
     let source = r#"
-\Component Flow(x: Distance: 0, y: Distance: 0, gap: Distance: 16px) {
+\Component Flow(x: Distance = 0, y: Distance = 0, gap: Distance = 16px) {
     \Children {
         x: left,
         y: prev ? prev.bottom + gap : top
@@ -140,7 +140,7 @@ fn test_headless_render_layout_to_image() {
 #[test]
 fn test_headless_render_to_png_file() {
     let source = r#"
-\Component ShadedBox(x: Distance: 0, y: Distance: 0, bg_color: Color: #333333, width: max(children.width) + 32px, height: sum(children.height) + 32px) {
+\Component ShadedBox(x: Distance = 0, y: Distance = 0, bg_color: Color = #333333, width: Distance = max(children.width) + 32px, height: Distance = sum(children.height) + 32px) {
     \Rect(
         x: x,
         y: y,

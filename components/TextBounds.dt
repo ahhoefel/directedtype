@@ -4,7 +4,7 @@
 \use "components/TextEnd.dt"
 
 \Component TextBounds(
-    start_at: TextStart: TextStart.Capital,
-    end_at: TextEnd: TextEnd.Baseline
+    start_at: TextStart = TextStart.Capital,
+    end_at: TextEnd = TextEnd.Baseline
 ) {}
 

@@ -8,8 +8,8 @@
 \use "components/ButtonStyle.dt"
 \use "theme/default.dt"
 
-\Component Counter(x: Distance, y: Distance, initial: Integer: 0) {
-    \state count: Integer: initial;
+\Component Counter(x: Distance, y: Distance, initial: Integer = 0) {
+    \state count: Integer = initial;
 
     \let is_max = count >= 10;
     \let is_zero = count <= 0;

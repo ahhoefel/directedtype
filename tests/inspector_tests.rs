@@ -301,7 +301,7 @@ fn test_overlay_render_to_scene_dpi_scaling() {
 #[test]
 fn test_build_tree_items_from_layout_and_ancestor_expansion() {
     let source = r#"
-        \Component Card(id: String: "c1") {
+        \Component Card(id: String = "c1") {
             \Rect(id: id, x: 0, y: 0, width: 200px, height: 100px, color: #38bdf8) {
                 \Text(size: 14px) { "Card Title" }
             }
@@ -519,7 +519,7 @@ fn test_inspect_cursor_toggle_and_selection_gating() {
 #[test]
 fn test_inspector_bottom_panel_dimensions_and_formulas() {
     let source = r#"
-        \Component Card(id: String: "card1") {
+        \Component Card(id: String = "card1") {
             \Rect(id: id, x: 20px + 5px, y: 10px * 2, width: min(400px, 300px), height: 180px, color: #6366f1) {
                 \Text(size: 14px) { "Card Content" }
             }
@@ -620,7 +620,7 @@ fn test_inspector_bottom_panel_dimensions_and_formulas() {
 #[test]
 fn test_ambient_children_authored_formulas_preserved() {
     let source = r#"
-        \Component Flow(x: Distance: 0, y: Distance: 0, width: Distance: parent.width, margin: Distance: 30px, gap: Distance: 20px) {
+        \Component Flow(x: Distance = 0, y: Distance = 0, width: Distance = parent.width, margin: Distance = 30px, gap: Distance = 20px) {
             \Children {
                 x: left + margin,
                 y: prev ? prev.bottom + gap : top,
@@ -888,7 +888,7 @@ fn test_expandable_reference_properties() {
 #[test]
 fn test_dom_tree_item_structured_keys() {
     let source = r#"
-\Component Cell(w: Distance: 80px, h: Distance: 30px) {
+\Component Cell(w: Distance = 80px, h: Distance = 30px) {
     \Rect(x: 0, y: 0, width: w, height: h, color: #ffffff)
 }
 
@@ -932,9 +932,9 @@ fn test_dom_tree_item_structured_keys() {
 #[test]
 fn test_inspector_target_info_state_variables() {
     let source = r#"
-\Component Counter(initial: Integer: 7) {
-    \state count: Integer: initial;
-    \state is_active: Boolean: true;
+\Component Counter(initial: Integer = 7) {
+    \state count: Integer = initial;
+    \state is_active: Boolean = true;
     \Rect(x: 0, y: 0, width: 200px, height: 100px, color: #ffffff)
 }
 
@@ -978,7 +978,7 @@ fn test_inspector_target_info_state_variables() {
 fn test_inspector_panel_render_state_variables_and_structured_keys() {
     let source = r#"
 \Component Switch {
-    \state is_on: Boolean: false;
+    \state is_on: Boolean = false;
     \Rect(x: 0, y: 0, width: 100px, height: 40px, color: #112233)
 }
 
@@ -1028,7 +1028,7 @@ fn test_inspector_panel_render_state_variables_and_structured_keys() {
 #[test]
 fn test_dag_property_trace_building() {
     let source = r#"
-\Component Container(x = 0, y = 0, width = 400px) {
+\Component Container(x: Distance = 0, y: Distance = 0, width: Distance = 400px) {
     \Rect("box"; x: x, y: y, width: width - 60px, height: 80px, color: #3b82f6)
 }
 \Container("container"; x: 0, y: 0, width: 400px)
@@ -1109,7 +1109,7 @@ fn test_inspector_state_property_selection() {
 #[test]
 fn test_panel_hit_testing_property_details_and_back() {
     let source = r#"
-\Component Container(x = 0, y = 0, width = 400px) {
+\Component Container(x: Distance = 0, y: Distance = 0, width: Distance = 400px) {
     \Rect("box"; x: x, y: y, width: width - 60px, height: 80px, color: #3b82f6)
 }
 \Container("container"; x: 0, y: 0, width: 400px)
@@ -1202,10 +1202,10 @@ fn test_property_stack_and_history_navigation() {
     use directedtype::inspector::{InspectPanelComponent, InspectorState, PanelHitResult, PropertyTraceDirection};
 
     let source = r#"
-\Component Outer(x = 0, y = 0, w = 500px) {
+\Component Outer(x: Distance = 0, y: Distance = 0, w: Distance = 500px) {
     \Inner("inner"; x: x, y: y, width: w - 40px)
 }
-\Component Inner(x = 0, y = 0, width = 460px) {
+\Component Inner(x: Distance = 0, y: Distance = 0, width: Distance = 460px) {
     \Rect("leaf"; x: x, y: y, width: width - 20px, height: 60px, color: #3b82f6)
 }
 \Outer("outer"; x: 0, y: 0, w: 500px)
@@ -1304,7 +1304,7 @@ fn test_property_stack_and_history_navigation() {
 #[test]
 fn test_render_property_details_headless() {
     let source = r#"
-\Component Container(x = 0, y = 0, width = 400px) {
+\Component Container(x: Distance = 0, y: Distance = 0, width: Distance = 400px) {
     \Rect(x: x, y: y, width: width - 50px, height: 40px, color: #10b981)
 }
 \Container(x: 0, y: 0, width: 400px)
@@ -1344,16 +1344,16 @@ fn test_render_property_details_headless() {
 #[test]
 fn test_inspector_horizontal_scroll_and_bounds() {
     let source = r#"
-\Component VeryLongNamedComponentWithManyParametersAndDeepHierarchy(x = 0, y = 0, extra_long_parameter_expression_name = 100px) {
+\Component VeryLongNamedComponentWithManyParametersAndDeepHierarchy(x: Distance = 0, y: Distance = 0, extra_long_parameter_expression_name: Distance = 100px) {
     \Rect(x: x, y: y, width: 400px, height: 100px, color: #3b82f6)
 }
-\Component GrandChild(x = 0, y = 0) {
+\Component GrandChild(x: Distance = 0, y: Distance = 0) {
     \VeryLongNamedComponentWithManyParametersAndDeepHierarchy(x: 0, y: 0)
 }
-\Component InnerChild(x = 0, y = 0) {
+\Component InnerChild(x: Distance = 0, y: Distance = 0) {
     \GrandChild(x: 0, y: 0)
 }
-\Component DeepNestedContainer(x = 0, y = 0, width = 500px) {
+\Component DeepNestedContainer(x: Distance = 0, y: Distance = 0, width: Distance = 500px) {
     \InnerChild(x: 0, y: 0)
 }
 \DeepNestedContainer(x: 0, y: 0, width: 500px)
@@ -1405,7 +1405,7 @@ fn test_inspector_horizontal_scroll_and_bounds() {
 #[test]
 fn test_inspector_scrollbar_hit_testing() {
     let source = r#"
-\Component LongList(x = 0, y = 0, width = 500px) {
+\Component LongList(x: Distance = 0, y: Distance = 0, width: Distance = 500px) {
     \Rect(x: 0, y: 0, width: 600px, height: 20px, color: #111111)
     \Rect(x: 0, y: 25px, width: 600px, height: 20px, color: #222222)
     \Rect(x: 0, y: 50px, width: 600px, height: 20px, color: #333333)
@@ -1480,10 +1480,10 @@ fn test_inspector_scrollbar_hit_testing() {
 #[test]
 fn test_render_inspector_with_horizontal_scrollbars() {
     let source = r#"
-\Component InnerDeepChild(x = 0, y = 0, very_long_formula_and_variable_name_causing_overflow = 123456789) {
+\Component InnerDeepChild(x: Distance = 0, y: Distance = 0, very_long_formula_and_variable_name_causing_overflow: Integer = 123456789) {
     \Rect(x: x, y: y, width: 500px, height: 60px, color: #06b6d4)
 }
-\Component LargeComponentWithWideTree(x = 0, y = 0, width = 600px) {
+\Component LargeComponentWithWideTree(x: Distance = 0, y: Distance = 0, width: Distance = 600px) {
     \InnerDeepChild(x: 0, y: 0)
 }
 \LargeComponentWithWideTree(x: 0, y: 0, width: 600px)

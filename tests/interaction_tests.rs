@@ -477,12 +477,13 @@ impl TestAudioPanel {
 fn test_component_typed_callback_wiring_and_execution() {
     let input = r#"
     \Component TestSlider(
-        x: Distance: 0,
-        y: Distance: 0,
-        width: Distance: 100px,
-        height: Distance: 20px
+        x: Distance = 0,
+        y: Distance = 0,
+        width: Distance = 100px,
+        height: Distance = 20px,
+        on_change: Handler = unset
     ) {
-        \state value: Float: 0;
+        \state value: Float = 0;
         \Rect(
             x: x,
             y: y,
@@ -496,7 +497,7 @@ fn test_component_typed_callback_wiring_and_execution() {
     }
 
     \Component TestAudioPanel() {
-        \state volume: Float: 25;
+        \state volume: Float = 25;
         \TestSlider(
             x: 10px,
             y: 10px,

@@ -6,7 +6,17 @@
     Roman,
 }
 
-\Component List(x, y, width, inset, item_gap, gap, env font, bullet_type: BulletType: BulletType.Number, bullet: String: "•") {
+\Component List(
+    x: Distance,
+    y: Distance,
+    width: Distance,
+    inset: Distance,
+    item_gap: Distance,
+    gap: Distance,
+    env font: Font,
+    bullet_type: BulletType = BulletType.Number,
+    bullet: String = "•"
+) {
     \let max_bullet_width = max(children.bullet_width);
     \Children {
         x: x + max(inset, max_bullet_width),
@@ -21,7 +31,16 @@
     \alias height = sum(children.height) + max(0, children.len - 1) * gap;
 }
 
-\Component Item(x,y, width, index: Integer, item_gap, bullet_type: BulletType, bullet: String: "•", env font) {
+\Component Item(
+    x: Distance,
+    y: Distance,
+    width: Distance,
+    index: Integer,
+    item_gap: Distance,
+    bullet_type: BulletType,
+    bullet: String = "•",
+    env font: Font
+) {
     \let bullet_node = \Text(
         x: x - bullet_node.width - item_gap,
         y: y,

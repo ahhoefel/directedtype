@@ -6,9 +6,9 @@
 \Component HStackStretch(
     width: Distance,
     height: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    gap: Distance: 0
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0
 ) {
     \alias right = x + width;
     \alias bottom = y + height;
@@ -23,9 +23,9 @@
 // 2. Intrinsic Width & Fixed Height HStackStretch
 \Component HStackStretch(
     height: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    gap: Distance: 0
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0
 ) {
     \alias width = sum(children.width) + max(0, children.len - 1) * gap;
     \alias right = x + width;

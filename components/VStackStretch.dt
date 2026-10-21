@@ -6,9 +6,9 @@
 \Component VStackStretch(
     width: Distance,
     height: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    gap: Distance: 0
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0
 ) {
     \alias right = x + width;
     \alias bottom = y + height;
@@ -23,9 +23,9 @@
 // 2. Explicit Fixed Width & Intrinsic Height VStackStretch
 \Component VStackStretch(
     width: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    gap: Distance: 0
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0
 ) {
     \alias right = x + width;
     \alias height = sum(children.height) + max(0, children.len - 1) * gap;

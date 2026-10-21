@@ -48,6 +48,7 @@ pub struct ExpandedNode {
     pub prev_sibling: Option<NodeId>,
     pub children: Vec<NodeId>,
     pub ports: HashMap<String, Expr>,
+    pub port_types: HashMap<String, String>,
     pub authored_ports: HashMap<String, Expr>,
     pub private_ports: HashSet<String>,
     pub state_vars: HashMap<String, Option<String>>,
@@ -77,6 +78,7 @@ impl ExpandedNode {
             prev_sibling: None,
             children: Vec::new(),
             ports: HashMap::new(),
+            port_types: HashMap::new(),
             authored_ports: HashMap::new(),
             private_ports: HashSet::new(),
             state_vars: HashMap::new(),
@@ -112,7 +114,9 @@ pub struct ExpandedDocument {
     pub nodes: Vec<ExpandedNode>,
     pub roots: Vec<NodeId>,
     pub window_ports: HashMap<String, Expr>,
+    pub window_port_types: HashMap<String, String>,
     pub window_state_vars: HashMap<String, Option<String>>,
+    pub local_bindings: Vec<(Expr, Option<String>, crate::span::Span)>,
     pub scope_tree: ScopeTree,
 }
 
@@ -122,7 +126,9 @@ impl ExpandedDocument {
             nodes: Vec::new(),
             roots: Vec::new(),
             window_ports: HashMap::new(),
+            window_port_types: HashMap::new(),
             window_state_vars: HashMap::new(),
+            local_bindings: Vec::new(),
             scope_tree: ScopeTree::new(),
         }
     }

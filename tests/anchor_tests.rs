@@ -12,10 +12,10 @@ fn test_block_anchor_geometry_passthrough_in_vstack() {
 
         \VStack(width: 800px, gap: 16px) {
             \Anchor("first") {
-                \Rect(width: 200px, height: 50px, color: "#112233")
+                \Rect(width: 200px, height: 50px, color: #112233)
             }
             \Anchor("second") {
-                \Rect(width: 300px, height: 80px, color: "#445566")
+                \Rect(width: 300px, height: 80px, color: #445566)
             }
         }
     "##;
@@ -91,12 +91,12 @@ fn test_hierarchical_scopes_and_path_resolution() {
         \HStack(gap: 20px) {
             \AnchorScope("pane-left") {
                 \Anchor("intro") {
-                    \Rect(width: 100px, height: 40px, color: "#111111")
+                    \Rect(width: 100px, height: 40px, color: #111111)
                 }
             }
             \AnchorScope("pane-right") {
                 \Anchor("intro") {
-                    \Rect(width: 150px, height: 60px, color: "#222222")
+                    \Rect(width: 150px, height: 60px, color: #222222)
                 }
             }
         }
@@ -148,10 +148,10 @@ fn test_duplicate_anchor_in_same_scope_rejected() {
     let source = r##"
         \AnchorScope("doc") {
             \Anchor("section") {
-                \Rect(width: 100px, height: 40px, color: "#111111")
+                \Rect(width: 100px, height: 40px, color: #111111)
             }
             \Anchor("section") {
-                \Rect(width: 100px, height: 40px, color: "#222222")
+                \Rect(width: 100px, height: 40px, color: #222222)
             }
         }
     "##;
@@ -176,7 +176,7 @@ fn test_anchor_scope_first_class_port_and_append_method() {
 
         \let main_scope = \AnchorScope("main") {
             \Anchor("setup") {
-                \Rect(width: 200px, height: 50px, color: "#abcdef")
+                \Rect(width: 200px, height: 50px, color: #abcdef)
             }
         };
 
@@ -235,15 +235,15 @@ fn test_viewer_window_scrolling_to_anchors() {
 
         \VStack(width: 800px, gap: 50px) {
             \Anchor("top") {
-                \Rect(width: 400px, height: 100px, color: "#111111")
+                \Rect(width: 400px, height: 100px, color: #111111)
             }
-            \Rect(width: 400px, height: 1000px, color: "#222222")
+            \Rect(width: 400px, height: 1000px, color: #222222)
             \Anchor("middle") {
-                \Rect(width: 400px, height: 100px, color: "#333333")
+                \Rect(width: 400px, height: 100px, color: #333333)
             }
-            \Rect(width: 400px, height: 1000px, color: "#444444")
+            \Rect(width: 400px, height: 1000px, color: #444444)
             \Anchor("bottom") {
-                \Rect(width: 400px, height: 100px, color: "#555555")
+                \Rect(width: 400px, height: 100px, color: #555555)
             }
         }
     "##;
@@ -298,8 +298,8 @@ fn test_headless_render_with_scroll_offset() {
         \use "components/VStack.dt";
 
         \VStack(width: 200px) {
-            \Rect(width: 200px, height: 100px, color: "#ff0000")
-            \Rect(width: 200px, height: 100px, color: "#0000ff")
+            \Rect(width: 200px, height: 100px, color: #ff0000)
+            \Rect(width: 200px, height: 100px, color: #0000ff)
         }
     "##;
 
@@ -353,11 +353,11 @@ fn test_scrolled_coordinate_hit_testing() {
         \use "components/VStack.dt";
 
         \VStack(width: 800px) {
-            \Rect(width: 300px, height: 500px, color: "#111111")
+            \Rect(width: 300px, height: 500px, color: #111111)
             \Anchor("target") {
-                \Rect(width: 300px, height: 200px, color: "#222222")
+                \Rect(width: 300px, height: 200px, color: #222222)
             }
-            \Rect(width: 300px, height: 800px, color: "#333333")
+            \Rect(width: 300px, height: 800px, color: #333333)
         }
     "##;
 
@@ -423,8 +423,8 @@ impl Component for FocusTrackerComponent {
 fn test_focus_and_blur_event_dispatch_and_bubbling() {
     let source = r##"
         \Component FocusTracker {
-            \state focused: false;
-            \Rect(x: 0, y: 0, width: 120px, height: 40px, color: "#111111", on_focus: handle_focus, on_blur: handle_blur)
+            \state focused: Boolean = false;
+            \Rect(x: 0, y: 0, width: 120px, height: 40px, color: #111111, on_focus: handle_focus, on_blur: handle_blur)
         }
         \FocusTracker
     "##;
@@ -567,7 +567,7 @@ fn test_keyboard_focus_scrolls_into_view() {
 
         \VStack(width: 800px, gap: 40px) {
             \Link(url: "#top") { Top Link }
-            \Rect(width: 300px, height: 1200px, color: "#111111")
+            \Rect(width: 300px, height: 1200px, color: #111111)
             \Link(url: "#bottom") { Bottom Link }
         }
     "##;
@@ -613,9 +613,9 @@ fn test_keyboard_activation_triggers_anchor_navigation() {
 
         \VStack(width: 800px, gap: 30px) {
             \Link(url: "#deep") { Jump to Deep Anchor }
-            \Rect(width: 300px, height: 1000px, color: "#222222")
+            \Rect(width: 300px, height: 1000px, color: #222222)
             \Anchor("deep") {
-                \Rect(width: 300px, height: 100px, color: "#333333")
+                \Rect(width: 300px, height: 100px, color: #333333)
             }
         }
     "##;
@@ -782,7 +782,7 @@ fn test_link_component_click_handler_and_action_queue() {
             \Link(url: "#nonexistent") { Broken Link }
             \Link(url: "https://example.com") { External Web }
             \Anchor("dest") {
-                \Rect(width: 200px, height: 50px, color: "#cccccc")
+                \Rect(width: 200px, height: 50px, color: #cccccc)
             }
         }
     "##;

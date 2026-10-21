@@ -8,6 +8,228 @@ use crate::span::Span;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
+/// Static compile-time type of a property, port, or expression.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StaticType {
+    Integer,
+    ZeroInteger,
+    Float,
+    Distance,
+    String,
+    Boolean,
+    Color,
+    Handler,
+    Unset,
+    ViewPort,
+    Enum(String),
+    Node(String),
+}
+
+impl StaticType {
+    pub fn canonical_name(&self) -> String {
+        match self {
+            StaticType::Integer | StaticType::ZeroInteger => "Integer".to_string(),
+            StaticType::Float => "Float".to_string(),
+            StaticType::Distance => "Distance".to_string(),
+            StaticType::String => "String".to_string(),
+            StaticType::Boolean => "Boolean".to_string(),
+            StaticType::Color => "Color".to_string(),
+            StaticType::Handler | StaticType::Unset => "Handler".to_string(),
+            StaticType::ViewPort => "ViewPort".to_string(),
+            StaticType::Enum(name) => name.clone(),
+            StaticType::Node(name) => name.clone(),
+        }
+    }
+
+    pub fn type_name(&self) -> String {
+        self.canonical_name()
+    }
+
+    pub fn decay(&self) -> StaticType {
+        self.clone().into_property_type()
+    }
+
+    pub fn into_property_type(self) -> StaticType {
+        match self {
+            StaticType::ZeroInteger => StaticType::Integer,
+            StaticType::Unset => StaticType::Handler,
+            other => other,
+        }
+    }
+
+    pub fn from_type_name(
+        name: &str,
+        span: Span,
+        enums: &HashMap<String, EnumDef>,
+        registry: &HashMap<String, Vec<ComponentDef>>,
+    ) -> Result<Self, CompileError> {
+        match name {
+            "Integer" => Ok(StaticType::Integer),
+            "Float" => Ok(StaticType::Float),
+            "Distance" => Ok(StaticType::Distance),
+            "String" => Ok(StaticType::String),
+            "Boolean" => Ok(StaticType::Boolean),
+            "Color" => Ok(StaticType::Color),
+            "Handler" => Ok(StaticType::Handler),
+            "ViewPort" => Ok(StaticType::ViewPort),
+            "Node" => Ok(StaticType::Node("Node".to_string())),
+            "Window" | "Rect" | "Text" | "Font" | "Clip" | "Box" | "Anchor" | "AnchorScope" => {
+                Ok(StaticType::Node(name.to_string()))
+            }
+            "Number" => Err(CompileError::Custom {
+                message: "Type 'Number' has been removed; use 'Float', 'Integer', or 'Distance' instead"
+                    .to_string(),
+                span,
+            }),
+            _ => {
+                if enums.contains_key(name) {
+                    Ok(StaticType::Enum(name.to_string()))
+                } else if registry.contains_key(name) {
+                    Ok(StaticType::Node(name.to_string()))
+                } else {
+                    Err(CompileError::Custom {
+                        message: format!("Unknown type '{}'", name),
+                        span,
+                    })
+                }
+            }
+        }
+    }
+
+    pub fn matches(&self, expected: &StaticType) -> bool {
+        if self == expected {
+            return true;
+        }
+        match (self, expected) {
+            (
+                StaticType::ZeroInteger,
+                StaticType::Integer | StaticType::Float | StaticType::Distance,
+            ) => true,
+            (StaticType::Integer, StaticType::ZeroInteger) => true,
+            (StaticType::Integer, StaticType::Float) => true,
+            (StaticType::Unset, StaticType::Handler) => true,
+            (StaticType::Handler, StaticType::Unset) => true,
+            (StaticType::Node(n), StaticType::ViewPort)
+                if n == "Window" || n == "ScrollView" || n == "Node" =>
+            {
+                true
+            }
+            (StaticType::Node(n), StaticType::Node(exp))
+                if exp == "Clip" && (n == "Window" || n == "Node") =>
+            {
+                true
+            }
+            (StaticType::Node(_), StaticType::Node(exp)) if exp == "Node" => true,
+            (StaticType::ViewPort, StaticType::Node(exp))
+                if exp == "Node" || exp == "Window" || exp == "ScrollView" =>
+            {
+                true
+            }
+            (StaticType::Node(n), StaticType::Node(_)) if n == "Node" => true,
+            _ => false,
+        }
+    }
+}
+
+fn validate_content_items_type_annotations(
+    items: &[ContentItem],
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> Result<(), CompileError> {
+    for item in items {
+        match item {
+            ContentItem::Let(l) => {
+                if let Some(ty) = &l.type_annotation {
+                    StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
+                }
+                if let Some(LetValue::Node(n)) = &l.value {
+                    if let Some(slot) = &n.content {
+                        validate_content_items_type_annotations(&slot.items, enums, registry)?;
+                    }
+                }
+            }
+            ContentItem::Alias(a) => {
+                if let Some(ty) = &a.type_annotation {
+                    StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
+                }
+            }
+            ContentItem::State(s) => {
+                if let Some(ty) = &s.type_annotation {
+                    StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
+                }
+            }
+            ContentItem::Env(e) => {
+                if let Some(ty) = &e.type_annotation {
+                    StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
+                }
+            }
+            ContentItem::Node(n) => {
+                if let Some(slot) = &n.content {
+                    validate_content_items_type_annotations(&slot.items, enums, registry)?;
+                }
+            }
+            ContentItem::Children(_) | ContentItem::Text(_) | ContentItem::Assert(_) => {}
+        }
+    }
+    Ok(())
+}
+
+fn coerce_typed_binding_expr(mut expr: Expr, type_annotation: Option<&TypeRef>) -> Expr {
+    if let Some(ty) = type_annotation {
+        match ty.name.as_str() {
+            "Distance" => {
+                if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                    expr = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+                }
+            }
+            "Float" => {
+                if let Expr::Literal(Literal::Integer(i, span)) = expr {
+                    expr = Expr::Literal(Literal::Float(i as f64, span));
+                }
+            }
+            "Integer" => {
+                if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                    expr = Expr::Call(CallExpr {
+                        callee: Ident::new("to_integer", span),
+                        args: vec![Expr::Literal(Literal::Integer(0, span))],
+                        span,
+                    });
+                }
+            }
+            _ => {}
+        }
+    } else if let Expr::Literal(Literal::Integer(0, span)) = expr {
+        expr = Expr::Call(CallExpr {
+            callee: Ident::new("to_integer", span),
+            args: vec![Expr::Literal(Literal::Integer(0, span))],
+            span,
+        });
+    }
+    expr
+}
+
+fn validate_node_type_annotation(
+    elem_name: &str,
+    elem_span: Span,
+    type_annotation: Option<&TypeRef>,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> Result<(), CompileError> {
+    if let Some(ty_ref) = type_annotation {
+        let expected =
+            StaticType::from_type_name(ty_ref.name.as_str(), ty_ref.span, enums, registry)?;
+        let actual = StaticType::Node(elem_name.to_string());
+        if !actual.matches(&expected) {
+            return Err(CompileError::TypeMismatch {
+                expected: expected.canonical_name(),
+                actual: actual.canonical_name(),
+                span: elem_span,
+            });
+        }
+    }
+    Ok(())
+}
+
 /// A lexical binding in the component or document scope.
 #[derive(Debug, Clone)]
 pub enum LexicalBinding {
@@ -67,7 +289,8 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
     base_dir: &std::path::Path,
     resolver: &R,
 ) -> Result<ExpandedDocument, CompileError> {
-    let (mut registry, imported_items) = crate::compiler::module::resolve_imports(doc, base_dir, resolver)?;
+    let (mut registry, imported_items, all_module_enums) =
+        crate::compiler::module::resolve_imports_with_enums(doc, base_dir, resolver)?;
     let mut merged_items = imported_items;
     merged_items.extend(doc.items.clone());
     let merged_doc = Document {
@@ -147,6 +370,53 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         }]
     });
 
+    let mut known_enums = all_module_enums;
+    for (k, v) in &enums {
+        known_enums.insert(k.clone(), v.clone());
+    }
+
+    // Validate all explicit type annotations across all registered components and top-level items
+    for overloads in registry.values() {
+        for comp_def in overloads {
+            for param in &comp_def.params {
+                if let Some(ty) = &param.type_annotation {
+                    StaticType::from_type_name(ty.name.as_str(), ty.span, &known_enums, &registry)?;
+                }
+            }
+            validate_content_items_type_annotations(&comp_def.body, &known_enums, &registry)?;
+        }
+    }
+    for item in &doc.items {
+        match item {
+            Item::Let(l) => {
+                if let Some(ty) = &l.type_annotation {
+                    StaticType::from_type_name(ty.name.as_str(), ty.span, &enums, &registry)?;
+                }
+                if let Some(LetValue::Node(n)) = &l.value {
+                    if let Some(slot) = &n.content {
+                        validate_content_items_type_annotations(&slot.items, &enums, &registry)?;
+                    }
+                }
+            }
+            Item::State(s) => {
+                if let Some(ty) = &s.type_annotation {
+                    StaticType::from_type_name(ty.name.as_str(), ty.span, &enums, &registry)?;
+                }
+            }
+            Item::Env(e) => {
+                if let Some(ty) = &e.type_annotation {
+                    StaticType::from_type_name(ty.name.as_str(), ty.span, &enums, &registry)?;
+                }
+            }
+            Item::Node(n) => {
+                if let Some(slot) = &n.content {
+                    validate_content_items_type_annotations(&slot.items, &enums, &registry)?;
+                }
+            }
+            _ => {}
+        }
+    }
+
     let mut global_scope = HashMap::new();
     let mut global_env_scope: HashMap<String, EnvEntry> = HashMap::new();
     let mut node_fonts: HashMap<NodeId, NodeId> = HashMap::new();
@@ -162,6 +432,15 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
     );
 
     let mut expanded_doc = ExpandedDocument::new();
+    for p in ["x", "y", "width", "height", "left", "top", "right", "bottom"] {
+        expanded_doc.window_port_types.insert(p.to_string(), "Distance".to_string());
+    }
+    expanded_doc.window_port_types.insert("z".to_string(), "Integer".to_string());
+    expanded_doc.window_port_types.insert("clip".to_string(), "Clip".to_string());
+    expanded_doc.window_port_types.insert("dpi".to_string(), "Float".to_string());
+    expanded_doc.window_port_types.insert("title".to_string(), "String".to_string());
+    expanded_doc.window_port_types.insert("vscroll".to_string(), "Boolean".to_string());
+    expanded_doc.window_port_types.insert("hscroll".to_string(), "Boolean".to_string());
 
     let mut window_scope_ports = vec![
         "x".to_string(),
@@ -253,7 +532,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
             if !window_scope_ports.contains(&name) {
                 window_scope_ports.push(name.clone());
             }
-            let default_expr = default_expr_for_state(s);
+            let default_expr = default_expr_for_state_with_enums(s, &enums);
             let window_ref = Expr::MemberAccess(MemberAccessExpr {
                 target: Box::new(Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), s.span))),
                 member: s.name.clone(),
@@ -261,6 +540,9 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
             });
             global_scope.insert(name.clone(), LexicalBinding::State(window_ref));
             let type_name = s.type_annotation.as_ref().map(|t| t.name.as_str().to_string());
+            if let Some(ref tn) = type_name {
+                expanded_doc.window_port_types.insert(name.clone(), tn.clone());
+            }
             expanded_doc.window_state_vars.insert(name.clone(), type_name);
             expanded_doc.window_ports.insert(name, default_expr);
         }
@@ -317,6 +599,10 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             enums: &enums,
                         };
                         if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
+                            let rewritten = coerce_typed_binding_expr(
+                                rewritten,
+                                let_binding.type_annotation.as_ref(),
+                            );
                             if let Some(LexicalBinding::Expr(existing)) = global_scope.get(let_binding.name.as_str()) {
                                 if existing != &rewritten {
                                     global_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
@@ -357,6 +643,10 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                                 enums: &enums,
                             };
                             if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
+                                let rewritten = coerce_typed_binding_expr(
+                                    rewritten,
+                                    env_binding.type_annotation.as_ref(),
+                                );
                                 if let Some(LexicalBinding::Expr(existing)) = global_scope.get(env_binding.name.as_str()) {
                                     if existing != &rewritten {
                                         global_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten.clone()));
@@ -413,6 +703,13 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
             Item::Component(_) => {}
             Item::Env(env_binding) => {
                 if let Some(Expr::Node(elem)) = &env_binding.value {
+                    validate_node_type_annotation(
+                        elem.name.as_str(),
+                        elem.span,
+                        env_binding.type_annotation.as_ref(),
+                        &enums,
+                        &registry,
+                    )?;
                     let elem_ctx = ElementContext {
                         parent_id: Some(NodeId::WINDOW),
                         parent_name: Some("window"),
@@ -470,6 +767,15 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         };
                         rewrite_expr(raw_expr, &scope_ctx)?
                     };
+                    let rewritten = coerce_typed_binding_expr(
+                        rewritten,
+                        env_binding.type_annotation.as_ref(),
+                    );
+                    expanded_doc.local_bindings.push((
+                        rewritten.clone(),
+                        env_binding.type_annotation.as_ref().map(|t| t.name.as_str().to_string()),
+                        raw_expr.span(),
+                    ));
                     global_scope.borrow_mut().insert(
                         env_binding.name.as_str().to_string(),
                         LexicalBinding::Expr(rewritten.clone()),
@@ -531,12 +837,28 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         };
                         rewrite_expr(raw_expr, &scope_ctx)?
                     };
+                    let rewritten = coerce_typed_binding_expr(
+                        rewritten,
+                        let_binding.type_annotation.as_ref(),
+                    );
+                    expanded_doc.local_bindings.push((
+                        rewritten.clone(),
+                        let_binding.type_annotation.as_ref().map(|t| t.name.as_str().to_string()),
+                        raw_expr.span(),
+                    ));
                     global_scope.borrow_mut().insert(
                         let_binding.name.as_str().to_string(),
                         LexicalBinding::Expr(rewritten),
                     );
                 }
                 Some(LetValue::Node(elem)) => {
+                    validate_node_type_annotation(
+                        elem.name.as_str(),
+                        elem.span,
+                        let_binding.type_annotation.as_ref(),
+                        &enums,
+                        &registry,
+                    )?;
                     let root_id = NodeId(expanded_doc.nodes.len());
                     global_scope.borrow_mut().insert(
                         let_binding.name.as_str().to_string(),
@@ -607,6 +929,11 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
             *expr = resolve_forward_scope_refs(expr, &final_global_scope);
         }
     }
+    for (expr, _, _) in &mut expanded_doc.local_bindings {
+        *expr = resolve_forward_scope_refs(expr, &final_global_scope);
+    }
+
+    typecheck_expanded_document(&mut expanded_doc, &known_enums, &registry)?;
 
     Ok(expanded_doc)
 }
@@ -1257,7 +1584,7 @@ fn expand_component_instance(
 
     let mut comp_ports = HashMap::new();
     for (state_name, s) in &declared_states {
-        let default_expr = default_expr_for_state(s);
+        let default_expr = default_expr_for_state_with_enums(s, ctx.enums);
         comp_ports.insert(state_name.clone(), default_expr);
     }
     for (let_name, l) in &declared_lets {
@@ -1321,6 +1648,12 @@ fn expand_component_instance(
     for port in &instance.ports {
         let name = port.name.as_str().to_string();
         explicit_unlowered_ports.insert(name.clone(), port.expr.clone());
+        let is_handler_param = comp_def.params.iter().any(|p| {
+            p.name.as_str() == name
+                && p.type_annotation
+                    .as_ref()
+                    .is_some_and(|t| t.name.as_str() == "Handler")
+        });
         let expr = match &port.expr {
             Expr::Node(inline_elem) => {
                 let child_ctx = ElementContext {
@@ -1357,7 +1690,7 @@ fn expand_component_instance(
                     child_node: None,
                     allow_parent: ctx.enclosing_component_id.is_none(),
                     shadowed_ports: ctx.shadowed_ports,
-                    is_event_port: name.starts_with("on_"),
+                    is_event_port: name.starts_with("on_") || is_handler_param,
                     parent_ports: ctx.parent_ports,
                     current_ports: &empty_ports,
                     lexical_scope: &*caller_scope_borrow,
@@ -1642,6 +1975,13 @@ fn expand_component_instance(
                 ContentItem::Children(_) => {}
                 ContentItem::Let(l) => {
                     if let Some(LetValue::Node(child_elem)) = &l.value {
+                        validate_node_type_annotation(
+                            child_elem.name.as_str(),
+                            child_elem.span,
+                            l.type_annotation.as_ref(),
+                            ctx.enums,
+                            registry,
+                        )?;
                         consumer_child_nodes.push((child_elem.clone(), Some(l.name.as_str().to_string())));
                     }
                 }
@@ -1660,7 +2000,11 @@ fn expand_component_instance(
     for param in &comp_def.params {
         let name = param.name.as_str().to_string();
         populated_comp_ports.insert(name.clone());
-        if name.starts_with("on_") {
+        let is_handler_param = param
+            .type_annotation
+            .as_ref()
+            .is_some_and(|t| t.name.as_str() == "Handler");
+        if name.starts_with("on_") || is_handler_param {
             if let Some(expr) = comp_ports.get(&name).cloned() {
                 if !already_rewritten_ports.contains(&name) {
                     let empty_scope = HashMap::new();
@@ -1898,6 +2242,10 @@ fn expand_component_instance(
                         enums: ctx.enums,
                     };
                     if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
+                        let rewritten = coerce_typed_binding_expr(
+                            rewritten,
+                            let_binding.type_annotation.as_ref(),
+                        );
                         if let Some(LexicalBinding::Expr(existing)) = local_scope.get(let_binding.name.as_str()) {
                             if existing != &rewritten {
                                 local_scope.insert(let_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
@@ -1939,6 +2287,10 @@ fn expand_component_instance(
                             enums: ctx.enums,
                         };
                         if let Ok(rewritten) = rewrite_expr(raw_expr, &scope_ctx) {
+                            let rewritten = coerce_typed_binding_expr(
+                                rewritten,
+                                env_binding.type_annotation.as_ref(),
+                            );
                             if let Some(LexicalBinding::Expr(existing)) = local_scope.get(env_binding.name.as_str()) {
                                 if existing != &rewritten {
                                     local_scope.insert(env_binding.name.as_str().to_string(), LexicalBinding::Expr(rewritten));
@@ -1957,6 +2309,7 @@ fn expand_component_instance(
 
     // Process body items in declaration order
     let start_node_idx = doc.nodes.len();
+    let start_local_bindings_idx = doc.local_bindings.len();
     let local_scope = RefCell::new(local_scope);
     for item in &comp_def.body {
         match item {
@@ -1973,6 +2326,13 @@ fn expand_component_instance(
                 }
 
                 if let Some(LetValue::Node(elem)) = &let_binding.value {
+                    validate_node_type_annotation(
+                        elem.name.as_str(),
+                        elem.span,
+                        let_binding.type_annotation.as_ref(),
+                        ctx.enums,
+                        registry,
+                    )?;
                     let node_id = NodeId(doc.nodes.len());
                     local_scope.borrow_mut().insert(
                         let_binding.name.as_str().to_string(),
@@ -2034,6 +2394,15 @@ fn expand_component_instance(
                             };
                             rewrite_expr(raw_expr, &scope_ctx)?
                         };
+                        let rewritten = coerce_typed_binding_expr(
+                            rewritten,
+                            let_binding.type_annotation.as_ref(),
+                        );
+                        doc.local_bindings.push((
+                            rewritten.clone(),
+                            let_binding.type_annotation.as_ref().map(|t| t.name.as_str().to_string()),
+                            raw_expr.span(),
+                        ));
                         local_scope.borrow_mut().insert(
                             let_binding.name.as_str().to_string(),
                             LexicalBinding::Expr(rewritten),
@@ -2062,6 +2431,13 @@ fn expand_component_instance(
                 if let Some(raw_expr) = &env_binding.value {
                     match raw_expr {
                         Expr::Node(elem) => {
+                            validate_node_type_annotation(
+                                elem.name.as_str(),
+                                elem.span,
+                                env_binding.type_annotation.as_ref(),
+                                ctx.enums,
+                                registry,
+                            )?;
                             let elem_ctx = ElementContext {
                                 parent_id: Some(ctx.comp_node_id),
                                 parent_name: Some(comp_def.name.as_str()),
@@ -2130,6 +2506,17 @@ fn expand_component_instance(
                                 };
                                 rewrite_expr(raw_expr, &scope_ctx)?
                             };
+                            let rewritten = coerce_typed_binding_expr(
+                                rewritten,
+                                env_binding.type_annotation.as_ref(),
+                            );
+                            if comp_shadowed_ports.contains(env_binding.name.as_str()) {
+                                doc.local_bindings.push((
+                                    rewritten.clone(),
+                                    env_binding.type_annotation.as_ref().map(|t| t.name.as_str().to_string()),
+                                    raw_expr.span(),
+                                ));
+                            }
                             local_scope.borrow_mut().insert(
                                 env_binding.name.as_str().to_string(),
                                 LexicalBinding::Expr(rewritten.clone()),
@@ -2187,6 +2574,13 @@ fn expand_component_instance(
                             if let Some(raw_expr) = &env_binding.value {
                                 match raw_expr {
                                     Expr::Node(elem) => {
+                                        validate_node_type_annotation(
+                                            elem.name.as_str(),
+                                            elem.span,
+                                            env_binding.type_annotation.as_ref(),
+                                            ctx.enums,
+                                            registry,
+                                        )?;
                                         let elem_ctx = ElementContext {
                                             parent_id: Some(ctx.comp_node_id),
                                             parent_name: Some(comp_def.name.as_str()),
@@ -2249,6 +2643,15 @@ fn expand_component_instance(
                                             };
                                             rewrite_expr(raw_expr, &scope_ctx)?
                                         };
+                                        let rewritten = coerce_typed_binding_expr(
+                                            rewritten,
+                                            env_binding.type_annotation.as_ref(),
+                                        );
+                                        doc.local_bindings.push((
+                                            rewritten.clone(),
+                                            env_binding.type_annotation.as_ref().map(|t| t.name.as_str().to_string()),
+                                            raw_expr.span(),
+                                        ));
                                         lexical_scope.borrow_mut().insert(
                                             env_binding.name.as_str().to_string(),
                                             LexicalBinding::Expr(rewritten.clone()),
@@ -2373,6 +2776,10 @@ fn expand_component_instance(
             *expr = resolve_forward_scope_refs(expr, &final_local_scope);
         }
     }
+    for binding_idx in start_local_bindings_idx..doc.local_bindings.len() {
+        let (expr, _, _) = &mut doc.local_bindings[binding_idx];
+        *expr = resolve_forward_scope_refs(expr, &final_local_scope);
+    }
 
     // 6. Rewrite component ports in scope
     let scope_ctx = ScopeContext {
@@ -2402,10 +2809,23 @@ fn expand_component_instance(
         if already_rewritten_ports.contains(port_name) {
             rewritten_ports.insert(port_name.clone(), port_expr.clone());
         } else {
+            let is_handler_param = comp_def.params.iter().any(|p| {
+                p.name.as_str() == port_name
+                    && p.type_annotation
+                        .as_ref()
+                        .is_some_and(|t| t.name.as_str() == "Handler")
+            });
             let mut port_scope_ctx = scope_ctx.clone();
-            port_scope_ctx.is_event_port = port_name.starts_with("on_");
+            port_scope_ctx.is_event_port = port_name.starts_with("on_") || is_handler_param;
             let mut rw = rewrite_expr(port_expr, &port_scope_ctx)?;
             rw = resolve_forward_scope_refs(&rw, &final_local_scope);
+            if let Some(l) = declared_lets.get(port_name) {
+                rw = coerce_typed_binding_expr(rw, l.type_annotation.as_ref());
+            } else if let Some(e) = declared_envs.get(port_name) {
+                rw = coerce_typed_binding_expr(rw, e.type_annotation.as_ref());
+            } else if let Some(s) = declared_states.get(port_name) {
+                rw = coerce_typed_binding_expr(rw, s.type_annotation.as_ref());
+            }
             rewritten_ports.insert(port_name.clone(), rw);
         }
     }
@@ -2436,9 +2856,17 @@ fn expand_component_instance(
                     if let Expr::Literal(Literal::Integer(0, span)) = expr {
                         *expr = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, *span));
                     }
-                } else if expected_type == "Float" || expected_type == "Number" {
+                } else if expected_type == "Float" {
                     if let Expr::Literal(Literal::Integer(i, span)) = expr {
                         *expr = Expr::Literal(Literal::Float(*i as f64, *span));
+                    }
+                } else if expected_type == "Integer" {
+                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                        *expr = Expr::Call(CallExpr {
+                            callee: Ident::new("to_integer", *span),
+                            args: vec![Expr::Literal(Literal::Integer(0, *span))],
+                            span: *span,
+                        });
                     }
                 }
             }
@@ -2531,7 +2959,7 @@ fn expand_component_instance(
         }
     }
     for (state_name, s) in &declared_states {
-        let default_expr = default_expr_for_state(s);
+        let default_expr = default_expr_for_state_with_enums(s, ctx.enums);
         comp_authored_ports.insert(state_name.clone(), default_expr);
     }
     for (let_name, l) in &declared_lets {
@@ -2577,7 +3005,8 @@ fn expand_component_instance(
         enums: ctx.enums,
     };
     for (alias_name, alias_binding) in &declared_aliases {
-        let rewritten_alias = rewrite_expr(&alias_binding.value, &alias_scope_ctx)?;
+        let mut rewritten_alias = rewrite_expr(&alias_binding.value, &alias_scope_ctx)?;
+        rewritten_alias = coerce_typed_binding_expr(rewritten_alias, alias_binding.type_annotation.as_ref());
         rewritten_ports.insert(alias_name.clone(), rewritten_alias);
         comp_authored_ports.insert(alias_name.clone(), alias_binding.value.clone());
     }
@@ -2684,6 +3113,43 @@ fn expand_component_instance(
         );
     }
 
+    let mut node_port_types = HashMap::new();
+    node_port_types.insert("clip".to_string(), "Clip".to_string());
+    for sp in ["left", "top", "right", "bottom"] {
+        if rewritten_ports.contains_key(sp) {
+            node_port_types.insert(sp.to_string(), "Distance".to_string());
+        }
+    }
+    for param in &comp_def.params {
+        if let Some(ty) = &param.type_annotation {
+            node_port_types.insert(param.name.as_str().to_string(), ty.name.as_str().to_string());
+        }
+    }
+    for (state_name, s) in &declared_states {
+        if let Some(ty) = &s.type_annotation {
+            node_port_types.insert(state_name.clone(), ty.name.as_str().to_string());
+        }
+    }
+    for (let_name, l) in &declared_lets {
+        if !comp_shadowed_ports.contains(let_name) {
+            if let Some(ty) = &l.type_annotation {
+                node_port_types.insert(let_name.clone(), ty.name.as_str().to_string());
+            }
+        }
+    }
+    for (env_name, e) in &declared_envs {
+        if !comp_shadowed_ports.contains(env_name) {
+            if let Some(ty) = &e.type_annotation {
+                node_port_types.insert(env_name.clone(), ty.name.as_str().to_string());
+            }
+        }
+    }
+    for (alias_name, a) in &declared_aliases {
+        if let Some(ty) = &a.type_annotation {
+            node_port_types.insert(alias_name.clone(), ty.name.as_str().to_string());
+        }
+    }
+
     let node = doc.get_node_mut(ctx.comp_node_id).unwrap();
     node.is_component = true;
     node.overload_params = comp_def
@@ -2708,12 +3174,15 @@ fn expand_component_instance(
         node.env_vars.insert(env_name.clone(), type_name);
     }
     for (port_name, expr) in &rewritten_ports {
-        if port_name.starts_with("on_") {
+        if port_name.starts_with("on_")
+            || node_port_types.get(port_name).is_some_and(|t| t == "Handler")
+        {
             if let Some(binding) = extract_event_binding(port_name, expr) {
                 node.event_handlers.insert(port_name.clone(), binding);
             }
         }
     }
+    node.port_types = node_port_types;
     node.ports = rewritten_ports;
 
     Ok(())
@@ -3003,6 +3472,13 @@ fn expand_primitive_element(
                 }
                 ContentItem::Let(l) => {
                     if let Some(LetValue::Node(child_elem)) = &l.value {
+                        validate_node_type_annotation(
+                            child_elem.name.as_str(),
+                            child_elem.span,
+                            l.type_annotation.as_ref(),
+                            ctx.enums,
+                            registry,
+                        )?;
                         let child_ctx = ElementContext {
                             parent_id: Some(node_id),
                             parent_name: Some(elem.name.as_str()),
@@ -3207,6 +3683,13 @@ fn expand_primitive_element(
                                 }
                                 ContentItem::Let(l) => {
                                     if let Some(LetValue::Node(child_elem)) = &l.value {
+                                        validate_node_type_annotation(
+                                            child_elem.name.as_str(),
+                                            child_elem.span,
+                                            l.type_annotation.as_ref(),
+                                            ctx.enums,
+                                            registry,
+                                        )?;
                                         let child_ctx = ElementContext {
                                             parent_id: Some(node_id),
                                             parent_name: Some(elem.name.as_str()),
@@ -3458,7 +3941,17 @@ fn expand_primitive_element(
         let mut rewritten = rewrite_expr(&expr, &scope_ctx)?;
         if matches!(
             port_name.as_str(),
-            "x" | "y" | "width" | "height" | "size" | "line_height" | "baseline"
+            "x"
+                | "y"
+                | "width"
+                | "height"
+                | "size"
+                | "line_height"
+                | "baseline"
+                | "radius"
+                | "border_width"
+                | "scroll_x"
+                | "scroll_y"
         ) {
             let unlowered_lit = match &expr {
                 Expr::Literal(lit) => Some(lit.clone()),
@@ -4455,7 +4948,7 @@ fn infer_expr_literal_for_typecheck<'a>(
                 return Some(Literal::Float(96.0, m.span));
             }
             if member == "weight" || member == "z" || member == "len" {
-                return Some(Literal::Integer(0, m.span));
+                return Some(Literal::Integer(1, m.span));
             }
             None
         }
@@ -4467,7 +4960,7 @@ fn infer_expr_literal_for_typecheck<'a>(
                 return Some(Literal::Float(0.0, call.span));
             }
             if call.callee.as_str() == "to_integer" {
-                return Some(Literal::Integer(0, call.span));
+                return Some(Literal::Integer(1, call.span));
             }
             if matches!(
                 call.callee.as_str(),
@@ -4490,7 +4983,7 @@ fn infer_expr_literal_for_typecheck<'a>(
                 return Some(Literal::Float(0.0, mc.span));
             }
             if mc.method.as_str() == "to_integer" {
-                return Some(Literal::Integer(0, mc.span));
+                return Some(Literal::Integer(1, mc.span));
             }
             None
         }
@@ -4555,12 +5048,24 @@ fn resolve_ident_or_member_to_literal<'a>(
 ) -> Option<Literal> {
     match expr {
         Expr::Literal(lit) => Some(lit.clone()),
+        Expr::Call(call) if call.callee.as_str() == "to_integer" && call.args.len() == 1 => {
+            if let Expr::Literal(Literal::Integer(i, span)) = &call.args[0] {
+                Some(Literal::Integer(*i, *span))
+            } else {
+                None
+            }
+        }
         Expr::Paren(inner, _) => resolve_ident_or_member_to_literal(inner, ctx),
         Expr::Ident(id) => {
             if let Some(comp_ports) = ctx.comp_ports {
                 if let Some(port_expr) = comp_ports.get(id.as_str()) {
                     match port_expr {
                         Expr::Literal(lit) => return Some(lit.clone()),
+                        Expr::Call(call) if call.callee.as_str() == "to_integer" && call.args.len() == 1 => {
+                            if let Expr::Literal(Literal::Integer(i, span)) = &call.args[0] {
+                                return Some(Literal::Integer(*i, *span));
+                            }
+                        }
                         Expr::MemberAccess(m) => {
                             if let Expr::Ident(target_id) = m.target.as_ref() {
                                 if let Some(enum_def) = ctx.enums.get(target_id.as_str()) {
@@ -4606,6 +5111,11 @@ fn resolve_ident_or_member_to_literal<'a>(
                         if let Some(port_expr) = comp_ports.get(m.member.as_str()) {
                             match port_expr {
                                 Expr::Literal(lit) => return Some(lit.clone()),
+                                Expr::Call(call) if call.callee.as_str() == "to_integer" && call.args.len() == 1 => {
+                                    if let Expr::Literal(Literal::Integer(i, span)) = &call.args[0] {
+                                        return Some(Literal::Integer(*i, *span));
+                                    }
+                                }
                                 Expr::MemberAccess(sub_m) => {
                                     if let Expr::Ident(sub_target_id) = sub_m.target.as_ref() {
                                         if let Some(enum_def) = ctx.enums.get(sub_target_id.as_str()) {
@@ -4887,11 +5397,23 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             if let Ok(crate::compiler::value::Value::Bool(b)) =
                 crate::compiler::eval::eval_expr(&rewritten_cond, &const_env)
             {
-                if b {
-                    return rewrite_expr(&tern.then_expr, ctx);
+                let (chosen_raw, other_raw) = if b {
+                    (&tern.then_expr, &tern.else_expr)
                 } else {
-                    return rewrite_expr(&tern.else_expr, ctx);
+                    (&tern.else_expr, &tern.then_expr)
+                };
+                let mut chosen = rewrite_expr(chosen_raw, ctx)?;
+                if let Expr::Literal(Literal::Integer(0, span)) = chosen {
+                    if let Ok(other_rewritten) = rewrite_expr(other_raw, ctx) {
+                        if matches!(
+                            infer_expr_literal_for_typecheck(&other_rewritten, ctx),
+                            Some(Literal::Distance(_, _, _))
+                        ) {
+                            chosen = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+                        }
+                    }
                 }
+                return Ok(chosen);
             }
             Ok(Expr::Ternary(TernaryExpr {
                 condition: Box::new(rewritten_cond),
@@ -5131,11 +5653,13 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
 
             let mut rewritten_args = Vec::new();
             let mut had_children = false;
+            let mut children_member = None;
             for arg in &call.args {
                 if let Expr::MemberAccess(m) = arg {
                     if let Expr::Ident(target_id) = m.target.as_ref() {
                         if target_id.as_str() == "children" && m.member.as_str() != "len" {
                             had_children = true;
+                            children_member = Some(m.member.as_str().to_string());
                             for &child_id in ctx.child_ids {
                                 let child_access = Expr::MemberAccess(MemberAccessExpr {
                                     target: Box::new(Expr::Ident(Ident::new(
@@ -5155,7 +5679,15 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
 
             if had_children && rewritten_args.is_empty() && call.callee.as_str() != "only" {
-                return Ok(Expr::Literal(Literal::Integer(0, call.span)));
+                let is_int_member = matches!(
+                    children_member.as_deref(),
+                    Some("z" | "weight" | "index" | "len")
+                );
+                if is_int_member {
+                    return Ok(Expr::Literal(Literal::Integer(0, call.span)));
+                } else {
+                    return Ok(Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, call.span)));
+                }
             }
 
             Ok(Expr::Call(CallExpr {
@@ -5236,6 +5768,14 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
 
 /// Returns the initial default expression for a state binding.
 pub fn default_expr_for_state(state: &StateBinding) -> Expr {
+    default_expr_for_state_with_enums(state, &HashMap::new())
+}
+
+/// Returns the initial default expression for a state binding, resolving enum defaults if needed.
+pub fn default_expr_for_state_with_enums(
+    state: &StateBinding,
+    enums: &HashMap<String, EnumDef>,
+) -> Expr {
     let ty_name = state.type_annotation.as_ref().map(|t| t.name.as_str());
     if let Some(def) = &state.default {
         if let Expr::Literal(Literal::Integer(0, span)) = def {
@@ -5252,12 +5792,24 @@ pub fn default_expr_for_state(state: &StateBinding) -> Expr {
         def.clone()
     } else if let Some(ty) = ty_name {
         match ty {
-            "Boolean" | "Bool" => Expr::Literal(Literal::Bool(false, state.span)),
+            "Boolean" => Expr::Literal(Literal::Bool(false, state.span)),
             "String" => Expr::Literal(Literal::String(String::new(), state.span)),
             "Color" => Expr::Literal(Literal::Color("#000000".to_string(), state.span)),
             "Float" => Expr::Literal(Literal::Float(0.0, state.span)),
             "Distance" => Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, state.span)),
-            _ => Expr::Literal(Literal::Integer(0, state.span)),
+            "Handler" => Expr::Ident(Ident::new("unset", state.span)),
+            other => {
+                if let Some(enum_def) = enums.get(other) {
+                    if let Some(first_var) = enum_def.variants.first() {
+                        return Expr::Literal(Literal::Enum(
+                            other.to_string(),
+                            first_var.as_str().to_string(),
+                            state.span,
+                        ));
+                    }
+                }
+                Expr::Literal(Literal::Integer(0, state.span))
+            }
         }
     } else {
         Expr::Literal(Literal::Integer(0, state.span))
@@ -5414,3 +5966,701 @@ fn extract_event_binding(
         _ => None,
     }
 }
+
+fn known_builtin_port_type(node_name: &str, port_name: &str) -> Option<StaticType> {
+    if node_name == "Window" {
+        match port_name {
+            "x" | "y" | "width" | "height" | "left" | "top" | "right" | "bottom"
+            | "scroll_x" | "scroll_y" => return Some(StaticType::Distance),
+            "dpi" => return Some(StaticType::Float),
+            "clip" => return Some(StaticType::Node("Clip".to_string())),
+            _ => {}
+        }
+    }
+    match port_name {
+        "x"
+        | "y"
+        | "width"
+        | "height"
+        | "left"
+        | "top"
+        | "right"
+        | "bottom"
+        | "size"
+        | "line_height"
+        | "baseline"
+        | "cap_height"
+        | "x_height"
+        | "ascent"
+        | "descent"
+        | "em_top"
+        | "line_gap"
+        | "gap_bottom"
+        | "radius"
+        | "border_width"
+        | "scroll_x"
+        | "scroll_y" => Some(StaticType::Distance),
+        "z" | "weight" => Some(StaticType::Integer),
+        "opacity" => Some(StaticType::Float),
+        "color" | "bg_color" | "border_color" => Some(StaticType::Color),
+        "family" | "text" | "content" | "cursor" | "url" | "name" | "path" | "id" => {
+            Some(StaticType::String)
+        }
+        "underline" => Some(StaticType::Boolean),
+        "clip" | "up" => Some(StaticType::Node("Clip".to_string())),
+        "font" => Some(StaticType::Node("Font".to_string())),
+        "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
+        "start_at" => Some(StaticType::Enum("TextStart".to_string())),
+        "end_at" => Some(StaticType::Enum("TextEnd".to_string())),
+        p if p.starts_with("on_") => Some(StaticType::Handler),
+        _ => None,
+    }
+}
+
+/// Strictly type-checks all expanded node ports, window ports, and local bindings at compile time.
+pub fn typecheck_expanded_document(
+    doc: &mut ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> Result<(), CompileError> {
+    let mut cache: HashMap<(NodeId, String), StaticType> = HashMap::new();
+    let mut visiting: HashSet<(NodeId, String)> = HashSet::new();
+
+    // 1. Validate and infer all window ports
+    let window_port_names: Vec<String> = doc.window_ports.keys().cloned().collect();
+    for port_name in window_port_names {
+        let inferred = infer_port_type(
+            NodeId::WINDOW,
+            &port_name,
+            doc,
+            enums,
+            registry,
+            &mut cache,
+            &mut visiting,
+        )?;
+        doc.window_port_types
+            .entry(port_name)
+            .or_insert_with(|| inferred.type_name());
+    }
+
+    // 2. Validate and infer all node ports
+    for idx in 0..doc.nodes.len() {
+        let node_id = NodeId(idx);
+        let port_names: Vec<String> = doc.nodes[idx].ports.keys().cloned().collect();
+        for port_name in port_names {
+            let inferred = infer_port_type(
+                node_id,
+                &port_name,
+                doc,
+                enums,
+                registry,
+                &mut cache,
+                &mut visiting,
+            )?;
+            doc.nodes[idx]
+                .port_types
+                .entry(port_name)
+                .or_insert_with(|| inferred.type_name());
+        }
+    }
+
+    // 3. Validate and infer all local bindings (\let, \env, \alias)
+    let local_bindings = doc.local_bindings.clone();
+    for (expr, explicit_type, span) in local_bindings {
+        let actual = infer_expr_type(&expr, doc, enums, registry, &mut cache, &mut visiting)?;
+        if let Some(expected_name) = explicit_type {
+            let expected = StaticType::from_type_name(&expected_name, span, enums, registry)?;
+            if !actual.matches(&expected) {
+                return Err(CompileError::TypeMismatch {
+                    expected: expected.type_name(),
+                    actual: actual.type_name(),
+                    span: expr.span(),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn infer_port_type(
+    node_id: NodeId,
+    port_name: &str,
+    doc: &ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    cache: &mut HashMap<(NodeId, String), StaticType>,
+    visiting: &mut HashSet<(NodeId, String)>,
+) -> Result<StaticType, CompileError> {
+    let key = (node_id, port_name.to_string());
+    if let Some(cached) = cache.get(&key) {
+        return Ok(cached.clone());
+    }
+
+    let explicit_type_name = if node_id.is_window() {
+        doc.window_port_types.get(port_name).cloned()
+    } else {
+        doc.get_node(node_id)
+            .and_then(|n| n.port_types.get(port_name).cloned())
+    };
+
+    let explicit_ty = if let Some(ref name) = explicit_type_name {
+        Some(StaticType::from_type_name(
+            name,
+            Span::default(),
+            enums,
+            registry,
+        )?)
+    } else {
+        None
+    };
+
+    if !visiting.insert(key.clone()) {
+        // Cycle detected: if there is an explicit or builtin type, return it; otherwise let graph cycle checker report it
+        if let Some(ty) = explicit_ty {
+            return Ok(ty);
+        }
+        let node_name = if node_id.is_window() {
+            "Window"
+        } else {
+            doc.get_node(node_id).map(|n| n.name.as_str()).unwrap_or("")
+        };
+        if let Some(builtin) = known_builtin_port_type(node_name, port_name) {
+            return Ok(builtin);
+        }
+        return Ok(StaticType::Float);
+    }
+
+    let expr_opt = if node_id.is_window() {
+        doc.window_ports.get(port_name)
+    } else {
+        doc.get_node(node_id).and_then(|n| n.ports.get(port_name))
+    };
+
+    let result = if let Some(expr) = expr_opt {
+        let actual = infer_expr_type(expr, doc, enums, registry, cache, visiting)?;
+        if let Some(expected) = explicit_ty {
+            if !actual.matches(&expected) {
+                visiting.remove(&key);
+                return Err(CompileError::TypeMismatch {
+                    expected: expected.type_name(),
+                    actual: actual.type_name(),
+                    span: expr.span(),
+                });
+            }
+            Ok(expected)
+        } else {
+            let node_name = if node_id.is_window() {
+                "Window"
+            } else {
+                doc.get_node(node_id).map(|n| n.name.as_str()).unwrap_or("")
+            };
+            if let Some(builtin) = known_builtin_port_type(node_name, port_name) {
+                if !node_id.is_window() && doc.get_node(node_id).is_some_and(|n| !n.is_component) {
+                    if node_name == "Text" && port_name == "font" && actual == StaticType::String {
+                        Ok(StaticType::String)
+                    } else if !actual.matches(&builtin) {
+                        visiting.remove(&key);
+                        return Err(CompileError::TypeMismatch {
+                            expected: builtin.type_name(),
+                            actual: actual.type_name(),
+                            span: expr.span(),
+                        });
+                    } else {
+                        Ok(builtin)
+                    }
+                } else {
+                    Ok(actual.decay())
+                }
+            } else {
+                Ok(actual.decay())
+            }
+        }
+    } else if let Some(expected) = explicit_ty {
+        Ok(expected)
+    } else {
+        let node_name = if node_id.is_window() {
+            "Window"
+        } else {
+            doc.get_node(node_id).map(|n| n.name.as_str()).unwrap_or("")
+        };
+        if let Some(builtin) = known_builtin_port_type(node_name, port_name) {
+            Ok(builtin)
+        } else {
+            visiting.remove(&key);
+            return Err(CompileError::Custom {
+                message: format!(
+                    "Node '{}' has no known type for port '{}'",
+                    node_name, port_name
+                ),
+                span: Span::default(),
+            });
+        }
+    };
+
+    visiting.remove(&key);
+    if let Ok(ref ty) = result {
+        cache.insert(key, ty.clone());
+    }
+    result
+}
+
+fn infer_expr_type(
+    expr: &Expr,
+    doc: &ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    cache: &mut HashMap<(NodeId, String), StaticType>,
+    visiting: &mut HashSet<(NodeId, String)>,
+) -> Result<StaticType, CompileError> {
+    match expr {
+        Expr::Literal(lit) => Ok(match lit {
+            Literal::Integer(0, _) => StaticType::ZeroInteger,
+            Literal::Integer(_, _) => StaticType::Integer,
+            Literal::Float(_, _) => StaticType::Float,
+            Literal::Distance(_, _, _) => StaticType::Distance,
+            Literal::String(_, _) => StaticType::String,
+            Literal::Bool(_, _) => StaticType::Boolean,
+            Literal::Color(_, _) => StaticType::Color,
+            Literal::Enum(enum_name, _, _) => StaticType::Enum(enum_name.clone()),
+        }),
+        Expr::Paren(inner, _) => infer_expr_type(inner, doc, enums, registry, cache, visiting),
+        Expr::Ident(id) => {
+            if id.as_str() == "unset" || id.as_str() == "None" {
+                return Ok(StaticType::Handler);
+            }
+            if id.as_str() == "window" {
+                return Ok(StaticType::Node("Window".to_string()));
+            }
+            if let Some(node_id) = NodeId::from_canonical_name(id.as_str()) {
+                if node_id.is_window() {
+                    return Ok(StaticType::Node("Window".to_string()));
+                }
+                if let Some(node) = doc.get_node(node_id) {
+                    return Ok(StaticType::Node(node.name.clone()));
+                }
+            }
+            Err(CompileError::Custom {
+                message: format!("Cannot determine static type for identifier '{}'", id.as_str()),
+                span: id.span,
+            })
+        }
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(target_id) = m.target.as_ref() {
+                if let Some(enum_def) = enums.get(target_id.as_str()) {
+                    if enum_def.has_variant(m.member.as_str()) {
+                        return Ok(StaticType::Enum(target_id.as_str().to_string()));
+                    }
+                }
+                if let Some(node_id) = NodeId::from_canonical_name(target_id.as_str()) {
+                    let has_port = if node_id.is_window() {
+                        doc.window_ports.contains_key(m.member.as_str())
+                            || known_builtin_port_type("Window", m.member.as_str()).is_some()
+                    } else if let Some(node) = doc.get_node(node_id) {
+                        node.ports.contains_key(m.member.as_str())
+                            || node.port_types.contains_key(m.member.as_str())
+                            || (!node.is_component
+                                && known_builtin_port_type(&node.name, m.member.as_str()).is_some())
+                    } else {
+                        false
+                    };
+                    if has_port {
+                        return infer_port_type(
+                            node_id,
+                            m.member.as_str(),
+                            doc,
+                            enums,
+                            registry,
+                            cache,
+                            visiting,
+                        );
+                    }
+                    // Check if it's an event handler method on a component node
+                    if let Some(node) = doc.get_node(node_id) {
+                        if node.is_component {
+                            return Ok(StaticType::Handler);
+                        }
+                    }
+                }
+            }
+            let target_ty = infer_expr_type(&m.target, doc, enums, registry, cache, visiting)?;
+            match target_ty {
+                StaticType::Node(ref node_name) => {
+                    if let Some(builtin) = known_builtin_port_type(node_name, m.member.as_str()) {
+                        return Ok(builtin);
+                    }
+                    if let Some(overloads) = registry.get(node_name) {
+                        for comp in overloads {
+                            if let Some(param) =
+                                comp.params.iter().find(|p| p.name.as_str() == m.member.as_str())
+                            {
+                                if let Some(ref t) = param.type_annotation {
+                                    if let Ok(st) = StaticType::from_type_name(
+                                        t.name.as_str(),
+                                        t.span,
+                                        enums,
+                                        registry,
+                                    ) {
+                                        return Ok(st);
+                                    }
+                                }
+                            }
+                        }
+                        return Ok(StaticType::Handler);
+                    }
+                    Err(CompileError::Custom {
+                        message: format!(
+                            "Node '{}' has no known port or method '{}'",
+                            node_name, m.member
+                        ),
+                        span: m.span,
+                    })
+                }
+                StaticType::ViewPort => match m.member.as_str() {
+                    "x" | "y" | "width" | "height" | "left" | "top" | "right" | "bottom" => {
+                        Ok(StaticType::Distance)
+                    }
+                    _ => Err(CompileError::Custom {
+                        message: format!("ViewPort has no port '{}'", m.member),
+                        span: m.span,
+                    }),
+                },
+                other => Err(CompileError::Custom {
+                    message: format!(
+                        "Cannot access member '{}' on value of type '{}'",
+                        m.member,
+                        other.type_name()
+                    ),
+                    span: m.span,
+                }),
+            }
+        }
+        Expr::Unary(u) => {
+            let op_ty = infer_expr_type(&u.operand, doc, enums, registry, cache, visiting)?;
+            match u.op {
+                UnaryOp::Neg => match op_ty.decay() {
+                    StaticType::Integer => Ok(StaticType::Integer),
+                    StaticType::Float => Ok(StaticType::Float),
+                    StaticType::Distance => Ok(StaticType::Distance),
+                    other => Err(CompileError::TypeMismatch {
+                        expected: "Float, Integer, or Distance".to_string(),
+                        actual: other.type_name(),
+                        span: u.span,
+                    }),
+                },
+                UnaryOp::Not => match op_ty.decay() {
+                    StaticType::Boolean => Ok(StaticType::Boolean),
+                    other => Err(CompileError::TypeMismatch {
+                        expected: "Boolean".to_string(),
+                        actual: other.type_name(),
+                        span: u.span,
+                    }),
+                },
+            }
+        }
+        Expr::Binary(bin) => {
+            let left_ty = infer_expr_type(&bin.left, doc, enums, registry, cache, visiting)?;
+            let right_ty = infer_expr_type(&bin.right, doc, enums, registry, cache, visiting)?;
+            match bin.op {
+                BinaryOp::Add => match (&left_ty, &right_ty) {
+                    (StaticType::String, _) | (_, StaticType::String) => Ok(StaticType::String),
+                    (StaticType::Distance, StaticType::Distance)
+                    | (StaticType::Distance, StaticType::ZeroInteger)
+                    | (StaticType::ZeroInteger, StaticType::Distance) => Ok(StaticType::Distance),
+                    (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
+                        Ok(StaticType::Integer)
+                    }
+                    (
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                    ) => Ok(StaticType::Float),
+                    (StaticType::Distance, other) => Err(CompileError::TypeMismatch {
+                        expected: "Distance".to_string(),
+                        actual: other.type_name(),
+                        span: bin.right.span(),
+                    }),
+                    (other, StaticType::Distance) => Err(CompileError::TypeMismatch {
+                        expected: "Distance".to_string(),
+                        actual: other.type_name(),
+                        span: bin.left.span(),
+                    }),
+                    _ => Err(CompileError::TypeMismatch {
+                        expected: left_ty.type_name(),
+                        actual: right_ty.type_name(),
+                        span: bin.span,
+                    }),
+                },
+                BinaryOp::Sub => match (&left_ty, &right_ty) {
+                    (StaticType::Distance, StaticType::Distance)
+                    | (StaticType::Distance, StaticType::ZeroInteger)
+                    | (StaticType::ZeroInteger, StaticType::Distance) => Ok(StaticType::Distance),
+                    (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
+                        Ok(StaticType::Integer)
+                    }
+                    (
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                    ) => Ok(StaticType::Float),
+                    (StaticType::Distance, other) => Err(CompileError::TypeMismatch {
+                        expected: "Distance".to_string(),
+                        actual: other.type_name(),
+                        span: bin.right.span(),
+                    }),
+                    (other, StaticType::Distance) => Err(CompileError::TypeMismatch {
+                        expected: "Distance".to_string(),
+                        actual: other.type_name(),
+                        span: bin.left.span(),
+                    }),
+                    _ => Err(CompileError::TypeMismatch {
+                        expected: left_ty.type_name(),
+                        actual: right_ty.type_name(),
+                        span: bin.span,
+                    }),
+                },
+                BinaryOp::Mul => match (&left_ty, &right_ty) {
+                    (
+                        StaticType::Distance,
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                    )
+                    | (
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                        StaticType::Distance,
+                    ) => Ok(StaticType::Distance),
+                    (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
+                        Ok(StaticType::Integer)
+                    }
+                    (
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                    ) => Ok(StaticType::Float),
+                    _ => Err(CompileError::TypeMismatch {
+                        expected: "Float or Integer".to_string(),
+                        actual: format!("{} * {}", left_ty.type_name(), right_ty.type_name()),
+                        span: bin.span,
+                    }),
+                },
+                BinaryOp::Div => match (&left_ty, &right_ty) {
+                    (StaticType::Distance, StaticType::Distance) => Ok(StaticType::Float),
+                    (
+                        StaticType::Distance,
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                    ) => Ok(StaticType::Distance),
+                    (
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                    ) => Ok(StaticType::Float),
+                    _ => Err(CompileError::TypeMismatch {
+                        expected: "Float, Integer, or Distance".to_string(),
+                        actual: format!("{} / {}", left_ty.type_name(), right_ty.type_name()),
+                        span: bin.span,
+                    }),
+                },
+                BinaryOp::Rem => match (&left_ty, &right_ty) {
+                    (
+                        StaticType::Integer | StaticType::ZeroInteger,
+                        StaticType::Integer | StaticType::ZeroInteger,
+                    ) => Ok(StaticType::Integer),
+                    (
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                    ) => Ok(StaticType::Float),
+                    _ => Err(CompileError::TypeMismatch {
+                        expected: "Float or Integer".to_string(),
+                        actual: format!("{} % {}", left_ty.type_name(), right_ty.type_name()),
+                        span: bin.span,
+                    }),
+                },
+                BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
+                    match (&left_ty, &right_ty) {
+                        (StaticType::Distance, StaticType::Distance)
+                        | (StaticType::Distance, StaticType::ZeroInteger)
+                        | (StaticType::ZeroInteger, StaticType::Distance)
+                        | (
+                            StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                            StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                        ) => Ok(StaticType::Boolean),
+                        (StaticType::Distance, other) => Err(CompileError::TypeMismatch {
+                            expected: "Distance".to_string(),
+                            actual: other.type_name(),
+                            span: bin.right.span(),
+                        }),
+                        (other, StaticType::Distance) => Err(CompileError::TypeMismatch {
+                            expected: "Distance".to_string(),
+                            actual: other.type_name(),
+                            span: bin.left.span(),
+                        }),
+                        _ => Err(CompileError::TypeMismatch {
+                            expected: left_ty.type_name(),
+                            actual: right_ty.type_name(),
+                            span: bin.span,
+                        }),
+                    }
+                }
+                BinaryOp::Eq | BinaryOp::Ne => {
+                    if left_ty.matches(&right_ty) || right_ty.matches(&left_ty) {
+                        Ok(StaticType::Boolean)
+                    } else if matches!(
+                        (&left_ty, &right_ty),
+                        (StaticType::Color, StaticType::String)
+                            | (StaticType::String, StaticType::Color)
+                    ) {
+                        Ok(StaticType::Boolean)
+                    } else {
+                        Err(CompileError::TypeMismatch {
+                            expected: left_ty.type_name(),
+                            actual: right_ty.type_name(),
+                            span: bin.span,
+                        })
+                    }
+                }
+                BinaryOp::And | BinaryOp::Or => {
+                    if left_ty != StaticType::Boolean {
+                        return Err(CompileError::TypeMismatch {
+                            expected: "Boolean".to_string(),
+                            actual: left_ty.type_name(),
+                            span: bin.left.span(),
+                        });
+                    }
+                    if right_ty != StaticType::Boolean {
+                        return Err(CompileError::TypeMismatch {
+                            expected: "Boolean".to_string(),
+                            actual: right_ty.type_name(),
+                            span: bin.right.span(),
+                        });
+                    }
+                    Ok(StaticType::Boolean)
+                }
+            }
+        }
+        Expr::Ternary(tern) => {
+            let cond_ty = infer_expr_type(&tern.condition, doc, enums, registry, cache, visiting)?;
+            if cond_ty != StaticType::Boolean {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Boolean".to_string(),
+                    actual: cond_ty.type_name(),
+                    span: tern.condition.span(),
+                });
+            }
+            let then_ty = infer_expr_type(&tern.then_expr, doc, enums, registry, cache, visiting)?;
+            let else_ty = infer_expr_type(&tern.else_expr, doc, enums, registry, cache, visiting)?;
+            if then_ty == else_ty {
+                Ok(then_ty.decay())
+            } else if then_ty.matches(&else_ty) {
+                Ok(else_ty.decay())
+            } else if else_ty.matches(&then_ty) {
+                Ok(then_ty.decay())
+            } else if matches!(
+                (&then_ty, &else_ty),
+                (StaticType::Node(a), StaticType::Node(b))
+                    if matches!(a.as_str(), "Window" | "ScrollView")
+                        && matches!(b.as_str(), "Window" | "ScrollView")
+            ) {
+                Ok(StaticType::ViewPort)
+            } else {
+                Err(CompileError::TypeMismatch {
+                    expected: then_ty.type_name(),
+                    actual: else_ty.type_name(),
+                    span: tern.else_expr.span(),
+                })
+            }
+        }
+        Expr::Call(call) => {
+            match call.callee.as_str() {
+                "distance_to_float" | "to_px" | "to_pt" | "to_float" | "to_number" => {
+                    for arg in &call.args {
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                    }
+                    Ok(StaticType::Float)
+                }
+                "to_integer" => {
+                    for arg in &call.args {
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                    }
+                    Ok(StaticType::Integer)
+                }
+                "round" | "floor" | "ceil" => {
+                    let mut first_ty = None;
+                    for (i, arg) in call.args.iter().enumerate() {
+                        let t = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        if i == 0 {
+                            first_ty = Some(t);
+                        }
+                    }
+                    if matches!(first_ty, Some(StaticType::Distance)) {
+                        Ok(StaticType::Distance)
+                    } else {
+                        Ok(StaticType::Integer)
+                    }
+                }
+                "to_fixed" | "to_precision" => {
+                    for arg in &call.args {
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                    }
+                    Ok(StaticType::String)
+                }
+                "hsl" | "hsla" | "rgb" | "rgba" => {
+                    for arg in &call.args {
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                    }
+                    Ok(StaticType::Color)
+                }
+                "text_width"
+                | "text_height"
+                | "text_baseline_offset"
+                | "font_cap_height"
+                | "font_x_height"
+                | "font_ascent"
+                | "font_descent"
+                | "font_line_gap"
+                | "font_line_height" => {
+                    for arg in &call.args {
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                    }
+                    Ok(StaticType::Distance)
+                }
+                "max" | "min" | "sum" | "abs" | "clamp" | "only" => {
+                    if call.args.is_empty() {
+                        return Ok(StaticType::Distance);
+                    }
+                    let mut acc_ty =
+                        infer_expr_type(&call.args[0], doc, enums, registry, cache, visiting)?;
+                    for arg in &call.args[1..] {
+                        let arg_ty = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        if arg_ty.matches(&acc_ty) {
+                            // keep acc_ty
+                        } else if acc_ty.matches(&arg_ty) {
+                            acc_ty = arg_ty;
+                        } else {
+                            return Err(CompileError::TypeMismatch {
+                                expected: acc_ty.type_name(),
+                                actual: arg_ty.type_name(),
+                                span: arg.span(),
+                            });
+                        }
+                    }
+                    Ok(acc_ty.decay())
+                }
+                _ => {
+                    for arg in &call.args {
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                    }
+                    Ok(StaticType::Float)
+                }
+            }
+        }
+        Expr::MethodCall(mc) => {
+            let _ = infer_expr_type(&mc.target, doc, enums, registry, cache, visiting)?;
+            for arg in &mc.args {
+                let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+            }
+            match mc.method.as_str() {
+                "append" | "to_fixed" | "to_precision" => Ok(StaticType::String),
+                "to_px" | "to_pt" | "to_float" | "to_number" => Ok(StaticType::Float),
+                "to_integer" => Ok(StaticType::Integer),
+                _ => Ok(StaticType::Float),
+            }
+        }
+        Expr::Node(elem) => Ok(StaticType::Node(elem.name.as_str().to_string())),
+    }
+}
+

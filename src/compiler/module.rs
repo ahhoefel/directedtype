@@ -314,12 +314,31 @@ pub fn resolve_imports<R: FileResolver>(
     base_dir: &Path,
     resolver: &R,
 ) -> Result<(HashMap<String, Vec<ComponentDef>>, Vec<crate::ast::Item>), CompileError> {
+    let (registry, imported_items, _) = resolve_imports_with_enums(doc, base_dir, resolver)?;
+    Ok((registry, imported_items))
+}
+
+/// Resolves all `\use` declarations in a document and returns the merged component registry, imported items,
+/// and all enums defined across imported modules (for type validation inside imported components).
+pub fn resolve_imports_with_enums<R: FileResolver>(
+    doc: &Document,
+    base_dir: &Path,
+    resolver: &R,
+) -> Result<
+    (
+        HashMap<String, Vec<ComponentDef>>,
+        Vec<crate::ast::Item>,
+        HashMap<String, crate::ast::EnumDef>,
+    ),
+    CompileError,
+> {
     let mut registry: HashMap<String, Vec<ComponentDef>> = HashMap::new();
     let mut imported_items = Vec::new();
     let mut active_stack = HashSet::new();
     let mut cache = HashMap::new();
     let mut module_exports = HashMap::new();
     let mut visited_files = HashSet::new();
+    let mut all_module_enums = HashMap::new();
 
     // 1. Index locally declared components in the root document
     for item in &doc.items {
@@ -341,13 +360,15 @@ pub fn resolve_imports<R: FileResolver>(
                 &mut cache,
                 &mut module_exports,
                 &mut visited_files,
+                &mut all_module_enums,
             )?;
         }
     }
 
-    Ok((registry, imported_items))
+    Ok((registry, imported_items, all_module_enums))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_use_decl<R: FileResolver>(
     u: &UseDeclaration,
     base_dir: &Path,
@@ -358,6 +379,7 @@ fn resolve_use_decl<R: FileResolver>(
     cache: &mut HashMap<PathBuf, Document>,
     module_exports: &mut HashMap<PathBuf, HashMap<String, Vec<ComponentDef>>>,
     visited_files: &mut HashSet<PathBuf>,
+    all_module_enums: &mut HashMap<String, crate::ast::EnumDef>,
 ) -> Result<(), CompileError> {
     let raw_path = Path::new(&u.path);
     let mut resolved_path = if raw_path.is_absolute() {
@@ -415,9 +437,9 @@ fn resolve_use_decl<R: FileResolver>(
     let imported_base_dir = resolved_path.parent().unwrap_or(Path::new("."));
 
     // Transitive imports first
+    let mut nested_imported_items = Vec::new();
     for item in &imported_doc.items {
         if let Item::Use(nested_u) = item {
-            let mut nested_imported_items = Vec::new();
             resolve_use_decl(
                 nested_u,
                 imported_base_dir,
@@ -432,6 +454,7 @@ fn resolve_use_decl<R: FileResolver>(
                 cache,
                 module_exports,
                 visited_files,
+                all_module_enums,
             )?;
         }
     }
@@ -441,6 +464,15 @@ fn resolve_use_decl<R: FileResolver>(
     for item in &imported_doc.items {
         if let Item::Enum(e) = item {
             available_enums.insert(e.name.as_str().to_string(), e.clone());
+            all_module_enums.insert(e.name.as_str().to_string(), e.clone());
+        }
+    }
+
+    // Collect all enums in scope inside this module (including transitive imports)
+    let mut module_scope_enums = available_enums.clone();
+    for item in imported_items.iter().chain(nested_imported_items.iter()) {
+        if let Item::Enum(e) = item {
+            module_scope_enums.insert(e.name.as_str().to_string(), e.clone());
         }
     }
 
@@ -451,7 +483,9 @@ fn resolve_use_decl<R: FileResolver>(
         let mut components: HashMap<String, Vec<ComponentDef>> = HashMap::new();
         for item in &imported_doc.items {
             if let Item::Component(comp) = item {
-                register_component_overload(&mut components, comp.clone())?;
+                let mut resolved_comp = comp.clone();
+                resolve_component_enum_literals(&mut resolved_comp, &module_scope_enums);
+                register_component_overload(&mut components, resolved_comp)?;
             }
         }
         module_exports.insert(canonical_path.clone(), components.clone());
@@ -476,6 +510,7 @@ fn resolve_use_decl<R: FileResolver>(
                 let mut target_enum = e.clone();
                 if let Some(alias) = &use_item.alias {
                     target_enum.name = Ident::new(alias.as_str(), alias.span);
+                    all_module_enums.insert(alias.as_str().to_string(), target_enum.clone());
                 }
                 if !imported_items.iter().any(|existing| match existing {
                     Item::Enum(ex_e) => ex_e.name.as_str() == target_name,
@@ -491,6 +526,12 @@ fn resolve_use_decl<R: FileResolver>(
                     Item::Let(l) if l.name.as_str() == symbol_name => {
                         found = true;
                         let mut target_let = l.clone();
+                        if let Some(val) = &mut target_let.value {
+                            match val {
+                                crate::ast::LetValue::Node(n) => resolve_element_node_enum_literals(n, &module_scope_enums),
+                                crate::ast::LetValue::Expr(e) => resolve_expr_enum_literals(e, &module_scope_enums),
+                            }
+                        }
                         if let Some(alias) = &use_item.alias {
                             target_let.name = Ident::new(alias.as_str(), alias.span);
                         }
@@ -504,6 +545,9 @@ fn resolve_use_decl<R: FileResolver>(
                     Item::Env(env) if env.name.as_str() == symbol_name => {
                         found = true;
                         let mut target_env = env.clone();
+                        if let Some(e) = &mut target_env.value {
+                            resolve_expr_enum_literals(e, &module_scope_enums);
+                        }
                         if let Some(alias) = &use_item.alias {
                             target_env.name = Ident::new(alias.as_str(), alias.span);
                         }
@@ -517,6 +561,9 @@ fn resolve_use_decl<R: FileResolver>(
                     Item::State(s) if s.name.as_str() == symbol_name => {
                         found = true;
                         let mut target_state = s.clone();
+                        if let Some(e) = &mut target_state.default {
+                            resolve_expr_enum_literals(e, &module_scope_enums);
+                        }
                         if let Some(alias) = &use_item.alias {
                             target_state.name = Ident::new(alias.as_str(), alias.span);
                         }
@@ -700,6 +747,9 @@ fn resolve_use_decl<R: FileResolver>(
 
 fn collect_referenced_component_names(comp: &ComponentDef, out: &mut HashSet<String>) {
     for param in &comp.params {
+        if let Some(ty) = &param.type_annotation {
+            out.insert(ty.name.as_str().to_string());
+        }
         if let Some(default_edge) = &param.default_edge {
             collect_from_expr(default_edge, out);
         }
@@ -713,6 +763,9 @@ fn collect_from_content_item(item: &ContentItem, out: &mut HashSet<String>) {
     match item {
         ContentItem::Node(node) => collect_from_element_node(node, out),
         ContentItem::Let(l) => {
+            if let Some(ty) = &l.type_annotation {
+                out.insert(ty.name.as_str().to_string());
+            }
             if let Some(val) = &l.value {
                 match val {
                     LetValue::Node(n) => collect_from_element_node(n, out),
@@ -725,14 +778,25 @@ fn collect_from_content_item(item: &ContentItem, out: &mut HashSet<String>) {
                 collect_from_expr(&port.expr, out);
             }
         }
-        ContentItem::Alias(a) => collect_from_expr(&a.value, out),
+        ContentItem::Alias(a) => {
+            if let Some(ty) = &a.type_annotation {
+                out.insert(ty.name.as_str().to_string());
+            }
+            collect_from_expr(&a.value, out);
+        }
         ContentItem::Assert(a) => collect_from_expr(&a.condition, out),
         ContentItem::State(s) => {
+            if let Some(ty) = &s.type_annotation {
+                out.insert(ty.name.as_str().to_string());
+            }
             if let Some(e) = &s.default {
                 collect_from_expr(e, out);
             }
         }
         ContentItem::Env(env) => {
+            if let Some(ty) = &env.type_annotation {
+                out.insert(ty.name.as_str().to_string());
+            }
             if let Some(e) = &env.value {
                 collect_from_expr(e, out);
             }
@@ -790,6 +854,11 @@ fn collect_from_expr(expr: &Expr, out: &mut HashSet<String>) {
 
 fn rewrite_component_node_names(comp: &mut ComponentDef, renames: &HashMap<String, String>) {
     for param in &mut comp.params {
+        if let Some(ty) = &mut param.type_annotation {
+            if let Some(new_name) = renames.get(ty.name.as_str()) {
+                ty.name = Ident::new(new_name, ty.name.span);
+            }
+        }
         if let Some(default_edge) = &mut param.default_edge {
             rewrite_expr(default_edge, renames);
         }
@@ -803,6 +872,11 @@ fn rewrite_content_item(item: &mut ContentItem, renames: &HashMap<String, String
     match item {
         ContentItem::Node(node) => rewrite_element_node(node, renames),
         ContentItem::Let(l) => {
+            if let Some(ty) = &mut l.type_annotation {
+                if let Some(new_name) = renames.get(ty.name.as_str()) {
+                    ty.name = Ident::new(new_name, ty.name.span);
+                }
+            }
             if let Some(val) = &mut l.value {
                 match val {
                     LetValue::Node(n) => rewrite_element_node(n, renames),
@@ -815,14 +889,31 @@ fn rewrite_content_item(item: &mut ContentItem, renames: &HashMap<String, String
                 rewrite_expr(&mut port.expr, renames);
             }
         }
-        ContentItem::Alias(a) => rewrite_expr(&mut a.value, renames),
+        ContentItem::Alias(a) => {
+            if let Some(ty) = &mut a.type_annotation {
+                if let Some(new_name) = renames.get(ty.name.as_str()) {
+                    ty.name = Ident::new(new_name, ty.name.span);
+                }
+            }
+            rewrite_expr(&mut a.value, renames);
+        }
         ContentItem::Assert(a) => rewrite_expr(&mut a.condition, renames),
         ContentItem::State(s) => {
+            if let Some(ty) = &mut s.type_annotation {
+                if let Some(new_name) = renames.get(ty.name.as_str()) {
+                    ty.name = Ident::new(new_name, ty.name.span);
+                }
+            }
             if let Some(e) = &mut s.default {
                 rewrite_expr(e, renames);
             }
         }
         ContentItem::Env(env) => {
+            if let Some(ty) = &mut env.type_annotation {
+                if let Some(new_name) = renames.get(ty.name.as_str()) {
+                    ty.name = Ident::new(new_name, ty.name.span);
+                }
+            }
             if let Some(e) = &mut env.value {
                 rewrite_expr(e, renames);
             }
@@ -876,6 +967,121 @@ fn rewrite_expr(expr: &mut Expr, renames: &HashMap<String, String>) {
         }
         Expr::Unary(u) => rewrite_expr(&mut u.operand, renames),
         Expr::Paren(p, _) => rewrite_expr(p, renames),
+        Expr::Literal(_) | Expr::Ident(_) => {}
+    }
+}
+
+fn resolve_component_enum_literals(
+    comp: &mut ComponentDef,
+    enums: &HashMap<String, crate::ast::EnumDef>,
+) {
+    for param in &mut comp.params {
+        if let Some(default_edge) = &mut param.default_edge {
+            resolve_expr_enum_literals(default_edge, enums);
+        }
+    }
+    for item in &mut comp.body {
+        resolve_content_item_enum_literals(item, enums);
+    }
+}
+
+fn resolve_content_item_enum_literals(
+    item: &mut ContentItem,
+    enums: &HashMap<String, crate::ast::EnumDef>,
+) {
+    match item {
+        ContentItem::Node(node) => resolve_element_node_enum_literals(node, enums),
+        ContentItem::Let(l) => {
+            if let Some(val) = &mut l.value {
+                match val {
+                    LetValue::Node(n) => resolve_element_node_enum_literals(n, enums),
+                    LetValue::Expr(e) => resolve_expr_enum_literals(e, enums),
+                }
+            }
+        }
+        ContentItem::Children(c) => {
+            for port in &mut c.ports {
+                resolve_expr_enum_literals(&mut port.expr, enums);
+            }
+        }
+        ContentItem::Alias(a) => resolve_expr_enum_literals(&mut a.value, enums),
+        ContentItem::Assert(a) => resolve_expr_enum_literals(&mut a.condition, enums),
+        ContentItem::State(s) => {
+            if let Some(e) = &mut s.default {
+                resolve_expr_enum_literals(e, enums);
+            }
+        }
+        ContentItem::Env(env) => {
+            if let Some(e) = &mut env.value {
+                resolve_expr_enum_literals(e, enums);
+            }
+        }
+        ContentItem::Text(_) => {}
+    }
+}
+
+fn resolve_element_node_enum_literals(
+    node: &mut ElementNode,
+    enums: &HashMap<String, crate::ast::EnumDef>,
+) {
+    if let Some(key) = &mut node.key {
+        for part in &mut key.parts {
+            resolve_expr_enum_literals(part, enums);
+        }
+    }
+    for port in &mut node.ports {
+        resolve_expr_enum_literals(&mut port.expr, enums);
+    }
+    if let Some(slot) = &mut node.content {
+        for item in &mut slot.items {
+            resolve_content_item_enum_literals(item, enums);
+        }
+    }
+}
+
+fn resolve_expr_enum_literals(
+    expr: &mut Expr,
+    enums: &HashMap<String, crate::ast::EnumDef>,
+) {
+    match expr {
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(target_id) = m.target.as_ref() {
+                if let Some(enum_def) = enums.get(target_id.as_str()) {
+                    if enum_def.has_variant(m.member.as_str()) {
+                        *expr = Expr::Literal(crate::ast::Literal::Enum(
+                            target_id.as_str().to_string(),
+                            m.member.as_str().to_string(),
+                            m.span,
+                        ));
+                        return;
+                    }
+                }
+            }
+            resolve_expr_enum_literals(&mut m.target, enums);
+        }
+        Expr::Node(node) => resolve_element_node_enum_literals(node, enums),
+        Expr::Ternary(t) => {
+            resolve_expr_enum_literals(&mut t.condition, enums);
+            resolve_expr_enum_literals(&mut t.then_expr, enums);
+            resolve_expr_enum_literals(&mut t.else_expr, enums);
+        }
+        Expr::Call(c) => {
+            for arg in &mut c.args {
+                resolve_expr_enum_literals(arg, enums);
+            }
+        }
+        Expr::MethodCall(m) => {
+            resolve_expr_enum_literals(&mut m.target, enums);
+            for arg in &mut m.args {
+                resolve_expr_enum_literals(arg, enums);
+            }
+        }
+        Expr::Binary(b) => {
+            resolve_expr_enum_literals(&mut b.left, enums);
+            resolve_expr_enum_literals(&mut b.right, enums);
+        }
+        Expr::Unary(u) => resolve_expr_enum_literals(&mut u.operand, enums),
+        Expr::Paren(p, _) => resolve_expr_enum_literals(p, enums),
         Expr::Literal(_) | Expr::Ident(_) => {}
     }
 }

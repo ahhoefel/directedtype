@@ -9,12 +9,12 @@
     width: Distance,
     x: Distance,
     y: Distance,
-    gap: Distance: 0,
-    focused_bg: Color: #eff6ff,
-    focused_border_color: Color: #3b82f6,
-    focused_border_width: Distance: 2px,
-    on_focus = self.focus,
-    on_blur = self.blur
+    gap: Distance = 0,
+    focused_bg: Color = #eff6ff,
+    focused_border_color: Color = #3b82f6,
+    focused_border_width: Distance = 2px,
+    on_focus: Handler = self.focus,
+    on_blur: Handler = self.blur
 ) {
     \state focused: Boolean = false;
 
@@ -51,12 +51,12 @@
     style: CardStyle,
     x: Distance,
     y: Distance,
-    gap: Distance: 0,
-    focused_bg: Color: #eff6ff,
-    focused_border_color: Color: #3b82f6,
-    focused_border_width: Distance: 2px,
-    on_focus = self.focus,
-    on_blur = self.blur
+    gap: Distance = 0,
+    focused_bg: Color = #eff6ff,
+    focused_border_color: Color = #3b82f6,
+    focused_border_width: Distance = 2px,
+    on_focus: Handler = self.focus,
+    on_blur: Handler = self.blur
 ) {
     \state focused: Boolean = false;
 

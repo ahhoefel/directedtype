@@ -5,17 +5,17 @@
 
 \Component Link(
     url: String,
-    \env link_style: LinkStyle,
-    \env font: Font,
-    view = window,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    cursor: String: "Pointer",
-    on_click = self.click,
-    on_focus = self.focus,
-    on_blur = self.blur,
-    on_pointer_enter = self.pointer_enter,
-    on_pointer_leave = self.pointer_leave
+    env link_style: LinkStyle,
+    env font: Font,
+    view: ViewPort = window,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    cursor: String = "Pointer",
+    on_click: Handler = self.click,
+    on_focus: Handler = self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave
 ) {
     \state focused: Boolean = false;
     \state hovered: Boolean = false;

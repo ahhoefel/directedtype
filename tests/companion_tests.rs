@@ -102,7 +102,7 @@ fn test_companion_file_discovery_via_resolver() {
 #[test]
 fn test_companion_component_on_mount_lifecycle() {
     let input = r#"
-    \Component Counter(initial: Float: 0) {
+    \Component Counter(initial: Float = 0) {
         \state count: Float = 0;
         \Rect(x: 0, y: 0, width: count * 10px, height: 40px, color: #3b82f6)
     }
@@ -133,7 +133,7 @@ fn test_companion_component_on_mount_lifecycle() {
 fn test_event_dispatch_self_increment_and_decrement() {
     let input = r#"
     \Component Counter {
-        \state count: Float: 0;
+        \state count: Float = 0;
         \Rect(x: 10px, y: 10px, width: 100px + count * 20px, height: 40px, color: #10b981, on_click: increment)
     }
 
@@ -202,8 +202,8 @@ fn test_sibling_actor_messaging_drawer_toggle() {
         \Rect(x: 0, y: 0, width: 80px, height: 30px, color: #2563eb, on_click: drawer.toggle)
     }
 
-    \Component Drawer(width: Distance: 200px) {
-        \state is_open: Boolean: false;
+    \Component Drawer(width: Distance = 200px) {
+        \state is_open: Boolean = false;
         \Rect(x: 100px, y: 0, width: is_open ? width : 0, height: 200px, color: #1e293b)
     }
 
@@ -287,7 +287,7 @@ fn test_structured_key_lookup_from_companion_context() {
         \Cell(1, 2; x: 60px, y: 0, width: 50px, height: 50px)
     }
 
-    \Component Cell(x: Distance: 0, y: Distance: 0, width: Distance: 50px, height: Distance: 50px) {
+    \Component Cell(x: Distance = 0, y: Distance = 0, width: Distance = 50px, height: Distance = 50px) {
         \Rect(x: x, y: y, width: width, height: height, color: #3b82f6)
     }
 
@@ -329,7 +329,7 @@ fn test_structured_key_lookup_from_companion_context() {
 fn test_dom_integration_register_and_dispatch() {
     let input = r#"
     \Component Counter {
-        \state count: Float: 0;
+        \state count: Float = 0;
         \Rect(x: 20px, y: 20px, width: 100px + count * 50px, height: 30px, color: #ff0000, on_click: increment)
     }
 

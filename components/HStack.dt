@@ -7,10 +7,10 @@
 \Component HStack(
     width: Distance,
     height: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    gap: Distance: 0,
-    align: Align: Align.Top
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0,
+    align: Align = Align.Top
 ) {
     \let is_center = align == Align.Center;
     \let is_bottom = align == Align.Bottom;
@@ -31,10 +31,10 @@
 // 2. Intrinsic Width & Fixed Height HStack: content-wrapping width with cross-axis alignment
 \Component HStack(
     height: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    gap: Distance: 0,
-    align: Align: Align.Top
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0,
+    align: Align = Align.Top
 ) {
     \let is_center = align == Align.Center;
     \let is_bottom = align == Align.Bottom;
@@ -56,10 +56,10 @@
 // 3. Explicit / Fixed Width HStack: specifies width directly, intrinsic height
 \Component HStack(
     width: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    gap: Distance: 0,
-    align: Align: Align.Top
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0,
+    align: Align = Align.Top
 ) {
     \let is_center = align == Align.Center;
     \let is_bottom = align == Align.Bottom;
@@ -81,10 +81,10 @@
 
 // 4. Intrinsic / Content-Wrapping HStack: automatically sizes width and height to wrap children
 \Component HStack(
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    gap: Distance: 0,
-    align: Align: Align.Top
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0,
+    align: Align = Align.Top
 ) {
     \let is_center = align == Align.Center;
     \let is_bottom = align == Align.Bottom;

@@ -3,7 +3,7 @@
 \use "components/TextBounds.dt"
 
 
-\Component Box(x, y, width, height, env font) {
+\Component Box(x: Distance, y: Distance, width: Distance, height: Distance, env font: Font) {
     \env text_bounds = \TextBounds(start_at: TextStart.Ascender, end_at: TextEnd.Descender);
     // Background card (drawn first so it stays behind text and guides)
     \Rect(x: left, y: top, width: width, height: height, color: #0f172a)
@@ -17,7 +17,7 @@
     }
 }
 
-\Component Measurement(x, y1, y2, arm: 5px, color: #ffffff) {
+\Component Measurement(x: Distance, y1: Distance, y2: Distance, arm: Distance = 5px, color: Color = #ffffff) {
     \env font = \Font(family: "Arial", size: 10px);
     \Rect(x: x, y: y1, width: 1px, height: y2 - y1, color: #ef4444)
     \Rect(x: x-arm, y: y1, width: 2*arm, height: 1px, color: #ef4444)

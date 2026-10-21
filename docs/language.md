@@ -36,8 +36,8 @@ DirectedType (`.dt`) is a declarative UI and typography layout language. Rather 
 Every element in a DirectedType file (`.dt`) is a node in the document tree, and every property on a node (`x`, `y`, `width`, `height`, `color`, custom parameters, etc.) is a symbolic expression in terms of other properties and values.
 
 ```dt
-\let header = \Text(x: 24, y: 20, size: 28) { "Chapter 1" };
-\Text(x: header.left, y: header.bottom + 12, size: 16) {
+\let header = \Text(x: 24px, y: 20px, size: 28px) { "Chapter 1" };
+\Text(x: header.left, y: header.bottom + 12px, size: 16px) {
     "Layout is expressed directly as relationships between properties."
 }
 ```
@@ -69,14 +69,44 @@ Every element in a DirectedType file (`.dt`) is a node in the document tree, and
 
 ### Data Types & Literals
 
-| Type | Description | Literal Examples |
+Every property, parameter, and local binding in DirectedType has a single static type known at compile time:
+
+| Type | Description | Literal / Expression Examples |
 | :--- | :--- | :--- |
-| `Number` | 64-bit IEEE 754 floating-point scalar | `0`, `42`, `3.14159`, `-12.5` |
+| `Distance` | Spatial length or coordinate with unit (`px`, `pt`, `em`), or unitless `0` | `0`, `24px`, `12pt`, `1.5em`, `-8px` |
+| `Float` | 64-bit IEEE 754 unitless floating-point scalar (`Integer` coerces to `Float`) | `0.0`, `3.14159`, `-0.5`, `42` |
+| `Integer` | Signed integer scalar (e.g. counts, `z` index, font `weight`) | `0`, `42`, `400`, `-1` |
 | `String` | UTF-8 text string | `"Hello"`, `"Inter"` |
 | `Boolean` (or `Bool`) | Logical truth value | `true`, `false` |
 | `Color` | Hex color literal (`#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`) or color function | `#1e293b`, `#3b82f680`, `rgba(59, 130, 246, 0.5)` |
 | `Enum` | Strongly-typed variant of a declared `\Enum` | `Align.Center`, `TextStart.Capital`, `TextEnd.Baseline` |
-| `Node` (or Component type) | Reference to an instantiated DOM node (e.g. `\Font`, `\Clip`, `\Box`, or any component) | `header`, `parent`, `prev`, `self`, `window` |
+| `Handler` | Event handler callback reference (or `unset`) | `act`, `self.pointer_down`, `unset` |
+| `ViewPort` | Reference to a scrollable viewport container (`window` or `\ScrollView`) | `window`, `scroll_view` |
+| `Node` (or Component type) | Reference to an instantiated DOM node (e.g. `Font`, `Clip`, `Box`, `CardStyle`) | `header`, `parent`, `prev`, `self`, `window` |
+
+#### Dimensional Analysis for `Distance`, `Float`, and `Integer`
+* **Addition & Subtraction (`+`, `-`)**: `Distance ± Distance -> Distance`. Adding or subtracting a `Distance` and a unitless `Float`/`Integer` is a compile-time type error (except literal `0`, which is polymorphic with `Distance`).
+* **Scaling & Ratios (`*`, `/`)**:
+  * `Distance * Float -> Distance` and `Float * Distance -> Distance` (with `Integer` coercing to `Float`).
+  * `Distance / Float -> Distance`.
+  * `Distance / Distance -> Float` (ratio of two lengths produces a unitless `Float`).
+  * `Distance * Distance` is rejected as a compile-time dimensional error.
+
+### Strict Compile-Time Typing & `:` vs. `=` Syntax
+
+DirectedType enforces a uniform convention across the language:
+* **`:` (Colon)** is used strictly for **type annotations** (`name: Type`) and **passing port arguments** at element instantiation sites (`\Rect(x: 10px, y: 20px)` or `\Children { x: left }`).
+* **`=` (Equals)** is used strictly for **default values and value assignments** (`= expr`).
+
+| Construct | Syntax | Type Annotation Rule |
+| :--- | :--- | :--- |
+| `\Component` parameter | `name: Type` or `name: Type = expr` | **Required** (`: Type` must always be written) |
+| `\Component` env parameter | `env name: Type` or `env name: Type = expr` | **Required** (written with bare `env`, no backslash) |
+| `\state` declaration | `\state name: Type = expr;` | **Required** (`: Type` and `= expr` are both required) |
+| `\let` declaration | `\let name: Type = expr;` or `\let name = expr;` | **Optional** (if omitted, statically inferred from `expr`) |
+| `\alias` declaration | `\alias name: Type = expr;` or `\alias name = expr;` | **Optional** (if omitted, statically inferred from `expr`) |
+| `\env` statement | `\env name: Type = expr;` or `\env name = expr;` | **Optional** (if omitted, statically inferred from `expr`) |
+| Element / `\Children` port | `port: expr` | Checked against the target component or primitive port's static type |
 
 ### Operators (Highest to Lowest Precedence)
 
@@ -84,11 +114,11 @@ Every element in a DirectedType file (`.dt`) is a node in the document tree, and
 | :---: | :--- | :--- | :---: |
 | 1 | `( expr )` | Grouping parentheses | — |
 | 2 | `target.port`, `target.method(...)` | Port member access, enum variant access, method call | Left-to-right |
-| 3 | `-expr`, `!expr` | Unary negation (`Number`), logical NOT (`Boolean`) | Right-to-left |
+| 3 | `-expr`, `!expr` | Unary negation (`Distance`, `Float`, `Integer`), logical NOT (`Boolean`) | Right-to-left |
 | 4 | `*`, `/`, `%` | Multiplication, division, remainder (`0.0` on divide-by-zero) | Left-to-right |
 | 5 | `+`, `-` | Addition (or string concatenation if either operand is `String`), subtraction | Left-to-right |
-| 6 | `<`, `<=`, `>`, `>=` | Numeric relational comparisons (yields `Boolean`) | Left-to-right |
-| 7 | `==`, `!=` | Equality and inequality across `Number`, `String`, `Boolean`, `Color`, `Enum` | Left-to-right |
+| 6 | `<`, `<=`, `>`, `>=` | Numeric/distance relational comparisons (yields `Boolean`) | Left-to-right |
+| 7 | `==`, `!=` | Equality and inequality across matching types | Left-to-right |
 | 8 | `&&` | Logical AND | Left-to-right |
 | 9 | `\|\|` | Logical OR | Left-to-right |
 | 10 | `cond ? then_expr : else_expr` | Conditional ternary expression | Right-to-left |
@@ -176,10 +206,10 @@ Inside a container or `\Component`, `children.<port>` expands to the list of `<p
 | Expression / Function | Return Type | Empty Children (`0` children) | Description |
 | :--- | :--- | :--- | :--- |
 | `children.len` | `Integer` | `0` | Compile-time count of direct children passed to the component or element. |
-| `sum(children.<port>)` | `Number` / `Distance` | `0` | Sums the specified numeric port across all direct children. |
-| `max(children.<port>)` | `Number` / `Distance` | `0` | Returns the maximum value of `<port>` across all direct children. |
-| `min(children.<port>)` | `Number` / `Distance` | `0` | Returns the minimum value of `<port>` across all direct children. |
-| `only(children.<port>)` | `Any` | **Compile/Eval Error** | Asserts that the node has **exactly 1 child** and returns that single child's `<port>`. Fails if `children.len != 1`. |
+| `sum(children.<port>)` | `Distance` / `Float` / `Integer` | `0` | Sums the specified numeric/distance port across all direct children. |
+| `max(children.<port>)` | `Distance` / `Float` / `Integer` | `0` | Returns the maximum value of `<port>` across all direct children. |
+| `min(children.<port>)` | `Distance` / `Float` / `Integer` | `0` | Returns the minimum value of `<port>` across all direct children. |
+| `only(children.<port>)` | Same as `<port>` | **Compile/Eval Error** | Asserts that the node has **exactly 1 child** and returns that single child's `<port>`. Fails if `children.len != 1`. |
 
 > [!NOTE]
 > `sum(...)`, `max(...)`, and `min(...)` can also be called with arbitrary comma-separated scalar arguments—or a mix of scalars and `children.<port>`:
@@ -191,18 +221,18 @@ Inside a container or `\Component`, `children.<port>` expands to the list of `<p
 
 | Function Signature | Return Type | Description |
 | :--- | :--- | :--- |
-| `min(a, b, ...)` | `Number` | Returns the smallest of one or more numeric arguments. |
-| `max(a, b, ...)` | `Number` | Returns the largest of one or more numeric arguments. |
-| `sum(a, b, ...)` | `Number` | Returns the sum of all numeric arguments. |
-| `clamp(val, min_val, max_val)` | `Number` | Clamps `val` to the inclusive range `[min_val, max_val]`. |
-| `round(val)` | `Number` | Rounds `val` to the nearest integer (`f64::round`). |
-| `floor(val)` | `Number` | Rounds `val` down toward $-\infty$ (`f64::floor`). |
-| `ceil(val)` | `Number` | Rounds `val` up toward $+\infty$ (`f64::ceil`). |
-| `abs(val)` | `Number` | Returns the absolute value $\|val\|$ (`f64::abs`). |
+| `min(a, b, ...)` | `Distance` / `Float` / `Integer` | Returns the smallest of one or more matching numeric/distance arguments. |
+| `max(a, b, ...)` | `Distance` / `Float` / `Integer` | Returns the largest of one or more matching numeric/distance arguments. |
+| `sum(a, b, ...)` | `Distance` / `Float` / `Integer` | Returns the sum of all matching numeric/distance arguments. |
+| `clamp(val, min_val, max_val)` | `Distance` / `Float` / `Integer` | Clamps `val` to the inclusive range `[min_val, max_val]`. |
+| `round(val)` | `Distance` / `Integer` | Rounds `val` to the nearest integer (`f64::round`). |
+| `floor(val)` | `Distance` / `Integer` | Rounds `val` down toward $-\infty$ (`f64::floor`). |
+| `ceil(val)` | `Distance` / `Integer` | Rounds `val` up toward $+\infty$ (`f64::ceil`). |
+| `abs(val)` | `Distance` / `Float` / `Integer` | Returns the absolute value $\|val\|$ (`f64::abs`). |
 
 ### 4.3 Number Formatting Functions & Methods
 
-Formatting helpers convert numbers into formatted `String` values for dynamic labels (e.g., slider readouts or metrics) and can be invoked either as **methods** on a `Number` or as **standalone functions**:
+Formatting helpers convert numbers (`Float`, `Integer`, or `Distance`) into formatted `String` values for dynamic labels (e.g., slider readouts or metrics) and can be invoked either as **methods** or as **standalone functions**:
 
 | Method Call | Function Call | Return Type | Description |
 | :--- | :--- | :--- | :--- |
@@ -224,14 +254,14 @@ While `\Text` and `\Font` nodes automatically wire these functions into their de
 
 | Function Signature | Return Type | Description |
 | :--- | :--- | :--- |
-| `text_width(text, size, weight, family)` | `Number` | Measures the single-line unwrapped advance width of `text` shaped with Parley. |
-| `text_height(text, size, weight, family, max_width, ends_at, start_at, line_height)` | `Number` | Measures the multi-line wrapped height of `text` constrained to `max_width`, cropped at `start_at` (`TextStart`) and `ends_at` (`TextEnd`). Pass `0` for `line_height` to use the font's natural line height. |
-| `text_baseline_offset(size, weight, family, start_at)` | `Number` | Distance from the top of the text box (`y`, determined by `start_at`) to the first typographic baseline. |
-| `font_cap_height(size, weight, family)` | `Number` | Exact height of capital flat-topped letters (e.g. `'H'`) for the font. |
-| `font_x_height(size, weight, family)` | `Number` | Exact height of lowercase `'x'` for the font. |
-| `font_ascent(size, weight, family)` | `Number` | Font ascender metric above the baseline. |
-| `font_descent(size, weight, family)` | `Number` | Font descender metric below the baseline (positive number). |
-| `font_line_height(size, weight, family)` | `Number` | Default single-line height (`ascent + descent + leading`). |
+| `text_width(text, size, weight, family)` | `Distance` | Measures the single-line unwrapped advance width of `text` shaped with Parley. |
+| `text_height(text, size, weight, family, max_width, ends_at, start_at, line_height)` | `Distance` | Measures the multi-line wrapped height of `text` constrained to `max_width`, cropped at `start_at` (`TextStart`) and `ends_at` (`TextEnd`). Pass `0` for `line_height` to use the font's natural line height. |
+| `text_baseline_offset(size, weight, family, start_at)` | `Distance` | Distance from the top of the text box (`y`, determined by `start_at`) to the first typographic baseline. |
+| `font_cap_height(size, weight, family)` | `Distance` | Exact height of capital flat-topped letters (e.g. `'H'`) for the font. |
+| `font_x_height(size, weight, family)` | `Distance` | Exact height of lowercase `'x'` for the font. |
+| `font_ascent(size, weight, family)` | `Distance` | Font ascender metric above the baseline. |
+| `font_descent(size, weight, family)` | `Distance` | Font descender metric below the baseline (positive distance). |
+| `font_line_height(size, weight, family)` | `Distance` | Default single-line height (`ascent + descent + leading`). |
 
 ### 4.6 Scope Path Methods
 
@@ -263,12 +293,12 @@ Every `.dt` document has an implicit root viewport node named `window`. You can 
 
 | Port | Kind | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `window.x` / `window.left` | Output | `Number` | `0` | Always `0`. |
-| `window.y` / `window.top` | Output | `Number` | `0` | Always `0`. |
-| `window.width` | Output | `Number` | Viewport width | Current logical width of the document viewport (updates live on window or inspector resize). |
-| `window.height` | Output | `Number` | Viewport height | Current logical height of the document viewport. |
-| `window.right` | Output | `Number` | `window.width` | Right edge of the viewport. |
-| `window.bottom` | Output | `Number` | `window.height` | Bottom edge of the viewport. |
+| `window.x` / `window.left` | Output | `Distance` | `0` | Always `0`. |
+| `window.y` / `window.top` | Output | `Distance` | `0` | Always `0`. |
+| `window.width` | Output | `Distance` | Viewport width | Current logical width of the document viewport (updates live on window or inspector resize). |
+| `window.height` | Output | `Distance` | Viewport height | Current logical height of the document viewport. |
+| `window.right` | Output | `Distance` | `window.width` | Right edge of the viewport. |
+| `window.bottom` | Output | `Distance` | `window.height` | Bottom edge of the viewport. |
 | `window.title` | Input (`\Window`) | `String` | `""` | Native OS window title. |
 | `window.vscroll` | Input (`\Window`) | `Boolean` | `true` | Enables or disables root vertical scrolling and scrollbar. |
 | `window.hscroll` | Input (`\Window`) | `Boolean` | `true` | Enables or disables root horizontal scrolling and scrollbar. |
@@ -281,12 +311,12 @@ Every `.dt` document has an implicit root viewport node named `window`. You can 
 `\Text` shapes, wraps, and renders OpenType text using Parley and Vello. It provides first-class typographic box trimming (`start_at` and `ends_at`) and baseline-grid alignment (`baseline`).
 
 ```dt
-\let body_font = \Font(family: "Georgia", size: 18, weight: 400, line_height: 27);
+\let body_font = \Font(family: "Georgia", size: 18px, weight: 400, line_height: 27px);
 
 \Text(
-    x: 40,
-    y: 60,
-    width: 480,
+    x: 40px,
+    y: 60px,
+    width: 480px,
     font: body_font,
     color: #1e293b,
     start_at: TextStart.Capital,
@@ -300,27 +330,27 @@ Every `.dt` document has an implicit root viewport node named `window`. You can 
 
 | Port | Kind | Type | Default Equation / Value | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `x` | Required Input | `Number` | `parent.left` (if provided via `\Children`) | Left coordinate of the text box. |
-| `y` | Input / Computed | `Number` | `baseline - text_baseline_offset(...)` (if `baseline` is set) | Top coordinate of the text box. Either `y` or `baseline` must be provided. |
-| `baseline` | Input / Computed | `Number` | `y + text_baseline_offset(size, weight, family, start_at)` | Y-coordinate of the **first line's typographic baseline**. Supplying `baseline` instead of `y` positions the text by its baseline! |
-| `font` | Input (or via `\env font`) | `\Font` or `String` | Ambient `\env font` (if bound) | Reference to a `\Font` node (or a font family name string). |
-| `size` | Required Input (if no `font`) | `Number` | `font.size` (or parent `\Text.size` for inline spans) | Font size in logical pixels. |
-| `weight` | Optional Input | `Number` | `font.weight` or `400` | OpenType font weight (`100`–`900`, `400` = normal, `700` = bold). |
+| `x` | Required Input | `Distance` | `parent.left` (if provided via `\Children`) | Left coordinate of the text box. |
+| `y` | Input / Computed | `Distance` | `baseline - text_baseline_offset(...)` (if `baseline` is set) | Top coordinate of the text box. Either `y` or `baseline` must be provided. |
+| `baseline` | Input / Computed | `Distance` | `y + text_baseline_offset(size, weight, family, start_at)` | Y-coordinate of the **first line's typographic baseline**. Supplying `baseline` instead of `y` positions the text by its baseline! |
+| `font` | Input (or via `\env font`) | `Font` or `String` | Ambient `\env font` (if bound) | Reference to a `\Font` node (or a font family name string). |
+| `size` | Required Input (if no `font`) | `Distance` | `font.size` (or parent `\Text.size` for inline spans) | Font size in logical pixels (`px`, `pt`, or `em`). |
+| `weight` | Optional Input | `Integer` | `font.weight` or `400` | OpenType font weight (`100`–`900`, `400` = normal, `700` = bold). |
 | `family` | Optional Input | `String` | `font.family` or `""` (system default) | Font family name (validated against available system/registered fonts). |
-| `line_height` | Optional Input | `Number` | `font.line_height` (if authored on `\Font`) | Explicit absolute line height in logical pixels. |
-| `width` | Optional Input / Computed | `Number` | `text_width(text, size, weight, family)` | If omitted, shrink-wraps to single-line advance width. If provided, wraps lines to `width`. |
-| `height` | Optional Input / Computed | `Number` | `text_height(text, size, weight, family, width, ends_at, start_at, line_height)` | Automatically computed from wrapped line count and vertical trim settings (`start_at` / `ends_at`). |
-| `text` (or `content`) | Optional Input | `String` / `Number` / `Bool` | Body `{ "..." }` text content | Dynamic text expression (overrides static `{ "..." }` body when set). |
+| `line_height` | Optional Input | `Distance` | `font.line_height` (if authored on `\Font`) | Explicit absolute line height in logical pixels. |
+| `width` | Optional Input / Computed | `Distance` | `text_width(text, size, weight, family)` | If omitted, shrink-wraps to single-line advance width. If provided, wraps lines to `width`. |
+| `height` | Optional Input / Computed | `Distance` | `text_height(text, size, weight, family, width, ends_at, start_at, line_height)` | Automatically computed from wrapped line count and vertical trim settings (`start_at` / `ends_at`). |
+| `text` (or `content`) | Optional Input | `String` / `Float` / `Integer` / `Bool` | Body `{ "..." }` text content | Dynamic text expression (overrides static `{ "..." }` body when set). |
 | `color` (or `text_color`) | Optional Input | `Color` | `#000000` | Fill color of the rendered glyphs. |
 | `align` (or `text_align`) | Optional Input | `String` / `Align` | `"left"` (`Alignment::Start`) | Horizontal alignment within `width`: `"left"`, `"center"`, `"right"`, or `"justify"`. |
 | `underline` | Optional Input | `Boolean` | `false` | Draws an underline across the text run. |
-| `text_bounds` | `env` Input | `\TextBounds` | `\TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)` | Controls vertical metric trimming (`start_at` and `end_at`) of the text bounding box; resolved via lexical `\env text_bounds` or explicit port. |
+| `text_bounds` | `env` Input | `TextBounds` | `\TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)` | Controls vertical metric trimming (`start_at` and `end_at`) of the text bounding box; resolved via lexical `\env text_bounds` or explicit port. |
 | `start_at` | Output (delegated) | `TextStart` | `text_bounds.start_at` | Top edge (`y`) metric anchor of the text bounding box. |
 | `end_at` | Output (delegated) | `TextEnd` | `text_bounds.end_at` | Bottom edge (`bottom`) metric anchor of the text bounding box. |
-| `font.cap_height`, `cap_height` | Output (delegated) | `Number` | `font_cap_height(...)` | Cap height of the text node's active font. |
-| `font.x_height`, `x_height` | Output (delegated) | `Number` | `font_x_height(...)` | Lowercase x-height of the text node's active font. |
-| `font.ascent`, `ascent` | Output (delegated) | `Number` | `font_ascent(...)` | Ascender height of the text node's active font. |
-| `font.descent`, `descent` | Output (delegated) | `Number` | `font_descent(...)` | Descender depth of the text node's active font. |
+| `font.cap_height`, `cap_height` | Output (delegated) | `Distance` | `font_cap_height(...)` | Cap height of the text node's active font. |
+| `font.x_height`, `x_height` | Output (delegated) | `Distance` | `font_x_height(...)` | Lowercase x-height of the text node's active font. |
+| `font.ascent`, `ascent` | Output (delegated) | `Distance` | `font_ascent(...)` | Ascender height of the text node's active font. |
+| `font.descent`, `descent` | Output (delegated) | `Distance` | `font_descent(...)` | Descender depth of the text node's active font. |
 
 #### Vertical Metric Trimming (`\TextBounds`, `TextStart`, and `TextEnd`)
 
@@ -343,7 +373,7 @@ You can override vertical metric trimming for an entire subtree using `\env text
 A `\Text` block can mix string literals and inline child `\Text` or `\Link` elements inside its `{ ... }` content block:
 
 ```dt
-\Text(x: 20, y: 20, width: 400, size: 16) {
+\Text(x: 20px, y: 20px, width: 400px, size: 16px) {
     "Read the "
     \Link(url: "#/guide/intro") { "Introduction" }
     " or highlight "
@@ -362,34 +392,34 @@ Inline child nodes inherit `size` and `font` from their parent `\Text` node and 
 ```dt
 \let heading_font = \Font(
     family: "Helvetica",
-    size: 32,
+    size: 32px,
     weight: 700,
-    line_height: 40
+    line_height: 40px
 );
 
 // Use font metrics directly in layout equations!
 \Rect(
-    x: 20,
-    y: 20,
-    width: 6,
+    x: 20px,
+    y: 20px,
+    width: 6px,
     height: heading_font.cap_height,
     color: #3b82f6
 )
-\Text(x: 34, y: 20, font: heading_font) { "Aligned to Cap Height" }
+\Text(x: 34px, y: 20px, font: heading_font) { "Aligned to Cap Height" }
 ```
 
 #### Ports on `\Font`
 
 | Port | Kind | Type | Default Equation / Value | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `size` | **Required Input** | `Number` | — | Font size in logical pixels. |
-| `weight` | Optional Input | `Number` | `400` | Font weight (`100`–`900`). |
+| `size` | **Required Input** | `Distance` | — | Font size in logical pixels (`px`, `pt`, or `em`). |
+| `weight` | Optional Input | `Integer` | `400` | Font weight (`100`–`900`). |
 | `family` | Optional Input | `String` | `""` | Font family name. |
-| `line_height` | Optional Input / Output | `Number` | `font_line_height(size, weight, family)` | Explicit line height if authored, or natural font line height. |
-| `cap_height` | Output | `Number` | `font_cap_height(size, weight, family)` | Capital letter height above baseline. |
-| `x_height` | Output | `Number` | `font_x_height(size, weight, family)` | Lowercase `'x'` height above baseline. |
-| `ascent` | Output | `Number` | `font_ascent(size, weight, family)` | Ascender metric above baseline. |
-| `descent` | Output | `Number` | `font_descent(size, weight, family)` | Descender metric below baseline. |
+| `line_height` | Optional Input / Output | `Distance` | `font_line_height(size, weight, family)` | Explicit line height if authored, or natural font line height. |
+| `cap_height` | Output | `Distance` | `font_cap_height(size, weight, family)` | Capital letter height above baseline. |
+| `x_height` | Output | `Distance` | `font_x_height(size, weight, family)` | Lowercase `'x'` height above baseline. |
+| `ascent` | Output | `Distance` | `font_ascent(size, weight, family)` | Ascender metric above baseline. |
+| `descent` | Output | `Distance` | `font_descent(size, weight, family)` | Descender metric below baseline. |
 
 ---
 
@@ -399,13 +429,13 @@ Inline child nodes inherit `size` and `font` from their parent `\Text` node and 
 
 ```dt
 \Rect(
-    x: 20,
-    y: 20,
-    width: 240,
-    height: 120,
+    x: 20px,
+    y: 20px,
+    width: 240px,
+    height: 120px,
     color: #f8fafc,
-    radius: 8,
-    border_width: 1,
+    radius: 8px,
+    border_width: 1px,
     border_color: #cbd5e1
 )
 ```
@@ -414,15 +444,15 @@ Inline child nodes inherit `size` and `font` from their parent `\Text` node and 
 
 | Port | Kind | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `x` | **Required Input** | `Number` | — | Left coordinate. |
-| `y` | **Required Input** | `Number` | — | Top coordinate. |
-| `width` | **Required Input** | `Number` | — | Width of the rectangle. |
-| `height` | **Required Input** | `Number` | — | Height of the rectangle. |
+| `x` | **Required Input** | `Distance` | — | Left coordinate. |
+| `y` | **Required Input** | `Distance` | — | Top coordinate. |
+| `width` | **Required Input** | `Distance` | — | Width of the rectangle. |
+| `height` | **Required Input** | `Distance` | — | Height of the rectangle. |
 | `color` (or `bg_color`) | **Required Input** | `Color` | — | Fill color (use `#00000000` for transparent fill). |
-| `radius` (or `corner_radius`) | Optional Input | `Number` | `0` | Corner rounding radius in logical pixels. |
-| `border_width` (or `stroke_width`) | Optional Input | `Number` | `0` | Border stroke thickness in logical pixels. |
+| `radius` (or `corner_radius`) | Optional Input | `Distance` | `0` | Corner rounding radius in logical pixels. |
+| `border_width` (or `stroke_width`) | Optional Input | `Distance` | `0` | Border stroke thickness in logical pixels. |
 | `border_color` (or `stroke_color`) | Optional Input | `Color` | `#000000` | Border stroke color. |
-| `z` | Optional Input | `Number` | `0` | Stacking order. |
+| `z` | Optional Input | `Integer` | `0` | Stacking order. |
 | `clip` | Optional Input | `Node` | Inherited `clip` | Clipping node reference. |
 
 ---
@@ -437,7 +467,7 @@ Inline child nodes inherit `size` and `font` from their parent `\Text` node and 
 ```dt
 \let viewport_clip = \Clip(
     up: self.clip,
-    box: \Box(x: x, y: y, width: width, height: height, radius: 8),
+    box: \Box(x: x, y: y, width: width, height: height, radius: 8px),
     scroll_x: 0,
     scroll_y: scroll_y
 );
@@ -449,9 +479,9 @@ Inline child nodes inherit `size` and `font` from their parent `\Text` node and 
 | :--- | :--- | :--- | :--- | :--- |
 | `box` | **Required Input** | `Node` (e.g. `\Box`) | — | Node whose `x`, `y`, `width`, `height`, and optional `radius` define the clip boundary. |
 | `up` | Optional Input | `Node` (`\Clip`) | `env.clip` or `parent.clip` or `window.clip` | Parent clip layer in the clip hierarchy, enabling nested scroll views and clips. |
-| `scroll_x` | Optional Input | `Number` | `0` | Horizontal scroll offset applied to all nodes referencing this clip. |
-| `scroll_y` | Optional Input | `Number` | `0` | Vertical scroll offset applied to all nodes referencing this clip. |
-| `x`, `y`, `width`, `height` | Output | `Number` | Delegated to `box.<port>` | Bounding box of the clip region. |
+| `scroll_x` | Optional Input | `Distance` | `0` | Horizontal scroll offset applied to all nodes referencing this clip. |
+| `scroll_y` | Optional Input | `Distance` | `0` | Vertical scroll offset applied to all nodes referencing this clip. |
+| `x`, `y`, `width`, `height` | Output | `Distance` | Delegated to `box.<port>` | Bounding box of the clip region. |
 
 #### `\Box` (Geometric Helper Node)
 Any non-painting element name (conventionally `\Box(x: ..., y: ..., width: ..., height: ...)`) acts as a pure geometric node in the DAG without emitting paint commands.
@@ -464,9 +494,9 @@ Any non-painting element name (conventionally `\Box(x: ..., y: ..., width: ..., 
 
 ```dt
 \AnchorScope(name: "chapter1") {
-    \VStack(width: 600, gap: 16) {
+    \VStack(width: 600px, gap: 16px) {
         \Anchor(name: "intro") {
-            \Text(size: 24) { "1.1 Introduction" }
+            \Text(size: 24px) { "1.1 Introduction" }
         }
         // Navigate via relative ("intro") or absolute ("#/chapter1/intro") URL:
         \Link(url: "#/chapter1/intro") { "Permalink to 1.1" }
@@ -480,8 +510,8 @@ Any non-painting element name (conventionally `\Box(x: ..., y: ..., width: ..., 
 | :--- | :--- | :--- | :--- | :--- |
 | `name` | **Required Input** | `String` | — | Local identifier for the anchor or scope segment. |
 | `path` | Output (`\AnchorScope` only) | `String` | Canonical `/`-joined scope path | Full resolved path of the scope in the document's `ScopeTree`. |
-| `x`, `y` | Optional Input / Forwarded | `Number` | Forwarded to child | Child's `(x, y)` defaults to the anchor's `(x, y)`. |
-| `width`, `height` | Optional Input / Computed | `Number` | `child.width`, `child.height` | Inherited from the wrapped child if not explicitly set. |
+| `x`, `y` | Optional Input / Forwarded | `Distance` | Forwarded to child | Child's `(x, y)` defaults to the anchor's `(x, y)`. |
+| `width`, `height` | Optional Input / Computed | `Distance` | `child.width`, `child.height` | Inherited from the wrapped child if not explicitly set. |
 
 ---
 
@@ -521,19 +551,19 @@ Variants are accessed with dot syntax (`Align.Center`) and compared using `==` a
 
 ### 6.3 Component Declarations (`\Component`)
 
-Components encapsulate reusable layout topologies, state, and subtrees.
+Components encapsulate reusable layout topologies, state, and subtrees. Every component parameter must have an explicit `: Type` annotation, and optional default values use `= expr`:
 
 ```dt
 \Component CardHeader(
-    width: Number,                  // Required parameter (no default)
-    x: Number = parent.left,        // Optional parameter (with default)
-    y: Number = parent.top,         // Note: `: default` and `= default` are both valid
-    padding: Number = 16,
+    width: Distance,                // Required parameter (no default)
+    x: Distance = parent.left,      // Optional parameter (with '= default')
+    y: Distance = parent.top,       // ':' is strictly for type, '=' is strictly for default
+    padding: Distance = 16px,
     bg: Color = #ffffff
 ) {
     \let inner_width = width - 2 * padding;
 
-    \Rect(x: x, y: y, width: width, height: height, color: bg, radius: 8)
+    \Rect(x: x, y: y, width: width, height: height, color: bg, radius: 8px)
 
     \Children {
         x: x + padding,
@@ -547,33 +577,33 @@ Components encapsulate reusable layout topologies, state, and subtrees.
 }
 ```
 
-* **Required Parameters**: Parameters without a default expression (e.g., `width: Number`) must be supplied by the caller (or inherited via `\Children` from the caller's parent).
-* **Optional Parameters**: Parameters with a default expression (`= expr` or `: expr`) use that default if omitted by the caller.
+* **Required Parameters**: Parameters without a default expression (e.g., `width: Distance`) must be supplied by the caller (or inherited via `\Children` from the caller's parent).
+* **Optional Parameters**: Parameters with a default expression (`name: Type = expr`) use that default if omitted by the caller.
 
 ---
 
 ### 6.4 Constructor Overloading
 
-In a single-pass DAG layout engine, a component whose `width` flows **top-down** from its parent (`width: Number`) has the opposite dependency direction from one whose `width` flows **bottom-up** from its children (`\alias width = max(children.width)`).
+In a single-pass DAG layout engine, a component whose `width` flows **top-down** from its parent (`width: Distance`) has the opposite dependency direction from one whose `width` flows **bottom-up** from its children (`\alias width = max(children.width)`).
 
 DirectedType solves this cleanly through **compile-time constructor overloading**. You can define multiple `\Component` declarations with the same name as long as their sets of **required parameters** are distinct:
 
 ```dt
 // Overload 1: Fixed-width & Fixed-height VStack -> \VStack(width, height)
 \Component VStack(
-    width: Number,
-    height: Number,
-    x: Number = parent.left,
-    y: Number = parent.top,
-    gap: Number = 0
+    width: Distance,
+    height: Distance,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0
 ) { ... }
 
 // Overload 2: Fixed-width, intrinsic bottom-up height -> \VStack(width)
 \Component VStack(
-    width: Number,
-    x: Number = parent.left,
-    y: Number = parent.top,
-    gap: Number = 0
+    width: Distance,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0
 ) {
     \alias height = sum(children.height) + max(0, children.len - 1) * gap;
     ...
@@ -582,9 +612,9 @@ DirectedType solves this cleanly through **compile-time constructor overloading*
 // Overload 3: Intrinsic shrink-wrapped width & height -> \VStack(shrink)
 \Component VStack(
     shrink: Boolean,
-    x: Number = parent.left,
-    y: Number = parent.top,
-    gap: Number = 0
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0
 ) {
     \alias width = max(children.width);
     \alias height = sum(children.height) + max(0, children.len - 1) * gap;
@@ -598,12 +628,12 @@ When a caller instantiates `\VStack(...)`, the compiler inspects the provided po
 
 ### 6.5 Lexical Bindings (`\let`) vs. Exported Aliases (`\alias`)
 
-Inside a `\Component`, there is a strict distinction between private internal variables and public output ports:
+Inside a `\Component`, there is a strict distinction between private internal variables and public output ports. Both directives accept an optional `: Type` annotation (`\let name: Type = expr;`); when omitted, the compiler infers and checks the binding's static type from `expr` at compile time:
 
 | Directive | Visibility outside Component | Can Bind | Purpose |
 | :--- | :--- | :--- | :--- |
-| `\let name = expr;` | **Private** (internal to lexical scope) | Scalar expression **or** a DOM node (`\let bg = \Rect(...)`) | Intermediate helper formulas or named internal child nodes. |
-| `\alias name = expr;` | **Public Output Port** (accessible as `comp.name` and `parent.name`) | Scalar or node reference expression | Exposes a computed property (such as intrinsic `width`, `height`, `right`, `bottom`) as a public port on the component instance. |
+| `\let name = expr;` (or `\let name: Type = expr;`) | **Private** (internal to lexical scope) | Scalar expression **or** a DOM node (`\let bg = \Rect(...)`) | Intermediate helper formulas or named internal child nodes. |
+| `\alias name = expr;` (or `\alias name: Type = expr;`) | **Public Output Port** (accessible as `comp.name` and `parent.name`) | Scalar or node reference expression | Exposes a computed property (such as intrinsic `width`, `height`, `right`, `bottom`) as a public port on the component instance. |
 
 ---
 
@@ -629,22 +659,22 @@ Inside a `\Children { ... }` block:
 
 Environmental variables (`\env`) pass contextual styling or configuration (such as `\Font`, `ButtonStyle`, `CardStyle`, or `LinkStyle`) down the component tree without manual prop-drilling through intermediate layout containers.
 
-1. **Providing an `\env` binding** (at top level or inside a component):
+1. **Providing an `\env` binding** (at top level or inside a component, with optional `: Type` annotation):
    ```dt
-   \env font = \Font(family: "Inter", size: 16, weight: 400);
-   \env card_style = \CardStyle();
+   \env font = \Font(family: "Inter", size: 16px, weight: 400);
+   \env card_style: CardStyle = \CardStyle();
    ```
-2. **Consuming an `\env` binding in a component signature**:
+2. **Consuming an `env` binding in a component signature** (note the bare `env` keyword without a leading backslash inside parameter lists):
    ```dt
    \Component Label(
-       \env font: Font,
-       x: Number = parent.left,
-       y: Number = parent.top
+       env font: Font,
+       x: Distance = parent.left,
+       y: Distance = parent.top
    ) {
        \Text(x: x, y: y, font: font) { \Children }
    }
    ```
-   A caller can still override an `\env` parameter explicitly at the call site: `\Label(font: custom_font) { "Custom" }`.
+   A caller can still override an `env` parameter explicitly at the call site: `\Label(font: custom_font) { "Custom" }`.
 3. **Blocking/Unsetting an `\env` binding**:
    ```dt
    \env font = unset; // Prevents descendants from implicitly inheriting `font`
@@ -670,11 +700,11 @@ If the boolean condition evaluates to `false` during expansion or DAG evaluation
 ### 6.9 Reactive State (`\state`), Keys & Events
 
 #### Declaring Reactive State (`\state`)
-Components can declare mutable reactive state variables with `\state`:
+Components can declare mutable reactive state variables with `\state` (both `: Type` and `= initial_expr` are required):
 
 ```dt
 \state hovered: Boolean = false;
-\state value: Number = 0.5;
+\state value: Float = 0.5;
 ```
 State variables act as source nodes in the DAG. When mutated by an event handler at runtime, the engine re-evaluates only the downstream ports connected to that state variable.
 
@@ -682,30 +712,31 @@ State variables act as source nodes in the DAG. When mutated by an event handler
 To preserve state across dynamic re-compilations or list reordering, an element instantiation can specify an identity key before a semicolon `;` at the start of its port list:
 
 ```dt
-\Button("save-btn"; x: 20, y: 40) { "Save" }
+\Button("save-btn"; x: 20px, y: 40px) { "Save" }
 ```
 > [!WARNING]
 > Identity key expressions must be pure identity values (literals, non-spatial parameters, or `\state` variables) and **cannot** depend on spatial layout ports (`x`, `y`, `width`, `height`, `left`, `top`, `right`, `bottom`, `z`, `clip`) or `\let` layout formulas.
 
 #### Event Handler Ports & Companion Rust Structs (`#[component]`)
-Interactive behavior is implemented in a companion Rust struct annotated with `#[component]` (e.g., `components/Button.rs` alongside `components/Button.dt`). In `.dt`, event ports (`on_click`, `on_scroll`, `on_pointer_down`, `on_pointer_move`, `on_pointer_up`, `on_pointer_enter`, `on_pointer_leave`, `on_focus`, `on_blur`) bind DOM events to companion methods:
+Interactive behavior is implemented in a companion Rust struct annotated with `#[component]` (e.g., `components/Button.rs` alongside `components/Button.dt`). In `.dt`, event ports (`on_click`, `on_scroll`, `on_pointer_down`, `on_pointer_move`, `on_pointer_up`, `on_pointer_enter`, `on_pointer_leave`, `on_focus`, `on_blur`) have type `Handler` and bind DOM events to companion methods:
 * **Unqualified method name (`on_click: act`)**: Binds to the `act` method on the **enclosing `\Component`** being defined.
 * **Qualified `self.<method>` (`on_click: self.act`)**: Binds to the `act` method on the **target component instance** itself (for example, when `\Component Foo() { \Bar(on_click: self.act) }` invokes `Bar.act` instead of `Foo.act`, or in a component's own signature default).
 
 ```dt
 \Component Slider(
-    width: Number,
-    min: Number = 0,
-    max: Number = 100,
-    initial: Number = 50,
-    on_change = unset,
-    on_pointer_down = self.pointer_down,
-    on_pointer_move = self.pointer_move,
-    on_pointer_up = self.pointer_up
+    width: Distance,
+    min: Float = 0.0,
+    max: Float = 100.0,
+    initial: Float = 50.0,
+    on_change: Handler = unset,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_move: Handler = self.pointer_move,
+    on_pointer_up: Handler = self.pointer_up
 ) {
-    \state value: Number = initial;
+    \state value: Float = initial;
     ...
 }
 ```
+
 
 

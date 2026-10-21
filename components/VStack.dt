@@ -7,10 +7,10 @@
 \Component VStack(
     width: Distance,
     height: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    gap: Distance: 0,
-    align: Align: Align.Left
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0,
+    align: Align = Align.Left
 ) {
     \let is_center = align == Align.Center;
     \let is_right = align == Align.Right;
@@ -32,10 +32,10 @@
 // 2. Explicit Fixed Width & Intrinsic Height VStack: zero references to parent.width
 \Component VStack(
     width: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    gap: Distance: 0,
-    align: Align: Align.Left
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0,
+    align: Align = Align.Left
 ) {
     \let is_center = align == Align.Center;
     \let is_right = align == Align.Right;
@@ -58,10 +58,10 @@
 // 3. Intrinsic Shrink-Wrapping Width VStack: wraps width to widest child
 \Component VStack(
     shrink: Boolean,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    gap: Distance: 0,
-    align: Align: Align.Left
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0,
+    align: Align = Align.Left
 ) {
     \alias max_child_width = max(children.width);
     \let is_center = align == Align.Center;

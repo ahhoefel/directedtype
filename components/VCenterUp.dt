@@ -7,8 +7,8 @@
 // 1. Explicit Height VCenterUp
 \Component VCenterUp(
     height: Distance,
-    x: Distance: parent.left,
-    y: Distance: parent.top
+    x: Distance = parent.left,
+    y: Distance = parent.top
 ) {
     \assert children.len == 1 as "Should have only one child.";
 

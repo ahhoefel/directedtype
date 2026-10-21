@@ -9,9 +9,9 @@
     style: ButtonStyle,
     width: Distance,
     label: String,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    disabled: Boolean: false
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    disabled: Boolean = false
 ) {
     \let is_disabled = disabled;
     \let bg_color = is_disabled ? style.disabled_bg : style.bg;
@@ -48,9 +48,9 @@
 \Component Button(
     style: ButtonStyle,
     label: String,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    disabled: Boolean: false
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    disabled: Boolean = false
 ) {
     \let is_disabled = disabled;
     \let bg_color = is_disabled ? style.disabled_bg : style.bg;
@@ -89,12 +89,12 @@
 
 // 3. Explicit / Fixed Width Button by Variant
 \Component Button(
-    variant: ButtonVariant: ButtonVariant.Primary,
+    variant: ButtonVariant = ButtonVariant.Primary,
     width: Distance,
     label: String,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    disabled: Boolean: false
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    disabled: Boolean = false
 ) {
     \let is_primary = variant == ButtonVariant.Primary;
     \let is_secondary = variant == ButtonVariant.Secondary;
@@ -160,11 +160,11 @@
 
 // 4. Intrinsic Text-Sized Button by Variant
 \Component Button(
-    variant: ButtonVariant: ButtonVariant.Primary,
+    variant: ButtonVariant = ButtonVariant.Primary,
     label: String,
-    x: Distance: parent.left,
-    y: Distance: parent.top,
-    disabled: Boolean: false
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    disabled: Boolean = false
 ) {
     \let is_primary = variant == ButtonVariant.Primary;
     \let is_secondary = variant == ButtonVariant.Secondary;

@@ -2,19 +2,19 @@
 // Horizontal slider component with interactive track, active fill, draggable thumb, and typed callback.
 
 \Component Slider(
-    x: Distance: 0,
-    y: Distance: 0,
-    width: Distance: 200px,
-    height: Distance: 24px,
-    min: Float: 0,
-    max: Float: 100,
-    value: Float: 0,
-    track_height: Distance: 6px,
-    thumb_size: Distance: 18px,
-    track_color: Color: #334155,
-    fill_color: Color: #3b82f6,
-    thumb_color: Color: #ffffff,
-    on_change: None
+    x: Distance = 0,
+    y: Distance = 0,
+    width: Distance = 200px,
+    height: Distance = 24px,
+    min: Float = 0,
+    max: Float = 100,
+    value: Float = 0,
+    track_height: Distance = 6px,
+    thumb_size: Distance = 18px,
+    track_color: Color = #334155,
+    fill_color: Color = #3b82f6,
+    thumb_color: Color = #ffffff,
+    on_change: Handler = unset
 ) {
     \state current_value: Float = 0;
 

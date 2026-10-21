@@ -10,78 +10,38 @@ use crate::span::Span;
 use crate::token::Token;
 
 /// Parses a parameter definition in a component signature:
-/// e.g. `bg_color: Color`, `gap: Number: 16`, `gap: Number = 16`, or `width: max(children.width) + 32`
+/// e.g. `bg_color: Color`, `gap: Distance = 16px`, `env font: Font`, or `width: Distance = max(children.width) + 32px`
 pub fn parse_param_def(cursor: &mut ParserCursor<'_>) -> Result<ParamDef, ParseError> {
-    let mut is_env = false;
-    let env_span = if let Some((Token::Backslash, _)) = cursor.peek_token()? {
-        if cursor.peek_nth(1)?.is_some_and(|(t, _)| t == &Token::Env) {
-            let bs_span = cursor.consume_token(&Token::Backslash)?;
-            let span = cursor.consume_token(&Token::Env)?;
-            is_env = true;
-            Some(bs_span.merge(span))
-        } else {
-            None
-        }
-    } else if let Some((Token::Env, _)) = cursor.peek_token()? {
+    let (is_env, env_span) = if let Some((Token::Env, _)) = cursor.peek_token()? {
         let span = cursor.consume_token(&Token::Env)?;
-        is_env = true;
-        Some(span)
+        (true, Some(span))
     } else {
-        None
+        (false, None)
     };
 
     let name = parse_ident(cursor)?;
 
-    let mut type_annotation = None;
-    let mut default_edge = None;
+    cursor.consume_token(&Token::Colon)?;
+    let (tok, type_span) = cursor.expect_token("type name")?;
+    let type_annotation = if let Token::Ident(type_name) = tok {
+        Some(TypeRef {
+            name: Ident::new(type_name, type_span),
+            span: type_span,
+        })
+    } else {
+        return Err(ParseError::UnexpectedToken {
+            expected: "type name identifier".to_string(),
+            found: tok.to_string(),
+            span: type_span,
+        });
+    };
 
-    if let Some((Token::Colon, _)) = cursor.peek_token()? {
-        cursor.consume_token(&Token::Colon)?;
-
-        // Inspect the token right after the colon
-        let tok0 = cursor.peek_token()?.cloned();
-        let tok1 = cursor.peek_nth(1)?.cloned();
-
-        match (tok0, tok1) {
-            // Check if tok0 is an uppercase identifier (e.g. Color, Number, String)
-            (Some((Token::Ident(type_name), span0)), Some((Token::Colon, _)))
-            | (Some((Token::Ident(type_name), span0)), Some((Token::Eq, _)))
-                if type_name.chars().next().is_some_and(|c| c.is_uppercase()) =>
-            {
-                // `name: Type: expr` or `name: Type = expr`
-                cursor.next_token()?; // consume type_name
-                type_annotation = Some(TypeRef {
-                    name: Ident::new(type_name, span0),
-                    span: span0,
-                });
-                if cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Eq) {
-                    cursor.consume_token(&Token::Eq)?;
-                } else {
-                    cursor.consume_token(&Token::Colon)?;
-                }
-                default_edge = Some(parse_expr(cursor)?);
-            }
-            (Some((Token::Ident(type_name), span0)), Some((Token::Comma, _)))
-            | (Some((Token::Ident(type_name), span0)), Some((Token::RParen, _)))
-                if type_name.chars().next().is_some_and(|c| c.is_uppercase()) =>
-            {
-                // `name: Type`
-                cursor.next_token()?; // consume type_name
-                type_annotation = Some(TypeRef {
-                    name: Ident::new(type_name, span0),
-                    span: span0,
-                });
-            }
-            _ => {
-                // `name: expr` (e.g. `width: max(...) + 32` or `x: 10`)
-                default_edge = Some(parse_expr(cursor)?);
-            }
-        }
-    } else if let Some((Token::Eq, _)) = cursor.peek_token()? {
-        // `name = expr`
+    let default_edge = if let Some((Token::Eq, _)) = cursor.peek_token()? {
         cursor.consume_token(&Token::Eq)?;
-        default_edge = Some(parse_expr(cursor)?);
-    }
+        Some(parse_expr(cursor)?)
+    } else {
+        None
+    };
 
     let end_span = default_edge
         .as_ref()
@@ -253,7 +213,7 @@ pub fn parse_env_binding(cursor: &mut ParserCursor<'_>) -> Result<EnvBinding, Pa
     })
 }
 
-/// Parses a public immutable alias binding: `\alias name = expr;`, `\alias name: Type = expr;`, or `\alias name: expr;`
+/// Parses a public immutable alias binding: `\alias name = expr;` or `\alias name: Type = expr;`
 pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding, ParseError> {
     let bs_span = cursor.consume_token(&Token::Backslash)?;
     let alias_span = cursor.consume_token(&Token::Alias)?;
@@ -263,41 +223,22 @@ pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding
     let mut type_annotation = None;
     if let Some((Token::Colon, _)) = cursor.peek_token()? {
         cursor.consume_token(&Token::Colon)?;
-
-        let tok0 = cursor.peek_token()?.cloned();
-        let tok1 = cursor.peek_nth(1)?.cloned();
-
-        match (tok0, tok1) {
-            (Some((Token::Ident(type_name), span0)), Some((Token::Eq, _)))
-            | (Some((Token::Ident(type_name), span0)), Some((Token::Colon, _)))
-                if type_name.chars().next().is_some_and(|c| c.is_uppercase()) =>
-            {
-                cursor.next_token()?; // consume type_name
-                type_annotation = Some(TypeRef {
-                    name: Ident::new(type_name, span0),
-                    span: span0,
-                });
-                if cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Eq) {
-                    cursor.consume_token(&Token::Eq)?;
-                } else {
-                    cursor.consume_token(&Token::Colon)?;
-                }
-            }
-            _ => {
-                // `\alias name: expr` -> no type annotation, expr follows
-            }
+        let (tok, span) = cursor.expect_token("type name")?;
+        if let Token::Ident(type_name) = tok {
+            type_annotation = Some(TypeRef {
+                name: Ident::new(type_name, span),
+                span,
+            });
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                expected: "type name identifier".to_string(),
+                found: tok.to_string(),
+                span,
+            });
         }
-    } else if let Some((Token::Eq, _)) = cursor.peek_token()? {
-        cursor.consume_token(&Token::Eq)?;
-    } else {
-        return Err(ParseError::UnexpectedToken {
-            expected: "'=' or ':' after alias identifier".to_string(),
-            found: cursor
-                .peek_token()?
-                .map_or("EOF".to_string(), |(t, _)| t.to_string()),
-            span: name.span,
-        });
     }
+
+    cursor.consume_token(&Token::Eq)?;
 
     let value = parse_expr(cursor)?;
     let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
@@ -316,60 +257,40 @@ pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding
 }
 
 /// Parses a reactive state variable binding:
-/// `\state name = expr;`, `\state name: Type = expr;`, `\state name: Type: expr;`, or uninitialized `\state name: Type;` / `\state name;`
+/// `\state name: Type = expr;` or uninitialized `\state name: Type;`
 pub fn parse_state_binding(cursor: &mut ParserCursor<'_>) -> Result<StateBinding, ParseError> {
     let bs_span = cursor.consume_token(&Token::Backslash)?;
     let state_span = cursor.consume_token(&Token::State)?;
     let start_span = bs_span.merge(state_span);
     let name = parse_ident(cursor)?;
 
-    let mut type_annotation = None;
-    let mut default = None;
+    cursor.consume_token(&Token::Colon)?;
+    let (tok, type_span) = cursor.expect_token("type name")?;
+    let type_annotation = if let Token::Ident(type_name) = tok {
+        Some(TypeRef {
+            name: Ident::new(type_name, type_span),
+            span: type_span,
+        })
+    } else {
+        return Err(ParseError::UnexpectedToken {
+            expected: "type name identifier".to_string(),
+            found: tok.to_string(),
+            span: type_span,
+        });
+    };
 
-    if let Some((Token::Colon, _)) = cursor.peek_token()? {
-        cursor.consume_token(&Token::Colon)?;
-
-        let tok0 = cursor.peek_token()?.cloned();
-        let tok1 = cursor.peek_nth(1)?.cloned();
-
-        match (tok0, tok1) {
-            // `\state name: Type: expr` or `\state name: Type = expr`
-            (Some((Token::Ident(type_name), span0)), Some((Token::Colon, _)))
-            | (Some((Token::Ident(type_name), span0)), Some((Token::Eq, _)))
-                if type_name.chars().next().is_some_and(|c| c.is_uppercase()) =>
-            {
-                cursor.next_token()?; // consume type_name
-                type_annotation = Some(TypeRef {
-                    name: Ident::new(type_name, span0),
-                    span: span0,
-                });
-                if cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Eq) {
-                    cursor.consume_token(&Token::Eq)?;
-                } else {
-                    cursor.consume_token(&Token::Colon)?;
-                }
-                default = Some(parse_expr(cursor)?);
-            }
-            // `\state name: Type;` (uninitialized with type)
-            (Some((Token::Ident(type_name), span0)), Some((Token::Semicolon, _)))
-                if type_name.chars().next().is_some_and(|c| c.is_uppercase()) =>
-            {
-                cursor.next_token()?; // consume type_name
-                type_annotation = Some(TypeRef {
-                    name: Ident::new(type_name, span0),
-                    span: span0,
-                });
-            }
-            _ => {
-                // `\state name: expr` (no type annotation, expr follows)
-                default = Some(parse_expr(cursor)?);
-            }
-        }
-    } else if let Some((Token::Eq, _)) = cursor.peek_token()? {
-        // `\state name = expr`
+    let default = if let Some((Token::Eq, _)) = cursor.peek_token()? {
         cursor.consume_token(&Token::Eq)?;
-        default = Some(parse_expr(cursor)?);
-    }
+        Some(parse_expr(cursor)?)
+    } else if let Some((Token::Colon, colon_span)) = cursor.peek_token()?.cloned() {
+        return Err(ParseError::UnexpectedToken {
+            expected: "'=' or ';'".to_string(),
+            found: "':'".to_string(),
+            span: colon_span,
+        });
+    } else {
+        None
+    };
 
     let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
         cursor.consume_token(&Token::Semicolon)?

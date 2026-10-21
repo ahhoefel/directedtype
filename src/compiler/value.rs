@@ -120,15 +120,16 @@ impl Value {
 
     pub fn matches_type_name(&self, expected: &str) -> bool {
         match expected {
-            "Integer" | "Int" => matches!(self, Value::Integer(_)),
-            "Float" | "Number" => matches!(self, Value::Float(_) | Value::Integer(_)),
+            "Integer" => matches!(self, Value::Integer(_)),
+            "Float" => matches!(self, Value::Float(_) | Value::Integer(_)),
             "Distance" => matches!(self, Value::Distance(_) | Value::Integer(0)),
             "String" => matches!(self, Value::String(_)),
-            "Boolean" | "Bool" => matches!(self, Value::Bool(_)),
+            "Boolean" => matches!(self, Value::Bool(_)),
             "Color" => matches!(self, Value::Color(_)),
-            "Node" => matches!(self, Value::Node(_)),
+            "Node" | "ViewPort" => matches!(self, Value::Node(_)),
             custom => match self {
                 Value::Enum { enum_name, .. } => enum_name == custom,
+                Value::Node(_) => true,
                 _ => false,
             },
         }

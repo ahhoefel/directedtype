@@ -46,8 +46,8 @@ fn test_slider_component_drag_and_callback() {
     \use "components/Slider.dt"
 
     \Component Equalizer() {
-        \state bass: Float: 20;
-        \state treble: Float: 80;
+        \state bass: Float = 20;
+        \state treble: Float = 80;
 
         \Slider(
             x: 50px,

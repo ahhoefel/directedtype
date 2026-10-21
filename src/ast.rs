@@ -668,11 +668,11 @@ impl Literal {
 
     pub fn matches_type_name(&self, expected: &str) -> bool {
         match expected {
-            "Integer" | "Int" => matches!(self, Literal::Integer(..)),
-            "Float" | "Number" => matches!(self, Literal::Float(..) | Literal::Integer(..)),
+            "Integer" => matches!(self, Literal::Integer(..)),
+            "Float" => matches!(self, Literal::Float(..) | Literal::Integer(..)),
             "Distance" => matches!(self, Literal::Distance(..) | Literal::Integer(0, _)),
             "String" => matches!(self, Literal::String(..)),
-            "Boolean" | "Bool" => matches!(self, Literal::Bool(..)),
+            "Boolean" => matches!(self, Literal::Bool(..)),
             "Color" => matches!(self, Literal::Color(..)),
             custom => match self {
                 Literal::Enum(enum_name, ..) => enum_name == custom,
