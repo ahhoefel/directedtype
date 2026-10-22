@@ -4209,3 +4209,22 @@ fn test_next_sibling_reference_in_children_directive() {
     assert_eq!(rects[1].rect.height, 50.0);
     assert_eq!(rects[2].rect.height, 10.0);
 }
+
+#[test]
+fn test_rect_per_side_and_per_corner_radii() {
+    let input = r#"
+    \Rect(x: 0, y: 0, width: 50px, height: 30px, radius_left: 6px, radius_right: 0px, color: #ff0000)
+    \Rect(x: 60px, y: 0, width: 50px, height: 30px, radius_top_left: 4px, radius_bottom_right: 8px, color: #00ff00)
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("Should evaluate per-side and per-corner radii");
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+
+    let r0 = directedtype::compiler::layout::extract_corner_radii(&rects[0].properties);
+    assert_eq!(r0, (6.0, 0.0, 0.0, 6.0));
+
+    let r1 = directedtype::compiler::layout::extract_corner_radii(&rects[1].properties);
+    assert_eq!(r1, (4.0, 0.0, 8.0, 0.0));
+}
+

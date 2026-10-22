@@ -4,12 +4,12 @@ use std::ops::Range;
 use parley::layout::{AlignmentOptions, PositionedLayoutItem};
 use parley::style::{FontFamily, FontWeight, StyleProperty};
 use parley::{Alignment, FontContext, LayoutContext};
-use vello::kurbo::{Affine, Cap, Line, Rect, RoundedRect, Stroke};
+use vello::kurbo::{Affine, Cap, Line, Rect, RoundedRect, RoundedRectRadii, Stroke};
 use vello::peniko::{Brush, Color, Fill};
 use vello::Scene;
 
 use crate::compiler::expanded::NodeId;
-use crate::compiler::layout::ResolvedLayout;
+use crate::compiler::layout::{extract_corner_radii, ResolvedLayout};
 use crate::compiler::value::Value;
 use crate::render::color::{color_to_rgba8, parse_color};
 
@@ -519,12 +519,9 @@ pub fn build_scene(
                 _ => Color::TRANSPARENT,
             };
 
-            let radius = node
-                .properties
-                .get("radius")
-                .or_else(|| node.properties.get("corner_radius"))
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
+            let (tl, tr, br, bl) = extract_corner_radii(&node.properties);
+            let has_radius = tl > 0.0 || tr > 0.0 || br > 0.0 || bl > 0.0;
+            let radii = RoundedRectRadii::new(tl, tr, br, bl);
 
             let x0 = node.rect.x;
             let y0 = node.rect.y;
@@ -532,8 +529,8 @@ pub fn build_scene(
             let y1 = y0 + node.rect.height;
 
             if color.components[3] > 0.0 {
-                if radius > 0.0 {
-                    let rrect = RoundedRect::new(x0, y0, x1, y1, radius);
+                if has_radius {
+                    let rrect = RoundedRect::new(x0, y0, x1, y1, radii);
                     active_scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(color), None, &rrect);
                 } else {
                     let rect = Rect::new(x0, y0, x1, y1);
@@ -561,8 +558,8 @@ pub fn build_scene(
                     .unwrap_or(Color::BLACK);
 
                 let stroke = Stroke::new(stroke_width);
-                if radius > 0.0 {
-                    let rrect = RoundedRect::new(x0, y0, x1, y1, radius);
+                if has_radius {
+                    let rrect = RoundedRect::new(x0, y0, x1, y1, radii);
                     active_scene.stroke(&stroke, Affine::IDENTITY, Brush::Solid(stroke_color), None, &rrect);
                 } else {
                     let rect = Rect::new(x0, y0, x1, y1);

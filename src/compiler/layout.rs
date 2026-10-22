@@ -87,15 +87,72 @@ impl Rect {
     }
 }
 
-/// Tests whether a point is inside a rectangle with an optional corner radius.
-pub fn rounded_rect_contains(rect: &Rect, radius: f64, point: Point) -> bool {
+/// Extracts per-corner radii `(top_left, top_right, bottom_right, bottom_left)` from node properties.
+pub fn extract_corner_radii(properties: &HashMap<String, Value>) -> (f64, f64, f64, f64) {
+    let get_prop = |k1: &str, k2: &str| -> Option<f64> {
+        properties
+            .get(k1)
+            .or_else(|| properties.get(k2))
+            .and_then(|v| v.as_f64())
+    };
+    let base = get_prop("radius", "corner_radius").unwrap_or(0.0);
+    let mut tl = base;
+    let mut tr = base;
+    let mut br = base;
+    let mut bl = base;
+
+    if let Some(left) = get_prop("radius_left", "left_radius") {
+        tl = left;
+        bl = left;
+    }
+    if let Some(right) = get_prop("radius_right", "right_radius") {
+        tr = right;
+        br = right;
+    }
+    if let Some(top) = get_prop("radius_top", "top_radius") {
+        tl = top;
+        tr = top;
+    }
+    if let Some(bottom) = get_prop("radius_bottom", "bottom_radius") {
+        bl = bottom;
+        br = bottom;
+    }
+
+    if let Some(v) = get_prop("radius_top_left", "top_left_radius") {
+        tl = v;
+    }
+    if let Some(v) = get_prop("radius_top_right", "top_right_radius") {
+        tr = v;
+    }
+    if let Some(v) = get_prop("radius_bottom_right", "bottom_right_radius") {
+        br = v;
+    }
+    if let Some(v) = get_prop("radius_bottom_left", "bottom_left_radius") {
+        bl = v;
+    }
+
+    (tl.max(0.0), tr.max(0.0), br.max(0.0), bl.max(0.0))
+}
+
+/// Tests whether a point is inside a rectangle with per-corner radii `(tl, tr, br, bl)`.
+pub fn rounded_rect_radii_contains(
+    rect: &Rect,
+    radii: (f64, f64, f64, f64),
+    point: Point,
+) -> bool {
     if !rect.contains_point(point) {
         return false;
     }
-    if radius <= 0.0 {
+    let (tl, tr, br, bl) = radii;
+    if tl <= 0.0 && tr <= 0.0 && br <= 0.0 && bl <= 0.0 {
         return true;
     }
-    let r = radius.min(rect.width / 2.0).min(rect.height / 2.0);
+    let max_r = (rect.width / 2.0).min(rect.height / 2.0);
+    let r_tl = tl.min(max_r);
+    let r_tr = tr.min(max_r);
+    let r_br = br.min(max_r);
+    let r_bl = bl.min(max_r);
+
     let px = point.x;
     let py = point.y;
     let x0 = rect.x;
@@ -103,22 +160,33 @@ pub fn rounded_rect_contains(rect: &Rect, radius: f64, point: Point) -> bool {
     let x1 = rect.x + rect.width;
     let y1 = rect.y + rect.height;
 
-    // Fast-path: if the point is within the inner cross bands, it is inside the rounded rect.
-    if (px >= x0 + r && px <= x1 - r) || (py >= y0 + r && py <= y1 - r) {
-        return true;
+    if px < x0 + r_tl && py < y0 + r_tl {
+        let dx = px - (x0 + r_tl);
+        let dy = py - (y0 + r_tl);
+        return dx * dx + dy * dy <= r_tl * r_tl;
+    }
+    if px > x1 - r_tr && py < y0 + r_tr {
+        let dx = px - (x1 - r_tr);
+        let dy = py - (y0 + r_tr);
+        return dx * dx + dy * dy <= r_tr * r_tr;
+    }
+    if px > x1 - r_br && py > y1 - r_br {
+        let dx = px - (x1 - r_br);
+        let dy = py - (y1 - r_br);
+        return dx * dx + dy * dy <= r_br * r_br;
+    }
+    if px < x0 + r_bl && py > y1 - r_bl {
+        let dx = px - (x0 + r_bl);
+        let dy = py - (y1 - r_bl);
+        return dx * dx + dy * dy <= r_bl * r_bl;
     }
 
-    // Determine which corner quadrant the point is in:
-    let (cx, cy) = match (px < x0 + r, py < y0 + r) {
-        (true, true) => (x0 + r, y0 + r),       // Top-left
-        (false, true) => (x1 - r, y0 + r),      // Top-right
-        (true, false) => (x0 + r, y1 - r),      // Bottom-left
-        (false, false) => (x1 - r, y1 - r),    // Bottom-right
-    };
+    true
+}
 
-    let dx = px - cx;
-    let dy = py - cy;
-    dx * dx + dy * dy <= r * r
+/// Tests whether a point is inside a rectangle with an optional uniform corner radius.
+pub fn rounded_rect_contains(rect: &Rect, radius: f64, point: Point) -> bool {
+    rounded_rect_radii_contains(rect, (radius, radius, radius, radius), point)
 }
 
 /// A resolved visual element with concrete spatial boundaries and computed properties.
@@ -332,14 +400,13 @@ impl ResolvedLayout {
                     let y = get_box_val("y");
                     let w = get_box_val("width");
                     let h = get_box_val("height");
-                    let radius = self
-                        .get_value(box_id, "radius")
-                        .or_else(|| self.get_value(box_id, "corner_radius"))
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.0);
+                    let radii = self
+                        .get_node(box_id)
+                        .map(|n| extract_corner_radii(&n.properties))
+                        .unwrap_or((0.0, 0.0, 0.0, 0.0));
 
                     let clip_rect = Rect::new(x, y, w, h);
-                    if !rounded_rect_contains(&clip_rect, radius, point) {
+                    if !rounded_rect_radii_contains(&clip_rect, radii, point) {
                         return false;
                     }
                 }
@@ -380,12 +447,7 @@ impl ResolvedLayout {
             let test_point = Point::new(point.x + sx, point.y + sy);
 
             // Check primitive geometry
-            let radius = node
-                .properties
-                .get("radius")
-                .or_else(|| node.properties.get("corner_radius"))
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
+            let radii = extract_corner_radii(&node.properties);
 
             if !node.fragments.is_empty() {
                 let hits_fragment = node.fragments.iter().any(|frag| {
@@ -395,7 +457,7 @@ impl ResolvedLayout {
                 if !hits_fragment {
                     continue;
                 }
-            } else if !rounded_rect_contains(&node.rect, radius, test_point) {
+            } else if !rounded_rect_radii_contains(&node.rect, radii, test_point) {
                 continue;
             }
 
