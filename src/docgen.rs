@@ -225,7 +225,7 @@ pub fn compute_render_geometry(layout: &ResolvedLayout, opts: &DocBlockOptions) 
 
     let mut found_any = false;
     for node in &layout.nodes {
-        if !node.is_paint_primitive() {
+        if !node.is_paint_primitive() && node.name != "PadOut" && node.name != "Box" {
             continue;
         }
         let half_border = if node.name == "Rect" {
