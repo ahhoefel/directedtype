@@ -557,18 +557,137 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         }
     }
 
-    // Pre-register uninitialized let and env items
-    for item in &doc.items {
-        match item {
-            Item::Let(l) if l.value.is_none() => {
-                global_scope.insert(l.name.as_str().to_string(), LexicalBinding::Uninitialized);
-                global_env_scope.insert(l.name.as_str().to_string(), EnvEntry::Tombstone);
+    let all_doc_lets = collect_all_document_lets(doc);
+    let mut all_doc_let_names: HashSet<String> = HashSet::new();
+    for l in &all_doc_lets {
+        let let_name = l.name.as_str().to_string();
+        if let_name == "parent" || let_name == "window" || let_name == "self" {
+            return Err(CompileError::ReservedPort {
+                node: "Document".to_string(),
+                port: let_name,
+                span: l.name.span,
+            });
+        }
+        if declared_top_states.contains_key(&let_name)
+            || expanded_doc.window_ports.contains_key(&let_name)
+            || all_doc_let_names.contains(&let_name)
+        {
+            return Err(CompileError::DuplicatePort {
+                node: "Document".to_string(),
+                port: let_name,
+                span: l.name.span,
+            });
+        }
+        all_doc_let_names.insert(let_name);
+    }
+
+    // Validate component declarations (aliases, states, lets, envs) across all registered components
+    for overloads in registry.values() {
+        for comp_def in overloads {
+            let mut comp_aliases = HashSet::new();
+            for a in collect_all_component_aliases(comp_def) {
+                let alias_name = a.name.as_str().to_string();
+                if alias_name == "parent" {
+                    return Err(CompileError::ReservedPort {
+                        node: comp_def.name.as_str().to_string(),
+                        port: "parent".to_string(),
+                        span: a.name.span,
+                    });
+                }
+                if comp_def.params.iter().any(|p| p.name.as_str() == alias_name)
+                    || !comp_aliases.insert(alias_name.clone())
+                {
+                    return Err(CompileError::DuplicatePort {
+                        node: comp_def.name.as_str().to_string(),
+                        port: alias_name,
+                        span: a.name.span,
+                    });
+                }
             }
-            Item::Env(e) if e.value.is_none() => {
+            let mut comp_states = HashSet::new();
+            for item in &comp_def.body {
+                if let ComponentBodyItem::State(s) = item {
+                    let state_name = s.name.as_str().to_string();
+                    if state_name == "parent" {
+                        return Err(CompileError::ReservedPort {
+                            node: comp_def.name.as_str().to_string(),
+                            port: "parent".to_string(),
+                            span: s.name.span,
+                        });
+                    }
+                    if comp_def.params.iter().any(|p| p.name.as_str() == state_name)
+                        || comp_aliases.contains(&state_name)
+                        || !comp_states.insert(state_name.clone())
+                    {
+                        return Err(CompileError::DuplicatePort {
+                            node: comp_def.name.as_str().to_string(),
+                            port: state_name,
+                            span: s.name.span,
+                        });
+                    }
+                }
+            }
+            let mut comp_lets = HashSet::new();
+            for l in collect_all_component_lets(comp_def) {
+                let let_name = l.name.as_str().to_string();
+                if let_name == "parent" {
+                    return Err(CompileError::ReservedPort {
+                        node: comp_def.name.as_str().to_string(),
+                        port: "parent".to_string(),
+                        span: l.name.span,
+                    });
+                }
+                if comp_aliases.contains(&let_name)
+                    || comp_states.contains(&let_name)
+                    || !comp_lets.insert(let_name.clone())
+                {
+                    return Err(CompileError::DuplicatePort {
+                        node: comp_def.name.as_str().to_string(),
+                        port: let_name,
+                        span: l.name.span,
+                    });
+                }
+            }
+            let mut comp_envs = HashSet::new();
+            for item in &comp_def.body {
+                if let ComponentBodyItem::Env(e) = item {
+                    let env_name = e.name.as_str().to_string();
+                    if env_name == "parent" {
+                        return Err(CompileError::ReservedPort {
+                            node: comp_def.name.as_str().to_string(),
+                            port: "parent".to_string(),
+                            span: e.name.span,
+                        });
+                    }
+                    if comp_aliases.contains(&env_name)
+                        || comp_states.contains(&env_name)
+                        || comp_lets.contains(&env_name)
+                        || !comp_envs.insert(env_name.clone())
+                    {
+                        return Err(CompileError::DuplicatePort {
+                            node: comp_def.name.as_str().to_string(),
+                            port: env_name,
+                            span: e.name.span,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Pre-register uninitialized let and env items
+    for l in &all_doc_lets {
+        if l.value.is_none() {
+            global_scope.insert(l.name.as_str().to_string(), LexicalBinding::Uninitialized);
+            global_env_scope.insert(l.name.as_str().to_string(), EnvEntry::Tombstone);
+        }
+    }
+    for item in &doc.items {
+        if let Item::Env(e) = item {
+            if e.value.is_none() {
                 global_scope.insert(e.name.as_str().to_string(), LexicalBinding::Uninitialized);
                 global_env_scope.insert(e.name.as_str().to_string(), EnvEntry::Tombstone);
             }
-            _ => {}
         }
     }
 
@@ -1029,37 +1148,75 @@ pub fn collect_all_component_aliases<'a>(comp_def: &'a ComponentDef) -> Vec<&'a 
     aliases
 }
 
+fn collect_expr_lets<'a>(expr: &'a Expr, out: &mut Vec<&'a LetBinding>) {
+    match expr {
+        Expr::Node(elem) => collect_element_lets(elem, out),
+        Expr::Binary(b) => {
+            collect_expr_lets(&b.left, out);
+            collect_expr_lets(&b.right, out);
+        }
+        Expr::Unary(u) => collect_expr_lets(&u.operand, out),
+        Expr::Paren(p, _) => collect_expr_lets(p, out),
+        Expr::Ternary(t) => {
+            collect_expr_lets(&t.condition, out);
+            collect_expr_lets(&t.then_expr, out);
+            collect_expr_lets(&t.else_expr, out);
+        }
+        Expr::Call(c) => {
+            for a in &c.args {
+                collect_expr_lets(a, out);
+            }
+        }
+        Expr::MethodCall(m) => {
+            collect_expr_lets(&m.target, out);
+            for a in &m.args {
+                collect_expr_lets(a, out);
+            }
+        }
+        Expr::MemberAccess(m) => collect_expr_lets(&m.target, out),
+        Expr::Literal(_) | Expr::Ident(_) => {}
+    }
+}
+
+fn collect_element_lets<'a>(elem: &'a ElementNode, out: &mut Vec<&'a LetBinding>) {
+    for port in &elem.ports {
+        collect_expr_lets(&port.expr, out);
+    }
+    if let Some(content) = &elem.content {
+        collect_nested_lets(&content.items, out);
+    }
+}
+
 fn collect_nested_lets<'a>(items: &'a [ContentItem], out: &mut Vec<&'a LetBinding>) {
     for item in items {
         match item {
             ContentItem::Let(l) => {
                 out.push(l);
-                if let Some(LetValue::Node(n)) = &l.value {
-                    if let Some(content) = &n.content {
-                        collect_nested_lets(&content.items, out);
-                    }
-                    for port in &n.ports {
-                        if let Expr::Node(elem) = &port.expr {
-                            if let Some(content) = &elem.content {
-                                collect_nested_lets(&content.items, out);
-                            }
-                        }
-                    }
+                match &l.value {
+                    Some(LetValue::Node(n)) => collect_element_lets(n, out),
+                    Some(LetValue::Expr(e)) => collect_expr_lets(e, out),
+                    None => {}
                 }
             }
-            ContentItem::Node(n) => {
-                if let Some(content) = &n.content {
-                    collect_nested_lets(&content.items, out);
-                }
-                for port in &n.ports {
-                    if let Expr::Node(elem) = &port.expr {
-                        if let Some(content) = &elem.content {
-                            collect_nested_lets(&content.items, out);
-                        }
-                    }
+            ContentItem::Node(n) => collect_element_lets(n, out),
+            ContentItem::Env(e) => {
+                if let Some(expr) = &e.value {
+                    collect_expr_lets(expr, out);
                 }
             }
-            _ => {}
+            ContentItem::Alias(a) => collect_expr_lets(&a.value, out),
+            ContentItem::State(s) => {
+                if let Some(expr) = &s.default {
+                    collect_expr_lets(expr, out);
+                }
+            }
+            ContentItem::Children(c) => {
+                for port in &c.ports {
+                    collect_expr_lets(&port.expr, out);
+                }
+            }
+            ContentItem::Assert(a) => collect_expr_lets(&a.condition, out),
+            ContentItem::Text(_) => {}
         }
     }
 }
@@ -1067,6 +1224,35 @@ fn collect_nested_lets<'a>(items: &'a [ContentItem], out: &mut Vec<&'a LetBindin
 pub fn collect_all_component_lets<'a>(comp_def: &'a ComponentDef) -> Vec<&'a LetBinding> {
     let mut lets = Vec::new();
     collect_nested_lets(&comp_def.body, &mut lets);
+    lets
+}
+
+pub fn collect_all_document_lets<'a>(doc: &'a Document) -> Vec<&'a LetBinding> {
+    let mut lets = Vec::new();
+    for item in &doc.items {
+        match item {
+            Item::Let(l) => {
+                lets.push(l);
+                match &l.value {
+                    Some(LetValue::Node(n)) => collect_element_lets(n, &mut lets),
+                    Some(LetValue::Expr(e)) => collect_expr_lets(e, &mut lets),
+                    None => {}
+                }
+            }
+            Item::Node(n) => collect_element_lets(n, &mut lets),
+            Item::Env(e) => {
+                if let Some(expr) = &e.value {
+                    collect_expr_lets(expr, &mut lets);
+                }
+            }
+            Item::State(s) => {
+                if let Some(expr) = &s.default {
+                    collect_expr_lets(expr, &mut lets);
+                }
+            }
+            Item::Component(_) | Item::Use(_) | Item::Enum(_) => {}
+        }
+    }
     lets
 }
 
@@ -1545,6 +1731,13 @@ fn expand_component_instance(
                 });
             }
             if declared_states.contains_key(&env_name) {
+                return Err(CompileError::DuplicatePort {
+                    node: comp_def.name.as_str().to_string(),
+                    port: env_name,
+                    span: e.name.span,
+                });
+            }
+            if all_let_names.contains(&env_name) {
                 return Err(CompileError::DuplicatePort {
                     node: comp_def.name.as_str().to_string(),
                     port: env_name,

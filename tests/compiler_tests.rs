@@ -4104,3 +4104,83 @@ fn test_strict_static_typing_and_number_removal() {
     assert_eq!(layout.nodes.len(), 2);
 }
 
+#[test]
+fn test_let_redefinition_errors() {
+    // 1. Top-level node \let redefinition
+    let dup_top_node_let = r#"
+    \let end = \Rect(x: 0, y: 64px, width: 100px, height: 40px, color: #000)
+    \let end = \Rect(x: 0, y: 128px, width: 100px, height: 40px, color: #000)
+    "#;
+    let err1 = compile_to_graph(&parse(dup_top_node_let).unwrap())
+        .expect_err("Should reject duplicate top-level node \\let");
+    assert!(
+        matches!(err1, CompileError::DuplicatePort { ref node, ref port, .. } if node == "Document" && port == "end"),
+        "Expected DuplicatePort for 'end' on 'Document', got: {:?}",
+        err1
+    );
+
+    // 2. Top-level scalar \let redefinition
+    let dup_top_expr_let = r#"
+    \let spacing = 10px;
+    \let spacing = 20px;
+    \Rect(x: spacing, y: 0, width: 50px, height: 50px, color: #000)
+    "#;
+    let err2 = compile_to_graph(&parse(dup_top_expr_let).unwrap())
+        .expect_err("Should reject duplicate top-level expr \\let");
+    assert!(
+        matches!(err2, CompileError::DuplicatePort { ref node, ref port, .. } if node == "Document" && port == "spacing"),
+        "Expected DuplicatePort for 'spacing' on 'Document', got: {:?}",
+        err2
+    );
+
+    // 3. Top-level \let redefined inside nested content block
+    let dup_nested_doc_let = r#"
+    \Component Container {
+        \Children(x: 0, y: 0)
+    }
+    \let item = \Rect(x: 0, y: 0, width: 50px, height: 50px, color: #000)
+    \Container {
+        \let item = \Rect(x: 0, y: 60px, width: 50px, height: 50px, color: #000)
+    }
+    "#;
+    let err3 = compile_to_graph(&parse(dup_nested_doc_let).unwrap())
+        .expect_err("Should reject nested \\let redefining top-level \\let");
+    assert!(
+        matches!(err3, CompileError::DuplicatePort { ref node, ref port, .. } if node == "Document" && port == "item"),
+        "Expected DuplicatePort for 'item' on 'Document', got: {:?}",
+        err3
+    );
+
+    // 4. Component local \let redefinition (even when component is not instantiated)
+    let dup_comp_let = r#"
+    \Component Card() {
+        \let pad = 10px;
+        \let pad = 20px;
+        \Rect(x: pad, y: 0, width: 50px, height: 50px, color: #000)
+    }
+    "#;
+    let err4 = compile_to_graph(&parse(dup_comp_let).unwrap())
+        .expect_err("Should reject duplicate \\let inside component");
+    assert!(
+        matches!(err4, CompileError::DuplicatePort { ref node, ref port, .. } if node == "Card" && port == "pad"),
+        "Expected DuplicatePort for 'pad' on 'Card', got: {:?}",
+        err4
+    );
+
+    // 5. Shadowing a component parameter once with \let is allowed, but redefining it a second time is an error
+    let dup_param_shadow_let = r#"
+    \Component Box(x: Distance = 10px) {
+        \let x = self.x + 10px;
+        \let x = 50px;
+        \Rect(x: x, y: 0, width: 50px, height: 50px, color: #000)
+    }
+    \Box()
+    "#;
+    let err5 = compile_to_graph(&parse(dup_param_shadow_let).unwrap())
+        .expect_err("Should reject shadowing parameter twice with \\let");
+    assert!(
+        matches!(err5, CompileError::DuplicatePort { ref node, ref port, .. } if node == "Box" && port == "x"),
+        "Expected DuplicatePort for 'x' on 'Box', got: {:?}",
+        err5
+    );
+}
