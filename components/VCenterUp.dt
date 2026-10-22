@@ -16,10 +16,10 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x,
         y: y + max(0, (height - child.height) / 2)
-    }
+    )
 }
 
 // 2. Fluid Height VCenterUp with explicit origin
@@ -37,10 +37,10 @@
     \alias height = resolved_height;
     \alias bottom = y + resolved_height;
 
-    \Children {
+    \Children(
         x: x,
         y: y + max(0, (available_height - child.height) / 2)
-    }
+    )
 }
 
 // 3. Fluid Parent-Fitting VCenterUp with explicit x
@@ -58,10 +58,10 @@
     \alias y = parent.top;
     \alias bottom = parent.top + resolved_height;
 
-    \Children {
+    \Children(
         x: x,
         y: y + max(0, (available_height - child.height) / 2)
-    }
+    )
 }
 
 // 4. Fluid Parent-Fitting VCenterUp
@@ -78,9 +78,9 @@
     \alias right = x + width;
     \alias bottom = parent.top + resolved_height;
 
-    \Children {
+    \Children(
         x: x,
         y: y + max(0, (available_height - child.height) / 2)
-    }
+    )
 }
 

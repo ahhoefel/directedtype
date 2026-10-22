@@ -3,9 +3,9 @@
 }
 
 \Component Bar(env color: Color) {
-    \Children {
+    \Children(
         color: color
-    }
+    )
 }
 
 \Foo(color: #F00) {

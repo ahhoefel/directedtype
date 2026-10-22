@@ -91,10 +91,10 @@ fn save_golden_or_preview(img: &image::RgbaImage, name: &str) {
 fn test_headless_render_layout_to_image() {
     let source = r#"
 \Component Flow(x: Distance = 0, y: Distance = 0, gap: Distance = 16px) {
-    \Children {
+    \Children(
         x: left,
         y: prev ? prev.bottom + gap : top
-    }
+    )
 }
 
 \Flow(gap: 20px) {
@@ -149,10 +149,10 @@ fn test_headless_render_to_png_file() {
         color: bg_color,
         radius: 8px
     )
-    \Children {
+    \Children(
         x: x + 16px,
         y: y + 16px
-    }
+    )
 }
 
 \ShadedBox(bg_color: #224488) {
@@ -228,11 +228,11 @@ fn test_viewer_hot_reload_document() {
     // 4. Cyclic dependency version: Must not crash, must retain last valid layout
     let v_cycle = r#"
 \Component ParadoxBox(width: max(children.width)) {
-  \Children {
+  \Children(
     x: 0,
     y: 0,
     width: parent.width
-  }
+  )
 }
 
 \ParadoxBox {

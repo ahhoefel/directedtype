@@ -129,17 +129,17 @@ pub fn parse_port_list(cursor: &mut ParserCursor<'_>) -> Result<(Vec<PortBinding
     Ok((ports, span))
 }
 
-/// Parses the `\Children [ { ... } ]` directive with port bindings.
+/// Parses the `\Children [ ( ... ) ]` directive with port bindings.
 pub fn parse_children_directive(cursor: &mut ParserCursor<'_>) -> Result<ChildrenDirective, ParseError> {
     let slash_span = cursor.consume_token(&Token::Backslash)?;
     let children_span = cursor.consume_token(&Token::Children)?;
 
-    if let Some((Token::LBrace, _)) = cursor.peek_token()? {
-        cursor.consume_token(&Token::LBrace)?;
+    if let Some((Token::LParen, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::LParen)?;
 
         let mut ports = Vec::new();
         while let Some((tok, _)) = cursor.peek_token()? {
-            if tok == &Token::RBrace {
+            if tok == &Token::RParen {
                 break;
             }
             ports.push(parse_port_binding(cursor)?);
@@ -148,8 +148,8 @@ pub fn parse_children_directive(cursor: &mut ParserCursor<'_>) -> Result<Childre
             }
         }
 
-        let rbrace_span = cursor.consume_token(&Token::RBrace)?;
-        let span = slash_span.merge(rbrace_span);
+        let rparen_span = cursor.consume_token(&Token::RParen)?;
+        let span = slash_span.merge(rparen_span);
         Ok(ChildrenDirective { ports, span })
     } else {
         let span = slash_span.merge(children_span);

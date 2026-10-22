@@ -18,7 +18,7 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: is_center ? (x + (width - child.width) / 2) : (
             is_right ? (x + width - child.width) : (
                 x
@@ -26,7 +26,7 @@
         ),
         y: prev ? prev.bottom + gap : y,
         text_align: align
-    }
+    )
 }
 
 // 2. Explicit Fixed Width & Intrinsic Height VStack: zero references to parent.width
@@ -44,7 +44,7 @@
     \alias height = sum(children.height) + max(0, children.len - 1) * gap;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: is_center ? (x + (width - child.width) / 2) : (
             is_right ? (x + width - child.width) : (
                 x
@@ -52,7 +52,7 @@
         ),
         y: prev ? prev.bottom + gap : y,
         text_align: align
-    }
+    )
 }
 
 // 3. Intrinsic Shrink-Wrapping Width VStack: wraps width to widest child
@@ -72,7 +72,7 @@
     \alias height = sum(children.height) + max(0, children.len - 1) * gap;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: is_center ? (x + (max_child_width - child.width) / 2) : (
             is_right ? (x + max_child_width - child.width) : (
                 x
@@ -80,6 +80,6 @@
         ),
         y: prev ? prev.bottom + gap : y,
         text_align: align
-    }
+    )
 }
 

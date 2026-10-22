@@ -1,6 +1,7 @@
 pub mod ast;
 pub mod compiler;
 pub mod component;
+pub mod docgen;
 pub mod dom;
 pub mod error;
 pub mod inspector;

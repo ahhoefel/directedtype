@@ -39,11 +39,11 @@
 
     \let inner_width = width - (2 * style.padding_x);
 
-    \Children {
+    \Children(
         x: left + style.padding_x,
         y: prev ? prev.bottom + gap : top + style.padding_y,
         width: inner_width
-    }
+    )
 }
 
 // 2. Fluid / Parent-Filling Card: automatically spans parent width
@@ -84,9 +84,9 @@
 
     \let inner_width = resolved_width - (2 * style.padding_x);
 
-    \Children {
+    \Children(
         x: left + style.padding_x,
         y: prev ? prev.bottom + gap : top + style.padding_y,
         width: inner_width
-    }
+    )
 }

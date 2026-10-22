@@ -15,10 +15,10 @@ fn test_spec_shaded_box_component() {
         color: bg_color
       )
       
-      \Children {
+      \Children(
         x: x + 16,
         y: y + 16
-      }
+      )
     }
     "#;
 
@@ -104,10 +104,10 @@ fn test_spec_shaded_box_component() {
 fn test_spec_flow_component() {
     let input = r#"
     \Component Flow(gap: Distance = 16px) {
-      \Children {
+      \Children(
         x: parent.left,
         y: prev ? prev.bottom + gap : parent.top
-      }
+      )
     }
     "#;
 
@@ -457,10 +457,10 @@ fn test_full_document_with_components_and_nodes() {
     let input = r#"
     // Component definition
     \Component Flow(gap: Float = 16) {
-      \Children {
+      \Children(
         x: parent.left,
         y: prev ? prev.bottom + gap : parent.top
-      }
+      )
     }
 
     /* Node invocation applying the flow */
@@ -753,9 +753,9 @@ fn test_parse_env_declarations_and_uninitialized_tombstones() {
 fn test_parse_env_member_access() {
     let input = r#"
     \Foo(color: env.color) {
-        \Children {
+        \Children(
             bg: env.card_bg
-        }
+        )
     }
 
     \let is_dark = env.theme == "dark" ? true : false;

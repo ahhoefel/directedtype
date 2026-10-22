@@ -95,7 +95,7 @@ Every property, parameter, and local binding in DirectedType has a single static
 ### Strict Compile-Time Typing & `:` vs. `=` Syntax
 
 DirectedType enforces a uniform convention across the language:
-* **`:` (Colon)** is used strictly for **type annotations** (`name: Type`) and **passing port arguments** at element instantiation sites (`\Rect(x: 10px, y: 20px)` or `\Children { x: left }`).
+* **`:` (Colon)** is used strictly for **type annotations** (`name: Type`) and **passing port arguments** at element instantiation sites (`\Rect(x: 10px, y: 20px)` or `\Children(x: left)`).
 * **`=` (Equals)** is used strictly for **default values and value assignments** (`= expr`).
 
 | Construct | Syntax | Type Annotation Rule |
@@ -134,17 +134,17 @@ Understanding which implicit variables are in scope at each point in a `.dt` fil
 
 1. **Top-Level Document Scope**: Outside any `\Component`, at the root of a `.dt` file.
 2. **Component Body Scope**: Inside `\Component Name(...) { ... }`.
-3. **Ambient `\Children` Scope**: Inside a `\Children { ... }` block within a `\Component`.
+3. **Ambient `\Children` Scope**: Inside a `\Children(...)` directive within a `\Component`.
 4. **Element Instance Scope**: Inside the port list `\Elem(port: expr, ...)` or body of an instantiated element.
 
 ### 3.1 Summary of Implicit Variables by Scope
 
-| Variable / Keyword | Top-Level Document | `\Component` Signature & Directives (`\let`, `\alias`, `\env`, `\assert`) | `\Children { ... }` Block | Internal Elements in `\Component` | Caller Element Instance `\Elem(...)` | Description |
+| Variable / Keyword | Top-Level Document | `\Component` Signature & Directives (`\let`, `\alias`, `\env`, `\assert`) | `\Children(...)` Directive | Internal Elements in `\Component` | Caller Element Instance `\Elem(...)` | Description |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | `window` | Yes | Yes | Yes | Yes | Yes | The root viewport container node (`NodeId::WINDOW`). |
-| `parent` | Resolves to `window` | Enclosing caller parent | **Error** (use bare component properties) | **Error** (use bare component properties) | Immediate parent container | The enclosing parent container in the expanded hierarchy. |
+| `parent` | Resolves to `window` | Enclosing caller parent | Immediate parent of `\Children` (the component or nested `\Bar` wrapping `\Children`) | Immediate parent of the element (the component or nested `\Bar` wrapping it) | Immediate parent container | The enclosing parent container in the expanded hierarchy. Supports chaining (`parent.parent.x`). |
 | `self.<port>` | **Error** | Shadowed port or `on_*` method only | Shadowed port or `on_*` method only | Shadowed port on component, or `on_*` method on element | `on_*` method on element only | Uncovers a component port shadowed by a local `\let` or `\env`, or binds an `on_*` event to the target element's own method (`self.act`) rather than the enclosing component's method (`act`). |
-| `child` | **Error** | **Error** | **Each child** receiving the default | **Error** | **Error** | Only valid in `\Children { ... }`, where it refers to the specific child node being configured (e.g., `child.width`). |
+| `child` | **Error** | **Error** | **Each child** receiving the default | **Error** | **Error** | Only valid in `\Children(...)`, where it refers to the specific child node being configured (e.g., `child.width`). |
 | `prev` | Previous top-level sibling | — | **Previous sibling** of each child | Previous sibling in component body | Previous sibling in the same block | Refers to the immediately preceding sibling node (or `None` for the first child). |
 | `children` | — | Direct children passed by caller | Direct children passed by caller | — | Direct children inside `{ ... }` | Collection pseudo-variable used in aggregates (`sum(children.height)`) and `children.len`. |
 | `children.len` | `0` | Number of caller children | Number of caller children | Number of element's children | Number of direct children | Compile-time `Integer` literal equal to the count of direct children. |
@@ -171,10 +171,10 @@ Because component ports and parameters resolve directly as bare identifiers ever
 Because layout is a static DAG rather than an imperative loop, sequential flow layouts (like vertical or horizontal stacks) use the `prev` keyword inside a ternary expression:
 
 ```dt
-\Children {
+\Children(
     x: left,
     y: prev ? prev.bottom + gap : top
-}
+)
 ```
 * For the **first child** (`index == 0`), `prev` does not exist, so `prev ? ... : ...` statically expands to the `else` branch (`top`).
 * For **subsequent children** (`index > 0`), `prev` resolves to the `NodeId` of child `index - 1`, so the expression expands to `child_{i-1}.bottom + gap`.
@@ -565,11 +565,11 @@ Components encapsulate reusable layout topologies, state, and subtrees. Every co
 
     \Rect(x: x, y: y, width: width, height: height, color: bg, radius: 8px)
 
-    \Children {
+    \Children(
         x: x + padding,
         y: y + padding,
         width: inner_width
-    }
+    )
 
     \alias height = only(children.height) + 2 * padding;
     \alias right = x + width;
@@ -639,18 +639,19 @@ Inside a `\Component`, there is a strict distinction between private internal va
 
 ### 6.6 Ambient Child Defaults (`\Children`)
 
-A component places caller-provided children into its hierarchy using `\Children`. If `\Children` includes a `{ port: expr, ... }` block, those port equations are injected as **default ports** onto every direct child node that does not explicitly override them:
+A component places caller-provided children into its hierarchy using `\Children`. If `\Children` includes a `(port: expr, ...)` argument list, those port equations are injected as **default ports** onto every direct child node that does not explicitly override them:
 
 ```dt
-\Children {
+\Children(
     x: left,
     y: prev ? prev.bottom + gap : top
-}
+)
 ```
 
-Inside a `\Children { ... }` block:
-* The enclosing component's parameters, `\let`s, `\alias`es, `\state`s, and synthesized ports (`left`, `top`, `right`, `bottom`, `clip`) are referenced directly as **bare identifiers** (`parent` is not allowed inside `\Children`, and `self.<port>` is only allowed when `<port>` is shadowed by a local `\let` or `\env`).
-* `child` refers to the individual child receiving the port (allowing alignment formulas like `left + (width - child.width) / 2`). `child` is **only** valid inside `\Children { ... }`.
+Inside a `\Children(...)` directive:
+* The enclosing component's parameters, `\let`s, `\alias`es, `\state`s, and synthesized ports (`left`, `top`, `right`, `bottom`, `clip`) can be referenced directly as **bare identifiers**.
+* `parent` refers to the immediate parent node around `\Children(...)`—for example, in `\Component MyComp() { \Children(x: parent.x) }`, `parent` refers to `\MyComp` (and `parent.parent` refers to the parent of `\MyComp`), while in `\Component MyComp() { \Bar { \Children(x: parent.x) } }`, `parent` refers to `\Bar` (and `parent.parent` refers to `\MyComp`). Similarly, on internal elements such as `\Component MyComp() { \Bar { \Foo(x: parent.x) } }`, `parent` on `\Foo` refers to `\Bar`.
+* `child` refers to the individual child receiving the port (allowing alignment formulas like `left + (width - child.width) / 2`). `child` is **only** valid inside `\Children(...)`.
 * `prev` refers to the child's immediately preceding sibling.
 
 ---

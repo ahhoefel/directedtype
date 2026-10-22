@@ -180,6 +180,12 @@ impl HeadlessRenderer {
             .ok_or_else(|| RenderError::ImageBuffer("Failed to create RgbaImage from buffer".into()))
     }
 
+    /// Clears the internal text and clip scene caches (useful when reusing a `HeadlessRenderer` across unrelated documents).
+    pub fn clear_caches(&mut self) {
+        self.text_cache.clear();
+        self.clip_cache.clear();
+    }
+
     /// Builds a scene from `ResolvedLayout` and renders it into an image buffer.
     pub fn render_layout(
         &mut self,

@@ -621,11 +621,11 @@ fn test_inspector_bottom_panel_dimensions_and_formulas() {
 fn test_ambient_children_authored_formulas_preserved() {
     let source = r#"
         \Component Flow(x: Distance = 0, y: Distance = 0, width: Distance = parent.width, margin: Distance = 30px, gap: Distance = 20px) {
-            \Children {
+            \Children(
                 x: left + margin,
                 y: prev ? prev.bottom + gap : top,
                 width: width - (2 * margin)
-            }
+            )
         }
 
         \Flow(margin: 40px) {

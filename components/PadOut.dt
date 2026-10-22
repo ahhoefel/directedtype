@@ -15,10 +15,10 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + padding,
         y: y + padding
-    }
+    )
 }
 
 // 2. 2D Asymmetric Outward Padding
@@ -35,10 +35,10 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + padding_x,
         y: y + padding_y
-    }
+    )
 }
 
 // 3. 1D Horizontal Outward Padding (vertical is child's height)
@@ -54,10 +54,10 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + padding_x,
         y: y
-    }
+    )
 }
 
 // 4. 1D Vertical Outward Padding (horizontal is child's width)
@@ -73,8 +73,8 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x,
         y: y + padding_y
-    }
+    )
 }

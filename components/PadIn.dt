@@ -19,12 +19,12 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + padding,
         y: y + padding,
         width: inner_width,
         height: inner_height
-    }
+    )
 }
 
 // 2. 2D Asymmetric Inward Padding
@@ -46,12 +46,12 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + padding_x,
         y: y + padding_y,
         width: inner_width,
         height: inner_height
-    }
+    )
 }
 
 // 3. 1D Horizontal Inward Padding (vertical is pass-through)
@@ -70,11 +70,11 @@
     \alias height = only(children.height);
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + padding_x,
         y: y,
         width: inner_width
-    }
+    )
 }
 
 // 4. 1D Vertical Inward Padding (horizontal is pass-through)
@@ -93,9 +93,9 @@
     \alias width = only(children.width);
     \alias right = x + width;
 
-    \Children {
+    \Children(
         x: x,
         y: y + padding_y,
         height: inner_height
-    }
+    )
 }

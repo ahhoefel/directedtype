@@ -340,10 +340,10 @@ fn test_nested_env_rejected_by_parser() {
 fn test_shorthand_property_names_in_component_and_children() {
     let input = r#"
     \Component Wrapper(gap: Distance, font_size: Distance) {
-      \Children {
+      \Children(
         gap,
         font_size
-      }
+      )
     }
 
     \Component Consumer(gap: Distance, font_size: Distance) {

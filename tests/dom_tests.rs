@@ -470,11 +470,11 @@ fn test_dom_destroy_node_frees_subtree() {
 fn test_dom_insert_before_dynamic_flow_recurrence() {
     let source = r#"
         \Component Flow(y: Distance = 0, gap: Distance = 20px) {
-            \Children {
+            \Children(
                 x: 0,
                 y: prev ? prev.bottom + gap : top,
                 width: 200px
-            }
+            )
         }
         \Flow() {
             \Rect(height: 50px, color: #ff0000)

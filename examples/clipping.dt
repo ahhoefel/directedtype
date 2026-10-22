@@ -36,12 +36,12 @@
     )
 
     // 3. Children inherit the clip context ambiently
-    \Children {
+    \Children(
         clip: clip,
         x: left + 24px,
         y: prev ? prev.bottom + 12px : top + 24px,
         width: width - 48px
-    }
+    )
 }
 
 \VStackStretch(

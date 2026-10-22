@@ -13,11 +13,11 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: prev ? prev.right + gap : x,
         y: y,
         height: height
-    }
+    )
 }
 
 // 2. Intrinsic Width & Fixed Height HStackStretch
@@ -31,9 +31,9 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: prev ? prev.right + gap : x,
         y: y,
         height: height
-    }
+    )
 }

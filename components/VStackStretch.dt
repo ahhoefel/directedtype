@@ -13,11 +13,11 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x,
         y: prev ? prev.bottom + gap : y,
         width: width
-    }
+    )
 }
 
 // 2. Explicit Fixed Width & Intrinsic Height VStackStretch
@@ -31,9 +31,9 @@
     \alias height = sum(children.height) + max(0, children.len - 1) * gap;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x,
         y: prev ? prev.bottom + gap : y,
         width: width
-    }
+    )
 }

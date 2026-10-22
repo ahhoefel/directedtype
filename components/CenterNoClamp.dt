@@ -12,10 +12,10 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + (width - child.width) / 2,
         y: y + (height - child.height) / 2
-    }
+    )
 }
 
 // 2. Explicit Dimensions CenterNoClamp (inherits origin from parent container)
@@ -28,10 +28,10 @@
     \alias right = parent.left + width;
     \alias bottom = parent.top + height;
 
-    \Children {
+    \Children(
         x: x + (width - child.width) / 2,
         y: y + (height - child.height) / 2
-    }
+    )
 }
 
 // 3. Fluid Dimensions CenterNoClamp (explicit origin, fills remaining parent space)
@@ -47,10 +47,10 @@
     \alias right = x + resolved_width;
     \alias bottom = y + resolved_height;
 
-    \Children {
+    \Children(
         x: x + (resolved_width - child.width) / 2,
         y: y + (resolved_height - child.height) / 2
-    }
+    )
 }
 
 // 4. Fluid Parent-Fitting CenterNoClamp: automatically fits parent container bounds
@@ -62,9 +62,9 @@
     \alias right = parent.right;
     \alias bottom = parent.bottom;
 
-    \Children {
+    \Children(
         x: x + (width - child.width) / 2,
         y: y + (height - child.height) / 2
-    }
+    )
 }
 

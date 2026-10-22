@@ -393,7 +393,7 @@ pub struct ElementNode {
     pub handle: Option<NodeHandle>,
 }
 
-/// The `\Children` directive: `\Children { x: parent.left, y: prev ? prev.bottom + gap : parent.top }`
+/// The `\Children` directive: `\Children(x: parent.left, y: prev ? prev.bottom + gap : parent.top)`
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChildrenDirective {
     pub ports: Vec<PortBinding>,

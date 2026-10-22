@@ -8,11 +8,11 @@
     width: Distance = min(max(window.width, 400px), 700px), 
     margin: Distance = 30px
 ) {
-    \Children {
+    \Children(
         x: left + margin,
         y: prev ? prev.bottom + gap : top,
         width: width - (2 * margin)
-    }
+    )
 }
 
 \Enum Theme {
@@ -31,11 +31,11 @@
     \env text_color = (theme == Theme.Dark) ? #f8fafc : #0f172a
     \env card_bg = (theme == Theme.Dark) ? #1e293b : #e2e8f0
     \env accent_color = #3b82f6
-    \Children {
+    \Children(
         x: left,
         y: prev ? prev.bottom + 20px : top,
         width: width
-    }
+    )
 }
 
 // 2. Interceptor: Intercepts ambient env accent_color and replaces it for subtrees
@@ -47,11 +47,11 @@
     height: Distance = sum(children.height)
 ) {
     \env accent_color = new_accent
-    \Children {
+    \Children(
         x: left,
         y: top,
         width: width
-    }
+    )
 }
 
 // 3. Shield / Swallower: Consumes env card_bg and text_color, swallowing propagation to descendants
@@ -73,11 +73,11 @@
     \Text(x: left + 12px, y: top + 10px, size: 13px, weight: 600, color: #ffffff) {
         Shield / Swallower Firewall: stopped env propagation below
     }
-    \Children {
+    \Children(
         x: left,
         y: top + 50px,
         width: width
-    }
+    )
 }
 
 // A leaf card component that automatically consumes ambient text_color, card_bg, and accent_color

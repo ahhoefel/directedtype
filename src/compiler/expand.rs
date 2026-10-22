@@ -256,7 +256,7 @@ pub struct ScopeContext<'a> {
     pub child_ids: &'a [NodeId],
     pub num_children: usize,
     pub child_node: Option<NodeId>,
-    pub allow_parent: bool,
+    pub nodes: &'a [ExpandedNode],
     pub shadowed_ports: Option<&'a HashSet<String>>,
     pub is_event_port: bool,
     pub parent_ports: &'a [String],
@@ -585,7 +585,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             child_ids: &empty_children,
                             num_children: 0,
                             child_node: None,
-                            allow_parent: true,
+                            nodes: &expanded_doc.nodes,
                             shadowed_ports: None,
                             is_event_port: false,
                             parent_ports: &empty_ports,
@@ -629,7 +629,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                                 child_ids: &empty_children,
                                 num_children: 0,
                                 child_node: None,
-                                allow_parent: true,
+                                nodes: &expanded_doc.nodes,
                                 shadowed_ports: None,
                                 is_event_port: false,
                                 parent_ports: &empty_ports,
@@ -675,7 +675,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         child_ids: &empty_children,
         num_children: 0,
         child_node: None,
-        allow_parent: true,
+        nodes: &expanded_doc.nodes,
         shadowed_ports: None,
         is_event_port: false,
         parent_ports: &empty_ports,
@@ -752,7 +752,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             child_ids: &empty_children,
                             num_children: 0,
                             child_node: None,
-                            allow_parent: true,
+                            nodes: &expanded_doc.nodes,
                             shadowed_ports: None,
                             is_event_port: false,
                             parent_ports: &empty_ports,
@@ -822,7 +822,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             child_ids: &empty_children,
                             num_children: 0,
                             child_node: None,
-                            allow_parent: true,
+                            nodes: &expanded_doc.nodes,
                             shadowed_ports: None,
                             is_event_port: false,
                             parent_ports: &empty_ports,
@@ -904,7 +904,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         child_ids: &empty_children,
         num_children: 0,
         child_node: None,
-        allow_parent: true,
+        nodes: &expanded_doc.nodes,
         shadowed_ports: None,
         is_event_port: false,
         parent_ports: &empty_ports,
@@ -938,6 +938,33 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
     Ok(expanded_doc)
 }
 
+#[derive(Clone)]
+struct ForwardedChildrenDirective<'a> {
+    pub ports: &'a [PortBinding],
+    pub parent_id: NodeId,
+    pub parent_name: &'a str,
+    pub parent_ports: Vec<String>,
+    pub lexical_scope: &'a RefCell<HashMap<String, LexicalBinding>>,
+    pub env_scope: HashMap<String, EnvEntry>,
+    pub enclosing_component_id: Option<NodeId>,
+    pub shadowed_ports: Option<&'a HashSet<String>>,
+    pub comp_ports: Option<&'a HashMap<String, Expr>>,
+    pub declared_state_names: Option<&'a HashSet<String>>,
+}
+
+#[derive(Clone)]
+struct ConsumerChildEntry<'a> {
+    pub elem: ElementNode,
+    pub var_name: Option<String>,
+    pub raw_text: Option<TextChunk>,
+    pub caller_lexical_scope: &'a RefCell<HashMap<String, LexicalBinding>>,
+    pub caller_env_scope: HashMap<String, EnvEntry>,
+    pub caller_enclosing_component_id: Option<NodeId>,
+    pub caller_shadowed_ports: Option<&'a HashSet<String>>,
+    pub instantiated_ids: Vec<&'a RefCell<Vec<NodeId>>>,
+    pub forwarded_directives: Vec<ForwardedChildrenDirective<'a>>,
+}
+
 struct InstanceContext<'a> {
     pub comp_node_id: NodeId,
     pub parent_id: Option<NodeId>,
@@ -949,6 +976,7 @@ struct InstanceContext<'a> {
     pub shadowed_ports: Option<&'a HashSet<String>>,
     pub enums: &'a HashMap<String, EnumDef>,
     pub active_scope_id: ScopeId,
+    pub consumer_children: Option<&'a [ConsumerChildEntry<'a>]>,
 }
 
 fn collect_nested_aliases<'a>(items: &'a [ContentItem], out: &mut Vec<&'a AliasBinding>) {
@@ -1117,7 +1145,7 @@ struct ElementContext<'a> {
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
     pub enums: &'a HashMap<String, EnumDef>,
     pub active_scope_id: ScopeId,
-    pub consumer_children: Option<&'a [ContentItem]>,
+    pub consumer_children: Option<&'a [ConsumerChildEntry<'a>]>,
 }
 
 /// Statically selects the unique matching component overload for an invocation.
@@ -1252,7 +1280,7 @@ fn expand_element(
             child_ids: &empty_children,
             num_children: 0,
             child_node: None,
-            allow_parent: ctx.enclosing_component_id.is_none(),
+            nodes: &doc.nodes,
             shadowed_ports: ctx.shadowed_ports,
             is_event_port: false,
             parent_ports: ctx.parent_ports,
@@ -1335,6 +1363,7 @@ fn expand_element(
             shadowed_ports: ctx.shadowed_ports,
             enums: ctx.enums,
             active_scope_id: ctx.active_scope_id,
+            consumer_children: ctx.consumer_children,
         };
         expand_component_instance(
             &inst_ctx,
@@ -1622,7 +1651,7 @@ fn expand_component_instance(
                 child_ids: &empty_children,
                 num_children: 0,
                 child_node: None,
-                allow_parent: ctx.enclosing_component_id.is_none(),
+                nodes: &doc.nodes,
                 shadowed_ports: ctx.shadowed_ports,
                 is_event_port: false,
                 parent_ports: ctx.parent_ports,
@@ -1688,7 +1717,7 @@ fn expand_component_instance(
                     child_ids: &empty_children,
                     num_children: 0,
                     child_node: None,
-                    allow_parent: ctx.enclosing_component_id.is_none(),
+                    nodes: &doc.nodes,
                     shadowed_ports: ctx.shadowed_ports,
                     is_event_port: name.starts_with("on_") || is_handler_param,
                     parent_ports: ctx.parent_ports,
@@ -1853,7 +1882,7 @@ fn expand_component_instance(
                     child_ids: &empty_children,
                     num_children: 0,
                     child_node: None,
-                    allow_parent: true,
+                    nodes: &doc.nodes,
                     shadowed_ports: Some(&comp_shadowed_ports),
                     is_event_port: false,
                     parent_ports: ctx.parent_ports,
@@ -1878,7 +1907,7 @@ fn expand_component_instance(
                 child_ids: &empty_children,
                 num_children: 0,
                 child_node: None,
-                allow_parent: true,
+                nodes: &doc.nodes,
                 shadowed_ports: Some(&comp_shadowed_ports),
                 is_event_port: false,
                 parent_ports: ctx.parent_ports,
@@ -1946,14 +1975,31 @@ fn expand_component_instance(
         }
     }
 
-    // 2. Expand consumer children passed to this component instance
-    let consumer_content_items = instance.content.as_ref().map(|s| s.items.as_slice());
-    let mut consumer_child_nodes = Vec::new();
+    let mut internal_scope_ports = comp_scope_ports.clone();
+    for let_name in declared_lets.keys() {
+        if !internal_scope_ports.contains(let_name) {
+            internal_scope_ports.push(let_name.clone());
+        }
+    }
+
+    // 2. Collect consumer children passed to this component instance
+    let instantiated_children_ids = RefCell::new(Vec::new());
+    let mut consumer_child_entries: Vec<ConsumerChildEntry<'_>> = Vec::new();
     if let Some(slot) = &instance.content {
         for item in &slot.items {
             match item {
                 ContentItem::Node(child_elem) => {
-                    consumer_child_nodes.push((child_elem.clone(), None));
+                    consumer_child_entries.push(ConsumerChildEntry {
+                        elem: child_elem.clone(),
+                        var_name: None,
+                        raw_text: None,
+                        caller_lexical_scope: lexical_scope,
+                        caller_env_scope: caller_env_scope.clone(),
+                        caller_enclosing_component_id: ctx.enclosing_component_id,
+                        caller_shadowed_ports: ctx.shadowed_ports,
+                        instantiated_ids: vec![&instantiated_children_ids],
+                        forwarded_directives: Vec::new(),
+                    });
                 }
                 ContentItem::Text(chunk) => {
                     let trimmed = chunk.text.trim();
@@ -1969,10 +2015,51 @@ fn expand_component_instance(
                             span: chunk.span,
                             handle: None,
                         };
-                        consumer_child_nodes.push((synthetic_text, None));
+                        consumer_child_entries.push(ConsumerChildEntry {
+                            elem: synthetic_text,
+                            var_name: None,
+                            raw_text: Some(chunk.clone()),
+                            caller_lexical_scope: lexical_scope,
+                            caller_env_scope: caller_env_scope.clone(),
+                            caller_enclosing_component_id: ctx.enclosing_component_id,
+                            caller_shadowed_ports: ctx.shadowed_ports,
+                            instantiated_ids: vec![&instantiated_children_ids],
+                            forwarded_directives: Vec::new(),
+                        });
                     }
                 }
-                ContentItem::Children(_) => {}
+                ContentItem::Children(forward_dir) => {
+                    for port in &forward_dir.ports {
+                        if port.name.as_str() == "parent" {
+                            return Err(CompileError::ReservedPort {
+                                node: "Children".to_string(),
+                                port: "parent".to_string(),
+                                span: port.name.span,
+                            });
+                        }
+                    }
+                    if let Some(outer_entries) = ctx.consumer_children {
+                        for outer_entry in outer_entries {
+                            let mut entry = outer_entry.clone();
+                            entry.instantiated_ids.push(&instantiated_children_ids);
+                            if !forward_dir.ports.is_empty() {
+                                entry.forwarded_directives.push(ForwardedChildrenDirective {
+                                    ports: &forward_dir.ports,
+                                    parent_id: ctx.comp_node_id,
+                                    parent_name: comp_def.name.as_str(),
+                                    parent_ports: comp_scope_ports.clone(),
+                                    lexical_scope,
+                                    env_scope: caller_env_scope.clone(),
+                                    enclosing_component_id: ctx.enclosing_component_id,
+                                    shadowed_ports: ctx.shadowed_ports,
+                                    comp_ports: None,
+                                    declared_state_names: None,
+                                });
+                            }
+                            consumer_child_entries.push(entry);
+                        }
+                    }
+                }
                 ContentItem::Let(l) => {
                     if let Some(LetValue::Node(child_elem)) = &l.value {
                         validate_node_type_annotation(
@@ -1982,18 +2069,27 @@ fn expand_component_instance(
                             ctx.enums,
                             registry,
                         )?;
-                        consumer_child_nodes.push((child_elem.clone(), Some(l.name.as_str().to_string())));
+                        consumer_child_entries.push(ConsumerChildEntry {
+                            elem: child_elem.clone(),
+                            var_name: Some(l.name.as_str().to_string()),
+                            raw_text: None,
+                            caller_lexical_scope: lexical_scope,
+                            caller_env_scope: caller_env_scope.clone(),
+                            caller_enclosing_component_id: ctx.enclosing_component_id,
+                            caller_shadowed_ports: ctx.shadowed_ports,
+                            instantiated_ids: vec![&instantiated_children_ids],
+                            forwarded_directives: Vec::new(),
+                        });
                     }
                 }
                 ContentItem::Alias(_) | ContentItem::State(_) | ContentItem::Env(_) | ContentItem::Assert(_) => {}
             }
         }
     }
-    let num_consumer_children = consumer_child_nodes.len();
+    let num_consumer_children = consumer_child_entries.len();
 
     // 3. Expand component body items in declaration order (Painter's Algorithm)
     let mut all_children_ids = Vec::new();
-    let mut instantiated_children_ids = Vec::new();
     let mut last_child_id: Option<NodeId> = None;
     let mut local_scope: HashMap<String, LexicalBinding> = lexical_scope.borrow().clone();
     let mut populated_comp_ports: HashSet<String> = HashSet::new();
@@ -2016,7 +2112,7 @@ fn expand_component_instance(
                         child_ids: &empty_children,
                         num_children: num_consumer_children,
                         child_node: None,
-                        allow_parent: true,
+                        nodes: &doc.nodes,
                         shadowed_ports: Some(&comp_shadowed_ports),
                         is_event_port: true,
                         parent_ports: ctx.parent_ports,
@@ -2228,7 +2324,7 @@ fn expand_component_instance(
                         child_ids: &empty_children,
                         num_children: num_consumer_children,
                         child_node: None,
-                        allow_parent: true,
+                        nodes: &doc.nodes,
                         shadowed_ports: Some(&comp_shadowed_ports),
                         is_event_port: false,
                         parent_ports: ctx.parent_ports,
@@ -2273,7 +2369,7 @@ fn expand_component_instance(
                             child_ids: &empty_children,
                             num_children: num_consumer_children,
                             child_node: None,
-                            allow_parent: true,
+                            nodes: &doc.nodes,
                             shadowed_ports: Some(&comp_shadowed_ports),
                             is_event_port: false,
                             parent_ports: ctx.parent_ports,
@@ -2338,11 +2434,16 @@ fn expand_component_instance(
                         let_binding.name.as_str().to_string(),
                         LexicalBinding::Node(node_id),
                     );
+                    for entry in &mut consumer_child_entries {
+                        for (k, v) in &children_env_scope {
+                            entry.caller_env_scope.insert(k.clone(), v.clone());
+                        }
+                    }
                     let elem_ctx = ElementContext {
                         parent_id: Some(ctx.comp_node_id),
                         parent_name: Some(comp_def.name.as_str()),
                         prev_sibling_id: None,
-                        parent_ports: &comp_scope_ports,
+                        parent_ports: &internal_scope_ports,
                         lexical_scope: &local_scope,
                         env_scope: &internal_body_env_scope,
                         enclosing_component_id: Some(ctx.comp_node_id),
@@ -2351,7 +2452,7 @@ fn expand_component_instance(
                         ambient_authored_ports: None,
                         enums: ctx.enums,
                         active_scope_id: ctx.active_scope_id,
-                        consumer_children: consumer_content_items,
+                        consumer_children: Some(&consumer_child_entries),
                     };
                     let expanded_node_id = expand_element(
                         elem,
@@ -2371,15 +2472,16 @@ fn expand_component_instance(
                     if is_param_shadow {
                         let rewritten = {
                             let scope_borrow = local_scope.borrow();
+                            let inst_borrow = instantiated_children_ids.borrow();
                             let scope_ctx = ScopeContext {
                                 current_node: ctx.comp_node_id,
                                 parent_node: ctx.parent_id,
                                 parent_name: ctx.parent_name,
                                 prev_sibling: ctx.prev_sibling_id,
-                                child_ids: &instantiated_children_ids,
+                                child_ids: &inst_borrow,
                                 num_children: num_consumer_children,
                                 child_node: None,
-                                allow_parent: true,
+                                nodes: &doc.nodes,
                                 shadowed_ports: Some(&comp_shadowed_ports),
                                 is_event_port: false,
                                 parent_ports: ctx.parent_ports,
@@ -2438,11 +2540,16 @@ fn expand_component_instance(
                                 ctx.enums,
                                 registry,
                             )?;
+                            for entry in &mut consumer_child_entries {
+                                for (k, v) in &children_env_scope {
+                                    entry.caller_env_scope.insert(k.clone(), v.clone());
+                                }
+                            }
                             let elem_ctx = ElementContext {
                                 parent_id: Some(ctx.comp_node_id),
                                 parent_name: Some(comp_def.name.as_str()),
                                 prev_sibling_id: None,
-                                parent_ports: &comp_scope_ports,
+                                parent_ports: &internal_scope_ports,
                                 lexical_scope: &local_scope,
                                 env_scope: &internal_body_env_scope,
                                 enclosing_component_id: Some(ctx.comp_node_id),
@@ -2451,7 +2558,7 @@ fn expand_component_instance(
                                 ambient_authored_ports: None,
                                 enums: ctx.enums,
                                 active_scope_id: ctx.active_scope_id,
-                                consumer_children: consumer_content_items,
+                                consumer_children: Some(&consumer_child_entries),
                             };
                             let node_id = expand_element(
                                 elem,
@@ -2483,15 +2590,16 @@ fn expand_component_instance(
                         _ => {
                             let rewritten = {
                                 let scope_borrow = local_scope.borrow();
+                                let inst_borrow = instantiated_children_ids.borrow();
                                 let scope_ctx = ScopeContext {
                                     current_node: ctx.comp_node_id,
                                     parent_node: ctx.parent_id,
                                     parent_name: ctx.parent_name,
                                     prev_sibling: ctx.prev_sibling_id,
-                                    child_ids: &instantiated_children_ids,
+                                    child_ids: &inst_borrow,
                                     num_children: num_consumer_children,
                                     child_node: None,
-                                    allow_parent: true,
+                                    nodes: &doc.nodes,
                                     shadowed_ports: Some(&comp_shadowed_ports),
                                     is_event_port: false,
                                     parent_ports: ctx.parent_ports,
@@ -2533,11 +2641,16 @@ fn expand_component_instance(
                 }
             }
             ComponentBodyItem::Node(body_node) => {
+                for entry in &mut consumer_child_entries {
+                    for (k, v) in &children_env_scope {
+                        entry.caller_env_scope.insert(k.clone(), v.clone());
+                    }
+                }
                 let elem_ctx = ElementContext {
                     parent_id: Some(ctx.comp_node_id),
                     parent_name: Some(comp_def.name.as_str()),
                     prev_sibling_id: last_child_id,
-                    parent_ports: &comp_scope_ports,
+                    parent_ports: &internal_scope_ports,
                     lexical_scope: &local_scope,
                     env_scope: &internal_body_env_scope,
                     enclosing_component_id: Some(ctx.comp_node_id),
@@ -2546,7 +2659,7 @@ fn expand_component_instance(
                     ambient_authored_ports: None,
                     enums: ctx.enums,
                     active_scope_id: ctx.active_scope_id,
-                    consumer_children: consumer_content_items,
+                    consumer_children: Some(&consumer_child_entries),
                 };
                 let body_id = expand_element(
                     body_node,
@@ -2628,7 +2741,7 @@ fn expand_component_instance(
                                                 child_ids: &empty_children,
                                                 num_children: 0,
                                                 child_node: None,
-                                                allow_parent: ctx.enclosing_component_id.is_none(),
+                                                nodes: &doc.nodes,
                                                 shadowed_ports: ctx.shadowed_ports,
                                                 is_event_port: false,
                                                 parent_ports: ctx.parent_ports,
@@ -2667,49 +2780,84 @@ fn expand_component_instance(
                     }
                 }
                 let mut last_consumer_child_id = None;
-                for (child_elem, var_name) in &consumer_child_nodes {
+                for entry in &consumer_child_entries {
+                    let child_elem = &entry.elem;
+                    let var_name = &entry.var_name;
                     let mut merged_ports = HashMap::new();
                     let mut authored_ambient_ports = HashMap::new();
+
+                    let mut entry_env_scope = entry.caller_env_scope.clone();
+                    for (k, v) in &children_env_scope {
+                        entry_env_scope.insert(k.clone(), v.clone());
+                    }
 
                     // Ambient rules from \Children are authored inside the component (Tier 3)
                     let child_node_id = NodeId(doc.nodes.len());
                     let empty_children: [NodeId; 0] = [];
                     let empty_ports: [String; 0] = [];
-                    let mut ambient_scope_ports = comp_scope_ports.clone();
-                    for let_name in declared_lets.keys() {
-                        if !ambient_scope_ports.contains(let_name) {
-                            ambient_scope_ports.push(let_name.clone());
+                    {
+                        let local_borrow = local_scope.borrow();
+                        let mut ambient_scope_ctx = ScopeContext {
+                            current_node: child_node_id,
+                            parent_node: Some(ctx.comp_node_id),
+                            parent_name: Some(comp_def.name.as_str()),
+                            prev_sibling: last_consumer_child_id,
+                            child_ids: &empty_children,
+                            num_children: num_consumer_children,
+                            child_node: Some(child_node_id),
+                            nodes: &doc.nodes,
+                            shadowed_ports: Some(&comp_shadowed_ports),
+                            is_event_port: false,
+                            parent_ports: &internal_scope_ports,
+                            current_ports: &empty_ports,
+                            lexical_scope: &*local_borrow,
+                            env_scope: &entry_env_scope,
+                            node_fonts: &*node_fonts,
+                            enclosing_component: Some(ctx.comp_node_id),
+                            comp_ports: Some(&comp_ports),
+                            declared_state_names: Some(&declared_state_names),
+                            enums: ctx.enums,
+                        };
+
+                        for ambient in &dir.ports {
+                            ambient_scope_ctx.is_event_port = ambient.name.as_str().starts_with("on_");
+                            let rewritten = rewrite_expr(&ambient.expr, &ambient_scope_ctx)?;
+                            merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
+                            authored_ambient_ports.insert(ambient.name.as_str().to_string(), ambient.expr.clone());
                         }
                     }
-                    let mut ambient_scope_ctx = ScopeContext {
-                        current_node: child_node_id,
-                        parent_node: Some(ctx.comp_node_id),
-                        parent_name: Some(comp_def.name.as_str()),
-                        prev_sibling: last_consumer_child_id,
-                        child_ids: &empty_children,
-                        num_children: num_consumer_children,
-                        child_node: Some(child_node_id),
-                        allow_parent: false,
-                        shadowed_ports: Some(&comp_shadowed_ports),
-                        is_event_port: false,
-                        parent_ports: &ambient_scope_ports,
-                        current_ports: &empty_ports,
-                        lexical_scope: &*local_scope.borrow(),
-                        env_scope: &children_env_scope,
-                        node_fonts: &*node_fonts,
-                        enclosing_component: Some(ctx.comp_node_id),
-                        comp_ports: Some(&comp_ports),
-                        declared_state_names: Some(&declared_state_names),
-                        enums: ctx.enums,
-                    };
 
-                    for ambient in &dir.ports {
-                        ambient_scope_ctx.is_event_port = ambient.name.as_str().starts_with("on_");
-                        let rewritten = rewrite_expr(&ambient.expr, &ambient_scope_ctx)?;
-                        merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
-                        authored_ambient_ports.insert(ambient.name.as_str().to_string(), ambient.expr.clone());
+                    // Forwarded \Children(...) directives from outer component wrappers
+                    for fwd in &entry.forwarded_directives {
+                        let fwd_lexical_borrow = fwd.lexical_scope.borrow();
+                        let mut fwd_scope_ctx = ScopeContext {
+                            current_node: child_node_id,
+                            parent_node: Some(fwd.parent_id),
+                            parent_name: Some(fwd.parent_name),
+                            prev_sibling: last_consumer_child_id,
+                            child_ids: &empty_children,
+                            num_children: num_consumer_children,
+                            child_node: Some(child_node_id),
+                            nodes: &doc.nodes,
+                            shadowed_ports: fwd.shadowed_ports,
+                            is_event_port: false,
+                            parent_ports: &fwd.parent_ports,
+                            current_ports: &empty_ports,
+                            lexical_scope: &*fwd_lexical_borrow,
+                            env_scope: &fwd.env_scope,
+                            node_fonts: &*node_fonts,
+                            enclosing_component: fwd.enclosing_component_id,
+                            comp_ports: fwd.comp_ports,
+                            declared_state_names: fwd.declared_state_names,
+                            enums: ctx.enums,
+                        };
+                        for ambient in fwd.ports {
+                            fwd_scope_ctx.is_event_port = ambient.name.as_str().starts_with("on_");
+                            let rewritten = rewrite_expr(&ambient.expr, &fwd_scope_ctx)?;
+                            merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
+                            authored_ambient_ports.insert(ambient.name.as_str().to_string(), ambient.expr.clone());
+                        }
                     }
-                    drop(ambient_scope_ctx);
 
                     // Explicit child ports override ambient rules (Tier 4 > Tier 3)
                     for explicit in &child_elem.ports {
@@ -2732,10 +2880,10 @@ fn expand_component_instance(
                         parent_name: Some(comp_def.name.as_str()),
                         prev_sibling_id: last_consumer_child_id,
                         parent_ports: &comp_scope_ports,
-                        lexical_scope, // Pass caller's lexical scope to preserve encapsulation
-                        env_scope: &children_env_scope,
-                        enclosing_component_id: ctx.enclosing_component_id,
-                        shadowed_ports: ctx.shadowed_ports,
+                        lexical_scope: entry.caller_lexical_scope,
+                        env_scope: &entry_env_scope,
+                        enclosing_component_id: entry.caller_enclosing_component_id,
+                        shadowed_ports: entry.caller_shadowed_ports,
                         is_let: var_name.is_some(),
                         ambient_authored_ports: Some(&authored_ambient_ports),
                         enums: ctx.enums,
@@ -2752,10 +2900,12 @@ fn expand_component_instance(
 
                     if let Some(v_name) = var_name {
                         doc.get_node_mut(child_id).unwrap().var_name = Some(v_name.clone());
-                        lexical_scope.borrow_mut().insert(v_name.clone(), LexicalBinding::Node(child_id));
+                        entry.caller_lexical_scope.borrow_mut().insert(v_name.clone(), LexicalBinding::Node(child_id));
                     }
 
-                    instantiated_children_ids.push(child_id);
+                    for inst_list in &entry.instantiated_ids {
+                        inst_list.borrow_mut().push(child_id);
+                    }
                     all_children_ids.push(child_id);
                     last_consumer_child_id = Some(child_id);
                 }
@@ -2768,6 +2918,7 @@ fn expand_component_instance(
     }
 
     let final_local_scope = local_scope.into_inner();
+    let instantiated_children_ids = instantiated_children_ids.into_inner();
 
     // Post-expansion forward reference resolution for all nodes created within this component
     for node_idx in start_node_idx..doc.nodes.len() {
@@ -2790,7 +2941,7 @@ fn expand_component_instance(
         child_ids: &instantiated_children_ids,
         num_children: num_consumer_children,
         child_node: None,
-        allow_parent: true,
+        nodes: &doc.nodes,
         shadowed_ports: Some(&comp_shadowed_ports),
         is_event_port: false,
         parent_ports: ctx.parent_ports,
@@ -2991,7 +3142,7 @@ fn expand_component_instance(
         child_ids: &instantiated_children_ids,
         num_children: num_consumer_children,
         child_node: None,
-        allow_parent: true,
+        nodes: &doc.nodes,
         shadowed_ports: Some(&comp_shadowed_ports),
         is_event_port: false,
         parent_ports: ctx.parent_ports,
@@ -3352,7 +3503,7 @@ fn expand_primitive_element(
                         ambient_authored_ports: None,
                         enums: ctx.enums,
                         active_scope_id: active_scope_for_children,
-                        consumer_children: None,
+                        consumer_children: ctx.consumer_children,
                     };
 
                     let is_wrapper = elem.name.as_str() == "Anchor" || elem.name.as_str() == "AnchorScope";
@@ -3483,7 +3634,7 @@ fn expand_primitive_element(
                             parent_id: Some(node_id),
                             parent_name: Some(elem.name.as_str()),
                             prev_sibling_id: last_child_id,
-                            parent_ports: ctx.parent_ports,
+                            parent_ports: &primitive_scope_ports,
                             lexical_scope: ctx.lexical_scope,
                             env_scope: ctx.env_scope,
                             enclosing_component_id: ctx.enclosing_component_id,
@@ -3492,7 +3643,7 @@ fn expand_primitive_element(
                             ambient_authored_ports: None,
                             enums: ctx.enums,
                             active_scope_id: active_scope_for_children,
-                            consumer_children: None,
+                            consumer_children: ctx.consumer_children,
                         };
 
                         let is_wrapper = elem.name.as_str() == "Anchor" || elem.name.as_str() == "AnchorScope";
@@ -3617,115 +3768,199 @@ fn expand_primitive_element(
                     }
                 }
                 ContentItem::Alias(_) | ContentItem::State(_) | ContentItem::Env(_) | ContentItem::Assert(_) => {}
-                ContentItem::Children(_) => {
+                ContentItem::Children(dir) => {
+                    for port in &dir.ports {
+                        if port.name.as_str() == "parent" {
+                            return Err(CompileError::ReservedPort {
+                                node: "Children".to_string(),
+                                port: "parent".to_string(),
+                                span: port.name.span,
+                            });
+                        }
+                    }
                     if let Some(consumer_items) = ctx.consumer_children {
-                        for c_item in consumer_items {
-                            match c_item {
-                                ContentItem::Text(chunk) => {
-                                    if elem.name.as_str() == "Text" {
-                                        let start = full_text.len();
-                                        full_text.push_str(&chunk.text);
-                                        let end = full_text.len();
-                                        text_spans.push(TextSpan::new(start..end));
-                                    }
+                        let num_consumer_children = consumer_items.len();
+                        let empty_children: [NodeId; 0] = [];
+                        let empty_ports: [String; 0] = [];
+                        for entry in consumer_items {
+                            if let Some(chunk) = &entry.raw_text {
+                                if elem.name.as_str() == "Text"
+                                    && dir.ports.is_empty()
+                                    && entry.forwarded_directives.is_empty()
+                                {
+                                    let start = full_text.len();
+                                    full_text.push_str(&chunk.text);
+                                    let end = full_text.len();
+                                    text_spans.push(TextSpan::new(start..end));
+                                    continue;
                                 }
-                                ContentItem::Node(child_elem) => {
-                                    let child_ctx = ElementContext {
-                                        parent_id: Some(node_id),
-                                        parent_name: Some(elem.name.as_str()),
-                                        prev_sibling_id: last_child_id,
-                                        parent_ports: ctx.parent_ports,
-                                        lexical_scope: ctx.lexical_scope,
-                                        env_scope: ctx.env_scope,
-                                        enclosing_component_id: ctx.enclosing_component_id,
-                                        shadowed_ports: ctx.shadowed_ports,
-                                        is_let: false,
-                                        ambient_authored_ports: None,
-                                        enums: ctx.enums,
-                                        active_scope_id: active_scope_for_children,
-                                        consumer_children: None,
-                                    };
-                                    let child_id = expand_element(
-                                        child_elem,
-                                        &child_ctx,
-                                        registry,
-                                        doc,
-                                        node_fonts,
-                                    )?;
-                                    child_ids.push(child_id);
-                                    last_child_id = Some(child_id);
-                                    if elem.name.as_str() == "Text" {
-                                        let child_text = doc.nodes[child_id.0]
-                                            .text_content
-                                            .clone()
-                                            .unwrap_or_default();
-                                        let start = full_text.len();
-                                        full_text.push_str(&child_text);
-                                        let end = full_text.len();
-                                        let is_link = child_elem.name.as_str() == "Link"
-                                            || child_elem.ports.iter().any(|p| p.name.as_str() == "url");
-                                        let mut style = SpanStyle::default();
-                                        if is_link {
-                                            style.url = child_elem.ports.iter().find(|p| p.name.as_str() == "url").and_then(|p| match &p.expr {
-                                                Expr::Literal(Literal::String(s, _)) => Some(s.clone()),
-                                                _ => None,
-                                            });
-                                            style.color = Some("#1a73e8".to_string());
-                                            style.underline = true;
-                                            style.cursor = Some(CursorKind::Pointer);
-                                        }
-                                        text_spans.push(TextSpan {
-                                            range: start..end,
-                                            node_id: Some(child_id),
-                                            style,
-                                        });
-                                    }
+                            }
+
+                            let child_elem = &entry.elem;
+                            let mut merged_ports = HashMap::new();
+                            let mut authored_ambient_ports = HashMap::new();
+                            let child_node_id = NodeId(doc.nodes.len());
+
+                            {
+                                let lexical_borrow = ctx.lexical_scope.borrow();
+                                let mut ambient_scope_ctx = ScopeContext {
+                                    current_node: child_node_id,
+                                    parent_node: Some(node_id),
+                                    parent_name: Some(elem.name.as_str()),
+                                    prev_sibling: last_child_id,
+                                    child_ids: &empty_children,
+                                    num_children: num_consumer_children,
+                                    child_node: Some(child_node_id),
+                                    nodes: &doc.nodes,
+                                    shadowed_ports: ctx.shadowed_ports,
+                                    is_event_port: false,
+                                    parent_ports: &primitive_scope_ports,
+                                    current_ports: &empty_ports,
+                                    lexical_scope: &*lexical_borrow,
+                                    env_scope: ctx.env_scope,
+                                    node_fonts: &*node_fonts,
+                                    enclosing_component: ctx.enclosing_component_id,
+                                    comp_ports: None,
+                                    declared_state_names: None,
+                                    enums: ctx.enums,
+                                };
+                                for ambient in &dir.ports {
+                                    ambient_scope_ctx.is_event_port = ambient.name.as_str().starts_with("on_");
+                                    let rewritten = rewrite_expr(&ambient.expr, &ambient_scope_ctx)?;
+                                    merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
+                                    authored_ambient_ports.insert(ambient.name.as_str().to_string(), ambient.expr.clone());
                                 }
-                                ContentItem::Let(l) => {
-                                    if let Some(LetValue::Node(child_elem)) = &l.value {
-                                        validate_node_type_annotation(
-                                            child_elem.name.as_str(),
-                                            child_elem.span,
-                                            l.type_annotation.as_ref(),
-                                            ctx.enums,
-                                            registry,
-                                        )?;
-                                        let child_ctx = ElementContext {
-                                            parent_id: Some(node_id),
-                                            parent_name: Some(elem.name.as_str()),
-                                            prev_sibling_id: last_child_id,
-                                            parent_ports: ctx.parent_ports,
-                                            lexical_scope: ctx.lexical_scope,
-                                            env_scope: ctx.env_scope,
-                                            enclosing_component_id: ctx.enclosing_component_id,
-                                            shadowed_ports: ctx.shadowed_ports,
-                                            is_let: true,
-                                            ambient_authored_ports: None,
-                                            enums: ctx.enums,
-                                            active_scope_id: active_scope_for_children,
-                                            consumer_children: None,
-                                        };
-                                        let child_id = expand_element(
-                                            child_elem,
-                                            &child_ctx,
-                                            registry,
-                                            doc,
-                                            node_fonts,
-                                        )?;
-                                        doc.get_node_mut(child_id).unwrap().var_name = Some(l.name.as_str().to_string());
-                                        ctx.lexical_scope.borrow_mut().insert(l.name.as_str().to_string(), LexicalBinding::Node(child_id));
-                                        child_ids.push(child_id);
-                                        last_child_id = Some(child_id);
-                                        if child_elem.name.as_str() == "Font" {
-                                            node_fonts.insert(child_id, child_id);
-                                        }
-                                    }
+                            }
+
+                            for fwd in &entry.forwarded_directives {
+                                let fwd_lexical_borrow = fwd.lexical_scope.borrow();
+                                let mut fwd_scope_ctx = ScopeContext {
+                                    current_node: child_node_id,
+                                    parent_node: Some(fwd.parent_id),
+                                    parent_name: Some(fwd.parent_name),
+                                    prev_sibling: last_child_id,
+                                    child_ids: &empty_children,
+                                    num_children: num_consumer_children,
+                                    child_node: Some(child_node_id),
+                                    nodes: &doc.nodes,
+                                    shadowed_ports: fwd.shadowed_ports,
+                                    is_event_port: false,
+                                    parent_ports: &fwd.parent_ports,
+                                    current_ports: &empty_ports,
+                                    lexical_scope: &*fwd_lexical_borrow,
+                                    env_scope: &fwd.env_scope,
+                                    node_fonts: &*node_fonts,
+                                    enclosing_component: fwd.enclosing_component_id,
+                                    comp_ports: fwd.comp_ports,
+                                    declared_state_names: fwd.declared_state_names,
+                                    enums: ctx.enums,
+                                };
+                                for ambient in fwd.ports {
+                                    fwd_scope_ctx.is_event_port = ambient.name.as_str().starts_with("on_");
+                                    let rewritten = rewrite_expr(&ambient.expr, &fwd_scope_ctx)?;
+                                    merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
+                                    authored_ambient_ports.insert(ambient.name.as_str().to_string(), ambient.expr.clone());
                                 }
-                                ContentItem::Alias(_)
-                                | ContentItem::Children(_)
-                                | ContentItem::State(_)
-                                | ContentItem::Env(_)
-                                | ContentItem::Assert(_) => {}
+                            }
+
+                            for explicit in &child_elem.ports {
+                                merged_ports.insert(explicit.name.as_str().to_string(), explicit.expr.clone());
+                                authored_ambient_ports.remove(explicit.name.as_str());
+                            }
+
+                            let is_wrapper = elem.name.as_str() == "Anchor" || elem.name.as_str() == "AnchorScope";
+                            if is_wrapper {
+                                if !merged_ports.contains_key("x") {
+                                    merged_ports.insert(
+                                        "x".to_string(),
+                                        Expr::MemberAccess(MemberAccessExpr {
+                                            target: Box::new(Expr::Ident(Ident::new(node_id.canonical_name(), child_elem.span))),
+                                            member: Ident::new("left", child_elem.span),
+                                            span: child_elem.span,
+                                        }),
+                                    );
+                                }
+                                if !merged_ports.contains_key("y") {
+                                    merged_ports.insert(
+                                        "y".to_string(),
+                                        Expr::MemberAccess(MemberAccessExpr {
+                                            target: Box::new(Expr::Ident(Ident::new(node_id.canonical_name(), child_elem.span))),
+                                            member: Ident::new("top", child_elem.span),
+                                            span: child_elem.span,
+                                        }),
+                                    );
+                                }
+                            }
+
+                            let mut wired_elem = child_elem.clone();
+                            wired_elem.ports = merged_ports
+                                .into_iter()
+                                .map(|(name, expr)| PortBinding {
+                                    name: Ident::new(name, child_elem.span),
+                                    expr,
+                                    span: child_elem.span,
+                                })
+                                .collect();
+
+                            let child_ctx = ElementContext {
+                                parent_id: Some(node_id),
+                                parent_name: Some(elem.name.as_str()),
+                                prev_sibling_id: last_child_id,
+                                parent_ports: &primitive_scope_ports,
+                                lexical_scope: entry.caller_lexical_scope,
+                                env_scope: &entry.caller_env_scope,
+                                enclosing_component_id: entry.caller_enclosing_component_id,
+                                shadowed_ports: entry.caller_shadowed_ports,
+                                is_let: entry.var_name.is_some(),
+                                ambient_authored_ports: Some(&authored_ambient_ports),
+                                enums: ctx.enums,
+                                active_scope_id: active_scope_for_children,
+                                consumer_children: None,
+                            };
+                            let child_id = expand_element(
+                                &wired_elem,
+                                &child_ctx,
+                                registry,
+                                doc,
+                                node_fonts,
+                            )?;
+                            if let Some(v_name) = &entry.var_name {
+                                doc.get_node_mut(child_id).unwrap().var_name = Some(v_name.clone());
+                                entry.caller_lexical_scope.borrow_mut().insert(v_name.clone(), LexicalBinding::Node(child_id));
+                            }
+                            if child_elem.name.as_str() == "Font" {
+                                node_fonts.insert(child_id, child_id);
+                            }
+                            for inst_list in &entry.instantiated_ids {
+                                inst_list.borrow_mut().push(child_id);
+                            }
+                            child_ids.push(child_id);
+                            last_child_id = Some(child_id);
+                            if elem.name.as_str() == "Text" {
+                                let child_text = doc.nodes[child_id.0]
+                                    .text_content
+                                    .clone()
+                                    .unwrap_or_default();
+                                let start = full_text.len();
+                                full_text.push_str(&child_text);
+                                let end = full_text.len();
+                                let is_link = child_elem.name.as_str() == "Link"
+                                    || child_elem.ports.iter().any(|p| p.name.as_str() == "url");
+                                let mut style = SpanStyle::default();
+                                if is_link {
+                                    style.url = child_elem.ports.iter().find(|p| p.name.as_str() == "url").and_then(|p| match &p.expr {
+                                        Expr::Literal(Literal::String(s, _)) => Some(s.clone()),
+                                        _ => None,
+                                    });
+                                    style.color = Some("#1a73e8".to_string());
+                                    style.underline = true;
+                                    style.cursor = Some(CursorKind::Pointer);
+                                }
+                                text_spans.push(TextSpan {
+                                    range: start..end,
+                                    node_id: Some(child_id),
+                                    style,
+                                });
                             }
                         }
                     }
@@ -3806,7 +4041,7 @@ fn expand_primitive_element(
             child_ids: &child_ids,
             num_children,
             child_node: None,
-            allow_parent: ctx.enclosing_component_id.is_none(),
+            nodes: &doc.nodes,
             shadowed_ports: ctx.shadowed_ports,
             is_event_port: false,
             parent_ports: ctx.parent_ports,
@@ -3834,7 +4069,7 @@ fn expand_primitive_element(
                 child_ids: &child_ids,
                 num_children,
                 child_node: None,
-                allow_parent: ctx.enclosing_component_id.is_none(),
+                nodes: &doc.nodes,
                 shadowed_ports: ctx.shadowed_ports,
                 is_event_port: false,
                 parent_ports: ctx.parent_ports,
@@ -3876,7 +4111,7 @@ fn expand_primitive_element(
         child_ids: &child_ids,
         num_children,
         child_node: None,
-        allow_parent: ctx.enclosing_component_id.is_none(),
+        nodes: &doc.nodes,
         shadowed_ports: ctx.shadowed_ports,
         is_event_port: false,
         parent_ports: ctx.parent_ports,
@@ -5320,18 +5555,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     return Ok(Expr::Ident(Ident::new(cid.canonical_name(), id.span)));
                 } else {
                     return Err(CompileError::Custom {
-                        message: "'child' can only be used inside a '\\Children { ... }' block".to_string(),
+                        message: "'child' can only be used inside a '\\Children(...)' block".to_string(),
                         span: id.span,
                     });
                 }
             }
             if id.as_str() == "parent" {
-                if !ctx.allow_parent {
-                    return Err(CompileError::Custom {
-                        message: "Cannot use 'parent' inside a '\\Children' block or internal component element; reference component properties directly".to_string(),
-                        span: id.span,
-                    });
-                }
                 if let Some(parent) = ctx.parent_node {
                     return Ok(Expr::Ident(Ident::new(parent.canonical_name(), id.span)));
                 }
@@ -5525,21 +5754,18 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         Expr::Ident(Ident::new(cid.canonical_name(), m.target.span()))
                     } else {
                         return Err(CompileError::Custom {
-                            message: "'child' can only be used inside a '\\Children { ... }' block".to_string(),
+                            message: "'child' can only be used inside a '\\Children(...)' block".to_string(),
                             span: m.target.span(),
                         });
                     }
                 } else if let Some(LexicalBinding::Node(node_id)) = ctx.lexical_scope.get(target_name) {
                     Expr::Ident(Ident::new(node_id.canonical_name(), m.target.span()))
                 } else if target_name == "parent" {
-                    if !ctx.allow_parent {
-                        return Err(CompileError::Custom {
-                            message: "Cannot use 'parent' inside a '\\Children' block or internal component element; reference component properties directly".to_string(),
-                            span: m.target.span(),
-                        });
-                    }
                     if let Some(parent) = ctx.parent_node {
-                        if !ctx.parent_ports.is_empty() && !ctx.parent_ports.contains(&m.member.as_str().to_string()) {
+                        if m.member.as_str() != "parent"
+                            && !ctx.parent_ports.is_empty()
+                            && !ctx.parent_ports.contains(&m.member.as_str().to_string())
+                        {
                             let parent_name = ctx.parent_name.unwrap_or("unknown");
                             return Err(CompileError::Custom {
                                 message: format!("Node '{}' has no public port '{}'", parent_name, m.member),
@@ -5569,6 +5795,25 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 Expr::Ident(id) => NodeId::from_canonical_name(id.as_str()),
                 _ => None,
             };
+
+            // Chained parent access: e.g. parent.parent -> parent_id of target_node_id
+            if m.member.as_str() == "parent" {
+                if let Some(tid) = target_node_id {
+                    let parent_id = if Some(tid) == ctx.child_node {
+                        ctx.parent_node
+                    } else {
+                        ctx.nodes.get(tid.0).and_then(|n| n.parent)
+                    };
+                    if let Some(pid) = parent_id {
+                        return Ok(Expr::Ident(Ident::new(pid.canonical_name(), m.span)));
+                    } else {
+                        return Err(CompileError::Custom {
+                            message: "Node has no parent".to_string(),
+                            span: m.span,
+                        });
+                    }
+                }
+            }
 
             // Font node reference access: e.g. label.font -> font_node_id
             if m.member.as_str() == "font" {

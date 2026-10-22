@@ -31,10 +31,10 @@ fn test_expand_flow_recurrence_and_graph() {
     }
     \Component Paragraph(x: Distance = 0, y: Distance = 0, width: Distance = 100px, height: Distance = 20px) {}
     \Component Flow(x: Distance = 0, y: Distance = 0, gap: Distance = 16px) {
-      \Children {
+      \Children(
         x: left,
         y: prev ? prev.bottom + gap : top
-      }
+      )
     }
 
     \Flow(gap: 24px) {
@@ -170,9 +170,9 @@ fn test_precedence_explicit_overrides_ambient() {
     let input = r#"
     \Component Paragraph(x: Distance = 0, y: Distance = 0, width: Distance = 100px, height: Distance = 20px) {}
     \Component Flow(x: Distance = 0, gap: Distance = 16px) {
-      \Children {
+      \Children(
         x: left
-      }
+      )
     }
 
     \Flow {
@@ -205,10 +205,10 @@ fn test_expand_shaded_box_intrinsic_children_width() {
         height: height,
         color: bg_color
       )
-      \Children {
+      \Children(
         x: x + 16px,
         y: y + 16px
-      }
+      )
     }
 
     \ShadedBox(bg_color: #333333) {
@@ -299,10 +299,10 @@ fn test_topological_sort_acyclic() {
     }
     \Component Paragraph(x: Distance = 0, y: Distance = 0, width: Distance = 100px, height: Distance = 20px) {}
     \Component Flow(x: Distance = 0, y: Distance = 0, gap: Distance = 16px) {
-      \Children {
+      \Children(
         x: left,
         y: prev ? prev.bottom + gap : top
-      }
+      )
     }
 
     \Flow(gap: 24px) {
@@ -347,9 +347,9 @@ fn test_cycle_detection_fit_content_paradox() {
     let input = r#"
     \Component Button(width: Distance) {}
     \Component ParadoxBox(width: Distance = max(children.width)) {
-      \Children {
+      \Children(
         width: width
-      }
+      )
     }
 
     \ParadoxBox {
@@ -438,10 +438,10 @@ fn test_multi_node_cycle_detection() {
 fn test_end_to_end_flow_math_evaluation() {
     let input = r#"
     \Component Flow(x: Distance = 0, y: Distance = 0, gap: Distance = 16px) {
-      \Children {
+      \Children(
         x: left,
         y: prev ? prev.bottom + gap : top
-      }
+      )
     }
 
     \Flow(gap: 24px) {
@@ -494,10 +494,10 @@ fn test_end_to_end_shaded_box_bottom_up_evaluation() {
         height: height,
         color: bg_color
       )
-      \Children {
+      \Children(
         x: x + 16px,
         y: y + 16px
-      }
+      )
     }
 
     \ShadedBox(bg_color: #333333) {
@@ -567,12 +567,12 @@ fn test_painters_algorithm_and_z_ordering() {
 fn test_global_window_dimensions_access() {
     let input = r#"
     \Component Container {
-        \Children {
+        \Children(
             x: 0,
             y: 0,
             width: window.width / 2,
             height: window.height - 100px
-        }
+        )
     }
 
     \Container {
@@ -619,9 +619,9 @@ fn test_top_level_parent_resolves_to_window() {
 fn test_responsive_flow_clamped_formula() {
     let input = r#"
     \Component Flow {
-        \Children {
+        \Children(
             width: min(max(window.width, 400px), 700px)
-        }
+        )
     }
 
     \Flow {
@@ -651,11 +651,11 @@ fn test_responsive_flow_clamped_formula() {
 fn test_parley_text_height_wrapping_multiline() {
     let input = r#"
     \Component Flow(x: Distance = 0, y: Distance = 0, gap: Distance = 24px) {
-        \Children {
+        \Children(
             x: left,
             y: prev ? prev.bottom + gap : top,
             width: 320px
-        }
+        )
     }
 
     \Flow {
@@ -771,9 +771,9 @@ fn test_required_port_provided_by_ambient_parent() {
     }
 
     \Component TaskList {
-      \Children {
+      \Children(
         progress_percentage: 42px
-      }
+      )
     }
 
     \TaskList {
@@ -796,9 +796,9 @@ fn test_required_port_ambient_overridden_by_instance() {
     }
 
     \Component TaskList {
-      \Children {
+      \Children(
         progress_percentage: 42px
-      }
+      )
     }
 
     \TaskList {
@@ -817,7 +817,7 @@ fn test_required_port_ambient_overridden_by_instance() {
 #[test]
 fn test_precedence_3_tier_hierarchy() {
     // Tier 1: Component signature default (width: 100px)
-    // Tier 2: Ambient parent (\Children { width: 200px })
+    // Tier 2: Ambient parent (\Children( width: 200px ))
     // Tier 3: Explicit instance override (width: 300px)
     let input = r#"
     \Component Button(width: Distance = 100px) {
@@ -825,9 +825,9 @@ fn test_precedence_3_tier_hierarchy() {
     }
 
     \Component Container {
-      \Children {
+      \Children(
         width: 200px
-      }
+      )
     }
 
     // Instance 1: Uses Tier 1 (Component default = 100)
@@ -923,10 +923,10 @@ fn test_lexical_scope_in_children_directive() {
     let input = r#"
     \Component FlowWithMargin(x: Distance = 0) {
       \let margin = 35px
-      \Children {
+      \Children(
         x: left + margin,
         y: 0
-      }
+      )
     }
 
     \FlowWithMargin {
@@ -983,7 +983,7 @@ fn test_visibility_child_cannot_access_parent_private_local_via_parent_dot() {
     let input = r#"
     \Component CustomCard {
       \let card_padding = 16px
-      \Children {}
+      \Children()
     }
 
     \CustomCard {
@@ -1007,7 +1007,7 @@ fn test_visibility_child_cannot_access_parent_private_local_via_bare_ident() {
     let input = r#"
     \Component CustomCard {
       \let card_padding = 16px
-      \Children {}
+      \Children()
     }
 
     \CustomCard {
@@ -1031,10 +1031,10 @@ fn test_visibility_parent_explicit_push_via_children_directive() {
     let input = r#"
     \Component CustomCard(x: Distance = 0) {
       \let card_padding = 16px
-      \Children {
+      \Children(
         x: left + card_padding,
         y: 0
-      }
+      )
     }
 
     \CustomCard {
@@ -1055,10 +1055,10 @@ fn test_visibility_child_retains_caller_lexical_scope() {
     let input = r#"
     \Component CustomCard(x: Distance = 0) {
       \let internal_padding = 10px
-      \Children {
+      \Children(
         x: left + internal_padding,
         y: 0
-      }
+      )
     }
 
     \let caller_width = 180px;
@@ -1083,10 +1083,10 @@ fn test_visibility_parent_private_local_does_not_shadow_caller_local() {
     let input = r#"
     \Component CustomCard(x: Distance = 0) {
       \let my_size = 999px
-      \Children {
+      \Children(
         x: left,
         y: 0
-      }
+      )
     }
 
     \let my_size = 42px;
@@ -1109,10 +1109,10 @@ fn test_visibility_child_explicit_parent_port_bypasses_internal_shadow() {
     let input = r#"
     \Component CustomCard(x: Distance = 0, clip_offset: Distance = 5px) {
       \let clip_offset = 100px // internal shadow
-      \Children {
+      \Children(
         x: left,
         y: 0
-      }
+      )
     }
 
     \CustomCard(clip_offset: 25px) {
@@ -1236,9 +1236,9 @@ fn test_forbidden_parent_port_on_component_param() {
 fn test_forbidden_parent_port_on_children_directive() {
     let input = r#"
     \Component Container {
-        \Children {
+        \Children(
             parent: 50px
-        }
+        )
     }
     \Container {
         \Rect()
@@ -1387,13 +1387,13 @@ fn test_children_directive_ambient_clip() {
     let input = r##"
     \Component ScrollContainer {
         \let clip = \Clip(box: \Box(width: 150px, height: 150px))
-        \Children {
+        \Children(
             clip: clip,
             x: 0,
             y: 0,
             width: 100px,
             height: 100px
-        }
+        )
     }
 
     \ScrollContainer {
@@ -1421,10 +1421,10 @@ fn test_dom_tree_formatting() {
     let input = r#"
     \Component Card(x: Distance = 0, y: Distance = 0, bg: Color = #1e293b, width: Distance = 300px, height: Distance = 150px) {
         \Rect(x: left, y: top, width: width, height: height, color: bg)
-        \Children {
+        \Children(
             x: left + 16px,
             y: prev ? prev.bottom + 8px : top + 16px
-        }
+        )
     }
 
     \Card {
@@ -1595,9 +1595,9 @@ fn test_env_4_tier_precedence_order() {
     }
 
     \Component Container() {
-        \Children {
+        \Children(
             color: #333333
-        }
+        )
     }
 
     \Component Button(env color: Color = #111111) {
@@ -1821,9 +1821,9 @@ fn test_env_does_not_bind_to_non_env_parameter_missing_port_error() {
     }
 
     \Component Bar(color: Color) {
-        \Children {
+        \Children(
             color: color
-        }
+        )
     }
 
     \Foo(color: #F00) {
@@ -1979,9 +1979,9 @@ fn test_env_manual_wiring_in_children_directive() {
     }
 
     \Component Container {
-        \Children {
+        \Children(
             border_color: env.accent
-        }
+        )
     }
 
     \Component Box(border_color: Color) {
@@ -2597,10 +2597,10 @@ fn test_raw_text_passed_directly_to_component_children() {
 
     \Component Card(x: Distance = 0, y: Distance = 0, padding_x: Distance = 24px, padding_y: Distance = 18px) {
         \Rect(x: 10px, y: 10px, width: 300px, height: 100px, color: #1e293b)
-        \Children {
+        \Children(
             x: left + padding_x,
             y: top + padding_y
-        }
+        )
     }
 
     \Card { Hello world! }
@@ -2891,9 +2891,9 @@ fn test_overload_card_in_hstack_no_cycle() {
         \alias width = max(children.right);
         \alias right = x + width;
         \Rect(x: 0, y: 0, width: width, height: 60px, color: #000000)
-        \Children {
+        \Children(
             x: prev ? prev.right + 10px : left
-        }
+        )
     }
 
     \Component Card(x: Distance = 0, y: Distance = 0, width: Distance) {
@@ -3300,10 +3300,10 @@ fn test_dag_backed_let_over_children_and_inspector_visibility() {
     \Component Container(x: Distance = 0, y: Distance = 0) {
         \let max_w = max(children.width);
         \let total_h = sum(children.height);
-        \Children {
+        \Children(
             x: x + max_w,
             y: prev ? prev.bottom + 5px : y,
-        }
+        )
         \alias width = max_w * 2;
         \alias height = total_h;
     }
@@ -3350,7 +3350,7 @@ fn test_dag_backed_let_rejects_external_access() {
     let input = r#"
     \Component Container(x: Distance = 0, y: Distance = 0) {
         \let max_w = max(children.width);
-        \Children {}
+        \Children()
     }
 
     \let my_container = \Container {
@@ -3373,7 +3373,7 @@ fn test_dag_backed_let_rejects_child_parent_dot_access() {
     let input = r#"
     \Component Container(x: Distance = 0, y: Distance = 0) {
         \let max_w = max(children.width);
-        \Children {}
+        \Children()
     }
 
     \Container {
@@ -3395,7 +3395,7 @@ fn test_dag_backed_let_rejects_caller_override() {
     let input = r#"
     \Component Container(x: Distance = 0, y: Distance = 0) {
         \let max_w = 42px;
-        \Children {}
+        \Children()
     }
 
     \Container(max_w: 100px) {
@@ -3755,11 +3755,11 @@ fn test_children_len_and_removed_child_count_aliases() {
     let valid = r#"
     \Component EqualCols(x: Distance = 0, y: Distance = 0, width: Distance = 300px, count: Integer = children.len) {
         \let n = children.len;
-        \Children {
+        \Children(
             x: prev ? prev.right : left,
             y: top,
             width: width / children.len
-        }
+        )
     }
     \EqualCols {
         \Rect(height: 20px, color: #111111)
@@ -3778,7 +3778,7 @@ fn test_children_len_and_removed_child_count_aliases() {
     // 2. Removed aliases (num_children, children.count, parent.num_children) must fail
     let bad_num_children = r#"
     \Component Bad(width: Distance = 100px) {
-        \Children { width: width / num_children }
+        \Children( width: width / num_children )
     }
     \Bad { \Rect(x: 0, y: 0, height: 10px, color: #000) }
     "#;
@@ -3786,7 +3786,7 @@ fn test_children_len_and_removed_child_count_aliases() {
 
     let bad_children_count = r#"
     \Component Bad(width: Distance = 100px) {
-        \Children { width: width / children.count }
+        \Children( width: width / children.count )
     }
     \Bad { \Rect(x: 0, y: 0, height: 10px, color: #000) }
     "#;
@@ -3799,20 +3799,20 @@ fn test_child_restricted_to_children_block() {
     let bad_child = r#"
     \Component Bad(x: Distance = 0, y: Distance = 0, width: Distance = 100px, height: Distance = 100px) {
         \Rect(x: x, y: y, width: child.width, height: height, color: #000)
-        \Children {}
+        \Children()
     }
     \Bad { \Rect(x: 0, y: 0, width: 50px, height: 50px, color: #111) }
     "#;
     let err = directedtype::evaluate_document(&parse(bad_child).unwrap()).unwrap_err();
     assert!(
-        err.to_string().contains("'child' can only be used inside a '\\Children { ... }' block"),
+        err.to_string().contains("'child' can only be used inside a '\\Children(...)' block"),
         "Unexpected error: {}",
         err
     );
 }
 
 #[test]
-fn test_parent_disallowed_in_children_and_internal_elements() {
+fn test_parent_in_children_and_internal_elements() {
     // 1. Allowed in component parameter default and \let
     let valid_parent = r#"
     \Component FillBox(x: Distance = parent.left, y: Distance = parent.top) {
@@ -3825,33 +3825,81 @@ fn test_parent_disallowed_in_children_and_internal_elements() {
     directedtype::evaluate_document(&parse(valid_parent).unwrap())
         .expect("parent in signature default and \\let should succeed");
 
-    // 2. Disallowed inside \Children
-    let bad_children = r#"
-    \Component Bad(x: Distance = 0, y: Distance = 0) {
-        \Children { x: parent.left }
+    // 2. \Component MyComp() { \Children(x: parent.x) } -> parent refers to MyComp
+    let comp_children_parent = r#"
+    \Component MyComp(x: Distance = 35px, y: Distance = 10px) {
+        \Children(x: parent.x + 5px, y: parent.y)
     }
-    \Bad { \Rect(y: 0, width: 10px, height: 10px, color: #000) }
+    \MyComp(x: 35px, y: 10px) {
+        \Rect(width: 20px, height: 20px, color: #000)
+    }
     "#;
-    let err_children = directedtype::evaluate_document(&parse(bad_children).unwrap()).unwrap_err();
-    assert!(
-        err_children.to_string().contains("Cannot use 'parent' inside a '\\Children' block"),
-        "Unexpected error: {}",
-        err_children
-    );
+    let layout = directedtype::evaluate_document(&parse(comp_children_parent).unwrap())
+        .expect("parent inside \\Children should refer to enclosing component");
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert_eq!(rect.rect.x, 40.0);
+    assert_eq!(rect.rect.y, 10.0);
 
-    // 3. Disallowed on internal element inside component body
-    let bad_internal = r#"
-    \Component Bad(x: Distance = 0, y: Distance = 0) {
-        \Rect(x: parent.left, y: y, width: 10px, height: 10px, color: #000)
+    // 3. \Component MyComp() { \Children(x: parent.parent.x) } -> parent.parent refers to parent of MyComp
+    let comp_children_grandparent = r#"
+    \Component Outer(x: Distance = 100px, y: Distance = 50px) {
+        \Children()
     }
-    \Bad()
+    \Component MyComp(x: Distance = 10px, y: Distance = 0) {
+        \Children(x: parent.parent.x + 12px, y: parent.parent.y)
+    }
+    \Outer(x: 100px, y: 50px) {
+        \MyComp(x: 10px) {
+            \Rect(width: 20px, height: 20px, color: #000)
+        }
+    }
     "#;
-    let err_internal = directedtype::evaluate_document(&parse(bad_internal).unwrap()).unwrap_err();
-    assert!(
-        err_internal.to_string().contains("Cannot use 'parent' inside a '\\Children' block or internal component element"),
-        "Unexpected error: {}",
-        err_internal
-    );
+    let layout = directedtype::evaluate_document(&parse(comp_children_grandparent).unwrap())
+        .expect("parent.parent inside \\Children should refer to parent of MyComp");
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert_eq!(rect.rect.x, 112.0);
+    assert_eq!(rect.rect.y, 50.0);
+
+    // 4. \Component MyComp() { \Bar { \Children(x: parent.x) } } -> parent refers to \Bar (component and primitive)
+    let nested_bar_children = r#"
+    \Component Bar(x: Distance = 0, y: Distance = 0) {
+        \Children()
+    }
+    \Component MyComp(x: Distance = 10px, y: Distance = 20px) {
+        \Bar(x: 60px, y: 70px) {
+            \Children(x: parent.x + 4px, y: parent.parent.y + 3px)
+        }
+    }
+    \MyComp(x: 10px, y: 20px) {
+        \Rect(width: 15px, height: 15px, color: #000)
+    }
+    "#;
+    let layout = directedtype::evaluate_document(&parse(nested_bar_children).unwrap())
+        .expect("parent inside nested \\Bar { \\Children(...) } should refer to Bar, and parent.parent to MyComp");
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert_eq!(rect.rect.x, 64.0);
+    assert_eq!(rect.rect.y, 23.0);
+
+    // 5. \Component MyComp() { \Bar { \Foo(x: parent.x) } } and direct internal element \Foo(x: parent.x)
+    let internal_elements_parent = r#"
+    \Component Bar(x: Distance = 0, y: Distance = 0) {
+        \Children()
+    }
+    \Component Foo(x: Distance = 0, y: Distance = 0) {
+        \Rect(x: parent.x, y: parent.y, width: 10px, height: 10px, color: #000)
+    }
+    \Component MyComp(x: Distance = 15px, y: Distance = 25px) {
+        \Bar(x: 80px, y: 90px) {
+            \Foo(x: parent.x + 2px, y: parent.parent.y + 5px)
+        }
+    }
+    \MyComp()
+    "#;
+    let layout = directedtype::evaluate_document(&parse(internal_elements_parent).unwrap())
+        .expect("parent on internal elements should refer to their enclosing parent node");
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert_eq!(rect.rect.x, 82.0);
+    assert_eq!(rect.rect.y, 30.0);
 }
 
 #[test]

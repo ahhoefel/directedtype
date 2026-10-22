@@ -312,6 +312,8 @@ pub fn build_scene(
     if let Some(bg) = options.background {
         if bg.components[3] > 0.0 {
             // Find bounding box or maximum extents (starting with window bounds if available)
+            let min_x = options.scroll_offset.0.min(0.0);
+            let min_y = options.scroll_offset.1.min(0.0);
             let mut max_w: f64 = layout
                 .get_value(NodeId::WINDOW, "width")
                 .and_then(|v| v.as_f64())
@@ -324,8 +326,10 @@ pub fn build_scene(
                 max_w = max_w.max(node.rect.x + node.rect.width);
                 max_h = max_h.max(node.rect.y + node.rect.height);
             }
-            if max_w > 0.0 && max_h > 0.0 {
-                let rect = Rect::new(0.0, 0.0, max_w, max_h);
+            let max_x = max_w + (-min_x);
+            let max_y = max_h + (-min_y);
+            if max_x > min_x && max_y > min_y {
+                let rect = Rect::new(min_x, min_y, max_x, max_y);
                 root_scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(bg), None, &rect);
             }
         }

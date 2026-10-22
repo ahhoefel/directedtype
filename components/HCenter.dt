@@ -17,10 +17,10 @@
     \alias height = parent.height;
     \alias bottom = parent.bottom;
 
-    \Children {
+    \Children(
         x: x + max(0, (width - child.width) / 2),
         y: y
-    }
+    )
 }
 
 // 2. Fluid Width HCenter with explicit origin
@@ -39,10 +39,10 @@
     \alias height = resolved_height;
     \alias bottom = y + resolved_height;
 
-    \Children {
+    \Children(
         x: x + max(0, (available_width - child.width) / 2),
         y: y
-    }
+    )
 }
 
 // 3. Fluid Parent-Fitting HCenter with explicit y
@@ -61,10 +61,10 @@
     \alias height = resolved_height;
     \alias bottom = y + resolved_height;
 
-    \Children {
+    \Children(
         x: x + max(0, (available_width - child.width) / 2),
         y: y
-    }
+    )
 }
 
 // 4. Fluid Parent-Fitting HCenter
@@ -81,8 +81,8 @@
     \alias height = parent.height;
     \alias bottom = parent.bottom;
 
-    \Children {
+    \Children(
         x: x + max(0, (available_width - child.width) / 2),
         y: y
-    }
+    )
 }

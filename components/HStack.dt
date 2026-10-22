@@ -18,14 +18,14 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: prev ? prev.right + gap : x,
         y: is_center ? (y + (height - child.height) / 2) : (
             is_bottom ? (y + height - child.height) : (
                 y
             )
         )
-    }
+    )
 }
 
 // 2. Intrinsic Width & Fixed Height HStack: content-wrapping width with cross-axis alignment
@@ -43,14 +43,14 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: prev ? prev.right + gap : x,
         y: is_center ? (y + (height - child.height) / 2) : (
             is_bottom ? (y + height - child.height) : (
                 y
             )
         )
-    }
+    )
 }
 
 // 3. Explicit / Fixed Width HStack: specifies width directly, intrinsic height
@@ -69,14 +69,14 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: prev ? prev.right + gap : x,
         y: is_center ? (y + (max_child_height - child.height) / 2) : (
             is_bottom ? (y + max_child_height - child.height) : (
                 y
             )
         )
-    }
+    )
 }
 
 // 4. Intrinsic / Content-Wrapping HStack: automatically sizes width and height to wrap children
@@ -95,12 +95,12 @@
     \alias height = max_child_height > 0 ? max_child_height : 0;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: prev ? prev.right + gap : x,
         y: is_center ? (y + (max_child_height - child.height) / 2) : (
             is_bottom ? (y + max_child_height - child.height) : (
                 y
             )
         )
-    }
+    )
 }

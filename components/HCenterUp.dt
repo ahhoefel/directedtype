@@ -16,10 +16,10 @@
     \alias height = only(children.height);
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + max(0, (width - child.width) / 2),
         y: y
-    }
+    )
 }
 
 // 2. Fluid Width HCenterUp with explicit origin
@@ -37,10 +37,10 @@
     \alias height = only(children.height);
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + max(0, (available_width - child.width) / 2),
         y: y
-    }
+    )
 }
 
 // 3. Fluid Parent-Fitting HCenterUp with explicit y
@@ -58,10 +58,10 @@
     \alias height = only(children.height);
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + max(0, (available_width - child.width) / 2),
         y: y
-    }
+    )
 }
 
 // 4. Fluid Parent-Fitting HCenterUp
@@ -78,9 +78,9 @@
     \alias height = only(children.height);
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + max(0, (available_width - child.width) / 2),
         y: y
-    }
+    )
 }
 

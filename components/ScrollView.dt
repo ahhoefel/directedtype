@@ -55,11 +55,11 @@
     \let content_left = x + padding;
 
     // 3. Children inherit the clip context and are positioned statically (decoupled from scroll state)
-    \Children {
+    \Children(
         clip: clip,
         x: prev ? prev.left : content_left,
         y: prev ? prev.bottom : content_top
-    }
+    )
 
     // 4. Dynamic scrollbar
     \let content_bottom = max(children.bottom) + padding;

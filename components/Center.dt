@@ -16,10 +16,10 @@
     \alias right = x + width;
     \alias bottom = y + height;
 
-    \Children {
+    \Children(
         x: x + max(0, (width - child.width) / 2),
         y: y + max(0, (height - child.height) / 2)
-    }
+    )
 }
 
 // 2. Explicit Dimensions Center (inherits origin from parent container)
@@ -34,10 +34,10 @@
     \alias right = parent.left + width;
     \alias bottom = parent.top + height;
 
-    \Children {
+    \Children(
         x: x + max(0, (width - child.width) / 2),
         y: y + max(0, (height - child.height) / 2)
-    }
+    )
 }
 
 // 3. Fluid Dimensions Center (explicit origin, fills remaining parent space)
@@ -57,10 +57,10 @@
     \alias right = x + resolved_width;
     \alias bottom = y + resolved_height;
 
-    \Children {
+    \Children(
         x: x + max(0, (available_width - child.width) / 2),
         y: y + max(0, (available_height - child.height) / 2)
-    }
+    )
 }
 
 // 4. Fluid Parent-Fitting Center: automatically fits parent container bounds
@@ -79,8 +79,8 @@
     \alias right = parent.left + resolved_width;
     \alias bottom = parent.top + resolved_height;
 
-    \Children {
+    \Children(
         x: x + max(0, (available_width - child.width) / 2),
         y: y + max(0, (available_height - child.height) / 2)
-    }
+    )
 }
