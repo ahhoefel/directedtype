@@ -253,6 +253,7 @@ pub struct ScopeContext<'a> {
     pub parent_node: Option<NodeId>,
     pub parent_name: Option<&'a str>,
     pub prev_sibling: Option<NodeId>,
+    pub has_next_sibling: bool,
     pub child_ids: &'a [NodeId],
     pub num_children: usize,
     pub child_node: Option<NodeId>,
@@ -710,6 +711,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             parent_node: None,
                             parent_name: None,
                             prev_sibling: None,
+                            has_next_sibling: false,
                             child_ids: &empty_children,
                             num_children: 0,
                             child_node: None,
@@ -754,6 +756,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                                 parent_node: None,
                                 parent_name: None,
                                 prev_sibling: None,
+                                has_next_sibling: false,
                                 child_ids: &empty_children,
                                 num_children: 0,
                                 child_node: None,
@@ -800,6 +803,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         parent_node: None,
         parent_name: None,
         prev_sibling: None,
+        has_next_sibling: false,
         child_ids: &empty_children,
         num_children: 0,
         child_node: None,
@@ -842,6 +846,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         parent_id: Some(NodeId::WINDOW),
                         parent_name: Some("window"),
                         prev_sibling_id: last_root_id,
+                        has_next_sibling: false,
                         parent_ports: &window_scope_ports,
                         lexical_scope: &global_scope,
                         env_scope: &global_env_scope,
@@ -877,6 +882,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             parent_node: None,
                             parent_name: None,
                             prev_sibling: None,
+                            has_next_sibling: false,
                             child_ids: &empty_children,
                             num_children: 0,
                             child_node: None,
@@ -922,6 +928,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                     parent_id: Some(NodeId::WINDOW),
                     parent_name: Some("window"),
                     prev_sibling_id: last_root_id,
+                    has_next_sibling: false,
                     parent_ports: &window_scope_ports,
                     lexical_scope: &global_scope,
                     env_scope: &global_env_scope,
@@ -947,6 +954,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                             parent_node: None,
                             parent_name: None,
                             prev_sibling: None,
+                            has_next_sibling: false,
                             child_ids: &empty_children,
                             num_children: 0,
                             child_node: None,
@@ -996,6 +1004,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         parent_id: Some(NodeId::WINDOW),
                         parent_name: Some("window"),
                         prev_sibling_id: last_root_id,
+                        has_next_sibling: false,
                         parent_ports: &window_scope_ports,
                         lexical_scope: &global_scope,
                         env_scope: &global_env_scope,
@@ -1029,6 +1038,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
         parent_node: None,
         parent_name: None,
         prev_sibling: None,
+        has_next_sibling: false,
         child_ids: &empty_children,
         num_children: 0,
         child_node: None,
@@ -1098,6 +1108,7 @@ struct InstanceContext<'a> {
     pub parent_id: Option<NodeId>,
     pub parent_name: Option<&'a str>,
     pub prev_sibling_id: Option<NodeId>,
+    pub has_next_sibling: bool,
     pub parent_ports: &'a [String],
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
     pub enclosing_component_id: Option<NodeId>,
@@ -1331,6 +1342,7 @@ struct ElementContext<'a> {
     pub parent_id: Option<NodeId>,
     pub parent_name: Option<&'a str>,
     pub prev_sibling_id: Option<NodeId>,
+    pub has_next_sibling: bool,
     pub parent_ports: &'a [String],
     pub lexical_scope: &'a RefCell<HashMap<String, LexicalBinding>>,
     pub env_scope: &'a HashMap<String, EnvEntry>,
@@ -1472,6 +1484,7 @@ fn expand_element(
             parent_node: ctx.parent_id,
             parent_name: ctx.parent_name,
             prev_sibling: ctx.prev_sibling_id,
+            has_next_sibling: ctx.has_next_sibling,
             child_ids: &empty_children,
             num_children: 0,
             child_node: None,
@@ -1552,6 +1565,7 @@ fn expand_element(
             parent_id: ctx.parent_id,
             parent_name: ctx.parent_name,
             prev_sibling_id: ctx.prev_sibling_id,
+            has_next_sibling: ctx.has_next_sibling,
             parent_ports: ctx.parent_ports,
             ambient_authored_ports: ctx.ambient_authored_ports,
             enclosing_component_id: ctx.enclosing_component_id,
@@ -1850,6 +1864,7 @@ fn expand_component_instance(
                 parent_node: ctx.parent_id,
                 parent_name: ctx.parent_name,
                 prev_sibling: ctx.prev_sibling_id,
+                has_next_sibling: ctx.has_next_sibling,
                 child_ids: &empty_children,
                 num_children: 0,
                 child_node: None,
@@ -1891,6 +1906,7 @@ fn expand_component_instance(
                     parent_id: Some(ctx.comp_node_id),
                     parent_name: ctx.parent_name,
                     prev_sibling_id: ctx.prev_sibling_id,
+                    has_next_sibling: false,
                     parent_ports: ctx.parent_ports,
                     lexical_scope,
                     env_scope: caller_env_scope,
@@ -1916,6 +1932,7 @@ fn expand_component_instance(
                     parent_node: ctx.parent_id,
                     parent_name: ctx.parent_name,
                     prev_sibling: ctx.prev_sibling_id,
+                    has_next_sibling: ctx.has_next_sibling,
                     child_ids: &empty_children,
                     num_children: 0,
                     child_node: None,
@@ -1959,6 +1976,7 @@ fn expand_component_instance(
                         parent_id: Some(ctx.comp_node_id),
                         parent_name: ctx.parent_name,
                         prev_sibling_id: ctx.prev_sibling_id,
+                        has_next_sibling: false,
                         parent_ports: ctx.parent_ports,
                         lexical_scope,
                         env_scope: caller_env_scope,
@@ -2081,6 +2099,7 @@ fn expand_component_instance(
                     parent_node: ctx.parent_id,
                     parent_name: ctx.parent_name,
                     prev_sibling: ctx.prev_sibling_id,
+                    has_next_sibling: ctx.has_next_sibling,
                     child_ids: &empty_children,
                     num_children: 0,
                     child_node: None,
@@ -2106,6 +2125,7 @@ fn expand_component_instance(
                 parent_node: ctx.parent_id,
                 parent_name: ctx.parent_name,
                 prev_sibling: ctx.prev_sibling_id,
+                has_next_sibling: ctx.has_next_sibling,
                 child_ids: &empty_children,
                 num_children: 0,
                 child_node: None,
@@ -2311,6 +2331,7 @@ fn expand_component_instance(
                         parent_node: ctx.parent_id,
                         parent_name: ctx.parent_name,
                         prev_sibling: ctx.prev_sibling_id,
+                        has_next_sibling: ctx.has_next_sibling,
                         child_ids: &empty_children,
                         num_children: num_consumer_children,
                         child_node: None,
@@ -2523,6 +2544,7 @@ fn expand_component_instance(
                         parent_node: ctx.parent_id,
                         parent_name: ctx.parent_name,
                         prev_sibling: ctx.prev_sibling_id,
+                        has_next_sibling: ctx.has_next_sibling,
                         child_ids: &empty_children,
                         num_children: num_consumer_children,
                         child_node: None,
@@ -2568,6 +2590,7 @@ fn expand_component_instance(
                             parent_node: ctx.parent_id,
                             parent_name: ctx.parent_name,
                             prev_sibling: ctx.prev_sibling_id,
+                            has_next_sibling: ctx.has_next_sibling,
                             child_ids: &empty_children,
                             num_children: num_consumer_children,
                             child_node: None,
@@ -2645,6 +2668,7 @@ fn expand_component_instance(
                         parent_id: Some(ctx.comp_node_id),
                         parent_name: Some(comp_def.name.as_str()),
                         prev_sibling_id: None,
+                        has_next_sibling: false,
                         parent_ports: &internal_scope_ports,
                         lexical_scope: &local_scope,
                         env_scope: &internal_body_env_scope,
@@ -2680,6 +2704,7 @@ fn expand_component_instance(
                                 parent_node: ctx.parent_id,
                                 parent_name: ctx.parent_name,
                                 prev_sibling: ctx.prev_sibling_id,
+                                has_next_sibling: ctx.has_next_sibling,
                                 child_ids: &inst_borrow,
                                 num_children: num_consumer_children,
                                 child_node: None,
@@ -2751,6 +2776,7 @@ fn expand_component_instance(
                                 parent_id: Some(ctx.comp_node_id),
                                 parent_name: Some(comp_def.name.as_str()),
                                 prev_sibling_id: None,
+                                has_next_sibling: false,
                                 parent_ports: &internal_scope_ports,
                                 lexical_scope: &local_scope,
                                 env_scope: &internal_body_env_scope,
@@ -2798,6 +2824,7 @@ fn expand_component_instance(
                                     parent_node: ctx.parent_id,
                                     parent_name: ctx.parent_name,
                                     prev_sibling: ctx.prev_sibling_id,
+                                    has_next_sibling: ctx.has_next_sibling,
                                     child_ids: &inst_borrow,
                                     num_children: num_consumer_children,
                                     child_node: None,
@@ -2852,6 +2879,7 @@ fn expand_component_instance(
                     parent_id: Some(ctx.comp_node_id),
                     parent_name: Some(comp_def.name.as_str()),
                     prev_sibling_id: last_child_id,
+                    has_next_sibling: false,
                     parent_ports: &internal_scope_ports,
                     lexical_scope: &local_scope,
                     env_scope: &internal_body_env_scope,
@@ -2900,6 +2928,7 @@ fn expand_component_instance(
                                             parent_id: Some(ctx.comp_node_id),
                                             parent_name: Some(comp_def.name.as_str()),
                                             prev_sibling_id: None,
+                                            has_next_sibling: false,
                                             parent_ports: &comp_scope_ports,
                                             lexical_scope,
                                             env_scope: &children_env_scope,
@@ -2940,6 +2969,7 @@ fn expand_component_instance(
                                                 parent_node: ctx.parent_id,
                                                 parent_name: ctx.parent_name,
                                                 prev_sibling: ctx.prev_sibling_id,
+                                                has_next_sibling: ctx.has_next_sibling,
                                                 child_ids: &empty_children,
                                                 num_children: 0,
                                                 child_node: None,
@@ -2982,7 +3012,9 @@ fn expand_component_instance(
                     }
                 }
                 let mut last_consumer_child_id = None;
-                for entry in &consumer_child_entries {
+                let mut dir_children_ids = Vec::with_capacity(num_consumer_children);
+                for (child_idx, entry) in consumer_child_entries.iter().enumerate() {
+                    let has_next_consumer_child = child_idx + 1 < num_consumer_children;
                     let child_elem = &entry.elem;
                     let var_name = &entry.var_name;
                     let mut merged_ports = HashMap::new();
@@ -3004,6 +3036,7 @@ fn expand_component_instance(
                             parent_node: Some(ctx.comp_node_id),
                             parent_name: Some(comp_def.name.as_str()),
                             prev_sibling: last_consumer_child_id,
+                            has_next_sibling: has_next_consumer_child,
                             child_ids: &empty_children,
                             num_children: num_consumer_children,
                             child_node: Some(child_node_id),
@@ -3037,6 +3070,7 @@ fn expand_component_instance(
                             parent_node: Some(fwd.parent_id),
                             parent_name: Some(fwd.parent_name),
                             prev_sibling: last_consumer_child_id,
+                            has_next_sibling: has_next_consumer_child,
                             child_ids: &empty_children,
                             num_children: num_consumer_children,
                             child_node: Some(child_node_id),
@@ -3081,6 +3115,7 @@ fn expand_component_instance(
                         parent_id: Some(ctx.comp_node_id),
                         parent_name: Some(comp_def.name.as_str()),
                         prev_sibling_id: last_consumer_child_id,
+                        has_next_sibling: has_next_consumer_child,
                         parent_ports: &comp_scope_ports,
                         lexical_scope: entry.caller_lexical_scope,
                         env_scope: &entry_env_scope,
@@ -3109,7 +3144,14 @@ fn expand_component_instance(
                         inst_list.borrow_mut().push(child_id);
                     }
                     all_children_ids.push(child_id);
+                    dir_children_ids.push(child_id);
                     last_consumer_child_id = Some(child_id);
+                }
+                for pair in dir_children_ids.windows(2) {
+                    local_scope.borrow_mut().insert(
+                        format!("__next_of_{}", pair[0].canonical_name()),
+                        LexicalBinding::Node(pair[1]),
+                    );
                 }
             }
             ComponentBodyItem::Alias(_) => {}
@@ -3140,6 +3182,7 @@ fn expand_component_instance(
         parent_node: ctx.parent_id,
         parent_name: ctx.parent_name,
         prev_sibling: ctx.prev_sibling_id,
+        has_next_sibling: ctx.has_next_sibling,
         child_ids: &instantiated_children_ids,
         num_children: num_consumer_children,
         child_node: None,
@@ -3341,6 +3384,7 @@ fn expand_component_instance(
         parent_node: ctx.parent_id,
         parent_name: ctx.parent_name,
         prev_sibling: ctx.prev_sibling_id,
+        has_next_sibling: ctx.has_next_sibling,
         child_ids: &instantiated_children_ids,
         num_children: num_consumer_children,
         child_node: None,
@@ -3696,6 +3740,7 @@ fn expand_primitive_element(
                         parent_id: Some(node_id),
                         parent_name: Some(elem.name.as_str()),
                         prev_sibling_id: last_child_id,
+                        has_next_sibling: false,
                         parent_ports: &primitive_scope_ports,
                         lexical_scope: ctx.lexical_scope,
                         env_scope: ctx.env_scope,
@@ -3836,6 +3881,7 @@ fn expand_primitive_element(
                             parent_id: Some(node_id),
                             parent_name: Some(elem.name.as_str()),
                             prev_sibling_id: last_child_id,
+                            has_next_sibling: false,
                             parent_ports: &primitive_scope_ports,
                             lexical_scope: ctx.lexical_scope,
                             env_scope: ctx.env_scope,
@@ -3984,7 +4030,7 @@ fn expand_primitive_element(
                         let num_consumer_children = consumer_items.len();
                         let empty_children: [NodeId; 0] = [];
                         let empty_ports: [String; 0] = [];
-                        for entry in consumer_items {
+                        for (child_idx, entry) in consumer_items.iter().enumerate() {
                             if let Some(chunk) = &entry.raw_text {
                                 if elem.name.as_str() == "Text"
                                     && dir.ports.is_empty()
@@ -3998,6 +4044,7 @@ fn expand_primitive_element(
                                 }
                             }
 
+                            let has_next_sibling = child_idx + 1 < num_consumer_children;
                             let child_elem = &entry.elem;
                             let mut merged_ports = HashMap::new();
                             let mut authored_ambient_ports = HashMap::new();
@@ -4010,6 +4057,7 @@ fn expand_primitive_element(
                                     parent_node: Some(node_id),
                                     parent_name: Some(elem.name.as_str()),
                                     prev_sibling: last_child_id,
+                                    has_next_sibling,
                                     child_ids: &empty_children,
                                     num_children: num_consumer_children,
                                     child_node: Some(child_node_id),
@@ -4041,6 +4089,7 @@ fn expand_primitive_element(
                                     parent_node: Some(fwd.parent_id),
                                     parent_name: Some(fwd.parent_name),
                                     prev_sibling: last_child_id,
+                                    has_next_sibling,
                                     child_ids: &empty_children,
                                     num_children: num_consumer_children,
                                     child_node: Some(child_node_id),
@@ -4108,6 +4157,7 @@ fn expand_primitive_element(
                                 parent_id: Some(node_id),
                                 parent_name: Some(elem.name.as_str()),
                                 prev_sibling_id: last_child_id,
+                                has_next_sibling,
                                 parent_ports: &primitive_scope_ports,
                                 lexical_scope: entry.caller_lexical_scope,
                                 env_scope: &entry.caller_env_scope,
@@ -4126,6 +4176,12 @@ fn expand_primitive_element(
                                 doc,
                                 node_fonts,
                             )?;
+                            if let Some(prev_id) = last_child_id {
+                                ctx.lexical_scope.borrow_mut().insert(
+                                    format!("__next_of_{}", prev_id.canonical_name()),
+                                    LexicalBinding::Node(child_id),
+                                );
+                            }
                             if let Some(v_name) = &entry.var_name {
                                 doc.get_node_mut(child_id).unwrap().var_name = Some(v_name.clone());
                                 entry.caller_lexical_scope.borrow_mut().insert(v_name.clone(), LexicalBinding::Node(child_id));
@@ -4197,6 +4253,7 @@ fn expand_primitive_element(
                     parent_id,
                     parent_name,
                     prev_sibling_id: last_child_id,
+                    has_next_sibling: false,
                     parent_ports: ctx.parent_ports,
                     lexical_scope: ctx.lexical_scope,
                     env_scope: ctx.env_scope,
@@ -4240,6 +4297,7 @@ fn expand_primitive_element(
             parent_node,
             parent_name: ctx.parent_name,
             prev_sibling: ctx.prev_sibling_id,
+            has_next_sibling: ctx.has_next_sibling,
             child_ids: &child_ids,
             num_children,
             child_node: None,
@@ -4268,6 +4326,7 @@ fn expand_primitive_element(
                 parent_node,
                 parent_name: ctx.parent_name,
                 prev_sibling: ctx.prev_sibling_id,
+                has_next_sibling: ctx.has_next_sibling,
                 child_ids: &child_ids,
                 num_children,
                 child_node: None,
@@ -4310,6 +4369,7 @@ fn expand_primitive_element(
         parent_node,
         parent_name: ctx.parent_name,
         prev_sibling: ctx.prev_sibling_id,
+        has_next_sibling: ctx.has_next_sibling,
         child_ids: &child_ids,
         num_children,
         child_node: None,
@@ -5549,6 +5609,12 @@ fn infer_expr_literal_for_typecheck<'a>(
                     | "line_gap"
                     | "gap_bottom"
                     | "line_height"
+                    | "radius"
+                    | "border_width"
+                    | "stroke_width"
+                    | "padding"
+                    | "padding_x"
+                    | "padding_y"
             ) {
                 return Some(Literal::Distance(0.0, DistanceUnit::Px, m.span));
             }
@@ -5838,6 +5904,35 @@ fn resolve_ident_or_member_to_literal<'a>(
     }
 }
 
+/// Evaluates sibling existence conditions (`prev`, `next`, `!prev`, `!next`, `&&`, `||`) at expansion time.
+fn eval_sibling_condition(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
+    match expr {
+        Expr::Paren(inner, _) => eval_sibling_condition(inner, ctx),
+        Expr::Ident(id) => match id.as_str() {
+            "prev" => Some(ctx.prev_sibling.is_some()),
+            "next" => Some(ctx.has_next_sibling),
+            _ => None,
+        },
+        Expr::Unary(u) if u.op == UnaryOp::Not => {
+            eval_sibling_condition(&u.operand, ctx).map(|b| !b)
+        }
+        Expr::Binary(bin) => match bin.op {
+            BinaryOp::And => {
+                let l = eval_sibling_condition(&bin.left, ctx)?;
+                let r = eval_sibling_condition(&bin.right, ctx)?;
+                Some(l && r)
+            }
+            BinaryOp::Or => {
+                let l = eval_sibling_condition(&bin.left, ctx)?;
+                let r = eval_sibling_condition(&bin.right, ctx)?;
+                Some(l || r)
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// Resolves the active font's `.size` expression in the current scope for `em` units and `distance_to_float(d, em)`.
 fn resolve_active_font_size_expr(ctx: &ScopeContext<'_>, span: Span) -> Result<Expr, CompileError> {
     if let Some(&fid) = ctx.node_fonts.get(&ctx.current_node) {
@@ -5888,6 +5983,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 && id.as_str() != "parent"
                 && id.as_str() != "window"
                 && id.as_str() != "prev"
+                && id.as_str() != "next"
                 && id.as_str() != "child"
             {
                 if let Some(binding) = ctx.lexical_scope.get(id.as_str()) {
@@ -5915,6 +6011,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 && id.as_str() != "parent"
                 && id.as_str() != "window"
                 && id.as_str() != "prev"
+                && id.as_str() != "next"
                 && id.as_str() != "child"
                 && NodeId::from_canonical_name(id.as_str()).is_none()
             {
@@ -5964,6 +6061,16 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     return Ok(Expr::Ident(Ident::new(prev.canonical_name(), id.span)));
                 }
             }
+            if id.as_str() == "next" {
+                if ctx.has_next_sibling {
+                    if let Some(cid) = ctx.child_node {
+                        return Ok(Expr::Ident(Ident::new(
+                            format!("__next_of_{}", cid.canonical_name()),
+                            id.span,
+                        )));
+                    }
+                }
+            }
             if id.as_str() == "num_children" {
                 return Err(CompileError::Custom {
                     message: "'num_children' is no longer supported; use 'children.len' instead".to_string(),
@@ -5974,17 +6081,25 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
         }
 
         Expr::Ternary(tern) => {
-            // Recurrence resolution for `prev ? then_expr : else_expr`
-            if let Expr::Ident(id) = tern.condition.as_ref() {
-                if id.as_str() == "prev" {
-                    if ctx.prev_sibling.is_none() {
-                        // Base case: prev does not exist -> else_expr
-                        return rewrite_expr(&tern.else_expr, ctx);
-                    } else {
-                        // Recurrence step: prev exists -> then_expr
-                        return rewrite_expr(&tern.then_expr, ctx);
+            // Recurrence resolution for `prev` / `next` conditions
+            if let Some(cond_val) = eval_sibling_condition(&tern.condition, ctx) {
+                let (chosen_raw, other_raw) = if cond_val {
+                    (&tern.then_expr, &tern.else_expr)
+                } else {
+                    (&tern.else_expr, &tern.then_expr)
+                };
+                let mut chosen = rewrite_expr(chosen_raw, ctx)?;
+                if let Expr::Literal(Literal::Integer(0, span)) = chosen {
+                    if let Ok(other_rewritten) = rewrite_expr(other_raw, ctx) {
+                        if matches!(
+                            infer_expr_literal_for_typecheck(&other_rewritten, ctx),
+                            Some(Literal::Distance(_, _, _))
+                        ) {
+                            chosen = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+                        }
                     }
                 }
+                return Ok(chosen);
             }
             let rewritten_cond = rewrite_expr(&tern.condition, ctx)?;
             let mut const_env = HashMap::new();
@@ -6117,7 +6232,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 };
             }
 
-            // Resolve target (parent, window, prev, self, child, or named node in lexical scope)
+            // Resolve target (parent, window, prev, next, self, child, or named node in lexical scope)
             let resolved_target = if let Some(target_name) = &target_ident_name {
                 if target_name == "self" {
                     if ctx.is_event_port {
@@ -6175,6 +6290,19 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 } else if target_name == "prev" {
                     if let Some(prev) = ctx.prev_sibling {
                         Expr::Ident(Ident::new(prev.canonical_name(), m.target.span()))
+                    } else {
+                        rewrite_expr(&m.target, ctx)?
+                    }
+                } else if target_name == "next" {
+                    if ctx.has_next_sibling {
+                        if let Some(cid) = ctx.child_node {
+                            Expr::Ident(Ident::new(
+                                format!("__next_of_{}", cid.canonical_name()),
+                                m.target.span(),
+                            ))
+                        } else {
+                            rewrite_expr(&m.target, ctx)?
+                        }
                     } else {
                         rewrite_expr(&m.target, ctx)?
                     }
@@ -6490,7 +6618,7 @@ fn validate_key_expr(
                     span: id.span,
                 });
             }
-            if name == "self" || name == "parent" || name == "prev" || name == "window" {
+            if name == "self" || name == "parent" || name == "prev" || name == "next" || name == "window" {
                 return Err(CompileError::InvalidComponentKeyDependency {
                     node: node_name.to_string(),
                     name: name.to_string(),

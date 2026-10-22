@@ -4184,3 +4184,28 @@ fn test_let_redefinition_errors() {
         err5
     );
 }
+
+#[test]
+fn test_next_sibling_reference_in_children_directive() {
+    let input = r#"
+    \Component Row(x: Distance = 0, y: Distance = 0) {
+        \Children(
+            x: prev ? prev.right : x,
+            y: y,
+            height: next ? next.width : 10px
+        )
+    }
+    \Row(x: 0, y: 0) {
+        \Rect(width: 20px, color: #ff0000)
+        \Rect(width: 35px, color: #00ff00)
+        \Rect(width: 50px, color: #0000ff)
+    }
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("Should evaluate next.width");
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 3);
+    assert_eq!(rects[0].rect.height, 35.0);
+    assert_eq!(rects[1].rect.height, 50.0);
+    assert_eq!(rects[2].rect.height, 10.0);
+}
