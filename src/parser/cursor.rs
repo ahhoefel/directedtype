@@ -1,12 +1,14 @@
 use crate::ast::{ContentItem, ContentSlot, TextChunk};
 use crate::error::ParseError;
-use crate::span::Span;
+use crate::span::{intern_file_name, LineIndex, Span};
 use crate::token::Token;
 use logos::Logos;
 use std::collections::VecDeque;
 
 pub struct ParserCursor<'a> {
     source: &'a str,
+    line_index: LineIndex<'a>,
+    file_id: u32,
     pos: usize,
     peeked: VecDeque<(Token, Span)>,
 }
@@ -24,6 +26,18 @@ impl<'a> ParserCursor<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
             source,
+            line_index: LineIndex::new(source),
+            file_id: 0,
+            pos: 0,
+            peeked: VecDeque::new(),
+        }
+    }
+
+    pub fn with_file(source: &'a str, file_name: &str) -> Self {
+        Self {
+            source,
+            line_index: LineIndex::new(source),
+            file_id: intern_file_name(file_name),
             pos: 0,
             peeked: VecDeque::new(),
         }
@@ -35,6 +49,15 @@ impl<'a> ParserCursor<'a> {
 
     pub fn pos(&self) -> usize {
         self.pos
+    }
+
+    pub fn span(&self, start: usize, end: usize) -> Span {
+        let loc = self.line_index.location(start);
+        Span::with_file_location(start, end, loc.line, loc.column, self.file_id)
+    }
+
+    pub fn empty_span(&self, pos: usize) -> Span {
+        self.span(pos, pos)
     }
 
     /// Returns the logical current position, accounting for peeked tokens in the queue.
@@ -89,12 +112,12 @@ impl<'a> ParserCursor<'a> {
             match lexer.next() {
                 Some(Ok(tok)) => {
                     let range = lexer.span();
-                    let span = Span::new(start_pos + range.start, start_pos + range.end);
+                    let span = self.span(start_pos + range.start, start_pos + range.end);
                     self.pos = span.end;
                     self.peeked.push_back((tok, span));
                 }
                 Some(Err(())) => {
-                    let span = Span::new(start_pos, (start_pos + 1).min(self.source.len()));
+                    let span = self.span(start_pos, (start_pos + 1).min(self.source.len()));
                     return Err(ParseError::LexError { span });
                 }
                 None => break,
@@ -119,7 +142,7 @@ impl<'a> ParserCursor<'a> {
     }
 
     pub fn expect_token(&mut self, expected_desc: &str) -> Result<(Token, Span), ParseError> {
-        let span = Span::empty(self.pos);
+        let span = self.empty_span(self.pos);
         match self.next_token()? {
             Some(tok) => Ok(tok),
             None => Err(ParseError::UnexpectedEof {
@@ -166,7 +189,9 @@ impl<'a> ParserCursor<'a> {
         let mut raw_buf = String::new();
         let mut text_start = self.pos;
 
-        let flush_text = |buf: &mut String,
+        let file_id = self.file_id;
+        let flush_text = |line_index: &LineIndex<'_>,
+                          buf: &mut String,
                           items: &mut Vec<ContentItem>,
                           start: usize,
                           end: usize,
@@ -177,6 +202,9 @@ impl<'a> ParserCursor<'a> {
             let normalized = normalize_whitespace(buf);
             let has_newline = buf.contains('\n');
             buf.clear();
+
+            let loc = line_index.location(start);
+            let span = Span::with_file_location(start, end, loc.line, loc.column, file_id);
 
             // Discard pure whitespace chunks between elements or at boundaries
             if normalized.trim().is_empty() {
@@ -190,7 +218,7 @@ impl<'a> ParserCursor<'a> {
                     if !already_ends_with_space {
                         items.push(ContentItem::Text(TextChunk {
                             text: " ".to_string(),
-                            span: Span::new(start, end),
+                            span,
                         }));
                     }
                 }
@@ -210,7 +238,7 @@ impl<'a> ParserCursor<'a> {
             if !trimmed.is_empty() {
                 items.push(ContentItem::Text(TextChunk {
                     text: trimmed,
-                    span: Span::new(start, end),
+                    span,
                 }));
             }
         };
@@ -228,9 +256,9 @@ impl<'a> ParserCursor<'a> {
             // Closing brace ends the content slot
             if rem.starts_with('}') {
                 if mode == SlotMode::ContentSlot {
-                    flush_text(&mut raw_buf, &mut items, text_start, self.pos, true);
+                    flush_text(&self.line_index, &mut raw_buf, &mut items, text_start, self.pos, true);
                 }
-                let close_span = Span::new(self.pos, self.pos + 1);
+                let close_span = self.span(self.pos, self.pos + 1);
                 self.reset_pos(self.pos + 1);
 
                 let slot_span = open_span.merge(close_span);
@@ -243,7 +271,7 @@ impl<'a> ParserCursor<'a> {
             // Single line comment `//`
             if rem.starts_with("//") {
                 if mode == SlotMode::ContentSlot {
-                    flush_text(&mut raw_buf, &mut items, text_start, self.pos, false);
+                    flush_text(&self.line_index, &mut raw_buf, &mut items, text_start, self.pos, false);
                 }
                 self.pos += 2;
                 while self.pos < self.source.len() && self.source.as_bytes()[self.pos] != b'\n' {
@@ -259,7 +287,7 @@ impl<'a> ParserCursor<'a> {
             // Multi-line comment `/* ... */`
             if rem.starts_with("/*") {
                 if mode == SlotMode::ContentSlot {
-                    flush_text(&mut raw_buf, &mut items, text_start, self.pos, false);
+                    flush_text(&self.line_index, &mut raw_buf, &mut items, text_start, self.pos, false);
                 }
                 self.pos += 2;
                 while self.pos + 1 < self.source.len()
@@ -308,7 +336,7 @@ impl<'a> ParserCursor<'a> {
                     .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
                 {
                     if mode == SlotMode::ContentSlot {
-                        flush_text(&mut raw_buf, &mut items, text_start, self.pos, false);
+                        flush_text(&self.line_index, &mut raw_buf, &mut items, text_start, self.pos, false);
                     }
                     self.reset_pos(self.pos);
                     let inline_item = parse_inline(self)?;
@@ -318,13 +346,13 @@ impl<'a> ParserCursor<'a> {
                     text_start = self.pos;
                     continue;
                 } else if mode == SlotMode::ContentSlot {
-                    let span = Span::new(self.pos, self.pos + 2.min(rem.len()));
+                    let span = self.span(self.pos, self.pos + 2.min(rem.len()));
                     return Err(ParseError::InvalidEscape {
                         escape: rem[..2.min(rem.len())].to_string(),
                         span,
                     });
                 } else {
-                    let span = Span::new(self.pos, self.pos + 1);
+                    let span = self.span(self.pos, self.pos + 1);
                     return Err(ParseError::UnexpectedToken {
                         expected: "let, env, alias, state, assert, Children, or element name after '\\'".to_string(),
                         found: rem[..1].to_string(),
@@ -343,7 +371,7 @@ impl<'a> ParserCursor<'a> {
                     }
                     end += c.len_utf8();
                 }
-                let span = Span::new(self.pos, end);
+                let span = self.span(self.pos, end);
                 return Err(ParseError::UnexpectedToken {
                     expected: "'\\' before command or element in component body".to_string(),
                     found: self.source[self.pos..end].to_string(),
@@ -353,7 +381,7 @@ impl<'a> ParserCursor<'a> {
 
             // Unescaped `{` in raw text is an error
             if rem.starts_with('{') {
-                let span = Span::new(self.pos, self.pos + 1);
+                let span = self.span(self.pos, self.pos + 1);
                 return Err(ParseError::Custom {
                     message: "Unescaped '{' in content text; use '\\{' to include a literal brace"
                         .to_string(),

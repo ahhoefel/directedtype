@@ -1,5 +1,7 @@
-use crate::compiler::graph::VarId;
+use crate::compiler::expanded::NodeId;
+use crate::compiler::graph::{GraphNodeInfo, VarId};
 use crate::span::Span;
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq)]
@@ -31,9 +33,10 @@ pub enum CompileError {
         span: Span,
     },
 
-    #[error("Cyclic dependency detected in layout graph: {}", format_cycle_path(.cycle))]
+    #[error("Cyclic dependency detected in layout graph:\n{}", format_cycle_path(.cycle, .node_info))]
     CyclicDependency {
         cycle: Vec<VarId>,
+        node_info: HashMap<NodeId, GraphNodeInfo>,
         span: Span,
     },
 
@@ -250,10 +253,38 @@ impl CompileError {
     }
 }
 
-fn format_cycle_path(cycle: &[VarId]) -> String {
+fn format_cycle_path(cycle: &[VarId], node_info: &HashMap<NodeId, GraphNodeInfo>) -> String {
     cycle
         .iter()
-        .map(|v| v.to_string())
+        .enumerate()
+        .map(|(i, v)| {
+            let prefix = if i == 0 { "     " } else { "  -> " };
+            match node_info.get(&v.node) {
+                Some(info) => {
+                    let var_label = if !info.name.is_empty() {
+                        if v.node.is_window() {
+                            format!("{}.{}", info.name, v.port)
+                        } else {
+                            format!("{}#{}.{}", info.name, v.node.0, v.port)
+                        }
+                    } else {
+                        v.to_string()
+                    };
+                    let loc_suffix = if info.span.line > 0 {
+                        match info.span.file_name() {
+                            Some(file) => {
+                                format!(" ({}:{}:{})", file, info.span.line, info.span.column)
+                            }
+                            None => format!(" ({}:{})", info.span.line, info.span.column),
+                        }
+                    } else {
+                        String::new()
+                    };
+                    format!("{prefix}{var_label}{loc_suffix}")
+                }
+                None => format!("{prefix}{v}"),
+            }
+        })
         .collect::<Vec<_>>()
-        .join(" -> ")
+        .join("\n")
 }

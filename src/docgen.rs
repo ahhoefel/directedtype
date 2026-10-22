@@ -5,7 +5,7 @@ use vello::peniko::Color;
 
 use crate::compiler::{CompiledDocument, FsResolver, ResolvedLayout};
 use crate::component::ComponentRegistry;
-use crate::parser::parse_document;
+use crate::parser::parse_document_with_file;
 use crate::render::color::parse_color;
 use crate::render::{HeadlessRenderer, SceneOptions};
 
@@ -462,14 +462,17 @@ pub fn compile_markdown_str(
                     .clone()
                     .unwrap_or_else(|| format!("Example {example_counter}"));
 
-                // Parse and compile the .dt snippet
-                let doc = parse_document(&compiler_source).map_err(|e| {
-                    format!(
-                        "{}:{}: Parse error in ```dt render block: {e}",
-                        source_label.display(),
-                        block_start_line
-                    )
-                })?;
+                // Parse and compile the .dt snippet, preserving line numbers from the .dt.md file
+                let padded_compiler_source =
+                    format!("{}{compiler_source}", "\n".repeat(block_start_line));
+                let doc =
+                    parse_document_with_file(&padded_compiler_source, source_label).map_err(|e| {
+                        format!(
+                            "{}:{}: Parse error in ```dt render block: {e}",
+                            source_label.display(),
+                            block_start_line
+                        )
+                    })?;
 
                 let eval_w = opts.width.unwrap_or(800) as f64;
                 let eval_h = opts.height.unwrap_or(600) as f64;
@@ -604,6 +607,7 @@ fn is_closing_fence(line: &str, opening_marker: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parser::parse_document;
 
     #[test]
     fn test_parse_doc_block_options() {

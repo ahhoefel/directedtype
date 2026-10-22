@@ -24,7 +24,7 @@ use crate::compiler::layout::ResolvedLayout;
 use crate::compiler::module::FsResolver;
 use crate::compiler::{CompiledDocument, Value};
 use crate::interaction::{Event, EventKind, Modifiers, MouseButton, Point};
-use crate::parser::parse_document;
+use crate::parser::parse_document_with_file;
 use crate::render::browser_bar::{BrowserBar, BrowserBarHitResult, NavigationHistory};
 use crate::render::scene::{build_scene, ClipSceneCache, SceneOptions, TextSceneCache};
 
@@ -1778,7 +1778,7 @@ impl ViewerApp {
         let source = std::fs::read_to_string(&resolved)
             .map_err(|e| format!("Failed to read '{}': {e}", resolved.display()))?;
 
-        let doc = parse_document(&source)
+        let doc = parse_document_with_file(&source, &resolved)
             .map_err(|e| format!("Parse error in '{}': {e}", resolved.display()))?;
 
         let (vp_w, vp_h) = self.viewport_size();
@@ -1911,7 +1911,7 @@ impl ViewerApp {
         let source = std::fs::read_to_string(&path)
             .map_err(|e| format!("Failed to read '{}': {e}", path.display()))?;
 
-        let doc = parse_document(&source)
+        let doc = parse_document_with_file(&source, &path)
             .map_err(|e| format!("Parse error in '{}': {e}", path.display()))?;
 
         let (vp_w, vp_h) = self.viewport_size();
@@ -2029,7 +2029,7 @@ impl ViewerApp {
             }
         };
 
-        let new_doc = match parse_document(&source) {
+        let new_doc = match parse_document_with_file(&source, &path) {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("[HotReload] Parse error in '{}':\n{e}", path.display());
@@ -3861,7 +3861,7 @@ pub fn run_viewer_with_file_and_registry(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let source = std::fs::read_to_string(&file_path)
         .map_err(|e| format!("Failed to read file '{}': {e}", file_path.display()))?;
-    let doc = parse_document(&source)
+    let doc = parse_document_with_file(&source, &file_path)
         .map_err(|e| format!("Parse error in '{}': {e}", file_path.display()))?;
     let base_dir = file_path.parent().unwrap_or_else(|| std::path::Path::new("."));
     let resolver = FsResolver;

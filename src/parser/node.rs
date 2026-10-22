@@ -260,7 +260,7 @@ pub fn parse_content_item(
             None => {
                 return Err(ParseError::UnexpectedEof {
                     expected: "command or element name after '\\'".to_string(),
-                    span: Span::empty(cursor.pos()),
+                    span: cursor.empty_span(cursor.pos()),
                 });
             }
         }

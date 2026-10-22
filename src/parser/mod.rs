@@ -11,12 +11,31 @@ use crate::parser::component::{
 };
 use crate::parser::cursor::ParserCursor;
 use crate::parser::node::parse_element_node;
-use crate::span::Span;
 use crate::token::Token;
 
 /// Parses a full DirectedType source string into an un-evaluated AST `Document`.
 pub fn parse_document(source: &str) -> Result<Document, ParseError> {
-    let mut cursor = ParserCursor::new(source);
+    parse_with_cursor(ParserCursor::new(source))
+}
+
+/// Parses a full DirectedType source string with an associated file path into an AST `Document`.
+pub fn parse_document_with_file(
+    source: &str,
+    path: &std::path::Path,
+) -> Result<Document, ParseError> {
+    let file_name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    let cursor = if file_name.is_empty() {
+        ParserCursor::new(source)
+    } else {
+        ParserCursor::with_file(source, file_name)
+    };
+    parse_with_cursor(cursor)
+}
+
+fn parse_with_cursor(mut cursor: ParserCursor<'_>) -> Result<Document, ParseError> {
     let mut items = Vec::new();
     let start_pos = cursor.pos();
 
@@ -79,7 +98,7 @@ pub fn parse_document(source: &str) -> Result<Document, ParseError> {
     }
 
     let end_pos = cursor.pos();
-    let doc_span = Span::new(start_pos, end_pos);
+    let doc_span = cursor.span(start_pos, end_pos);
 
     Ok(Document {
         items,

@@ -416,7 +416,7 @@ pub fn parse_use_declaration(cursor: &mut ParserCursor<'_>) -> Result<UseDeclara
             None => {
                 return Err(ParseError::UnexpectedEof {
                     expected: "'from' keyword after import list".to_string(),
-                    span: Span::empty(cursor.pos()),
+                    span: cursor.empty_span(cursor.pos()),
                 });
             }
         }
@@ -434,7 +434,7 @@ pub fn parse_use_declaration(cursor: &mut ParserCursor<'_>) -> Result<UseDeclara
             None => {
                 return Err(ParseError::UnexpectedEof {
                     expected: "string literal file path after 'from'".to_string(),
-                    span: Span::empty(cursor.pos()),
+                    span: cursor.empty_span(cursor.pos()),
                 });
             }
         };
@@ -465,7 +465,7 @@ pub fn parse_use_declaration(cursor: &mut ParserCursor<'_>) -> Result<UseDeclara
             None => {
                 return Err(ParseError::UnexpectedEof {
                     expected: "string literal file path or '{' after '\\use'".to_string(),
-                    span: Span::empty(cursor.pos()),
+                    span: cursor.empty_span(cursor.pos()),
                 });
             }
         };
@@ -484,7 +484,7 @@ pub fn parse_use_declaration(cursor: &mut ParserCursor<'_>) -> Result<UseDeclara
                 None => {
                     return Err(ParseError::UnexpectedEof {
                         expected: "identifier alias after 'as'".to_string(),
-                        span: Span::empty(cursor.pos()),
+                        span: cursor.empty_span(cursor.pos()),
                     });
                 }
             }

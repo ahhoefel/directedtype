@@ -35,6 +35,24 @@ pub struct VariableNode {
     pub span: Span,
 }
 
+/// Metadata about a node in the layout graph for diagnostic reporting.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphNodeInfo {
+    pub name: String,
+    pub span: Span,
+}
+
+fn unmangle_component_name(name: &str) -> &str {
+    if let Some(rest) = name.strip_prefix("__dt_") {
+        if let Some((hash_part, original)) = rest.split_once('_') {
+            if !hash_part.is_empty() && hash_part.chars().all(|c| c.is_ascii_hexdigit()) {
+                return original;
+            }
+        }
+    }
+    name
+}
+
 /// The flat layout dependency graph.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariableGraph {
@@ -44,6 +62,8 @@ pub struct VariableGraph {
     pub upstream: HashMap<VarId, Vec<VarId>>,
     /// Downstream dependents: VarId -> list of variables that depend on it
     pub downstream: HashMap<VarId, Vec<VarId>>,
+    /// Node metadata (component/element type name and source span) keyed by NodeId
+    pub node_info: HashMap<NodeId, GraphNodeInfo>,
 }
 
 impl VariableGraph {
@@ -52,7 +72,19 @@ impl VariableGraph {
             variables: HashMap::new(),
             upstream: HashMap::new(),
             downstream: HashMap::new(),
+            node_info: HashMap::new(),
         }
+    }
+
+    /// Registers diagnostic metadata (component/element type name and span) for a node.
+    pub fn set_node_info(&mut self, id: NodeId, name: impl Into<String>, span: Span) {
+        self.node_info.insert(
+            id,
+            GraphNodeInfo {
+                name: name.into(),
+                span,
+            },
+        );
     }
 
     /// Adds a variable to the graph with its defining equation.
@@ -119,6 +151,7 @@ pub fn build_variable_graph_with_window(
 
     // 0. Ambient Window Node Variables
     let window_span = Span::default();
+    graph.set_node_info(NodeId::WINDOW, "Window", window_span);
     graph.add_variable(
         VarId::new(NodeId::WINDOW, "x"),
         Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, window_span)),
@@ -185,6 +218,11 @@ pub fn build_variable_graph_with_window(
     }
 
     for node in &doc.nodes {
+        graph.set_node_info(
+            node.id,
+            unmangle_component_name(&node.name),
+            node.span,
+        );
         let is_root = doc.roots.contains(&node.id) || node.parent.is_none_or(|p| p.is_window());
         let mut ports = node.ports.clone();
 

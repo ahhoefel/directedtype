@@ -373,18 +373,99 @@ fn test_cycle_detection_fit_content_paradox() {
 
             let err_msg = err.to_string();
             assert!(
-                err_msg.contains("Cyclic dependency detected"),
-                "Error message should mention cyclic dependency: {}",
+                err_msg.contains("Cyclic dependency detected in layout graph:\n     "),
+                "Error message should mention cyclic dependency with 5-space indent on first line: {}",
                 err_msg
             );
             assert!(
-                err_msg.contains("width"),
-                "Error message should mention the cyclic width variable: {}",
+                err_msg.contains("ParadoxBox#0.width (9:5)"),
+                "Error message should include ParadoxBox#0.width and source position: {}",
+                err_msg
+            );
+            assert!(
+                err_msg.contains("  -> Button#1.width (10:7)"),
+                "Error message should include Button#1.width and source position on indented line: {}",
                 err_msg
             );
         }
         other => panic!("Expected CyclicDependency error, got: {:?}", other),
     }
+}
+
+#[test]
+fn test_cycle_detection_with_file_name() {
+    use directedtype::parser::parse_document_with_file;
+    use std::path::Path;
+
+    let src = "\
+\\Component Button(width: Distance) {}
+\\Component ParadoxBox(width: Distance = max(children.width)) {
+  \\Children(width: width)
+}
+\\ParadoxBox {
+  \\Button { Click Me }
+}";
+
+    let doc = parse_document_with_file(src, Path::new("docs/tutorial/intro.dt.md")).unwrap();
+    let err = directedtype::compiler::compile_and_sort(&doc)
+        .expect_err("Expected cyclic dependency error");
+    let err_msg = err.to_string();
+
+    assert!(
+        err_msg.contains("Cyclic dependency detected in layout graph:\n     "),
+        "First line of cycle should be indented by 5 spaces: {}",
+        err_msg
+    );
+    assert!(
+        err_msg.contains("ParadoxBox#0.width (intro.dt.md:5:1)"),
+        "Cycle node should format as Type#id.port (file:line:col): {}",
+        err_msg
+    );
+    assert!(
+        err_msg.contains("  -> Button#1.width (intro.dt.md:6:3)"),
+        "Subsequent cycle line should align with '  -> ' and include (file:line:col): {}",
+        err_msg
+    );
+}
+
+#[test]
+fn test_cycle_detection_dom_application_logic_without_line_numbers() {
+    use directedtype::dom::Dom;
+
+    let mut dom = Dom::from_source(
+        r#"
+        \Component Button(width: Distance) {}
+        \Component ParadoxBox(width: Distance = max(children.width)) {
+          \Children(width: width)
+        }
+        "#,
+    )
+    .unwrap();
+    let box_a = dom.create_element("ParadoxBox", Vec::new());
+    let btn_b = dom.create_element("Button", Vec::new());
+    dom.append_root(box_a).unwrap();
+    dom.append_child(box_a, btn_b).unwrap();
+
+    let err = dom
+        .commit()
+        .expect_err("Expected cyclic dependency error from programmatic DOM");
+    let err_msg = err.to_string();
+
+    assert!(
+        err_msg.contains("ParadoxBox#0.width\n"),
+        "Programmatic DOM nodes should include Type#id.port without line numbers: {}",
+        err_msg
+    );
+    assert!(
+        err_msg.contains("  -> Button#1.width\n"),
+        "Programmatic DOM nodes should include Type#id.port on indented line: {}",
+        err_msg
+    );
+    assert!(
+        !err_msg.contains('('),
+        "Programmatic DOM nodes without spans should not report location parentheses: {}",
+        err_msg
+    );
 }
 
 #[test]

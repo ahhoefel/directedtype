@@ -86,7 +86,28 @@ pub fn sort_graph(graph: &VariableGraph) -> Result<TopologicalSchedule, CompileE
             .and_then(|v| graph.get_variable(v))
             .map_or(Span::default(), |node| node.span);
 
-        return Err(CompileError::CyclicDependency { cycle, span });
+        let mut node_info = graph.node_info.clone();
+        for var_id in &cycle {
+            if !node_info.contains_key(&var_id.node) {
+                if let Some(var_node) = graph.get_variable(var_id) {
+                    if var_node.span.line > 0 {
+                        node_info.insert(
+                            var_id.node,
+                            crate::compiler::graph::GraphNodeInfo {
+                                name: String::new(),
+                                span: var_node.span,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        return Err(CompileError::CyclicDependency {
+            cycle,
+            node_info,
+            span,
+        });
     }
 
     Ok(TopologicalSchedule { order })

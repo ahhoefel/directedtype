@@ -3,7 +3,7 @@ use crate::ast::{
     UseDeclaration,
 };
 use crate::compiler::error::{AmbiguousOverloadDetails, CompileError};
-use crate::parser::parse_document;
+use crate::parser::parse_document_with_file;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -424,10 +424,12 @@ fn resolve_use_decl<R: FileResolver>(
             span: u.span,
         })?;
 
-        let parsed = parse_document(&source).map_err(|e| CompileError::ImportError {
-            path: u.path.clone(),
-            message: format!("Parse error in '{}': {}", u.path, e),
-            span: u.span,
+        let parsed = parse_document_with_file(&source, &resolved_path).map_err(|e| {
+            CompileError::ImportError {
+                path: u.path.clone(),
+                message: format!("Parse error in '{}': {}", u.path, e),
+                span: u.span,
+            }
         })?;
 
         cache.insert(canonical_path.clone(), parsed.clone());

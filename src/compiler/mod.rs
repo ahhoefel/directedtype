@@ -20,7 +20,8 @@ pub use eval::{
 pub use expand::{expand_document, expand_document_with_base_dir, expand_document_with_resolver};
 pub use expanded::{ExpandedDocument, ExpandedNode, NodeId};
 pub use graph::{
-    build_variable_graph, build_variable_graph_with_window, VarId, VariableGraph, VariableNode,
+    build_variable_graph, build_variable_graph_with_window, GraphNodeInfo, VarId, VariableGraph,
+    VariableNode,
 };
 pub use layout::{
     project_inline_fragments, resolve_layout, update_resolved_layout, Rect, ResolvedLayout,

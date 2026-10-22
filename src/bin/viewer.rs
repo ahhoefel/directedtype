@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use directedtype::parser::parse_document;
+use directedtype::parser::parse_document_with_file;
 use directedtype::render::{
     run_viewer_with_file, HeadlessRenderer, SceneOptions, ViewerConfig,
 };
@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("Failed to read file '{}': {e}", file_path.display()))?;
 
     println!("Parsing document...");
-    let doc = parse_document(&source)
+    let doc = parse_document_with_file(&source, &file_path)
         .map_err(|e| format!("Parse error in '{}': {e}", file_path.display()))?;
 
     let base_dir = file_path.parent().unwrap_or_else(|| std::path::Path::new("."));

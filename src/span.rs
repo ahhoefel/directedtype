@@ -1,29 +1,152 @@
 use std::fmt;
+use std::sync::{OnceLock, RwLock};
 
-/// Represents a half-open byte range `[start, end)` in the source text.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Hash)]
+static FILE_INTERNER: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
+
+pub fn intern_file_name(name: &str) -> u32 {
+    if name.is_empty() {
+        return 0;
+    }
+    let lock = FILE_INTERNER.get_or_init(|| RwLock::new(Vec::new()));
+    if let Ok(files) = lock.read() {
+        if let Some(idx) = files.iter().position(|f| f == name) {
+            return (idx + 1) as u32;
+        }
+    }
+    if let Ok(mut files) = lock.write() {
+        if let Some(idx) = files.iter().position(|f| f == name) {
+            return (idx + 1) as u32;
+        }
+        files.push(name.to_string());
+        return files.len() as u32;
+    }
+    0
+}
+
+pub fn lookup_file_name(file_id: u32) -> Option<String> {
+    if file_id == 0 {
+        return None;
+    }
+    let lock = FILE_INTERNER.get()?;
+    let files = lock.read().ok()?;
+    files.get((file_id - 1) as usize).cloned()
+}
+
+/// Represents a half-open byte range `[start, end)` in the source text,
+/// along with optional 1-indexed line and column numbers (`0` when unset)
+/// and an optional interned source file ID (`0` when unset).
+#[derive(Clone, Copy, Default)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
+    pub line: usize,
+    pub column: usize,
+    pub file_id: u32,
+}
+
+impl PartialEq for Span {
+    fn eq(&self, other: &Self) -> bool {
+        self.start == other.start && self.end == other.end
+    }
+}
+
+impl Eq for Span {}
+
+impl std::hash::Hash for Span {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.start.hash(state);
+        self.end.hash(state);
+    }
 }
 
 impl Span {
     pub const fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
+        Self {
+            start,
+            end,
+            line: 0,
+            column: 0,
+            file_id: 0,
+        }
+    }
+
+    pub const fn with_location(start: usize, end: usize, line: usize, column: usize) -> Self {
+        Self {
+            start,
+            end,
+            line,
+            column,
+            file_id: 0,
+        }
+    }
+
+    pub const fn with_file_location(
+        start: usize,
+        end: usize,
+        line: usize,
+        column: usize,
+        file_id: u32,
+    ) -> Self {
+        Self {
+            start,
+            end,
+            line,
+            column,
+            file_id,
+        }
     }
 
     pub const fn empty(pos: usize) -> Self {
         Self {
             start: pos,
             end: pos,
+            line: 0,
+            column: 0,
+            file_id: 0,
         }
+    }
+
+    pub fn file_name(self) -> Option<String> {
+        lookup_file_name(self.file_id)
     }
 
     /// Extends this span to encompass `other`.
     pub fn merge(self, other: Span) -> Self {
+        let (start, line, column, file_id) = if self.start < other.start {
+            (
+                self.start,
+                self.line,
+                self.column,
+                if self.file_id > 0 { self.file_id } else { other.file_id },
+            )
+        } else if other.start < self.start {
+            (
+                other.start,
+                other.line,
+                other.column,
+                if other.file_id > 0 { other.file_id } else { self.file_id },
+            )
+        } else if self.line > 0 {
+            (
+                self.start,
+                self.line,
+                self.column,
+                if self.file_id > 0 { self.file_id } else { other.file_id },
+            )
+        } else {
+            (
+                self.start,
+                other.line,
+                other.column,
+                if other.file_id > 0 { other.file_id } else { self.file_id },
+            )
+        };
         Self {
-            start: self.start.min(other.start),
+            start,
             end: self.end.max(other.end),
+            line,
+            column,
+            file_id,
         }
     }
 
@@ -38,7 +161,19 @@ impl Span {
 
 impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}..{}", self.start, self.end)
+        if self.line > 0 {
+            if let Some(file) = self.file_name() {
+                write!(
+                    f,
+                    "{}..{}({}:{}:{})",
+                    self.start, self.end, file, self.line, self.column
+                )
+            } else {
+                write!(f, "{}..{}({}:{})", self.start, self.end, self.line, self.column)
+            }
+        } else {
+            write!(f, "{}..{}", self.start, self.end)
+        }
     }
 }
 
