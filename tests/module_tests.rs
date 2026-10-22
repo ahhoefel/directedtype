@@ -368,10 +368,19 @@ fn test_syntax_error_in_imported_file() {
     )
     .expect_err("Syntax error in imported file should produce ImportError");
 
-    match err {
+    match &err {
         CompileError::ImportError { path, message, .. } => {
             assert_eq!(path, "./Broken.dt");
             assert!(message.contains("Parse error"));
+            assert!(
+                message.contains("(Broken.dt:2:29)"),
+                "Expected imported file location in error message, got: {message}"
+            );
+            let full = err.to_string();
+            assert!(
+                full.contains("Import failed for './Broken.dt' (2:5):"),
+                "Expected caller import location in full error, got: {full}"
+            );
         }
         other => panic!("Expected ImportError, got {:?}", other),
     }

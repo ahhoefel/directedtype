@@ -110,6 +110,18 @@ impl Span {
         lookup_file_name(self.file_id)
     }
 
+    /// Formats the span's source location as `" (file:line:col)"`, `" (line:col)"`, or `""` if unknown.
+    pub fn format_location_suffix(self) -> String {
+        if self.line > 0 {
+            match self.file_name() {
+                Some(file) => format!(" ({}:{}:{})", file, self.line, self.column),
+                None => format!(" ({}:{})", self.line, self.column),
+            }
+        } else {
+            String::new()
+        }
+    }
+
     /// Extends this span to encompass `other`.
     pub fn merge(self, other: Span) -> Self {
         let (start, line, column, file_id) = if self.start < other.start {
