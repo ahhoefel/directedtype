@@ -472,6 +472,17 @@ fn resolve_use_decl<R: FileResolver>(
 
     // Collect all enums in scope inside this module (including transitive imports)
     let mut module_scope_enums = available_enums.clone();
+    module_scope_enums
+        .entry("LineCap".to_string())
+        .or_insert_with(|| crate::ast::EnumDef {
+            name: Ident::new("LineCap", imported_doc.span),
+            variants: vec![
+                Ident::new("Butt", imported_doc.span),
+                Ident::new("Round", imported_doc.span),
+                Ident::new("Square", imported_doc.span),
+            ],
+            span: imported_doc.span,
+        });
     for item in imported_items.iter().chain(nested_imported_items.iter()) {
         if let Item::Enum(e) = item {
             module_scope_enums.insert(e.name.as_str().to_string(), e.clone());

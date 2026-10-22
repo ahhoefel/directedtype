@@ -101,6 +101,7 @@ impl ExpandedNode {
 
     pub fn is_paint_primitive(&self) -> bool {
         self.name == "Rect"
+            || self.name == "Line"
             || self.name == "Text"
             || self.text_content.is_some()
             || self.ports.contains_key("text")

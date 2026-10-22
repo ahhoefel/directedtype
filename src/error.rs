@@ -4,37 +4,37 @@ use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum ParseError {
-    #[error("Expected {expected}, found {found}")]
+    #[error("Expected {expected}, found {found}{}", .span.format_location_suffix())]
     UnexpectedToken {
         expected: String,
         found: String,
         span: Span,
     },
 
-    #[error("Unexpected end of input, expected {expected}")]
+    #[error("Unexpected end of input, expected {expected}{}", .span.format_location_suffix())]
     UnexpectedEof {
         expected: String,
         span: Span,
     },
 
-    #[error("Invalid escape sequence '{escape}'")]
+    #[error("Invalid escape sequence '{escape}'{}", .span.format_location_suffix())]
     InvalidEscape {
         escape: String,
         span: Span,
     },
 
-    #[error("Unclosed delimiter '{delimiter}', opened at {open_span:?}")]
+    #[error("Unclosed delimiter '{delimiter}'{}", .open_span.format_location_suffix())]
     UnclosedDelimiter {
         delimiter: char,
         open_span: Span,
     },
 
-    #[error("Invalid or unrecognized token")]
+    #[error("Invalid or unrecognized token{}", .span.format_location_suffix())]
     LexError {
         span: Span,
     },
 
-    #[error("{message}")]
+    #[error("{message}{}", .span.format_location_suffix())]
     Custom {
         message: String,
         span: Span,

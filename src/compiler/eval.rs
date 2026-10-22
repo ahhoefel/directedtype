@@ -599,6 +599,49 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     Some(Value::Integer(i)) => Ok(Value::Integer(i.abs())),
                     _ => Ok(Value::Integer(0)),
                 },
+                "hypot" => {
+                    if evaluated_args.len() >= 2 {
+                        let a = &evaluated_args[0];
+                        let b = &evaluated_args[1];
+                        let has_distance =
+                            matches!(a, Value::Distance(_)) || matches!(b, Value::Distance(_));
+                        if has_distance {
+                            eval_aggregate_fn("hypot", &evaluated_args[..2], c.span, |vals| {
+                                vals[0].hypot(vals[1])
+                            })
+                        } else {
+                            let x = a.as_f64().unwrap_or(0.0);
+                            let y = b.as_f64().unwrap_or(0.0);
+                            Ok(Value::Float(x.hypot(y)))
+                        }
+                    } else {
+                        Err(CompileError::Custom {
+                            message: "hypot() expects 2 arguments: hypot(dx, dy)".to_string(),
+                            span: c.span,
+                        })
+                    }
+                }
+                "sqrt" => {
+                    let x = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    Ok(Value::Float(x.max(0.0).sqrt()))
+                }
+                "sin" => {
+                    let x = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    Ok(Value::Float(x.sin()))
+                }
+                "cos" => {
+                    let x = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    Ok(Value::Float(x.cos()))
+                }
+                "tan" => {
+                    let x = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    Ok(Value::Float(x.tan()))
+                }
+                "atan2" => {
+                    let y = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let x = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    Ok(Value::Float(y.atan2(x)))
+                }
                 "hsl" | "hsla" => {
                     let h = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
                     let s = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(100.0);

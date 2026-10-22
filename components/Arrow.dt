@@ -1,0 +1,72 @@
+// DirectedType Standard Component Library: Arrow
+// Directed line segment with an arrowhead from (x1, y1) to (x2, y2).
+
+\Component Arrow(
+    x1: Distance,
+    y1: Distance,
+    x2: Distance,
+    y2: Distance,
+    thickness: Distance = 2px,
+    color: Color = #334155,
+    head_length: Distance = max(8px, thickness * 4),
+    head_width: Distance = max(8px, thickness * 4),
+    cap: LineCap = LineCap.Round
+) {
+    \let dx = x2 - x1;
+    \let dy = y2 - y1;
+    \let len = hypot(dx, dy);
+
+    \alias x = min(x1, x2);
+    \alias y = min(y1, y2);
+    \alias width = abs(dx);
+    \alias height = abs(dy);
+    \alias left = x;
+    \alias top = y;
+    \alias right = max(x1, x2);
+    \alias bottom = max(y1, y2);
+    \alias length = len;
+
+    \let ux = len > 0 ? dx / len : 0.0;
+    \let uy = len > 0 ? dy / len : 1.0;
+    \let nx = -uy;
+    \let ny = ux;
+
+    \let base_x = x2 - head_length * ux;
+    \let base_y = y2 - head_length * uy;
+    \let half_head_w = head_width / 2.0;
+
+    \let wing1_x = base_x + half_head_w * nx;
+    \let wing1_y = base_y + half_head_w * ny;
+    \let wing2_x = base_x - half_head_w * nx;
+    \let wing2_y = base_y - half_head_w * ny;
+
+    \Line(
+        x1: x1,
+        y1: y1,
+        x2: x2,
+        y2: y2,
+        thickness: thickness,
+        color: color,
+        cap: cap
+    )
+
+    \Line(
+        x1: wing1_x,
+        y1: wing1_y,
+        x2: x2,
+        y2: y2,
+        thickness: thickness,
+        color: color,
+        cap: LineCap.Round
+    )
+
+    \Line(
+        x1: wing2_x,
+        y1: wing2_y,
+        x2: x2,
+        y2: y2,
+        thickness: thickness,
+        color: color,
+        cap: LineCap.Round
+    )
+}

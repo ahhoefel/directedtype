@@ -126,3 +126,91 @@ fn test_divider_in_vstack() {
     assert_eq!(rects[3].rect.height, 2.0);
     assert_eq!(rects[3].rect.width, 120.0);
 }
+
+#[test]
+fn test_line_primitive_and_caps() {
+    let input = r#"
+    \Line(x1: 100px, y1: 50px, x2: 20px, y2: 110px, thickness: 3px, color: #3b82f6, cap: LineCap.Round)
+    \Line(start_x: 10px, start_y: 10px, end_x: 50px, end_y: 10px, thickness: 2px, cap: LineCap.Square)
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let lines: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Line").collect();
+    assert_eq!(lines.len(), 2);
+
+    assert_eq!(lines[0].rect.x, 20.0);
+    assert_eq!(lines[0].rect.y, 50.0);
+    assert_eq!(lines[0].rect.width, 80.0);
+    assert_eq!(lines[0].rect.height, 60.0);
+
+    assert_eq!(lines[1].rect.x, 10.0);
+    assert_eq!(lines[1].rect.y, 10.0);
+    assert_eq!(lines[1].rect.width, 40.0);
+    assert_eq!(lines[1].rect.height, 0.0);
+}
+
+#[test]
+fn test_arrow_component() {
+    let input = r#"
+    \use "components/Arrow.dt"
+
+    \let a1 = \Arrow(
+        x1: 100px,
+        y1: 40px,
+        x2: 100px,
+        y2: 120px,
+        thickness: 2px,
+        color: #1e293b
+    );
+
+    \let a2 = \Arrow(
+        x1: 50px,
+        y1: 50px,
+        x2: 150px,
+        y2: 100px,
+        thickness: 3px,
+        head_length: 12px,
+        head_width: 10px,
+        cap: LineCap.Butt
+    );
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let lines: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Line").collect();
+    // Each Arrow expands to 3 Line primitives (1 shaft + 2 arrowhead wings)
+    assert_eq!(lines.len(), 6);
+
+    // First arrow is vertical from (100, 40) to (100, 120) with head_length = max(8, 2*4) = 8, head_width = 8
+    // Wing 1: (96, 112) -> (100, 120), Wing 2: (104, 112) -> (100, 120)
+    assert_eq!(lines[0].properties.get("x1").and_then(|v| v.as_f64()), Some(100.0));
+    assert_eq!(lines[0].properties.get("y1").and_then(|v| v.as_f64()), Some(40.0));
+    assert_eq!(lines[0].properties.get("x2").and_then(|v| v.as_f64()), Some(100.0));
+    assert_eq!(lines[0].properties.get("y2").and_then(|v| v.as_f64()), Some(120.0));
+
+    assert_eq!(lines[1].properties.get("x1").and_then(|v| v.as_f64()), Some(96.0));
+    assert_eq!(lines[1].properties.get("y1").and_then(|v| v.as_f64()), Some(112.0));
+    assert_eq!(lines[2].properties.get("x1").and_then(|v| v.as_f64()), Some(104.0));
+    assert_eq!(lines[2].properties.get("y1").and_then(|v| v.as_f64()), Some(112.0));
+}

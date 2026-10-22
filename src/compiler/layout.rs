@@ -157,6 +157,7 @@ impl ResolvedNode {
 
     pub fn is_paint_primitive(&self) -> bool {
         self.name == "Rect"
+            || self.name == "Line"
             || self.name == "Text"
             || self.name == "Link"
             || !self.fragments.is_empty()

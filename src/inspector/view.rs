@@ -26,7 +26,12 @@ pub struct DomTreeItem {
 impl DomTreeItem {
     /// Returns true if this element represents a paint primitive rather than an authored component.
     pub fn is_primitive(&self) -> bool {
-        self.tag == "Rect" || self.tag == "Text" || self.tag == "Font" || self.tag == "Clip" || self.tag == "Box"
+        self.tag == "Rect"
+            || self.tag == "Line"
+            || self.tag == "Text"
+            || self.tag == "Font"
+            || self.tag == "Clip"
+            || self.tag == "Box"
     }
 
     /// Formats the tree item display line (e.g. `"▼ \Table#main"`, `"► \Cell#(0, 0)"`, or `"▼ \ScrollView#main (height: 200)"`).

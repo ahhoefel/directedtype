@@ -73,7 +73,7 @@ impl StaticType {
             "Handler" => Ok(StaticType::Handler),
             "ViewPort" => Ok(StaticType::ViewPort),
             "Node" => Ok(StaticType::Node("Node".to_string())),
-            "Window" | "Rect" | "Text" | "Font" | "Clip" | "Box" | "Anchor" | "AnchorScope" => {
+            "Window" | "Rect" | "Line" | "Text" | "Font" | "Clip" | "Box" | "Anchor" | "AnchorScope" => {
                 Ok(StaticType::Node(name.to_string()))
             }
             "Number" => Err(CompileError::Custom {
@@ -329,6 +329,15 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
             Ident::new("Capital", doc.span),
             Ident::new("Ascender", doc.span),
             Ident::new("EmTop", doc.span),
+        ],
+        span: doc.span,
+    });
+    enums.entry("LineCap".to_string()).or_insert_with(|| EnumDef {
+        name: Ident::new("LineCap", doc.span),
+        variants: vec![
+            Ident::new("Butt", doc.span),
+            Ident::new("Round", doc.span),
+            Ident::new("Square", doc.span),
         ],
         span: doc.span,
     });
@@ -3354,7 +3363,7 @@ fn expand_primitive_element(
 
     if !matches!(
         elem.name.as_str(),
-        "Rect" | "Text" | "Font" | "Clip" | "Box" | "Anchor" | "AnchorScope"
+        "Rect" | "Line" | "Text" | "Font" | "Clip" | "Box" | "Anchor" | "AnchorScope"
     ) && !(is_inline_span && elem.name.as_str() == "Link")
     {
         return Err(CompileError::UndefinedComponent {
@@ -4157,6 +4166,15 @@ fn expand_primitive_element(
         }
     }
     for (port_name, expr) in resolved_port_exprs {
+        let is_ambient = ctx
+            .ambient_authored_ports
+            .is_some_and(|m| m.contains_key(&port_name));
+        if elem.name.as_str() == "Line"
+            && is_ambient
+            && matches!(port_name.as_str(), "x" | "y" | "width" | "height")
+        {
+            continue;
+        }
         if let Some(ambient_expr) = ctx.ambient_authored_ports.and_then(|m| m.get(&port_name)) {
             authored_ports.insert(port_name.clone(), ambient_expr.clone());
         } else {
@@ -4178,6 +4196,14 @@ fn expand_primitive_element(
             port_name.as_str(),
             "x"
                 | "y"
+                | "x1"
+                | "y1"
+                | "x2"
+                | "y2"
+                | "start_x"
+                | "start_y"
+                | "end_x"
+                | "end_y"
                 | "width"
                 | "height"
                 | "size"
@@ -4185,6 +4211,8 @@ fn expand_primitive_element(
                 | "baseline"
                 | "radius"
                 | "border_width"
+                | "thickness"
+                | "stroke_width"
                 | "scroll_x"
                 | "scroll_y"
         ) {
@@ -4496,6 +4524,140 @@ fn expand_primitive_element(
                 span: elem.span,
             });
         }
+    }
+
+    if elem.name.as_str() == "Line" {
+        for (alias, canonical) in [
+            ("start_x", "x1"),
+            ("start_y", "y1"),
+            ("end_x", "x2"),
+            ("end_y", "y2"),
+        ] {
+            if !ports.contains_key(canonical) {
+                if let Some(val) = ports.get(alias).cloned() {
+                    ports.insert(canonical.to_string(), val);
+                }
+                if let Some(authored) = authored_ports.get(alias).cloned() {
+                    authored_ports.insert(canonical.to_string(), authored);
+                }
+            }
+        }
+
+        for port in ["x1", "y1", "x2", "y2"] {
+            if !ports.contains_key(port) {
+                return Err(CompileError::MissingPort {
+                    node: "Line".to_string(),
+                    port: port.to_string(),
+                    span: elem.span,
+                });
+            }
+        }
+
+        if !ports.contains_key("thickness") {
+            if let Some(sw) = ports
+                .get("stroke_width")
+                .or_else(|| ports.get("border_width"))
+                .cloned()
+            {
+                ports.insert("thickness".to_string(), sw);
+            } else {
+                ports.insert(
+                    "thickness".to_string(),
+                    Expr::Literal(Literal::Distance(1.0, DistanceUnit::Px, elem.span)),
+                );
+            }
+        }
+
+        if !ports.contains_key("color") {
+            if let Some(sc) = ports
+                .get("stroke_color")
+                .or_else(|| ports.get("border_color"))
+                .cloned()
+            {
+                ports.insert("color".to_string(), sc);
+            } else {
+                ports.insert(
+                    "color".to_string(),
+                    Expr::Literal(Literal::Color("#000000".to_string(), elem.span)),
+                );
+            }
+        }
+
+        if !ports.contains_key("cap") {
+            if let Some(lc) = ports.get("line_cap").cloned() {
+                ports.insert("cap".to_string(), lc);
+            } else {
+                ports.insert(
+                    "cap".to_string(),
+                    Expr::Literal(Literal::Enum(
+                        "LineCap".to_string(),
+                        "Butt".to_string(),
+                        elem.span,
+                    )),
+                );
+            }
+        }
+
+        let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
+        let x1_ref = Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("x1", elem.span),
+            span: elem.span,
+        });
+        let y1_ref = Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("y1", elem.span),
+            span: elem.span,
+        });
+        let x2_ref = Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident.clone()),
+            member: Ident::new("x2", elem.span),
+            span: elem.span,
+        });
+        let y2_ref = Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(self_ident),
+            member: Ident::new("y2", elem.span),
+            span: elem.span,
+        });
+
+        ports.entry("x".to_string()).or_insert_with(|| {
+            Expr::Call(CallExpr {
+                callee: Ident::new("min", elem.span),
+                args: vec![x1_ref.clone(), x2_ref.clone()],
+                span: elem.span,
+            })
+        });
+        ports.entry("y".to_string()).or_insert_with(|| {
+            Expr::Call(CallExpr {
+                callee: Ident::new("min", elem.span),
+                args: vec![y1_ref.clone(), y2_ref.clone()],
+                span: elem.span,
+            })
+        });
+        ports.entry("width".to_string()).or_insert_with(|| {
+            Expr::Call(CallExpr {
+                callee: Ident::new("abs", elem.span),
+                args: vec![Expr::Binary(BinaryExpr {
+                    op: BinaryOp::Sub,
+                    left: Box::new(x2_ref),
+                    right: Box::new(x1_ref),
+                    span: elem.span,
+                })],
+                span: elem.span,
+            })
+        });
+        ports.entry("height".to_string()).or_insert_with(|| {
+            Expr::Call(CallExpr {
+                callee: Ident::new("abs", elem.span),
+                args: vec![Expr::Binary(BinaryExpr {
+                    op: BinaryOp::Sub,
+                    left: Box::new(y2_ref),
+                    right: Box::new(y1_ref),
+                    span: elem.span,
+                })],
+                span: elem.span,
+            })
+        });
     }
 
     // Base Spatial Trait defaults for height and width
@@ -5090,6 +5252,12 @@ fn expand_primitive_element(
     let overload_params = match elem.name.as_str() {
         "Clip" => vec!["box".to_string()],
         "Anchor" | "AnchorScope" => vec!["name".to_string()],
+        "Line" => vec![
+            "x1".to_string(),
+            "y1".to_string(),
+            "x2".to_string(),
+            "y2".to_string(),
+        ],
         "Rect" => {
             let color_port = if ports.contains_key("bg_color") && !ports.contains_key("color") {
                 "bg_color"
@@ -5163,6 +5331,18 @@ fn infer_expr_literal_for_typecheck<'a>(
                     | "height"
                     | "x"
                     | "y"
+                    | "x1"
+                    | "y1"
+                    | "x2"
+                    | "y2"
+                    | "start_x"
+                    | "start_y"
+                    | "end_x"
+                    | "end_y"
+                    | "thickness"
+                    | "head_length"
+                    | "head_width"
+                    | "length"
                     | "left"
                     | "top"
                     | "right"
@@ -5190,12 +5370,33 @@ fn infer_expr_literal_for_typecheck<'a>(
         Expr::Call(call) => {
             if matches!(
                 call.callee.as_str(),
-                "distance_to_float" | "to_px" | "to_pt" | "to_float" | "to_number"
+                "distance_to_float"
+                    | "to_px"
+                    | "to_pt"
+                    | "to_float"
+                    | "to_number"
+                    | "sqrt"
+                    | "sin"
+                    | "cos"
+                    | "tan"
+                    | "atan2"
             ) {
                 return Some(Literal::Float(0.0, call.span));
             }
             if call.callee.as_str() == "to_integer" {
                 return Some(Literal::Integer(1, call.span));
+            }
+            if call.callee.as_str() == "hypot" {
+                if let Some(first) = call
+                    .args
+                    .first()
+                    .and_then(|a| infer_expr_literal_for_typecheck(a, ctx))
+                {
+                    if matches!(first, Literal::Distance(_, _, _)) {
+                        return Some(Literal::Distance(0.0, DistanceUnit::Px, call.span));
+                    }
+                }
+                return Some(Literal::Float(0.0, call.span));
             }
             if matches!(
                 call.callee.as_str(),
@@ -6225,6 +6426,14 @@ fn known_builtin_port_type(node_name: &str, port_name: &str) -> Option<StaticTyp
     match port_name {
         "x"
         | "y"
+        | "x1"
+        | "y1"
+        | "x2"
+        | "y2"
+        | "start_x"
+        | "start_y"
+        | "end_x"
+        | "end_y"
         | "width"
         | "height"
         | "left"
@@ -6243,11 +6452,16 @@ fn known_builtin_port_type(node_name: &str, port_name: &str) -> Option<StaticTyp
         | "gap_bottom"
         | "radius"
         | "border_width"
+        | "thickness"
+        | "stroke_width"
+        | "head_length"
+        | "head_width"
+        | "length"
         | "scroll_x"
         | "scroll_y" => Some(StaticType::Distance),
         "z" | "weight" => Some(StaticType::Integer),
         "opacity" => Some(StaticType::Float),
-        "color" | "bg_color" | "border_color" => Some(StaticType::Color),
+        "color" | "bg_color" | "border_color" | "stroke_color" => Some(StaticType::Color),
         "family" | "text" | "content" | "cursor" | "url" | "name" | "path" | "id" => {
             Some(StaticType::String)
         }
@@ -6257,6 +6471,7 @@ fn known_builtin_port_type(node_name: &str, port_name: &str) -> Option<StaticTyp
         "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
         "start_at" => Some(StaticType::Enum("TextStart".to_string())),
         "end_at" => Some(StaticType::Enum("TextEnd".to_string())),
+        "cap" | "line_cap" => Some(StaticType::Enum("LineCap".to_string())),
         p if p.starts_with("on_") => Some(StaticType::Handler),
         _ => None,
     }
@@ -6863,7 +7078,7 @@ fn infer_expr_type(
                     }
                     Ok(StaticType::Distance)
                 }
-                "max" | "min" | "sum" | "abs" | "clamp" | "only" => {
+                "max" | "min" | "sum" | "abs" | "clamp" | "only" | "hypot" => {
                     if call.args.is_empty() {
                         return Ok(StaticType::Distance);
                     }
@@ -6883,7 +7098,11 @@ fn infer_expr_type(
                             });
                         }
                     }
-                    Ok(acc_ty.decay())
+                    if call.callee.as_str() == "hypot" && acc_ty.decay() == StaticType::Integer {
+                        Ok(StaticType::Float)
+                    } else {
+                        Ok(acc_ty.decay())
+                    }
                 }
                 _ => {
                     for arg in &call.args {

@@ -4,7 +4,7 @@ use std::ops::Range;
 use parley::layout::{AlignmentOptions, PositionedLayoutItem};
 use parley::style::{FontFamily, FontWeight, StyleProperty};
 use parley::{Alignment, FontContext, LayoutContext};
-use vello::kurbo::{Affine, Rect, RoundedRect, Stroke};
+use vello::kurbo::{Affine, Cap, Line, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color, Fill};
 use vello::Scene;
 
@@ -567,6 +567,84 @@ pub fn build_scene(
                 } else {
                     let rect = Rect::new(x0, y0, x1, y1);
                     active_scene.stroke(&stroke, Affine::IDENTITY, Brush::Solid(stroke_color), None, &rect);
+                }
+            }
+        }
+
+        // Render stroked line segment (for \Line paint primitives)
+        if node.name == "Line" {
+            let x1 = node
+                .properties
+                .get("x1")
+                .or_else(|| node.properties.get("start_x"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(node.rect.x);
+            let y1 = node
+                .properties
+                .get("y1")
+                .or_else(|| node.properties.get("start_y"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(node.rect.y);
+            let x2 = node
+                .properties
+                .get("x2")
+                .or_else(|| node.properties.get("end_x"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(node.rect.x + node.rect.width);
+            let y2 = node
+                .properties
+                .get("y2")
+                .or_else(|| node.properties.get("end_y"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(node.rect.y + node.rect.height);
+
+            let thickness = node
+                .properties
+                .get("thickness")
+                .or_else(|| node.properties.get("stroke_width"))
+                .or_else(|| node.properties.get("border_width"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(1.0);
+
+            if thickness > 0.0 {
+                let color_val = node
+                    .properties
+                    .get("color")
+                    .or_else(|| node.properties.get("stroke_color"))
+                    .or_else(|| node.properties.get("border_color"));
+                let color = match color_val {
+                    Some(Value::Color(c)) | Some(Value::String(c)) => parse_color(c),
+                    _ => Color::BLACK,
+                };
+
+                if color.components[3] > 0.0 {
+                    let cap_val = node
+                        .properties
+                        .get("cap")
+                        .or_else(|| node.properties.get("line_cap"));
+                    let cap = match cap_val {
+                        Some(Value::Enum { variant, .. }) => match variant.as_str() {
+                            "Round" | "round" => Cap::Round,
+                            "Square" | "square" => Cap::Square,
+                            _ => Cap::Butt,
+                        },
+                        Some(Value::String(s)) => match s.to_ascii_lowercase().as_str() {
+                            "round" => Cap::Round,
+                            "square" => Cap::Square,
+                            _ => Cap::Butt,
+                        },
+                        _ => Cap::Butt,
+                    };
+
+                    let stroke = Stroke::new(thickness).with_caps(cap);
+                    let line = Line::new((x1, y1), (x2, y2));
+                    active_scene.stroke(
+                        &stroke,
+                        Affine::IDENTITY,
+                        Brush::Solid(color),
+                        None,
+                        &line,
+                    );
                 }
             }
         }

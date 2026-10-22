@@ -236,6 +236,15 @@ pub fn compute_render_geometry(layout: &ResolvedLayout, opts: &DocBlockOptions) 
                 .unwrap_or(0.0)
                 .max(0.0)
                 / 2.0
+        } else if node.name == "Line" {
+            node.properties
+                .get("thickness")
+                .or_else(|| node.properties.get("stroke_width"))
+                .or_else(|| node.properties.get("border_width"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(1.0)
+                .max(0.0)
+                / 2.0
         } else {
             0.0
         };
