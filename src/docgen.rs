@@ -43,7 +43,7 @@ impl Default for DocBlockOptions {
             height: None,
             padding: 0,
             background: Some(Color::WHITE),
-            scale_factor: 1.0,
+            scale_factor: 2.0,
             layout: DocBlockLayout::Stacked,
             name: None,
             alt: None,
@@ -206,9 +206,9 @@ pub fn split_hidden_lines(raw_code: &str) -> (String, String) {
     (compiler_lines.join("\n"), display_lines.join("\n"))
 }
 
-/// Computes the render viewport `(width, height)` and `scroll_offset` for a `ResolvedLayout`
+/// Computes the 1x logical viewport `(width, height)` and `scroll_offset` for a `ResolvedLayout`
 /// according to `DocBlockOptions` (auto-sizing to content bounds when `width` or `height` is omitted).
-pub fn compute_render_geometry(layout: &ResolvedLayout, opts: &DocBlockOptions) -> (u32, u32, (f64, f64)) {
+pub fn compute_logical_geometry(layout: &ResolvedLayout, opts: &DocBlockOptions) -> (u32, u32, (f64, f64)) {
     let pad = opts.padding as f64;
 
     if let (Some(w), Some(h)) = (opts.width, opts.height) {
@@ -309,11 +309,17 @@ pub fn compute_render_geometry(layout: &ResolvedLayout, opts: &DocBlockOptions) 
         (content_h, min_y - pad)
     };
 
-    let scale = opts.scale_factor;
-    let scaled_w = ((final_w as f64) * scale).ceil().max(1.0) as u32;
-    let scaled_h = ((final_h as f64) * scale).ceil().max(1.0) as u32;
+    (final_w, final_h, (scroll_x, scroll_y))
+}
 
-    (scaled_w, scaled_h, (scroll_x, scroll_y))
+/// Computes the physical render viewport `(width, height)` (scaled by `opts.scale_factor`) and `scroll_offset`
+/// for a `ResolvedLayout` according to `DocBlockOptions`.
+pub fn compute_render_geometry(layout: &ResolvedLayout, opts: &DocBlockOptions) -> (u32, u32, (f64, f64)) {
+    let (logical_w, logical_h, scroll) = compute_logical_geometry(layout, opts);
+    let scale = opts.scale_factor;
+    let scaled_w = ((logical_w as f64) * scale).ceil().max(1.0) as u32;
+    let scaled_h = ((logical_h as f64) * scale).ceil().max(1.0) as u32;
+    (scaled_w, scaled_h, scroll)
 }
 
 /// Output summary from compiling a `.dt.md` file.
@@ -508,7 +514,8 @@ pub fn compile_markdown_str(
                 })?;
 
                 let layout = compiled.layout();
-                let (render_w, render_h, scroll_offset) = compute_render_geometry(&layout, &opts);
+                let (logical_w, logical_h, scroll_offset) = compute_logical_geometry(&layout, &opts);
+                let (render_w, render_h, _) = compute_render_geometry(&layout, &opts);
 
                 let scene_options = SceneOptions {
                     background: opts.background,
@@ -536,6 +543,14 @@ pub fn compile_markdown_str(
 
                 rendered_images.push(image_path);
 
+                let img_markup = if (opts.scale_factor - 1.0).abs() > 1e-4 {
+                    format!(
+                        "<img src=\"{rel_image_url}\" alt=\"{alt_text}\" width=\"{logical_w}\" height=\"{logical_h}\">"
+                    )
+                } else {
+                    format!("![{alt_text}]({rel_image_url})")
+                };
+
                 match opts.layout {
                     DocBlockLayout::Stacked => {
                         out_lines.push(format!("{fence_marker}dt"));
@@ -544,7 +559,7 @@ pub fn compile_markdown_str(
                         }
                         out_lines.push(fence_marker.to_string());
                         out_lines.push(String::new());
-                        out_lines.push(format!("![{alt_text}]({rel_image_url})"));
+                        out_lines.push(img_markup);
                     }
                     DocBlockLayout::SideBySide => {
                         out_lines.push("<table>".to_string());
@@ -560,14 +575,14 @@ pub fn compile_markdown_str(
                         out_lines.push("</td>".to_string());
                         out_lines.push("<td>".to_string());
                         out_lines.push(String::new());
-                        out_lines.push(format!("![{alt_text}]({rel_image_url})"));
+                        out_lines.push(img_markup);
                         out_lines.push(String::new());
                         out_lines.push("</td>".to_string());
                         out_lines.push("</tr>".to_string());
                         out_lines.push("</table>".to_string());
                     }
                     DocBlockLayout::ImageOnly => {
-                        out_lines.push(format!("![{alt_text}]({rel_image_url})"));
+                        out_lines.push(img_markup);
                     }
                 }
                 continue;
@@ -625,6 +640,7 @@ mod tests {
 
         let plain = DocBlockOptions::parse_info_string("dt").unwrap().unwrap();
         assert!(!plain.render);
+        assert_eq!(plain.scale_factor, 2.0);
 
         let rendered = DocBlockOptions::parse_info_string(
             "dt render width=480 height=200px padding=12 bg=#f8fafc side-by-side name=hero alt=\"Hero Card\"",
@@ -635,6 +651,7 @@ mod tests {
         assert_eq!(rendered.width, Some(480));
         assert_eq!(rendered.height, Some(200));
         assert_eq!(rendered.padding, 12);
+        assert_eq!(rendered.scale_factor, 2.0);
         assert_eq!(rendered.layout, DocBlockLayout::SideBySide);
         assert_eq!(rendered.name.as_deref(), Some("hero"));
         assert_eq!(rendered.alt.as_deref(), Some("Hero Card"));
@@ -661,20 +678,24 @@ mod tests {
     fn test_compute_render_geometry_autosize() {
         use crate::compiler::evaluate_document;
 
-        // 1. Element with x: 20px, y: 15px, width: 100px, height: 50px -> auto-sizes with symmetric margin to 140x80
+        // 1. Element with x: 20px, y: 15px, width: 100px, height: 50px -> auto-sizes with symmetric margin to 140x80 logical (280x160 physical at 2x default scale)
         let doc = parse_document(r#"\Rect(x: 20px, y: 15px, width: 100px, height: 50px, color: #3b82f6)"#).unwrap();
         let layout = evaluate_document(&doc).unwrap();
         let opts = DocBlockOptions::parse_info_string("dt render").unwrap().unwrap();
-        let (w, h, scroll) = compute_render_geometry(&layout, &opts);
-        assert_eq!((w, h), (140, 80));
+        let (lw, lh, scroll) = compute_logical_geometry(&layout, &opts);
+        let (w, h, _) = compute_render_geometry(&layout, &opts);
+        assert_eq!((lw, lh), (140, 80));
+        assert_eq!((w, h), (280, 160));
         assert_eq!(scroll, (0.0, 0.0));
 
-        // 2. Element at origin (0, 0) with padding=16 -> shifts by (-16, -16) and adds 32px to dimensions
+        // 2. Element at origin (0, 0) with padding=16 -> shifts by (-16, -16) and adds 32px to logical dimensions (132x82 logical, 264x164 physical)
         let doc2 = parse_document(r#"\Rect(x: 0, y: 0, width: 100px, height: 50px, color: #3b82f6)"#).unwrap();
         let layout2 = evaluate_document(&doc2).unwrap();
         let opts2 = DocBlockOptions::parse_info_string("dt render padding=16").unwrap().unwrap();
-        let (w2, h2, scroll2) = compute_render_geometry(&layout2, &opts2);
-        assert_eq!((w2, h2), (132, 82));
+        let (lw2, lh2, scroll2) = compute_logical_geometry(&layout2, &opts2);
+        let (w2, h2, _) = compute_render_geometry(&layout2, &opts2);
+        assert_eq!((lw2, lh2), (132, 82));
+        assert_eq!((w2, h2), (264, 164));
         assert_eq!(scroll2, (-16.0, -16.0));
     }
 }

@@ -198,7 +198,7 @@ impl HeadlessRenderer {
         self.render_scene(&scene, width, height)
     }
 
-    /// Renders `ResolvedLayout` and saves directly to a PNG file.
+    /// Renders `ResolvedLayout` and saves directly to a PNG file (embedding physical DPI metadata).
     pub fn render_layout_to_file(
         &mut self,
         layout: &ResolvedLayout,
@@ -208,7 +208,56 @@ impl HeadlessRenderer {
         path: impl AsRef<Path>,
     ) -> Result<(), RenderError> {
         let image = self.render_layout(layout, width, height, options)?;
-        image.save(path)?;
+        let scale = if options.scale_factor > 0.0 {
+            options.scale_factor
+        } else {
+            1.0
+        };
+        save_png_with_dpi(&image, path.as_ref(), 96.0 * scale)?;
         Ok(())
     }
+}
+
+fn png_crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xffff_ffffu32;
+    for &b in bytes {
+        crc ^= b as u32;
+        for _ in 0..8 {
+            if crc & 1 != 0 {
+                crc = (crc >> 1) ^ 0xedb8_8320;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    !crc
+}
+
+fn save_png_with_dpi(image: &RgbaImage, path: &Path, dpi: f64) -> Result<(), RenderError> {
+    let mut png_bytes = Vec::new();
+    image.write_to(
+        &mut std::io::Cursor::new(&mut png_bytes),
+        image::ImageFormat::Png,
+    )?;
+
+    // PNG signature (8 bytes) + IHDR chunk (25 bytes) = 33 bytes
+    if png_bytes.len() >= 33 && &png_bytes[0..8] == b"\x89PNG\r\n\x1a\n" && &png_bytes[12..16] == b"IHDR" {
+        let ppm = (dpi / 0.0254).round().max(1.0) as u32;
+        let mut chunk_type_and_data = Vec::with_capacity(13);
+        chunk_type_and_data.extend_from_slice(b"pHYs");
+        chunk_type_and_data.extend_from_slice(&ppm.to_be_bytes());
+        chunk_type_and_data.extend_from_slice(&ppm.to_be_bytes());
+        chunk_type_and_data.push(1u8); // unit: 1 = meter
+        let crc = png_crc32(&chunk_type_and_data);
+
+        let mut phys_chunk = Vec::with_capacity(21);
+        phys_chunk.extend_from_slice(&9u32.to_be_bytes());
+        phys_chunk.extend_from_slice(&chunk_type_and_data);
+        phys_chunk.extend_from_slice(&crc.to_be_bytes());
+
+        png_bytes.splice(33..33, phys_chunk);
+    }
+
+    std::fs::write(path, png_bytes)?;
+    Ok(())
 }
