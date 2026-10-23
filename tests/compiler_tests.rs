@@ -534,26 +534,26 @@ fn test_end_to_end_flow_math_evaluation() {
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate layout");
 
-    assert_eq!(layout.nodes.len(), 3);
-
-    // Node 0: Flow
     let flow = &layout.nodes[0];
     assert_eq!(flow.name, "Flow");
     assert_eq!(flow.rect.x, 0.0);
     assert_eq!(flow.rect.y, 0.0);
 
-    // Node 1: Header Text
+    let text_nodes: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Text").collect();
+    assert_eq!(text_nodes.len(), 2);
+
+    // Header Text
     let expected_header_h = directedtype::compiler::text::measure_font_metrics(32.0, 400.0, None).cap_height;
-    let header = &layout.nodes[1];
+    let header = text_nodes[0];
     assert_eq!(header.name, "Text");
     assert_eq!(header.rect.x, 0.0);
     assert_eq!(header.rect.y, 0.0);
     assert_eq!(header.rect.height, expected_header_h);
     assert_eq!(header.text_content.as_deref(), Some("Welcome to DAG-UI"));
 
-    // Node 2: Paragraph Text
+    // Paragraph Text
     // Paragraph y = Header.bottom + gap
-    let para = &layout.nodes[2];
+    let para = text_nodes[1];
     assert_eq!(para.name, "Text");
     assert_eq!(para.rect.x, 0.0);
     assert_eq!(para.rect.y, expected_header_h + 24.0);
@@ -752,9 +752,10 @@ fn test_parley_text_height_wrapping_multiline() {
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
 
-    assert_eq!(layout.nodes.len(), 3);
-    let title = &layout.nodes[1];
-    let subtitle = &layout.nodes[2];
+    let text_nodes: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Text").collect();
+    assert_eq!(text_nodes.len(), 2);
+    let title = text_nodes[0];
+    let subtitle = text_nodes[1];
 
     assert_eq!(title.name, "Text");
     assert_eq!(title.rect.x, 0.0);
@@ -786,8 +787,7 @@ fn test_parley_intrinsic_text_width_unconstrained() {
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Layout evaluation failed");
 
-    assert_eq!(layout.nodes.len(), 1);
-    let text_node = &layout.nodes[0];
+    let text_node = layout.nodes.iter().find(|n| n.name == "Text").unwrap();
 
     // Unconstrained width must be measured via Parley (> 50px, single line)
     assert!(
@@ -4272,3 +4272,67 @@ fn test_area_type_and_operations() {
         err_dist
     );
 }
+
+#[test]
+fn test_children_refers_to_enclosing_component_while_parent_is_context_sensitive() {
+    let input = r##"
+    \Component Outline() {
+        \assert children.len == 1 as "Should only have one child."
+        \Rect(
+            x: only(children.x),
+            y: only(children.y),
+            width: only(children.width),
+            height: only(children.height),
+            color: #00000000,
+            border_width: 1px,
+            border_color: #000000,
+        )
+        \Children
+    }
+
+    \Component Wrapper(x: Distance = 0, y: Distance = 0, pad: Distance = 8px) {
+        \alias width = sum(children.width);
+        \alias height = max(children.height);
+        \Children(x: parent.x + pad, y: parent.y + pad)
+        \Rect(
+            x: only(children.x),
+            y: only(children.y),
+            width: sum(children.width),
+            height: max(children.height),
+            color: #ff0000,
+        )
+    }
+
+    \Outline {
+        \Wrapper(x: 10px, y: 20px, pad: 5px) {
+            \Rect(width: 40px, height: 30px, color: #00ff00)
+        }
+    }
+    "##;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc)
+        .expect("Should evaluate children in internal element ports before and after \\Children");
+
+    // Outline's internal Rect should match Wrapper's x, y, width, height (10, 20, 40, 30)
+    // Wrapper's child Rect has x = 10 + 5 = 15, y = 20 + 5 = 25, width = 40, height = 30
+    // Wrapper's internal Rect has x = 15, y = 25, width = 40, height = 30
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 3);
+    // Outline's internal Rect (evaluated before \Children):
+    assert_eq!(rects[0].rect.x, 10.0);
+    assert_eq!(rects[0].rect.y, 20.0);
+    assert_eq!(rects[0].rect.width, 40.0);
+    assert_eq!(rects[0].rect.height, 30.0);
+    // Child Rect inside Wrapper:
+    assert_eq!(rects[1].rect.x, 15.0);
+    assert_eq!(rects[1].rect.y, 25.0);
+    assert_eq!(rects[1].rect.width, 40.0);
+    assert_eq!(rects[1].rect.height, 30.0);
+    // Wrapper's internal Rect (evaluated after \Children):
+    assert_eq!(rects[2].rect.x, 15.0);
+    assert_eq!(rects[2].rect.y, 25.0);
+    assert_eq!(rects[2].rect.width, 40.0);
+    assert_eq!(rects[2].rect.height, 30.0);
+}
+

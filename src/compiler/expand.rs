@@ -859,6 +859,8 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         lexical_scope: &global_scope,
                         env_scope: &global_env_scope,
                         enclosing_component_id: None,
+                        enclosing_num_children: 0,
+                        enclosing_instantiated_children: None,
                         shadowed_ports: None,
                         is_let: true,
                         ambient_authored_ports: None,
@@ -941,6 +943,8 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                     lexical_scope: &global_scope,
                     env_scope: &global_env_scope,
                     enclosing_component_id: None,
+                    enclosing_num_children: 0,
+                    enclosing_instantiated_children: None,
                     shadowed_ports: None,
                     is_let: false,
                     ambient_authored_ports: None,
@@ -1017,6 +1021,8 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                         lexical_scope: &global_scope,
                         env_scope: &global_env_scope,
                         enclosing_component_id: None,
+                        enclosing_num_children: 0,
+                        enclosing_instantiated_children: None,
                         shadowed_ports: None,
                         is_let: true,
                         ambient_authored_ports: None,
@@ -1093,6 +1099,8 @@ struct ForwardedChildrenDirective<'a> {
     pub lexical_scope: &'a RefCell<HashMap<String, LexicalBinding>>,
     pub env_scope: HashMap<String, EnvEntry>,
     pub enclosing_component_id: Option<NodeId>,
+    pub enclosing_num_children: usize,
+    pub enclosing_instantiated_children: Option<&'a RefCell<Vec<NodeId>>>,
     pub shadowed_ports: Option<&'a HashSet<String>>,
     pub comp_ports: Option<&'a HashMap<String, Expr>>,
     pub declared_state_names: Option<&'a HashSet<String>>,
@@ -1106,6 +1114,8 @@ struct ConsumerChildEntry<'a> {
     pub caller_lexical_scope: &'a RefCell<HashMap<String, LexicalBinding>>,
     pub caller_env_scope: HashMap<String, EnvEntry>,
     pub caller_enclosing_component_id: Option<NodeId>,
+    pub caller_enclosing_num_children: usize,
+    pub caller_enclosing_instantiated_children: Option<&'a RefCell<Vec<NodeId>>>,
     pub caller_shadowed_ports: Option<&'a HashSet<String>>,
     pub instantiated_ids: Vec<&'a RefCell<Vec<NodeId>>>,
     pub forwarded_directives: Vec<ForwardedChildrenDirective<'a>>,
@@ -1120,6 +1130,8 @@ struct InstanceContext<'a> {
     pub parent_ports: &'a [String],
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
     pub enclosing_component_id: Option<NodeId>,
+    pub enclosing_num_children: usize,
+    pub enclosing_instantiated_children: Option<&'a RefCell<Vec<NodeId>>>,
     pub shadowed_ports: Option<&'a HashSet<String>>,
     pub enums: &'a HashMap<String, EnumDef>,
     pub active_scope_id: ScopeId,
@@ -1355,6 +1367,8 @@ struct ElementContext<'a> {
     pub lexical_scope: &'a RefCell<HashMap<String, LexicalBinding>>,
     pub env_scope: &'a HashMap<String, EnvEntry>,
     pub enclosing_component_id: Option<NodeId>,
+    pub enclosing_num_children: usize,
+    pub enclosing_instantiated_children: Option<&'a RefCell<Vec<NodeId>>>,
     pub shadowed_ports: Option<&'a HashSet<String>>,
     pub is_let: bool,
     pub ambient_authored_ports: Option<&'a HashMap<String, Expr>>,
@@ -1487,14 +1501,19 @@ fn expand_element(
         validate_component_key(elem.name.as_str(), key, &ctx.lexical_scope.borrow())?;
         let empty_ports: [String; 0] = [];
         let empty_children: [NodeId; 0] = [];
+        let inst_borrow = ctx.enclosing_instantiated_children.map(|c| c.borrow());
+        let child_ids_slice: &[NodeId] = match &inst_borrow {
+            Some(b) => b.as_slice(),
+            None => &empty_children,
+        };
         let key_scope_ctx = ScopeContext {
             current_node: node_id,
             parent_node: ctx.parent_id,
             parent_name: ctx.parent_name,
             prev_sibling: ctx.prev_sibling_id,
             has_next_sibling: ctx.has_next_sibling,
-            child_ids: &empty_children,
-            num_children: 0,
+            child_ids: child_ids_slice,
+            num_children: ctx.enclosing_num_children,
             child_node: None,
             nodes: &doc.nodes,
             shadowed_ports: ctx.shadowed_ports,
@@ -1577,6 +1596,8 @@ fn expand_element(
             parent_ports: ctx.parent_ports,
             ambient_authored_ports: ctx.ambient_authored_ports,
             enclosing_component_id: ctx.enclosing_component_id,
+            enclosing_num_children: ctx.enclosing_num_children,
+            enclosing_instantiated_children: ctx.enclosing_instantiated_children,
             shadowed_ports: ctx.shadowed_ports,
             enums: ctx.enums,
             active_scope_id: ctx.active_scope_id,
@@ -1862,19 +1883,37 @@ fn expand_component_instance(
     let mut already_rewritten_ports: HashSet<String> = HashSet::new();
     let empty_ports: [String; 0] = [];
     let empty_children: [NodeId; 0] = [];
+    let instantiated_children_ids = RefCell::new(Vec::new());
+    let num_consumer_children = instance.content.as_ref().map_or(0, |slot| {
+        slot.items
+            .iter()
+            .map(|item| match item {
+                ContentItem::Node(_) => 1,
+                ContentItem::Text(chunk) if !chunk.text.trim().is_empty() => 1,
+                ContentItem::Children(_) => ctx.consumer_children.map_or(0, |c| c.len()),
+                ContentItem::Let(l) if matches!(l.value, Some(LetValue::Node(_))) => 1,
+                _ => 0,
+            })
+            .sum()
+    });
 
     // Pre-resolve explicit "font" port if passed on this component instance so sibling ports (e.g. `1em`) see it
     if let Some(font_port) = instance.ports.iter().find(|p| p.name.as_str() == "font") {
         if !matches!(&font_port.expr, Expr::Node(_)) {
             let caller_scope_borrow = lexical_scope.borrow();
+            let caller_inst_borrow = ctx.enclosing_instantiated_children.map(|c| c.borrow());
+            let caller_child_ids: &[NodeId] = match &caller_inst_borrow {
+                Some(b) => b.as_slice(),
+                None => &empty_children,
+            };
             let caller_scope_ctx = ScopeContext {
                 current_node: ctx.comp_node_id,
                 parent_node: ctx.parent_id,
                 parent_name: ctx.parent_name,
                 prev_sibling: ctx.prev_sibling_id,
                 has_next_sibling: ctx.has_next_sibling,
-                child_ids: &empty_children,
-                num_children: 0,
+                child_ids: caller_child_ids,
+                num_children: ctx.enclosing_num_children,
                 child_node: None,
                 nodes: &doc.nodes,
                 shadowed_ports: ctx.shadowed_ports,
@@ -1919,6 +1958,8 @@ fn expand_component_instance(
                     lexical_scope,
                     env_scope: caller_env_scope,
                     enclosing_component_id: ctx.enclosing_component_id,
+                    enclosing_num_children: ctx.enclosing_num_children,
+                    enclosing_instantiated_children: ctx.enclosing_instantiated_children,
                     shadowed_ports: ctx.shadowed_ports,
                     is_let: false,
                     ambient_authored_ports: None,
@@ -1935,14 +1976,19 @@ fn expand_component_instance(
             }
             other => {
                 let caller_scope_borrow = lexical_scope.borrow();
+                let caller_inst_borrow = ctx.enclosing_instantiated_children.map(|c| c.borrow());
+                let caller_child_ids: &[NodeId] = match &caller_inst_borrow {
+                    Some(b) => b.as_slice(),
+                    None => &empty_children,
+                };
                 let caller_scope_ctx = ScopeContext {
                     current_node: ctx.comp_node_id,
                     parent_node: ctx.parent_id,
                     parent_name: ctx.parent_name,
                     prev_sibling: ctx.prev_sibling_id,
                     has_next_sibling: ctx.has_next_sibling,
-                    child_ids: &empty_children,
-                    num_children: 0,
+                    child_ids: caller_child_ids,
+                    num_children: ctx.enclosing_num_children,
                     child_node: None,
                     nodes: &doc.nodes,
                     shadowed_ports: ctx.shadowed_ports,
@@ -1989,6 +2035,8 @@ fn expand_component_instance(
                         lexical_scope,
                         env_scope: caller_env_scope,
                         enclosing_component_id: Some(ctx.comp_node_id),
+                        enclosing_num_children: num_consumer_children,
+                        enclosing_instantiated_children: Some(&instantiated_children_ids),
                         shadowed_ports: Some(&comp_shadowed_ports),
                         is_let: false,
                         ambient_authored_ports: None,
@@ -2109,7 +2157,7 @@ fn expand_component_instance(
                     prev_sibling: ctx.prev_sibling_id,
                     has_next_sibling: ctx.has_next_sibling,
                     child_ids: &empty_children,
-                    num_children: 0,
+                    num_children: num_consumer_children,
                     child_node: None,
                     nodes: &doc.nodes,
                     shadowed_ports: Some(&comp_shadowed_ports),
@@ -2135,7 +2183,7 @@ fn expand_component_instance(
                 prev_sibling: ctx.prev_sibling_id,
                 has_next_sibling: ctx.has_next_sibling,
                 child_ids: &empty_children,
-                num_children: 0,
+                num_children: num_consumer_children,
                 child_node: None,
                 nodes: &doc.nodes,
                 shadowed_ports: Some(&comp_shadowed_ports),
@@ -2213,7 +2261,6 @@ fn expand_component_instance(
     }
 
     // 2. Collect consumer children passed to this component instance
-    let instantiated_children_ids = RefCell::new(Vec::new());
     let mut consumer_child_entries: Vec<ConsumerChildEntry<'_>> = Vec::new();
     if let Some(slot) = &instance.content {
         for item in &slot.items {
@@ -2226,6 +2273,8 @@ fn expand_component_instance(
                         caller_lexical_scope: lexical_scope,
                         caller_env_scope: caller_env_scope.clone(),
                         caller_enclosing_component_id: ctx.enclosing_component_id,
+                        caller_enclosing_num_children: ctx.enclosing_num_children,
+                        caller_enclosing_instantiated_children: ctx.enclosing_instantiated_children,
                         caller_shadowed_ports: ctx.shadowed_ports,
                         instantiated_ids: vec![&instantiated_children_ids],
                         forwarded_directives: Vec::new(),
@@ -2252,6 +2301,8 @@ fn expand_component_instance(
                             caller_lexical_scope: lexical_scope,
                             caller_env_scope: caller_env_scope.clone(),
                             caller_enclosing_component_id: ctx.enclosing_component_id,
+                            caller_enclosing_num_children: ctx.enclosing_num_children,
+                            caller_enclosing_instantiated_children: ctx.enclosing_instantiated_children,
                             caller_shadowed_ports: ctx.shadowed_ports,
                             instantiated_ids: vec![&instantiated_children_ids],
                             forwarded_directives: Vec::new(),
@@ -2281,6 +2332,8 @@ fn expand_component_instance(
                                     lexical_scope,
                                     env_scope: caller_env_scope.clone(),
                                     enclosing_component_id: ctx.enclosing_component_id,
+                                    enclosing_num_children: ctx.enclosing_num_children,
+                                    enclosing_instantiated_children: ctx.enclosing_instantiated_children,
                                     shadowed_ports: ctx.shadowed_ports,
                                     comp_ports: None,
                                     declared_state_names: None,
@@ -2306,6 +2359,8 @@ fn expand_component_instance(
                             caller_lexical_scope: lexical_scope,
                             caller_env_scope: caller_env_scope.clone(),
                             caller_enclosing_component_id: ctx.enclosing_component_id,
+                            caller_enclosing_num_children: ctx.enclosing_num_children,
+                            caller_enclosing_instantiated_children: ctx.enclosing_instantiated_children,
                             caller_shadowed_ports: ctx.shadowed_ports,
                             instantiated_ids: vec![&instantiated_children_ids],
                             forwarded_directives: Vec::new(),
@@ -2316,7 +2371,7 @@ fn expand_component_instance(
             }
         }
     }
-    let num_consumer_children = consumer_child_entries.len();
+    debug_assert_eq!(num_consumer_children, consumer_child_entries.len());
 
     // 3. Expand component body items in declaration order (Painter's Algorithm)
     let mut all_children_ids = Vec::new();
@@ -2681,6 +2736,8 @@ fn expand_component_instance(
                         lexical_scope: &local_scope,
                         env_scope: &internal_body_env_scope,
                         enclosing_component_id: Some(ctx.comp_node_id),
+                        enclosing_num_children: num_consumer_children,
+                        enclosing_instantiated_children: Some(&instantiated_children_ids),
                         shadowed_ports: Some(&comp_shadowed_ports),
                         is_let: true,
                         ambient_authored_ports: None,
@@ -2789,6 +2846,8 @@ fn expand_component_instance(
                                 lexical_scope: &local_scope,
                                 env_scope: &internal_body_env_scope,
                                 enclosing_component_id: Some(ctx.comp_node_id),
+                                enclosing_num_children: num_consumer_children,
+                                enclosing_instantiated_children: Some(&instantiated_children_ids),
                                 shadowed_ports: Some(&comp_shadowed_ports),
                                 is_let: false,
                                 ambient_authored_ports: None,
@@ -2892,6 +2951,8 @@ fn expand_component_instance(
                     lexical_scope: &local_scope,
                     env_scope: &internal_body_env_scope,
                     enclosing_component_id: Some(ctx.comp_node_id),
+                    enclosing_num_children: num_consumer_children,
+                    enclosing_instantiated_children: Some(&instantiated_children_ids),
                     shadowed_ports: Some(&comp_shadowed_ports),
                     is_let: false,
                     ambient_authored_ports: None,
@@ -2941,6 +3002,8 @@ fn expand_component_instance(
                                             lexical_scope,
                                             env_scope: &children_env_scope,
                                             enclosing_component_id: ctx.enclosing_component_id,
+                                            enclosing_num_children: ctx.enclosing_num_children,
+                                            enclosing_instantiated_children: ctx.enclosing_instantiated_children,
                                             shadowed_ports: ctx.shadowed_ports,
                                             is_let: false,
                                             ambient_authored_ports: None,
@@ -2972,14 +3035,19 @@ fn expand_component_instance(
                                             let scope_borrow = lexical_scope.borrow();
                                             let empty_children: [NodeId; 0] = [];
                                             let empty_ports: [String; 0] = [];
+                                            let caller_inst_borrow = ctx.enclosing_instantiated_children.map(|c| c.borrow());
+                                            let caller_child_ids: &[NodeId] = match &caller_inst_borrow {
+                                                Some(b) => b.as_slice(),
+                                                None => &empty_children,
+                                            };
                                             let scope_ctx = ScopeContext {
                                                 current_node: ctx.comp_node_id,
                                                 parent_node: ctx.parent_id,
                                                 parent_name: ctx.parent_name,
                                                 prev_sibling: ctx.prev_sibling_id,
                                                 has_next_sibling: ctx.has_next_sibling,
-                                                child_ids: &empty_children,
-                                                num_children: 0,
+                                                child_ids: caller_child_ids,
+                                                num_children: ctx.enclosing_num_children,
                                                 child_node: None,
                                                 nodes: &doc.nodes,
                                                 shadowed_ports: ctx.shadowed_ports,
@@ -3039,13 +3107,14 @@ fn expand_component_instance(
                     let empty_ports: [String; 0] = [];
                     {
                         let local_borrow = local_scope.borrow();
+                        let inst_borrow = instantiated_children_ids.borrow();
                         let mut ambient_scope_ctx = ScopeContext {
                             current_node: child_node_id,
                             parent_node: Some(ctx.comp_node_id),
                             parent_name: Some(comp_def.name.as_str()),
                             prev_sibling: last_consumer_child_id,
                             has_next_sibling: has_next_consumer_child,
-                            child_ids: &empty_children,
+                            child_ids: &inst_borrow,
                             num_children: num_consumer_children,
                             child_node: Some(child_node_id),
                             nodes: &doc.nodes,
@@ -3073,14 +3142,19 @@ fn expand_component_instance(
                     // Forwarded \Children(...) directives from outer component wrappers
                     for fwd in &entry.forwarded_directives {
                         let fwd_lexical_borrow = fwd.lexical_scope.borrow();
+                        let fwd_inst_borrow = fwd.enclosing_instantiated_children.map(|c| c.borrow());
+                        let fwd_child_ids: &[NodeId] = match &fwd_inst_borrow {
+                            Some(b) => b.as_slice(),
+                            None => &empty_children,
+                        };
                         let mut fwd_scope_ctx = ScopeContext {
                             current_node: child_node_id,
                             parent_node: Some(fwd.parent_id),
                             parent_name: Some(fwd.parent_name),
                             prev_sibling: last_consumer_child_id,
                             has_next_sibling: has_next_consumer_child,
-                            child_ids: &empty_children,
-                            num_children: num_consumer_children,
+                            child_ids: fwd_child_ids,
+                            num_children: fwd.enclosing_num_children,
                             child_node: Some(child_node_id),
                             nodes: &doc.nodes,
                             shadowed_ports: fwd.shadowed_ports,
@@ -3128,6 +3202,8 @@ fn expand_component_instance(
                         lexical_scope: entry.caller_lexical_scope,
                         env_scope: &entry_env_scope,
                         enclosing_component_id: entry.caller_enclosing_component_id,
+                        enclosing_num_children: entry.caller_enclosing_num_children,
+                        enclosing_instantiated_children: entry.caller_enclosing_instantiated_children,
                         shadowed_ports: entry.caller_shadowed_ports,
                         is_let: var_name.is_some(),
                         ambient_authored_ports: Some(&authored_ambient_ports),
@@ -3169,8 +3245,14 @@ fn expand_component_instance(
         }
     }
 
-    let final_local_scope = local_scope.into_inner();
+    let mut final_local_scope = local_scope.into_inner();
     let instantiated_children_ids = instantiated_children_ids.into_inner();
+    for (idx, &child_id) in instantiated_children_ids.iter().enumerate() {
+        final_local_scope.insert(
+            format!("__child_of_{}_{}", ctx.comp_node_id.canonical_name(), idx),
+            LexicalBinding::Node(child_id),
+        );
+    }
 
     // Post-expansion forward reference resolution for all nodes created within this component
     for node_idx in start_node_idx..doc.nodes.len() {
@@ -3416,6 +3498,7 @@ fn expand_component_instance(
     };
     for (alias_name, alias_binding) in &declared_aliases {
         let mut rewritten_alias = rewrite_expr(&alias_binding.value, &alias_scope_ctx)?;
+        rewritten_alias = resolve_forward_scope_refs(&rewritten_alias, &final_local_scope);
         rewritten_alias = coerce_typed_binding_expr(rewritten_alias, alias_binding.type_annotation.as_ref());
         rewritten_ports.insert(alias_name.clone(), rewritten_alias);
         comp_authored_ports.insert(alias_name.clone(), alias_binding.value.clone());
@@ -3758,6 +3841,8 @@ fn expand_primitive_element(
                         lexical_scope: ctx.lexical_scope,
                         env_scope: ctx.env_scope,
                         enclosing_component_id: ctx.enclosing_component_id,
+                        enclosing_num_children: ctx.enclosing_num_children,
+                        enclosing_instantiated_children: ctx.enclosing_instantiated_children,
                         shadowed_ports: ctx.shadowed_ports,
                         is_let: false,
                         ambient_authored_ports: None,
@@ -3899,6 +3984,8 @@ fn expand_primitive_element(
                             lexical_scope: ctx.lexical_scope,
                             env_scope: ctx.env_scope,
                             enclosing_component_id: ctx.enclosing_component_id,
+                            enclosing_num_children: ctx.enclosing_num_children,
+                            enclosing_instantiated_children: ctx.enclosing_instantiated_children,
                             shadowed_ports: ctx.shadowed_ports,
                             is_let: true,
                             ambient_authored_ports: None,
@@ -4065,14 +4152,19 @@ fn expand_primitive_element(
 
                             {
                                 let lexical_borrow = ctx.lexical_scope.borrow();
+                                let inst_borrow = ctx.enclosing_instantiated_children.map(|c| c.borrow());
+                                let enc_child_ids: &[NodeId] = match &inst_borrow {
+                                    Some(b) => b.as_slice(),
+                                    None => &empty_children,
+                                };
                                 let mut ambient_scope_ctx = ScopeContext {
                                     current_node: child_node_id,
                                     parent_node: Some(node_id),
                                     parent_name: Some(elem.name.as_str()),
                                     prev_sibling: last_child_id,
                                     has_next_sibling,
-                                    child_ids: &empty_children,
-                                    num_children: num_consumer_children,
+                                    child_ids: enc_child_ids,
+                                    num_children: ctx.enclosing_num_children,
                                     child_node: Some(child_node_id),
                                     nodes: &doc.nodes,
                                     shadowed_ports: ctx.shadowed_ports,
@@ -4097,14 +4189,19 @@ fn expand_primitive_element(
 
                             for fwd in &entry.forwarded_directives {
                                 let fwd_lexical_borrow = fwd.lexical_scope.borrow();
+                                let fwd_inst_borrow = fwd.enclosing_instantiated_children.map(|c| c.borrow());
+                                let fwd_child_ids: &[NodeId] = match &fwd_inst_borrow {
+                                    Some(b) => b.as_slice(),
+                                    None => &empty_children,
+                                };
                                 let mut fwd_scope_ctx = ScopeContext {
                                     current_node: child_node_id,
                                     parent_node: Some(fwd.parent_id),
                                     parent_name: Some(fwd.parent_name),
                                     prev_sibling: last_child_id,
                                     has_next_sibling,
-                                    child_ids: &empty_children,
-                                    num_children: num_consumer_children,
+                                    child_ids: fwd_child_ids,
+                                    num_children: fwd.enclosing_num_children,
                                     child_node: Some(child_node_id),
                                     nodes: &doc.nodes,
                                     shadowed_ports: fwd.shadowed_ports,
@@ -4175,6 +4272,8 @@ fn expand_primitive_element(
                                 lexical_scope: entry.caller_lexical_scope,
                                 env_scope: &entry.caller_env_scope,
                                 enclosing_component_id: entry.caller_enclosing_component_id,
+                                enclosing_num_children: entry.caller_enclosing_num_children,
+                                enclosing_instantiated_children: entry.caller_enclosing_instantiated_children,
                                 shadowed_ports: entry.caller_shadowed_ports,
                                 is_let: entry.var_name.is_some(),
                                 ambient_authored_ports: Some(&authored_ambient_ports),
@@ -4271,6 +4370,8 @@ fn expand_primitive_element(
                     lexical_scope: ctx.lexical_scope,
                     env_scope: ctx.env_scope,
                     enclosing_component_id: ctx.enclosing_component_id,
+                    enclosing_num_children: ctx.enclosing_num_children,
+                    enclosing_instantiated_children: ctx.enclosing_instantiated_children,
                     shadowed_ports: ctx.shadowed_ports,
                     is_let: ctx.is_let,
                     ambient_authored_ports: None,
@@ -4296,10 +4397,16 @@ fn expand_primitive_element(
 
     // 2. Rewrite element ports
     let empty_ports: [String; 0] = [];
+    let empty_enclosing_children: [NodeId; 0] = [];
+    let enclosing_children_borrow = ctx.enclosing_instantiated_children.map(|c| c.borrow());
+    let enclosing_child_ids: &[NodeId] = match &enclosing_children_borrow {
+        Some(b) => b.as_slice(),
+        None => &empty_enclosing_children,
+    };
     let current_node = node_id;
     let parent_node = ctx.parent_id;
     let current_ports = &empty_ports;
-    let num_children = child_ids.len();
+    let num_children = ctx.enclosing_num_children;
 
     // First, determine if this element has a font node (explicitly or ambiently)
     let mut font_node_id = None;
@@ -4311,7 +4418,7 @@ fn expand_primitive_element(
             parent_name: ctx.parent_name,
             prev_sibling: ctx.prev_sibling_id,
             has_next_sibling: ctx.has_next_sibling,
-            child_ids: &child_ids,
+            child_ids: enclosing_child_ids,
             num_children,
             child_node: None,
             nodes: &doc.nodes,
@@ -4340,7 +4447,7 @@ fn expand_primitive_element(
                 parent_name: ctx.parent_name,
                 prev_sibling: ctx.prev_sibling_id,
                 has_next_sibling: ctx.has_next_sibling,
-                child_ids: &child_ids,
+                child_ids: enclosing_child_ids,
                 num_children,
                 child_node: None,
                 nodes: &doc.nodes,
@@ -4385,7 +4492,7 @@ fn expand_primitive_element(
         parent_name: ctx.parent_name,
         prev_sibling: ctx.prev_sibling_id,
         has_next_sibling: ctx.has_next_sibling,
-        child_ids: &child_ids,
+        child_ids: enclosing_child_ids,
         num_children,
         child_node: None,
         nodes: &doc.nodes,
@@ -5743,6 +5850,15 @@ fn infer_expr_literal_for_typecheck<'a>(
             ) {
                 return Some(Literal::Distance(0.0, DistanceUnit::Px, call.span));
             }
+            if matches!(
+                call.callee.as_str(),
+                "only" | "max" | "min" | "sum" | "clamp" | "abs" | "round" | "floor" | "ceil"
+            ) {
+                return call
+                    .args
+                    .first()
+                    .and_then(|a| infer_expr_literal_for_typecheck(a, ctx));
+            }
             None
         }
         Expr::MethodCall(mc) => {
@@ -6556,16 +6672,41 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         if target_id.as_str() == "children" && m.member.as_str() != "len" {
                             had_children = true;
                             children_member = Some(m.member.as_str().to_string());
-                            for &child_id in ctx.child_ids {
-                                let child_access = Expr::MemberAccess(MemberAccessExpr {
-                                    target: Box::new(Expr::Ident(Ident::new(
-                                        child_id.canonical_name(),
-                                        target_id.span,
-                                    ))),
-                                    member: m.member.clone(),
-                                    span: m.span,
-                                });
-                                rewritten_args.push(child_access);
+                            if ctx.child_ids.len() == ctx.num_children {
+                                for &child_id in ctx.child_ids {
+                                    let child_access = Expr::MemberAccess(MemberAccessExpr {
+                                        target: Box::new(Expr::Ident(Ident::new(
+                                            child_id.canonical_name(),
+                                            target_id.span,
+                                        ))),
+                                        member: m.member.clone(),
+                                        span: m.span,
+                                    });
+                                    rewritten_args.push(child_access);
+                                }
+                            } else if let Some(comp_id) = ctx.enclosing_component {
+                                for idx in 0..ctx.num_children {
+                                    let target_name = ctx
+                                        .child_ids
+                                        .get(idx)
+                                        .map(|id| id.canonical_name())
+                                        .unwrap_or_else(|| {
+                                            format!(
+                                                "__child_of_{}_{}",
+                                                comp_id.canonical_name(),
+                                                idx
+                                            )
+                                        });
+                                    let child_access = Expr::MemberAccess(MemberAccessExpr {
+                                        target: Box::new(Expr::Ident(Ident::new(
+                                            target_name,
+                                            target_id.span,
+                                        ))),
+                                        member: m.member.clone(),
+                                        span: m.span,
+                                    });
+                                    rewritten_args.push(child_access);
+                                }
                             }
                             continue;
                         }
