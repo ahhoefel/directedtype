@@ -35,16 +35,14 @@
     \VStack(gap: 14px) {
     // Header Section
     \Text(
-        size: 26px,
-        weight: 700,
+        font: \Font(size: 26px, weight: 700),
         color: #f8fafc
     ) {
         VStack Flow Component
     }
 
     \Text(
-        size: 15px,
-        weight: 400,
+        font: \Font(size: 15px, weight: 400),
         color: #94a3b8
     ) {
         Declarative vertical stacking with gap recurrence, padding, and cross-axis alignment.
@@ -60,7 +58,7 @@
             width: 210px,
             gap: 14px
         ) {
-            \Text(size: 13px, weight: 700, color: #38bdf8) { ALIGN: LEFT (DEFAULT) }
+            \Text(font: \Font(size: 13px, weight: 700), color: #38bdf8) { ALIGN: LEFT (DEFAULT) }
 
             \VStack(
                 width: 178px,
@@ -81,7 +79,7 @@
             width: 210px,
             gap: 14px
         ) {
-            \Text(size: 13px, weight: 700, color: #a78bfa) { ALIGN: CENTER }
+            \Text(font: \Font(size: 13px, weight: 700), color: #a78bfa) { ALIGN: CENTER }
 
             \VStack(
                 width: 178px,
@@ -102,7 +100,7 @@
             width: 210px,
             gap: 14px
         ) {
-            \Text(size: 13px, weight: 700, color: #f472b6) { ALIGN: RIGHT }
+            \Text(font: \Font(size: 13px, weight: 700), color: #f472b6) { ALIGN: RIGHT }
 
             \VStack(
                 width: 178px,
@@ -123,7 +121,7 @@
             width: 215px,
             gap: 14px
         ) {
-            \Text(size: 13px, weight: 700, color: #4ade80) { ALIGN: STRETCH }
+            \Text(font: \Font(size: 13px, weight: 700), color: #4ade80) { ALIGN: STRETCH }
 
             \VStackStretch(
                 width: 183px,

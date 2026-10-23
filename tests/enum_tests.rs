@@ -222,13 +222,13 @@ fn test_enum_import_and_aliased_import() {
 #[test]
 fn test_text_end_at_baseline_and_descender() {
     let input = r#"
-    \Text(size: 32px, text_bounds: \TextBounds(end_at: TextEnd.Baseline)) {
+    \Text(font: \Font(size: 32px), text_bounds: \TextBounds(end_at: TextEnd.Baseline)) {
         Typography & Baseline
     }
-    \Text(size: 32px, text_bounds: \TextBounds(end_at: TextEnd.Descender)) {
+    \Text(font: \Font(size: 32px), text_bounds: \TextBounds(end_at: TextEnd.Descender)) {
         Typography & Baseline
     }
-    \Text(size: 32px) {
+    \Text(font: \Font(size: 32px)) {
         Typography & Baseline
     }
     "#;
@@ -278,7 +278,7 @@ fn test_text_end_at_via_component_use() {
 
     \env text_bounds = \TextBounds(end_at: TextEnd.Descender);
 
-    \Text(size: 24px) {
+    \Text(font: \Font(size: 24px)) {
         Descender text
     }
     "#;
@@ -308,15 +308,15 @@ fn test_text_start_at_capital_and_ascender() {
     use directedtype::component::ComponentRegistry;
 
     let input = r#"
-    \Text(size: 32px, text_bounds: \TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)) {
+    \Text(font: \Font(size: 32px), text_bounds: \TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)) {
         Capital baseline text
     }
 
-    \Text(size: 32px, text_bounds: \TextBounds(start_at: TextStart.Ascender, end_at: TextEnd.Baseline)) {
+    \Text(font: \Font(size: 32px), text_bounds: \TextBounds(start_at: TextStart.Ascender, end_at: TextEnd.Baseline)) {
         Ascender baseline text
     }
 
-    \Text(size: 32px) {
+    \Text(font: \Font(size: 32px)) {
         Default text
     }
     "#;
@@ -375,7 +375,7 @@ fn test_text_start_at_via_component_use() {
 
     \env text_bounds = \TextBounds(start_at: TextStart.Capital);
 
-    \Text(size: 24px) {
+    \Text(font: \Font(size: 24px)) {
         Capital start text
     }
     "#;
@@ -404,7 +404,7 @@ fn test_text_start_at_misspelled_acender_rejected() {
     let input = r#"
     \use "components/TextBounds.dt"
 
-    \Text(size: 24px, text_bounds: \TextBounds(start_at: TextStart.Acender)) {
+    \Text(font: \Font(size: 24px), text_bounds: \TextBounds(start_at: TextStart.Acender)) {
         Misspelled enum
     }
     "#;
@@ -423,7 +423,7 @@ fn test_text_start_at_misspelled_acender_rejected() {
 #[test]
 fn test_direct_start_at_or_end_at_on_text_rejected() {
     let input = r#"
-    \Text(size: 24px, start_at: TextStart.Capital) {
+    \Text(font: \Font(size: 24px), start_at: TextStart.Capital) {
         Direct start_at not allowed
     }
     "#;

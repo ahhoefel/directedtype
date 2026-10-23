@@ -895,7 +895,7 @@ mod tests {
 # \\env font = \\Font(family: \"Arial\", size: 12pt)
 \\Component Foo(x: Distance) {
     \\let y = 30px;
-    \\Text(x, y, size: 12pt){ Hello World!}
+    \\Text(x, y, font: \\Font(family: \"Arial\", size: 12pt)){ Hello World!}
 }
 
 \\let f = \\Foo(x: 20px)
@@ -904,7 +904,7 @@ mod tests {
 ";
         let out_err = compile_markdown_str(expected_err_md, label, base_dir, image_dir, "images/test", &mut renderer)
             .expect("dt compile-error should succeed when code fails to compile");
-        assert!(out_err.markdown.contains("```text\nCompile error: Node 'Foo' has no public port 'y' (7:18)\n```"), "got:\n{}", out_err.markdown);
+        assert!(out_err.markdown.contains("```text\nCompile error: Node 'Foo' has no public property 'y' (7:18)\n```"), "got:\n{}", out_err.markdown);
 
         // 4. `dt compile-error` fails when code actually compiles
         let unexpected_ok_md = "```dt compile-error\n\\let x = 10px;\n```\n";

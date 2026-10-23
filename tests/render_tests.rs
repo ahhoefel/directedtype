@@ -99,7 +99,7 @@ fn test_headless_render_layout_to_image() {
 
 \Flow(gap: 20px) {
     \Rect(x: 20px, y: 20px, width: 200px, height: 60px, color: #ff0000)
-    \Text(x: 20px, y: 100px, width: 200px, size: 20px, color: #0000ff) {
+    \Text(x: 20px, y: 100px, width: 200px, font: \Font(size: 20px), color: #0000ff) {
         Hello DirectedType Vello
     }
 }
@@ -156,7 +156,7 @@ fn test_headless_render_to_png_file() {
 }
 
 \ShadedBox(bg_color: #224488) {
-    \Text(width: 250px, size: 18px, color: #ffffff) {
+    \Text(width: 250px, font: \Font(size: 18px), color: #ffffff) {
         DirectedType Headless PNG Rendering
     }
 }
@@ -681,7 +681,7 @@ fn test_render_link_focus_highlight() {
 
 \PadIn(padding: 30px, x: 0, y: 0) {
     \VStack(gap: 16px) {
-        \Text(size: 20px) {
+        \Text(font: \Font(size: 20px)) {
             Check out \Link(url: "https://directedtype.org", link_style: red_link_style){DirectedType Engine} today.
         }
     }
@@ -756,7 +756,7 @@ fn test_render_link_hover_highlight() {
 
 \PadIn(padding: 30px, x: 0, y: 0) {
     \VStack(gap: 16px) {
-        \Text(size: 20px) {
+        \Text(font: \Font(size: 20px)) {
             Hovering over \Link(url: "https://directedtype.org", link_style: blue_hover_link_style){DirectedType Engine} reveals hover styles.
         }
     }

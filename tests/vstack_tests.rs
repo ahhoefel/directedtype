@@ -157,7 +157,7 @@ fn test_vstack_with_button_and_text_composition() {
     \use "theme/default.dt"
 
     \VStackStretch(x: 20px, y: 20px, width: 350px, gap: 14px) {
-        \Text(size: 20px, weight: 700) { Header Title }
+        \Text(font: \Font(size: 20px, weight: 700)) { Header Title }
         \Button(style: button_primary, label: "Submit Order")
     }
     "#;

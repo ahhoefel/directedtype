@@ -370,7 +370,7 @@ pub fn build_variable_graph_with_window(
                     .unwrap_or("unknown");
                 return Err(CompileError::Custom {
                     message: format!(
-                        "Node '{}' has no public port '{}'",
+                        "Node '{}' has no public property '{}'",
                         node_name, dep.port
                     ),
                     span: graph.variables.get(var_id).map_or(Span::default(), |v| v.span),
@@ -386,7 +386,7 @@ pub fn build_variable_graph_with_window(
                     if !is_internal && !is_ambient {
                         return Err(CompileError::Custom {
                             message: format!(
-                                "Node '{}' has no public port '{}'",
+                                "Node '{}' has no public property '{}'",
                                 target_node.name, dep.port
                             ),
                             span: graph.variables.get(var_id).map_or(Span::default(), |v| v.span),

@@ -303,7 +303,7 @@ fn test_build_tree_items_from_layout_and_ancestor_expansion() {
     let source = r#"
         \Component Card(id: String = "c1") {
             \Rect(id: id, x: 0, y: 0, width: 200px, height: 100px, color: #38bdf8) {
-                \Text(size: 14px) { "Card Title" }
+                \Text(font: \Font(size: 14px)) { "Card Title" }
             }
         }
         \Card(id: "main_card")
@@ -346,7 +346,7 @@ fn test_build_tree_items_from_layout_and_ancestor_expansion() {
 fn test_inspect_panel_component_rendering_and_hit_testing() {
     let source = r#"
         \Rect(id: "hero_box", x: 0, y: 0, width: 400px, height: 200px, color: #0284c7) {
-            \Text(size: 24px) { "Hero Headline" }
+            \Text(font: \Font(size: 24px)) { "Hero Headline" }
         }
     "#;
     let doc = directedtype::parse(source).expect("Must parse");
@@ -521,7 +521,7 @@ fn test_inspector_bottom_panel_dimensions_and_formulas() {
     let source = r#"
         \Component Card(id: String = "card1") {
             \Rect(id: id, x: 20px + 5px, y: 10px * 2, width: min(400px, 300px), height: 180px, color: #6366f1) {
-                \Text(size: 14px) { "Card Content" }
+                \Text(font: \Font(size: 14px)) { "Card Content" }
             }
         }
         \Card(id: "my_card")
@@ -629,7 +629,7 @@ fn test_ambient_children_authored_formulas_preserved() {
         }
 
         \Flow(margin: 40px) {
-            \Text(size: 16px) { "Environmental Scope Showcase" }
+            \Text(font: \Font(size: 16px)) { "Environmental Scope Showcase" }
         }
     "#;
     let doc = directedtype::parse(source).expect("Source must parse");

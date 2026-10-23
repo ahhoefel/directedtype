@@ -179,7 +179,7 @@ fn test_event_click_synthesis_and_bubbling() {
 #[test]
 fn test_hit_test_inline_link_single_line() {
     let input = r#"
-    \Text(x: 20px, y: 30px, width: 500px, size: 16px) {
+    \Text(x: 20px, y: 30px, width: 500px, font: \Font(size: 16px)) {
         Before link \Link(url: "https://directedtype.org"){ClickableLink} after link
     }
     "#;
@@ -208,7 +208,7 @@ fn test_hit_test_inline_link_single_line() {
 fn test_hit_test_inline_link_multi_line_disjoint_fragments() {
     // Narrow container forces link text to wrap across two lines
     let input = r#"
-    \Text(x: 20px, y: 30px, width: 140px, size: 16px) {
+    \Text(x: 20px, y: 30px, width: 140px, font: \Font(size: 16px)) {
         Prefix text \Link(url: "https://example.com"){wrapped link that spans across multiple lines} suffix
     }
     "#;

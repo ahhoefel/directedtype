@@ -63,7 +63,7 @@ fn test_block_anchor_geometry_passthrough_in_vstack() {
 #[test]
 fn test_inline_anchor_bookmark_in_text() {
     let source = r##"
-        \Text(size: 16px) {
+        \Text(font: \Font(size: 16px)) {
             Hello \Anchor("bookmark") World
         }
     "##;

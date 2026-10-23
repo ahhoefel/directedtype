@@ -48,7 +48,7 @@ pub const INSPECT_BADGE_DTML: &str = r#"
             x: parent.x + 8px,
             y: parent.y + 3px,
             color: text_color,
-            font_size: 11px
+            font: \Font(size: 11px)
         ) { label }
     }
 }

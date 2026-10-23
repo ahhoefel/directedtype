@@ -1826,7 +1826,7 @@ fn expand_component_instance(
         if all_let_names.contains(name) && !comp_def.params.iter().any(|p| p.name.as_str() == name) {
             return Err(CompileError::Custom {
                 message: format!(
-                    "Node '{}' has no public port '{}'",
+                    "Node '{}' has no public property '{}'",
                     comp_def.name.as_str(),
                     name
                 ),
@@ -4364,6 +4364,8 @@ fn expand_primitive_element(
                     }
                 } else if matches!(rewritten, Expr::Literal(Literal::String(_, _))) {
                     resolved_port_exprs.push(("font".to_string(), rewritten));
+                } else if elem.name.as_str() == "Text" {
+                    resolved_port_exprs.push(("font".to_string(), rewritten));
                 }
             }
         }
@@ -4443,6 +4445,13 @@ fn expand_primitive_element(
         }
         if let Some(ambient_expr) = ctx.ambient_authored_ports.and_then(|m| m.get(&port_name)) {
             authored_ports.insert(port_name.clone(), ambient_expr.clone());
+        } else if let Some(orig_port) = elem.ports.iter().find(|p| p.name.as_str() == port_name) {
+            authored_ports.insert(port_name.clone(), orig_port.expr.clone());
+        } else if port_name == "font" {
+            authored_ports.insert(
+                port_name.clone(),
+                Expr::Ident(Ident::new("font", elem.span)),
+            );
         } else {
             authored_ports.insert(port_name.clone(), expr.clone());
         }
@@ -5029,9 +5038,15 @@ fn expand_primitive_element(
             ) {
                 return Err(CompileError::Custom {
                     message: format!(
-                        "Port '{}' is not supported directly on Text; use 'text_bounds: \\TextBounds(start_at: ..., end_at: ...)' or '\\env text_bounds = \\TextBounds(...)' instead",
+                        "Property '{}' is not supported directly on Text; use 'text_bounds: \\TextBounds(start_at: ..., end_at: ...)' or '\\env text_bounds = \\TextBounds(...)' instead",
                         port.name.as_str()
                     ),
+                    span: port.name.span,
+                });
+            }
+            if port.name.as_str() == "size" {
+                return Err(CompileError::Custom {
+                    message: "Property 'size' is not supported directly on Text; use 'font: \\Font(size: ...)' or '\\env font = \\Font(...)' instead".to_string(),
                     span: port.name.span,
                 });
             }
@@ -5107,7 +5122,7 @@ fn expand_primitive_element(
         if !ports.contains_key("size") {
             return Err(CompileError::MissingPort {
                 node: "Text".to_string(),
-                port: "size".to_string(),
+                port: "font".to_string(),
                 span: elem.span,
             });
         }
@@ -5563,9 +5578,7 @@ fn expand_primitive_element(
                 let used_baseline = elem.ports.iter().any(|p| p.name.as_str() == "baseline")
                     && !elem.ports.iter().any(|p| p.name.as_str() == "y");
                 params.push(if used_baseline { "baseline" } else { "y" }.to_string());
-                let used_font = font_node_id.is_some()
-                    || elem.ports.iter().any(|p| p.name.as_str() == "font");
-                params.push(if used_font { "font" } else { "size" }.to_string());
+                params.push("font".to_string());
                 params
             }
         }
@@ -6128,7 +6141,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
             if id.as_str() == "self" {
                 return Err(CompileError::Custom {
-                    message: "Bare 'self' is not allowed; use 'self.<method>' in an event handler or 'self.<port>' to access a shadowed component port".to_string(),
+                    message: "Bare 'self' is not allowed; use 'self.<method>' in an event handler or 'self.<property>' to access a shadowed component property".to_string(),
                     span: id.span,
                 });
             }
@@ -6341,7 +6354,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         } else {
                             return Err(CompileError::Custom {
                                 message: format!(
-                                    "Cannot use 'self.{}' because port '{}' is not shadowed by a local '\\let' or '\\env' binding; use '{}' directly",
+                                    "Cannot use 'self.{}' because property '{}' is not shadowed by a local '\\let' or '\\env' binding; use '{}' directly",
                                     m.member, m.member, m.member
                                 ),
                                 span: m.span,
@@ -6350,7 +6363,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     } else {
                         return Err(CompileError::Custom {
                             message: format!(
-                                "Cannot use 'self.{}' outside of a component; 'self' is only allowed in event handlers or to access a shadowed component port",
+                                "Cannot use 'self.{}' outside of a component; 'self' is only allowed in event handlers or to access a shadowed component property",
                                 m.member
                             ),
                             span: m.span,
@@ -6375,7 +6388,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         {
                             let parent_name = ctx.parent_name.unwrap_or("unknown");
                             return Err(CompileError::Custom {
-                                message: format!("Node '{}' has no public port '{}'", parent_name, m.member),
+                                message: format!("Node '{}' has no public property '{}'", parent_name, m.member),
                                 span: m.span,
                             });
                         }
@@ -6477,7 +6490,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     {
                         return Err(CompileError::Custom {
                             message: format!(
-                                "Node '{}' has no public port '{}'",
+                                "Node '{}' has no public property '{}'",
                                 target_node.name, m.member
                             ),
                             span: m.span,
@@ -7107,7 +7120,7 @@ fn infer_port_type(
             visiting.remove(&key);
             return Err(CompileError::Custom {
                 message: format!(
-                    "Node '{}' has no known type for port '{}'",
+                    "Node '{}' has no known type for property '{}'",
                     node_name, port_name
                 ),
                 span: Span::default(),
@@ -7228,7 +7241,7 @@ fn infer_expr_type(
                     }
                     Err(CompileError::Custom {
                         message: format!(
-                            "Node '{}' has no known port or method '{}'",
+                            "Node '{}' has no known property or method '{}'",
                             node_name, m.member
                         ),
                         span: m.span,
@@ -7239,7 +7252,7 @@ fn infer_expr_type(
                         Ok(StaticType::Distance)
                     }
                     _ => Err(CompileError::Custom {
-                        message: format!("ViewPort has no port '{}'", m.member),
+                        message: format!("ViewPort has no property '{}'", m.member),
                         span: m.span,
                     }),
                 },

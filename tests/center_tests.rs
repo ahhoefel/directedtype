@@ -45,7 +45,7 @@ fn test_center_with_intrinsic_text() {
 
     \Rect(x: 50px, y: 50px, width: 200px, height: 80px, color: #1e293b) {
         \Center {
-            \Text(size: 20px, weight: 700) {
+            \Text(font: \Font(size: 20px, weight: 700)) {
                 Centered
             }
         }

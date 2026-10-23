@@ -271,7 +271,7 @@ fn test_expand_shaded_box_intrinsic_children_width() {
 #[test]
 fn test_text_wrapping_default_height() {
     let input = r#"
-    \Text(width: 200px, size: 16px) { This is a long sentence for text wrapping test. }
+    \Text(width: 200px, font: \Font(size: 16px)) { This is a long sentence for text wrapping test. }
     "#;
 
     let doc = parse(input).expect("Failed to parse Text");
@@ -526,8 +526,8 @@ fn test_end_to_end_flow_math_evaluation() {
     }
 
     \Flow(gap: 24px) {
-      \Text(size: 32px) { Welcome to DAG-UI }
-      \Text(size: 16px) { This layout is mathematically provable. }
+      \Text(font: \Font(size: 32px)) { Welcome to DAG-UI }
+      \Text(font: \Font(size: 16px)) { This layout is mathematically provable. }
     }
     "#;
 
@@ -706,7 +706,7 @@ fn test_responsive_flow_clamped_formula() {
     }
 
     \Flow {
-        \Text(size: 16px) { Responsive DirectedType }
+        \Text(font: \Font(size: 16px)) { Responsive DirectedType }
     }
     "#;
 
@@ -740,10 +740,10 @@ fn test_parley_text_height_wrapping_multiline() {
     }
 
     \Flow {
-        \Text(size: 36px, weight: 700) {
+        \Text(font: \Font(size: 36px, weight: 700)) {
             DirectedType Native Layout Engine
         }
-        \Text(size: 18px) {
+        \Text(font: \Font(size: 18px)) {
             A pure functional reactive layout engine
         }
     }
@@ -780,7 +780,7 @@ fn test_parley_text_height_wrapping_multiline() {
 #[test]
 fn test_parley_intrinsic_text_width_unconstrained() {
     let input = r#"
-    \Text(size: 20px) { Hello World }
+    \Text(font: \Font(size: 20px)) { Hello World }
     "#;
 
     let doc = parse(input).expect("Failed to parse");
@@ -1077,7 +1077,7 @@ fn test_visibility_child_cannot_access_parent_private_local_via_parent_dot() {
     assert!(result.is_err(), "Expected error when child accesses parent's private local via parent.p");
     let err_msg = result.unwrap_err().to_string();
     assert!(
-        err_msg.contains("has no public port 'card_padding'"),
+        err_msg.contains("has no public property 'card_padding'"),
         "Unexpected error message: {}",
         err_msg
     );
@@ -1509,7 +1509,7 @@ fn test_dom_tree_formatting() {
     }
 
     \Card {
-        \Text(size: 18px) { Hello DOM }
+        \Text(font: \Font(size: 18px)) { Hello DOM }
         \Rect(width: 100px, height: 20px, color: #3b82f6)
     }
     "#;
@@ -2250,15 +2250,12 @@ fn test_font_backward_compatible_string_family() {
     \let t = \Text(font: "Menlo", size: 18px) { Code };
     "#;
     let doc = parse(input).expect("Failed to parse");
-    let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate layout");
-    let (expanded, _) = compile_to_graph(&doc).expect("Graph compilation");
-
-    let t_id = expanded.roots[0];
-    let t_node = expanded.get_node(t_id).unwrap();
-    assert_eq!(t_node.font, None, "String font should not create a font node reference");
-
-    let font_val = layout.get_value(t_id, "font").and_then(|v| v.as_str()).unwrap();
-    assert_eq!(font_val, "Menlo");
+    let err = compile_to_graph(&doc).expect_err("Direct size on Text must be rejected");
+    assert!(
+        err.to_string().contains("Property 'size' is not supported directly on Text"),
+        "Unexpected error: {}",
+        err
+    );
 }
 
 #[test]
@@ -3008,7 +3005,7 @@ fn test_overload_card_in_hstack_no_cycle() {
 #[test]
 fn test_text_with_inline_link_spans() {
     let input = r#"
-    \Text(width: 400px, size: 16px) {
+    \Text(width: 400px, font: \Font(size: 16px)) {
         Visit \Link(url: "https://www.google.com"){Google} today
     }
     "#;
@@ -3053,7 +3050,7 @@ fn test_text_with_inline_link_spans() {
 #[test]
 fn test_text_with_custom_styled_link_span() {
     let input = r#"
-    \Text(size: 16px) {
+    \Text(font: \Font(size: 16px)) {
         Check \Link(url: "https://github.com", color: #2563eb, underline: false){GitHub}
     }
     "#;
@@ -3074,7 +3071,7 @@ fn test_text_with_custom_styled_link_span() {
 
 #[test]
 fn test_plain_text_has_default_span() {
-    let input = r#"\Text(size: 16px) { Plain text here }"#;
+    let input = r#"\Text(font: \Font(size: 16px)) { Plain text here }"#;
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate");
 
@@ -3107,7 +3104,7 @@ fn test_rect_bounding_union() {
 
 #[test]
 fn test_single_line_link_fragments_projection() {
-    let input = r#"\Text(width: 500px, size: 16px) { Visit \Link(url: "https://google.com"){Google} now }"#;
+    let input = r#"\Text(width: 500px, font: \Font(size: 16px)) { Visit \Link(url: "https://google.com"){Google} now }"#;
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate");
 
@@ -3131,7 +3128,7 @@ fn test_single_line_link_fragments_projection() {
 #[test]
 fn test_multiline_wrapped_link_fragments_projection() {
     // Narrow width forces the link phrase to wrap across line boundaries
-    let input = r#"\Text(width: 160px, size: 16px) { Welcome and visit our \Link(url: "https://example.com"){comprehensive guide to documentation} today }"#;
+    let input = r#"\Text(width: 160px, font: \Font(size: 16px)) { Welcome and visit our \Link(url: "https://example.com"){comprehensive guide to documentation} today }"#;
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate");
 
@@ -3160,15 +3157,15 @@ fn test_multiline_wrapped_link_fragments_projection() {
 
 #[test]
 fn test_missing_size_on_text_yields_compile_error() {
-    let input = r#"\Text { Hello missing size }"#;
+    let input = r#"\Text { Hello missing font }"#;
     let doc = parse(input).expect("parse ok");
     let err = compile_to_graph(&doc).unwrap_err();
     match err {
         directedtype::compiler::CompileError::MissingPort { node, port, .. } => {
             assert_eq!(node, "Text");
-            assert_eq!(port, "size");
+            assert_eq!(port, "font");
         }
-        other => panic!("Expected MissingPort on Text size, got: {:?}", other),
+        other => panic!("Expected MissingPort on Text font, got: {:?}", other),
     }
 }
 
@@ -3318,7 +3315,7 @@ fn test_font_family_not_found_in_font_static() {
 #[test]
 fn test_font_family_not_found_in_text_family_static() {
     let input = r#"
-    \Text(family: "NonExistentFontXYZ", size: 16px) { Hello }
+    \Text(font: \Font(family: "NonExistentFontXYZ", size: 16px)) { Hello }
     "#;
     let doc = parse(input).expect("parse ok");
     let err = directedtype::evaluate_document(&doc).unwrap_err();
@@ -3333,7 +3330,8 @@ fn test_font_family_not_found_in_text_family_static() {
 #[test]
 fn test_font_family_not_found_in_text_font_static() {
     let input = r#"
-    \Text(font: "NonExistentFontXYZ", size: 16px) { Hello }
+    \env font = \Font(family: "NonExistentFontXYZ", size: 16px);
+    \Text { Hello }
     "#;
     let doc = parse(input).expect("parse ok");
     let err = directedtype::evaluate_document(&doc).unwrap_err();
@@ -3369,7 +3367,7 @@ fn test_font_family_generic_and_valid_fonts_succeed() {
     \Font(family: "monospace", size: 16px)
     \Font(family: "Arial", size: 16px)
     \Font(size: 16px)
-    \Text(font: "sans-serif", size: 16px) { Test }
+    \Text(font: \Font(family: "sans-serif", size: 16px)) { Test }
     "#;
     let doc = parse(input).expect("parse ok");
     assert!(directedtype::evaluate_document(&doc).is_ok());
@@ -3443,7 +3441,7 @@ fn test_dag_backed_let_rejects_external_access() {
     let err = directedtype::evaluate_document(&doc).unwrap_err();
     let msg = err.to_string();
     assert!(
-        msg.contains("Node 'Container' has no public port 'max_w'"),
+        msg.contains("Node 'Container' has no public property 'max_w'"),
         "Expected error rejecting external access to private let port, got: {}",
         msg
     );
@@ -3465,7 +3463,7 @@ fn test_dag_backed_let_rejects_child_parent_dot_access() {
     let err = directedtype::evaluate_document(&doc).unwrap_err();
     let msg = err.to_string();
     assert!(
-        msg.contains("Node 'Container' has no public port 'max_w'"),
+        msg.contains("Node 'Container' has no public property 'max_w'"),
         "Expected error rejecting consumer child parent.max_w, got: {}",
         msg
     );
@@ -3487,7 +3485,7 @@ fn test_dag_backed_let_rejects_caller_override() {
     let err = directedtype::evaluate_document(&doc).unwrap_err();
     let msg = err.to_string();
     assert!(
-        msg.contains("Node 'Container' has no public port 'max_w'"),
+        msg.contains("Node 'Container' has no public property 'max_w'"),
         "Expected error rejecting caller override of private let, got: {}",
         msg
     );
@@ -3503,27 +3501,27 @@ fn test_number_to_string_builtins() {
 
     \Text(
         text: to_fixed(pi, 2),
-        size: 14px, width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
     )
     \Text(
         text: pi.to_fixed(4),
-        size: 14px, width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
     )
     \Text(
         text: whole.to_fixed(0),
-        size: 14px, width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
     )
     \Text(
         text: to_precision(n1, 4),
-        size: 14px, width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
     )
     \Text(
         text: small.to_precision(2),
-        size: 14px, width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
     )
     \Text(
         text: n1.to_precision(2),
-        size: 14px, width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
     )
     "#;
 
@@ -3654,7 +3652,7 @@ fn test_distance_units_px_and_pt_and_conversions() {
     \Text(
         x: 0,
         y: 0,
-        size: 12pt,
+        font: \Font(size: 12pt),
         text: px_num.to_fixed(0) + "," + pt_num.to_fixed(0) + "," + px_fn.to_fixed(0) + "," + pt_fn.to_fixed(0)
     )
     "#;
@@ -3994,7 +3992,7 @@ fn test_self_requires_shadowed_port_or_event_handler() {
     "#;
     let err = directedtype::evaluate_document(&parse(unshadowed).unwrap()).unwrap_err();
     assert!(
-        err.to_string().contains("Cannot use 'self.bottom' because port 'bottom' is not shadowed by a local '\\let' or '\\env' binding; use 'bottom' directly"),
+        err.to_string().contains("Cannot use 'self.bottom' because property 'bottom' is not shadowed by a local '\\let' or '\\env' binding; use 'bottom' directly"),
         "Unexpected error: {}",
         err
     );

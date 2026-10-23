@@ -12,21 +12,21 @@ pub enum CompileError {
         span: Span,
     },
 
-    #[error("Port '{port}' is reserved on node '{node}'{}", .span.format_location_suffix())]
+    #[error("Property '{port}' is reserved on node '{node}'{}", .span.format_location_suffix())]
     ReservedPort {
         node: String,
         port: String,
         span: Span,
     },
 
-    #[error("Node '{node}' is missing required port '{port}'{}", .span.format_location_suffix())]
+    #[error("Node '{node}' is missing required property '{port}'{}", .span.format_location_suffix())]
     MissingPort {
         node: String,
         port: String,
         span: Span,
     },
 
-    #[error("Port '{port}' defined multiple times on node '{node}'{}", .span.format_location_suffix())]
+    #[error("Property '{port}' defined multiple times on node '{node}'{}", .span.format_location_suffix())]
     DuplicatePort {
         node: String,
         port: String,
@@ -40,44 +40,44 @@ pub enum CompileError {
         span: Span,
     },
 
-    #[error("Attempted to use explicitly uninitialized variable '{name}'{}", .span.format_location_suffix())]
+    #[error("Attempted to use explicitly uninitialized property '{name}'{}", .span.format_location_suffix())]
     UninitializedVariableUse {
         name: String,
         span: Span,
     },
 
-    #[error("Undefined environmental variable '{name}'{}", .span.format_location_suffix())]
+    #[error("Undefined environmental property '{name}'{}", .span.format_location_suffix())]
     UndefinedEnvVariable {
         name: String,
         span: Span,
     },
 
-    #[error("Environmental variable '{name}' is firewalled/swallowed and cannot be accessed{}", .span.format_location_suffix())]
+    #[error("Environmental property '{name}' is firewalled/swallowed and cannot be accessed{}", .span.format_location_suffix())]
     BlockedEnvVariable {
         name: String,
         span: Span,
     },
 
-    #[error("Cannot use bare 'env' as an expression; access an environmental variable via 'env.<name>'{}", .span.format_location_suffix())]
+    #[error("Cannot use bare 'env' as an expression; access an environmental property via 'env.<name>'{}", .span.format_location_suffix())]
     BareEnvUse {
         span: Span,
     },
 
-    #[error("Cannot override immutable alias port '{port}' on node '{node}'{}", .span.format_location_suffix())]
+    #[error("Cannot override immutable alias property '{port}' on node '{node}'{}", .span.format_location_suffix())]
     ImmutableAliasPort {
         node: String,
         port: String,
         span: Span,
     },
 
-    #[error("Component key on '{node}' cannot depend on layout port or formula '{name}'{}", .span.format_location_suffix())]
+    #[error("Component key on '{node}' cannot depend on layout property or formula '{name}'{}", .span.format_location_suffix())]
     InvalidComponentKeyDependency {
         node: String,
         name: String,
         span: Span,
     },
 
-    #[error("Port '{port}' on node '{node}' is private component state and cannot be set by caller{}", .span.format_location_suffix())]
+    #[error("Property '{port}' on node '{node}' is a state property and cannot be set by caller{}", .span.format_location_suffix())]
     PrivateStatePort {
         node: String,
         port: String,
@@ -115,7 +115,7 @@ pub enum CompileError {
         span: Span,
     },
 
-    #[error("Variable '{var}' on node '{node}' is not a declared state variable{}", .span.format_location_suffix())]
+    #[error("Property '{var}' on node '{node}' is not a declared state property{}", .span.format_location_suffix())]
     NotAStateVariable {
         node: String,
         var: String,
@@ -148,13 +148,13 @@ pub enum CompileError {
         span: Span,
     },
 
-    #[error("Potentially ambiguous overloads for component '{}': signatures {:?} and {:?} both accept ports {:?}{}", .0.name, .0.signature_a, .0.signature_b, .0.witness_overlap, .0.span.format_location_suffix())]
+    #[error("Potentially ambiguous overloads for component '{}': signatures {:?} and {:?} both accept properties {:?}{}", .0.name, .0.signature_a, .0.signature_b, .0.witness_overlap, .0.span.format_location_suffix())]
     PotentiallyAmbiguousOverloads(Box<AmbiguousOverloadDetails>),
 
-    #[error("No matching overload for component '{}' with provided ports {:?}{}", .0.name, .0.provided_ports, .0.span.format_location_suffix())]
+    #[error("No matching overload for component '{}' with provided properties {:?}{}", .0.name, .0.provided_ports, .0.span.format_location_suffix())]
     NoMatchingOverload(Box<NoMatchingOverloadDetails>),
 
-    #[error("Duplicate overload signature for component '{name}' with ports {signature:?}{}", .span.format_location_suffix())]
+    #[error("Duplicate overload signature for component '{name}' with properties {signature:?}{}", .span.format_location_suffix())]
     DuplicateOverloadSignature {
         name: String,
         signature: Vec<String>,
@@ -184,7 +184,7 @@ pub enum CompileError {
         span: Span,
     },
 
-    #[error("Disallowed port '{port}' on \\Window. Ambient spatial geometry and arbitrary custom ports cannot be set on \\Window; only viewer runtime control ports ('title', 'dpi', 'vscroll', 'hscroll') are supported{}", .span.format_location_suffix())]
+    #[error("Disallowed property '{port}' on \\Window. Ambient spatial geometry and arbitrary custom properties cannot be set on \\Window; only viewer runtime control properties ('title', 'dpi', 'vscroll', 'hscroll') are supported{}", .span.format_location_suffix())]
     DisallowedWindowPort {
         port: String,
         span: Span,

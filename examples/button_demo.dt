@@ -28,16 +28,14 @@
 ) {
     // Header Section
     \Text(
-        size: 26px,
-        weight: 700,
+        font: \Font(size: 26px, weight: 700),
         color: #f8fafc
     ) {
         DirectedType Component Library
     }
 
     \Text(
-        size: 15px,
-        weight: 400,
+        font: \Font(size: 15px, weight: 400),
         color: #94a3b8
     ) {
         Standard \\Card and \\Button with intrinsic typography sizing, 6 variants, and direct text support.
@@ -48,7 +46,7 @@
 
     // Section 1: Visual Variants
     \Card("card_variants"; style: card_dark, gap: 10px) {
-        \Text(size: 13px, weight: 700, color: #94a3b8) { 1. DESIGN VARIANTS (AUTO-SIZED) }
+        \Text(font: \Font(size: 13px, weight: 700), color: #94a3b8) { 1. DESIGN VARIANTS (AUTO-SIZED) }
         \HStack(gap: 12px) {
             \Button("btn_primary"; variant: ButtonVariant.Primary, label: "Primary")
             \Button("btn_secondary"; variant: ButtonVariant.Secondary, label: "Secondary")
@@ -61,7 +59,7 @@
 
     // Section 2: Dynamic Intrinsic Sizing vs Fixed Width
     \Card("card_sizing"; style: card_dark, gap: 10px) {
-        \Text(size: 13px, weight: 700, color: #94a3b8) { 2. INTRINSIC TEXT METRIC SIZING VS FIXED OVERRIDE }
+        \Text(font: \Font(size: 13px, weight: 700), color: #94a3b8) { 2. INTRINSIC TEXT METRIC SIZING VS FIXED OVERRIDE }
         \HStack(gap: 12px) {
             \Button("btn_short"; style: button_primary, label: "OK")
             \Button("btn_medium"; style: button_secondary, label: "Save Changes")
@@ -72,15 +70,14 @@
 
     // Section 3: Active vs Disabled States
     \Card("card_interactive"; style: card_dark, gap: 12px) {
-        \Text(size: 13px, weight: 700, color: #94a3b8) { 3. ACTIVE VS DISABLED STATES }
+        \Text(font: \Font(size: 13px, weight: 700), color: #94a3b8) { 3. ACTIVE VS DISABLED STATES }
         \HStack(gap: 16px) {
             \Button("btn_active"; style: button_primary, label: "Active Button")
             \Button("btn_disabled"; style: button_primary, label: "Disabled Button (Suppressed)", disabled: true)
         }
 
         \Text(
-            size: 13px,
-            weight: 500,
+            font: \Font(size: 13px, weight: 500),
             color: #64748b
         ) {
             Disabled buttons render with theme disabled styling and suppress pointer events.
@@ -89,7 +86,7 @@
 
     // Section 4: Direct Text in Card (Auto-Wrapping Height)
     \Card("card_direct_text"; style: card_dark) {
-        \Text(size: 14px, color: #f8fafc) {
+        \Text(font: \Font(size: 14px), color: #f8fafc) {
             Direct text passed straight to Card with auto-wrapping height!
         }
     }

@@ -90,11 +90,11 @@
     ) {
         // Component Title & Subtitle via VStack
         \VStack(gap: 4px) {
-            \Text(size: 22px, weight: 700, color: #f8fafc) {
+            \Text(font: \Font(size: 22px, weight: 700), color: #f8fafc) {
                 Reactive Counter
             }
 
-            \Text(size: 12px, color: #94a3b8) {
+            \Text(font: \Font(size: 12px), color: #94a3b8) {
                 One-Way Pipeline: State -> DAG -> Pixels
             }
         }
@@ -106,14 +106,12 @@
         ) {
             \HStack(gap: 60px, align: Align.Center) {
                 \Text(
-                    size: 26px,
-                    weight: 700,
+                    font: \Font(size: 26px, weight: 700),
                     color: is_max ? #ef4444 : (is_zero ? #94a3b8 : #38bdf8),
                     text: count_label
                 )
                 \Text(
-                    size: 12px,
-                    weight: 600,
+                    font: \Font(size: 12px, weight: 600),
                     color: is_max ? #f87171 : #64748b,
                     text: status_label
                 )

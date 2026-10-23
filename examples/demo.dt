@@ -24,11 +24,11 @@
         gap: 20px
     ) {
         // Document Header
-        \Text(size: 34px, weight: 700, color: #0f172a) {
+        \Text(font: \Font(size: 34px, weight: 700), color: #0f172a) {
             DirectedType Native Layout Engine
         }
 
-        \Text(size: 16px, color: #475569) {
+        \Text(font: \Font(size: 16px), color: #475569) {
             A pure functional reactive layout engine based on a Directed Acyclic Graph (DAG) of layout equations, powered by Vello GPU rendering and Parley text shaping.
         }
 
@@ -39,10 +39,10 @@
             style: demo_card_style,
             gap: 10px
         ) {
-            \Text(size: 13px, weight: 700, color: #38bdf8) {
+            \Text(font: \Font(size: 13px, weight: 700), color: #38bdf8) {
                 TOPOLOGICAL DAG EVALUATION
             }
-            \Text(size: 15px, width: parent.width - 44px, color: #e2e8f0) {
+            \Text(font: \Font(size: 15px), width: parent.width - 44px, color: #e2e8f0) {
                 Layout is Math: Every spatial coordinate (x, y, width, height, z) is an explicit edge in a topological dependency graph. Kahn's algorithm guarantees deterministic evaluation without CSS layout thrashing.
             }
         }
@@ -57,7 +57,7 @@
         \Divider(thickness: 2px, color: #e2e8f0)
 
         // Footer Note
-        \Text(size: 14px, color: #64748b) {
+        \Text(font: \Font(size: 14px), color: #64748b) {
             Rendered natively on Apple Metal with compute-centric vector pipelines via Vello and wgpu.
         }
     }

@@ -70,7 +70,7 @@
     // Local let shadows env parameter, creating a firewall that stops accent propagation
     \let accent_color = #94a3b8;
     \Rect(x: left, y: top, width: width, height: 36px, color: accent_color, radius: 8px)
-    \Text(x: left + 12px, y: top + 10px, size: 13px, weight: 600, color: #ffffff) {
+    \Text(x: left + 12px, y: top + 10px, font: \Font(size: 13px, weight: 600), color: #ffffff) {
         Shield / Swallower Firewall: stopped env propagation below
     }
     \Children(
@@ -103,8 +103,7 @@
     \Text(
         x: left + 16px,
         y: top + 20px,
-        size: 16px,
-        weight: 600,
+        font: \Font(size: 16px, weight: 600),
         color: text_color
     ) {
         Environmental Scoping Active
@@ -112,7 +111,7 @@
     \Text(
         x: left + 16px,
         y: top + 48px,
-        size: 14px,
+        font: \Font(size: 14px),
         color: accent_color
     ) {
         Accent border color inherited via env propagation
@@ -142,8 +141,7 @@
     \Text(
         x: left + 16px,
         y: top + 20px,
-        size: 16px,
-        weight: 600,
+        font: \Font(size: 16px, weight: 600),
         color: text_color
     ) {
         No environmental scoping.
@@ -151,7 +149,7 @@
     \Text(
         x: left + 16px,
         y: top + 48px,
-        size: 14px,
+        font: \Font(size: 14px),
         color: accent_color
     ) {
         Accent color not taken from environment. card_bg set from env.card_bg.
@@ -159,7 +157,7 @@
 }
 
 \Flow(margin: 40px, gap: 24px) {
-    \Text(size: 28px, weight: 700, color: #0f172a) {
+    \Text(font: \Font(size: 28px, weight: 700), color: #0f172a) {
         Environmental Scope Showcase
     }
 

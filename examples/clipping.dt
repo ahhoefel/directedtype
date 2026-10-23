@@ -50,27 +50,27 @@
     gap: 20px,
     width: min(max(window.width - 64px, 400px), 600px)
 ) {
-    \Text(size: 28px, weight: 700, color: #0f172a) {
+    \Text(font: \Font(size: 28px, weight: 700), color: #0f172a) {
         Spatial Clipping Demonstration
     }
 
-    \Text(size: 15px, color: #475569) {
+    \Text(font: \Font(size: 15px), color: #475569) {
         In DirectedType, clipping is a GPU hardware state decoupled from the layout hierarchy. The ScrollView below establishes a rounded hardware clip mask.
     }
 
     \ScrollView(height: 200px, radius: 16px, bg_color: #0f172a, border_color: #38bdf8) {
-        \Text(size: 16px, weight: 600, color: #38bdf8) {
+        \Text(font: \Font(size: 16px, weight: 600), color: #38bdf8) {
             Clipped Viewport Content
         }
 
-        \Text(size: 14px, color: #94a3b8) {
+        \Text(font: \Font(size: 14px), color: #94a3b8) {
             This content overflows the bottom and side boundaries of the ScrollView. Notice how fragments are clipped cleanly against the rounded corner mask.
         }
 
         // An oversized accent block that extends past the right edge
         \Rect(x: parent.left + 10px, width: 500px, height: 44px, color: #6366f1, radius: 8px)
 
-        \Text(size: 13px, color: #e2e8f0) {
+        \Text(font: \Font(size: 13px), color: #e2e8f0) {
            If you shrink the window enough, you'll see overflowing text that gets clipped smoothly at the bottom rounded boundary.
         }
 
@@ -88,15 +88,14 @@
             clip: window.clip,
             x: parent.right - 105px,
             y: parent.top - 7px,
-            size: 11px,
-            weight: 700,
+            font: \Font(size: 11px, weight: 700),
             color: #ffffff
         ) {
             UNCLIPPED
         }
     }
 
-    \Text(size: 15px, color: #475569) {
+    \Text(font: \Font(size: 15px), color: #475569) {
         Escape Hatches: Nodes can step up the clip chain via 'clip: clip.up' or bypass clipping entirely using 'clip: window.clip'.
     }
 }

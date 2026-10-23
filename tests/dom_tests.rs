@@ -1,7 +1,22 @@
-use directedtype::ast::{Expr, Ident};
+use directedtype::ast::{ElementNode, Expr, Ident, PortBinding};
 use directedtype::dom::{Dom, DomError};
 use directedtype::interaction::Point;
 use directedtype::span::Span;
+
+fn font_expr(size_px: f64) -> Expr {
+    Expr::Node(Box::new(ElementNode {
+        name: Ident::new("Font", Span::default()),
+        key: None,
+        ports: vec![PortBinding {
+            name: Ident::new("size", Span::default()),
+            expr: Expr::distance_px(size_px),
+            span: Span::default(),
+        }],
+        content: None,
+        span: Span::default(),
+        handle: None,
+    }))
+}
 
 #[test]
 fn test_dom_create_and_append() {
@@ -23,7 +38,7 @@ fn test_dom_create_and_append() {
         vec![
             ("x".to_string(), Expr::distance_px(15.0)),
             ("y".to_string(), Expr::distance_px(25.0)),
-            ("size".to_string(), Expr::distance_px(16.0)),
+            ("font".to_string(), font_expr(16.0)),
             ("color".to_string(), Expr::color("#ffffff")),
         ],
     );
@@ -218,7 +233,7 @@ fn test_dom_ports_and_text_mutation() {
         vec![
             ("x".to_string(), Expr::distance_px(0.0)),
             ("y".to_string(), Expr::distance_px(0.0)),
-            ("size".to_string(), Expr::distance_px(16.0)),
+            ("font".to_string(), font_expr(16.0)),
             ("color".to_string(), Expr::color("#000000")),
         ],
     );
