@@ -6468,6 +6468,24 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
             }
 
+            if let Some(tid) = target_node_id {
+                if let Some(target_node) = ctx.nodes.get(tid.0) {
+                    if target_node.private_ports.contains(m.member.as_str())
+                        && ctx.current_node != tid
+                        && ctx.enclosing_component != Some(tid)
+                        && target_ident_name.as_deref() != Some("parent")
+                    {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Node '{}' has no public port '{}'",
+                                target_node.name, m.member
+                            ),
+                            span: m.span,
+                        });
+                    }
+                }
+            }
+
             Ok(Expr::MemberAccess(MemberAccessExpr {
                 target: Box::new(resolved_target),
                 member: m.member.clone(),

@@ -5,9 +5,23 @@ use vello::peniko::Color;
 
 use crate::compiler::{CompiledDocument, FsResolver, ResolvedLayout};
 use crate::component::ComponentRegistry;
-use crate::parser::parse_document_with_file;
+use crate::parser::{parse_document, parse_document_with_file};
 use crate::render::color::parse_color;
 use crate::render::{HeadlessRenderer, SceneOptions};
+
+/// Compilation / rendering mode for a ```dt code block in a `.dt.md` template.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DocBlockMode {
+    /// Emits the ```dt code block verbatim without compiling or rendering.
+    #[default]
+    Plain,
+    /// Compiles the ```dt code block and asserts that it compiles without error (no image rendered).
+    Compiles,
+    /// Compiles the ```dt code block, asserts that it fails to compile, and outputs the error message.
+    CompileError,
+    /// Compiles and renders the ```dt code block to a PNG image and embeds it in the Markdown output.
+    Render,
+}
 
 /// Layout presentation mode for a rendered `.dt` code block in generated Markdown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -24,6 +38,7 @@ pub enum DocBlockLayout {
 /// Parsed configuration options from a ```` ```dt ... ```` code fence info string.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DocBlockOptions {
+    pub mode: DocBlockMode,
     pub render: bool,
     pub width: Option<u32>,
     pub height: Option<u32>,
@@ -38,6 +53,7 @@ pub struct DocBlockOptions {
 impl Default for DocBlockOptions {
     fn default() -> Self {
         Self {
+            mode: DocBlockMode::Plain,
             render: false,
             width: None,
             height: None,
@@ -72,8 +88,16 @@ impl DocBlockOptions {
 
         for token in tokens {
             if token == "render" {
+                opts.mode = DocBlockMode::Render;
                 opts.render = true;
+            } else if token == "compiles" || token == "compile" {
+                opts.mode = DocBlockMode::Compiles;
+                opts.render = false;
+            } else if token == "compile-error" || token == "compile_error" {
+                opts.mode = DocBlockMode::CompileError;
+                opts.render = false;
             } else if token == "norender" || token == "ignore" {
+                opts.mode = DocBlockMode::Plain;
                 opts.render = false;
             } else if token == "side-by-side" || token == "side_by_side" {
                 opts.layout = DocBlockLayout::SideBySide;
@@ -204,6 +228,38 @@ pub fn split_hidden_lines(raw_code: &str) -> (String, String) {
     }
 
     (compiler_lines.join("\n"), display_lines.join("\n"))
+}
+
+/// Maps a trailing ` (line:col)` suffix in an error message from `compiler_source` line numbers
+/// to `display_source` line numbers when `# ` hidden lines are present.
+fn remap_error_line_to_display(err_msg: &str, raw_code: &str) -> String {
+    let mut map = vec![1usize];
+    let mut display_line = 0usize;
+    let mut has_hidden = false;
+    for line in raw_code.lines() {
+        let trimmed = line.trim_start();
+        if trimmed == "#" || trimmed.starts_with("# ") {
+            has_hidden = true;
+        } else {
+            display_line += 1;
+        }
+        map.push(display_line.max(1));
+    }
+    if !has_hidden {
+        return err_msg.to_string();
+    }
+    if let Some(open_paren) = err_msg.rfind(" (") {
+        if err_msg.ends_with(')') {
+            let inner = &err_msg[open_paren + 2..err_msg.len() - 1];
+            if let Some((line_str, col_str)) = inner.split_once(':') {
+                if let (Ok(comp_line), Ok(col)) = (line_str.parse::<usize>(), col_str.parse::<usize>()) {
+                    let disp_line = map.get(comp_line).copied().unwrap_or(comp_line);
+                    return format!("{} ({disp_line}:{col})", &err_msg[..open_paren]);
+                }
+            }
+        }
+    }
+    err_msg.to_string()
 }
 
 /// Computes the 1x logical viewport `(width, height)` and `scroll_offset` for a `ResolvedLayout`
@@ -446,13 +502,130 @@ pub fn compile_markdown_str(
                 let raw_code = code_lines.join("\n");
                 let (compiler_source, display_source) = split_hidden_lines(&raw_code);
 
-                if !opts.render {
-                    out_lines.push(format!("{fence_marker}dt"));
-                    if !display_source.is_empty() {
-                        out_lines.push(display_source);
+                let eval_w = opts.width.unwrap_or(800) as f64;
+                let eval_h = opts.height.unwrap_or(600) as f64;
+
+                match opts.mode {
+                    DocBlockMode::Plain => {
+                        out_lines.push(format!("{fence_marker}dt"));
+                        if !display_source.is_empty() {
+                            out_lines.push(display_source);
+                        }
+                        out_lines.push(fence_marker.to_string());
+                        continue;
                     }
-                    out_lines.push(fence_marker.to_string());
-                    continue;
+                    DocBlockMode::Compiles => {
+                        let padded_compiler_source =
+                            format!("{}{compiler_source}", "\n".repeat(block_start_line));
+                        let doc = parse_document_with_file(&padded_compiler_source, source_label)
+                            .map_err(|e| {
+                                format!(
+                                    "{}:{}: Parse error in ```dt compiles block: {e}",
+                                    source_label.display(),
+                                    block_start_line
+                                )
+                            })?;
+
+                        let resolver = FsResolver;
+                        let mut registry = ComponentRegistry::standard();
+                        registry.auto_discover_wasm(source_label, &resolver);
+                        registry.auto_discover_wasm_for_document(&doc, source_label, &resolver);
+
+                        CompiledDocument::compile_with_registry(
+                            &doc,
+                            eval_w,
+                            eval_h,
+                            base_dir,
+                            &resolver,
+                            &registry,
+                        )
+                        .map_err(|e| {
+                            format!(
+                                "{}:{}: Compile error in ```dt compiles block: {e}",
+                                source_label.display(),
+                                block_start_line
+                            )
+                        })?;
+
+                        if opts.layout != DocBlockLayout::ImageOnly {
+                            out_lines.push(format!("{fence_marker}dt"));
+                            if !display_source.is_empty() {
+                                out_lines.push(display_source);
+                            }
+                            out_lines.push(fence_marker.to_string());
+                        }
+                        continue;
+                    }
+                    DocBlockMode::CompileError => {
+                        let compile_result: Result<(), String> = (|| {
+                            let doc = parse_document(&compiler_source)
+                                .map_err(|e| format!("Parse error: {e}"))?;
+                            let resolver = FsResolver;
+                            let mut registry = ComponentRegistry::standard();
+                            registry.auto_discover_wasm(source_label, &resolver);
+                            registry.auto_discover_wasm_for_document(&doc, source_label, &resolver);
+                            CompiledDocument::compile_with_registry(
+                                &doc,
+                                eval_w,
+                                eval_h,
+                                base_dir,
+                                &resolver,
+                                &registry,
+                            )
+                            .map(|_| ())
+                            .map_err(|e| format!("Compile error: {e}"))
+                        })();
+
+                        let raw_err = match compile_result {
+                            Ok(()) => {
+                                return Err(format!(
+                                    "{}:{}: Expected compile error in ```dt compile-error block, but it compiled successfully",
+                                    source_label.display(),
+                                    block_start_line
+                                ));
+                            }
+                            Err(e) => remap_error_line_to_display(&e, &raw_code),
+                        };
+
+                        let error_block = format!("{fence_marker}text\n{raw_err}\n{fence_marker}");
+
+                        match opts.layout {
+                            DocBlockLayout::Stacked => {
+                                out_lines.push(format!("{fence_marker}dt"));
+                                if !display_source.is_empty() {
+                                    out_lines.push(display_source);
+                                }
+                                out_lines.push(fence_marker.to_string());
+                                out_lines.push(String::new());
+                                out_lines.push(error_block);
+                            }
+                            DocBlockLayout::SideBySide => {
+                                out_lines.push("<table>".to_string());
+                                out_lines.push("<tr>".to_string());
+                                out_lines.push("<td>".to_string());
+                                out_lines.push(String::new());
+                                out_lines.push(format!("{fence_marker}dt"));
+                                if !display_source.is_empty() {
+                                    out_lines.push(display_source);
+                                }
+                                out_lines.push(fence_marker.to_string());
+                                out_lines.push(String::new());
+                                out_lines.push("</td>".to_string());
+                                out_lines.push("<td>".to_string());
+                                out_lines.push(String::new());
+                                out_lines.push(error_block);
+                                out_lines.push(String::new());
+                                out_lines.push("</td>".to_string());
+                                out_lines.push("</tr>".to_string());
+                                out_lines.push("</table>".to_string());
+                            }
+                            DocBlockLayout::ImageOnly => {
+                                out_lines.push(error_block);
+                            }
+                        }
+                        continue;
+                    }
+                    DocBlockMode::Render => {}
                 }
 
                 example_counter += 1;
@@ -488,9 +661,6 @@ pub fn compile_markdown_str(
                             block_start_line
                         )
                     })?;
-
-                let eval_w = opts.width.unwrap_or(800) as f64;
-                let eval_h = opts.height.unwrap_or(600) as f64;
 
                 let resolver = FsResolver;
                 let mut registry = ComponentRegistry::standard();
@@ -697,5 +867,49 @@ mod tests {
         assert_eq!((lw2, lh2), (132, 82));
         assert_eq!((w2, h2), (264, 164));
         assert_eq!(scroll2, (-16.0, -16.0));
+    }
+
+    #[test]
+    fn test_compiles_and_compile_error_directives() {
+        let mut renderer = None;
+        let label = Path::new("test.dt.md");
+        let base_dir = Path::new(".");
+        let image_dir = Path::new("images/test");
+
+        // 1. `dt compiles` succeeds on valid code
+        let valid_md = "```dt compiles\n\\Component Rectangle(area: Area, width: Distance) {\n    \\alias height = area / width;\n}\n```\n";
+        let out = compile_markdown_str(valid_md, label, base_dir, image_dir, "images/test", &mut renderer)
+            .expect("dt compiles should succeed on valid code");
+        assert!(out.markdown.contains("```dt\n\\Component Rectangle"));
+        assert!(out.rendered_images.is_empty());
+
+        // 2. `dt compiles` fails on invalid code
+        let invalid_compiles_md = "```dt compiles\n\\let x = 10px + 5;\n```\n";
+        let err = compile_markdown_str(invalid_compiles_md, label, base_dir, image_dir, "images/test", &mut renderer)
+            .expect_err("dt compiles should error on invalid code");
+        assert!(err.contains("Compile error in ```dt compiles block"), "got: {err}");
+
+        // 3. `dt compile-error` succeeds on invalid code and includes error output in markdown
+        let expected_err_md = "\
+```dt compile-error
+# \\env font = \\Font(family: \"Arial\", size: 12pt)
+\\Component Foo(x: Distance) {
+    \\let y = 30px;
+    \\Text(x, y, size: 12pt){ Hello World!}
+}
+
+\\let f = \\Foo(x: 20px)
+\\let sum = f.x + f.y;
+```
+";
+        let out_err = compile_markdown_str(expected_err_md, label, base_dir, image_dir, "images/test", &mut renderer)
+            .expect("dt compile-error should succeed when code fails to compile");
+        assert!(out_err.markdown.contains("```text\nCompile error: Node 'Foo' has no public port 'y' (7:18)\n```"), "got:\n{}", out_err.markdown);
+
+        // 4. `dt compile-error` fails when code actually compiles
+        let unexpected_ok_md = "```dt compile-error\n\\let x = 10px;\n```\n";
+        let err2 = compile_markdown_str(unexpected_ok_md, label, base_dir, image_dir, "images/test", &mut renderer)
+            .expect_err("dt compile-error should error when code compiles");
+        assert!(err2.contains("Expected compile error in ```dt compile-error block"), "got: {err2}");
     }
 }

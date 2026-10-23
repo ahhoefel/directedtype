@@ -28,6 +28,8 @@ fn print_usage() {
     println!("Code Fence Syntax in .dt.md:");
     println!("  ```dt render [width=N] [height=N] [padding=N] [bg=#rrggbb|transparent]");
     println!("               [side-by-side|hide-code] [name=slug] [alt=\"...\"]");
+    println!("  ```dt compiles                  // Verifies the block compiles without rendering an image");
+    println!("  ```dt compile-error             // Verifies the block fails to compile and displays the error");
     println!("  # \\use \"components/VStack.dt\"   // '# ' lines are compiled but hidden from output");
     println!("  \\Rect(x: 20px, y: 20px, width: 120px, height: 60px, color: #3b82f6)");
     println!("  ```");
