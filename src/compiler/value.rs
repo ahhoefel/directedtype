@@ -7,6 +7,7 @@ pub enum Value {
     Integer(i64),
     Float(f64),
     Distance(f64),
+    Area(f64),
     String(String),
     Bool(bool),
     Color(String),
@@ -21,7 +22,7 @@ impl Value {
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Value::Integer(n) => Some(*n as f64),
-            Value::Float(n) | Value::Distance(n) => Some(*n),
+            Value::Float(n) | Value::Distance(n) | Value::Area(n) => Some(*n),
             _ => None,
         }
     }
@@ -29,7 +30,7 @@ impl Value {
     pub fn as_i64(&self) -> Option<i64> {
         match self {
             Value::Integer(n) => Some(*n),
-            Value::Float(n) | Value::Distance(n) => Some(*n as i64),
+            Value::Float(n) | Value::Distance(n) | Value::Area(n) => Some(*n as i64),
             _ => None,
         }
     }
@@ -37,6 +38,14 @@ impl Value {
     pub fn as_distance(&self) -> Option<f64> {
         match self {
             Value::Distance(d) => Some(*d),
+            Value::Integer(0) => Some(0.0),
+            _ => None,
+        }
+    }
+
+    pub fn as_area(&self) -> Option<f64> {
+        match self {
+            Value::Area(a) => Some(*a),
             Value::Integer(0) => Some(0.0),
             _ => None,
         }
@@ -72,7 +81,7 @@ impl Value {
         match self {
             Value::Bool(b) => *b,
             Value::Integer(n) => *n != 0,
-            Value::Float(n) | Value::Distance(n) => *n != 0.0,
+            Value::Float(n) | Value::Distance(n) | Value::Area(n) => *n != 0.0,
             Value::String(s) => !s.is_empty(),
             Value::Color(_) => true,
             Value::Node(_) => true,
@@ -98,6 +107,13 @@ impl Value {
                     format!("{n}px")
                 }
             }
+            Value::Area(n) => {
+                if n.fract() == 0.0 && n.is_finite() {
+                    format!("{:.0}px^2", n)
+                } else {
+                    format!("{n}px^2")
+                }
+            }
             Value::Bool(b) => format!("{b}"),
             Value::Color(c) => c.clone(),
             Value::Node(id) => id.canonical_name(),
@@ -110,6 +126,7 @@ impl Value {
             Value::Integer(_) => "Integer",
             Value::Float(_) => "Float",
             Value::Distance(_) => "Distance",
+            Value::Area(_) => "Area",
             Value::String(_) => "String",
             Value::Bool(_) => "Boolean",
             Value::Color(_) => "Color",
@@ -123,6 +140,7 @@ impl Value {
             "Integer" => matches!(self, Value::Integer(_)),
             "Float" => matches!(self, Value::Float(_) | Value::Integer(_)),
             "Distance" => matches!(self, Value::Distance(_) | Value::Integer(0)),
+            "Area" => matches!(self, Value::Area(_) | Value::Integer(0)),
             "String" => matches!(self, Value::String(_)),
             "Boolean" => matches!(self, Value::Bool(_)),
             "Color" => matches!(self, Value::Color(_)),
@@ -146,6 +164,13 @@ impl fmt::Display for Value {
                     write!(f, "{:.0}px", n)
                 } else {
                     write!(f, "{}px", n)
+                }
+            }
+            Value::Area(n) => {
+                if n.fract() == 0.0 && n.is_finite() {
+                    write!(f, "{:.0}px^2", n)
+                } else {
+                    write!(f, "{}px^2", n)
                 }
             }
             Value::String(s) => write!(f, "\"{}\"", s),

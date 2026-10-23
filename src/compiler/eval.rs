@@ -179,6 +179,21 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     span: *span,
                 }),
             },
+            Literal::Area(a, unit, span) => match unit {
+                crate::ast::DistanceUnit::Px => Ok(Value::Area(*a)),
+                crate::ast::DistanceUnit::Pt => {
+                    let dpi = env
+                        .get(&VarId::new(NodeId::WINDOW, "dpi"))
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(96.0);
+                    let factor = dpi / 72.0;
+                    Ok(Value::Area(*a * factor * factor))
+                }
+                crate::ast::DistanceUnit::Em => Err(CompileError::UndefinedEnvVariable {
+                    name: "font".to_string(),
+                    span: *span,
+                }),
+            },
             Literal::String(s, _) => Ok(Value::String(s.clone())),
             Literal::Bool(b, _) => Ok(Value::Bool(*b)),
             Literal::Color(c, _) => Ok(Value::Color(c.clone())),
@@ -250,6 +265,9 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     (Value::Distance(l), Value::Distance(r)) => Ok(Value::Distance(l + r)),
                     (Value::Distance(l), Value::Integer(0))
                     | (Value::Integer(0), Value::Distance(l)) => Ok(Value::Distance(*l)),
+                    (Value::Area(l), Value::Area(r)) => Ok(Value::Area(l + r)),
+                    (Value::Area(l), Value::Integer(0))
+                    | (Value::Integer(0), Value::Area(l)) => Ok(Value::Area(*l)),
                     (Value::String(_), _) | (_, Value::String(_)) => Ok(Value::String(format!(
                         "{}{}",
                         left.to_display_string(),
@@ -274,6 +292,9 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     (Value::Distance(l), Value::Distance(r)) => Ok(Value::Distance(l - r)),
                     (Value::Distance(l), Value::Integer(0)) => Ok(Value::Distance(*l)),
                     (Value::Integer(0), Value::Distance(r)) => Ok(Value::Distance(-*r)),
+                    (Value::Area(l), Value::Area(r)) => Ok(Value::Area(l - r)),
+                    (Value::Area(l), Value::Integer(0)) => Ok(Value::Area(*l)),
+                    (Value::Integer(0), Value::Area(r)) => Ok(Value::Area(-*r)),
                     _ => Err(CompileError::Custom {
                         message: format!(
                             "Cannot subtract {} ({}) from {} ({})",
@@ -294,10 +315,11 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     | (Value::Integer(i), Value::Distance(d)) => Ok(Value::Distance(d * *i as f64)),
                     (Value::Distance(d), Value::Float(f))
                     | (Value::Float(f), Value::Distance(d)) => Ok(Value::Distance(d * f)),
-                    (Value::Distance(_), Value::Distance(_)) => Err(CompileError::Custom {
-                        message: "Cannot multiply Distance by Distance".to_string(),
-                        span: b.span,
-                    }),
+                    (Value::Distance(l), Value::Distance(r)) => Ok(Value::Area(l * r)),
+                    (Value::Area(a), Value::Integer(i))
+                    | (Value::Integer(i), Value::Area(a)) => Ok(Value::Area(a * *i as f64)),
+                    (Value::Area(a), Value::Float(f))
+                    | (Value::Float(f), Value::Area(a)) => Ok(Value::Area(a * f)),
                     _ => Err(CompileError::Custom {
                         message: format!(
                             "Cannot multiply {} ({}) and {} ({})",
@@ -360,6 +382,35 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         }
                     }
                     (Value::Integer(0), Value::Distance(_)) => Ok(Value::Float(0.0)),
+                    (Value::Area(a), Value::Distance(d)) => {
+                        if *d == 0.0 {
+                            Ok(Value::Distance(0.0))
+                        } else {
+                            Ok(Value::Distance(a / d))
+                        }
+                    }
+                    (Value::Integer(0), Value::Area(_)) => Ok(Value::Float(0.0)),
+                    (Value::Area(l), Value::Area(r)) => {
+                        if *r == 0.0 {
+                            Ok(Value::Float(0.0))
+                        } else {
+                            Ok(Value::Float(l / r))
+                        }
+                    }
+                    (Value::Area(a), Value::Integer(r)) => {
+                        if *r == 0 {
+                            Ok(Value::Area(0.0))
+                        } else {
+                            Ok(Value::Area(a / *r as f64))
+                        }
+                    }
+                    (Value::Area(a), Value::Float(r)) => {
+                        if *r == 0.0 {
+                            Ok(Value::Area(0.0))
+                        } else {
+                            Ok(Value::Area(a / r))
+                        }
+                    }
                     _ => Err(CompileError::Custom {
                         message: format!(
                             "Cannot divide {} ({}) by {} ({})",
@@ -407,6 +458,13 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                             Ok(Value::Distance(l % r))
                         }
                     }
+                    (Value::Area(l), Value::Area(r)) => {
+                        if *r == 0.0 {
+                            Ok(Value::Area(0.0))
+                        } else {
+                            Ok(Value::Area(l % r))
+                        }
+                    }
                     _ => Err(CompileError::Custom {
                         message: format!(
                             "Cannot compute remainder of {} ({}) and {} ({})",
@@ -443,6 +501,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     Value::Integer(n) => Ok(Value::Integer(-n)),
                     Value::Float(n) => Ok(Value::Float(-n)),
                     Value::Distance(d) => Ok(Value::Distance(-d)),
+                    Value::Area(a) => Ok(Value::Area(-a)),
                     other => Err(CompileError::Custom {
                         message: format!("Cannot negate value of type {}", other.type_name()),
                         span: u.span,
@@ -457,16 +516,20 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
             if cond.is_truthy() {
                 let val = eval_expr(&t.then_expr, env)?;
                 if matches!(val, Value::Integer(0)) {
-                    if let Ok(Value::Distance(_)) = eval_expr(&t.else_expr, env) {
-                        return Ok(Value::Distance(0.0));
+                    match eval_expr(&t.else_expr, env) {
+                        Ok(Value::Distance(_)) => return Ok(Value::Distance(0.0)),
+                        Ok(Value::Area(_)) => return Ok(Value::Area(0.0)),
+                        _ => {}
                     }
                 }
                 Ok(val)
             } else {
                 let val = eval_expr(&t.else_expr, env)?;
                 if matches!(val, Value::Integer(0)) {
-                    if let Ok(Value::Distance(_)) = eval_expr(&t.then_expr, env) {
-                        return Ok(Value::Distance(0.0));
+                    match eval_expr(&t.then_expr, env) {
+                        Ok(Value::Distance(_)) => return Ok(Value::Distance(0.0)),
+                        Ok(Value::Area(_)) => return Ok(Value::Area(0.0)),
+                        _ => {}
                     }
                 }
                 Ok(val)
@@ -577,24 +640,28 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 }
                 "round" => match evaluated_args.first() {
                     Some(Value::Distance(d)) => Ok(Value::Distance(d.round())),
+                    Some(Value::Area(a)) => Ok(Value::Area(a.round())),
                     Some(Value::Float(f)) => Ok(Value::Integer(f.round() as i64)),
                     Some(Value::Integer(i)) => Ok(Value::Integer(*i)),
                     _ => Ok(Value::Integer(0)),
                 },
                 "floor" => match evaluated_args.first() {
                     Some(Value::Distance(d)) => Ok(Value::Distance(d.floor())),
+                    Some(Value::Area(a)) => Ok(Value::Area(a.floor())),
                     Some(Value::Float(f)) => Ok(Value::Integer(f.floor() as i64)),
                     Some(Value::Integer(i)) => Ok(Value::Integer(*i)),
                     _ => Ok(Value::Integer(0)),
                 },
                 "ceil" => match evaluated_args.first() {
                     Some(Value::Distance(d)) => Ok(Value::Distance(d.ceil())),
+                    Some(Value::Area(a)) => Ok(Value::Area(a.ceil())),
                     Some(Value::Float(f)) => Ok(Value::Integer(f.ceil() as i64)),
                     Some(Value::Integer(i)) => Ok(Value::Integer(*i)),
                     _ => Ok(Value::Integer(0)),
                 },
                 "abs" => match evaluated_args.first() {
                     Some(Value::Distance(d)) => Ok(Value::Distance(d.abs())),
+                    Some(Value::Area(a)) => Ok(Value::Area(a.abs())),
                     Some(Value::Float(f)) => Ok(Value::Float(f.abs())),
                     Some(Value::Integer(i)) => Ok(Value::Integer(i.abs())),
                     _ => Ok(Value::Integer(0)),
@@ -621,10 +688,13 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         })
                     }
                 }
-                "sqrt" => {
-                    let x = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    Ok(Value::Float(x.max(0.0).sqrt()))
-                }
+                "sqrt" => match evaluated_args.first() {
+                    Some(Value::Area(a)) => Ok(Value::Distance(a.max(0.0).sqrt())),
+                    first => {
+                        let x = first.and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        Ok(Value::Float(x.max(0.0).sqrt()))
+                    }
+                },
                 "sin" => {
                     let x = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
                     Ok(Value::Float(x.sin()))
@@ -877,7 +947,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let decimals = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0).max(0.0) as usize;
                     match target_val {
                         Value::Integer(n) => Ok(Value::String(format_fixed(n as f64, decimals))),
-                        Value::Float(n) | Value::Distance(n) => Ok(Value::String(format_fixed(n, decimals))),
+                        Value::Float(n) | Value::Distance(n) | Value::Area(n) => Ok(Value::String(format_fixed(n, decimals))),
                         _ => Err(CompileError::Custom {
                             message: format!("to_fixed() can only be called on numeric values, got {}", target_val.type_name()),
                             span: mc.span,
@@ -888,7 +958,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let sigfigs = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(1.0).max(1.0) as usize;
                     match target_val {
                         Value::Integer(n) => Ok(Value::String(format_sigfigs(n as f64, sigfigs))),
-                        Value::Float(n) | Value::Distance(n) => Ok(Value::String(format_sigfigs(n, sigfigs))),
+                        Value::Float(n) | Value::Distance(n) | Value::Area(n) => Ok(Value::String(format_sigfigs(n, sigfigs))),
                         _ => Err(CompileError::Custom {
                             message: format!("to_precision() can only be called on numeric values, got {}", target_val.type_name()),
                             span: mc.span,
@@ -963,6 +1033,10 @@ fn values_equal(left: &Value, right: &Value) -> bool {
         (Value::Distance(a), Value::Integer(0)) | (Value::Integer(0), Value::Distance(a)) => {
             a.abs() < 1e-9
         }
+        (Value::Area(a), Value::Area(b)) => (a - b).abs() < 1e-9,
+        (Value::Area(a), Value::Integer(0)) | (Value::Integer(0), Value::Area(a)) => {
+            a.abs() < 1e-9
+        }
         _ => left == right,
     }
 }
@@ -980,6 +1054,9 @@ fn extract_comparable_pair(
         (Value::Distance(a), Value::Distance(b)) => Ok((*a, *b)),
         (Value::Distance(a), Value::Integer(0)) => Ok((*a, 0.0)),
         (Value::Integer(0), Value::Distance(b)) => Ok((0.0, *b)),
+        (Value::Area(a), Value::Area(b)) => Ok((*a, *b)),
+        (Value::Area(a), Value::Integer(0)) => Ok((*a, 0.0)),
+        (Value::Integer(0), Value::Area(b)) => Ok((0.0, *b)),
         _ => Err(CompileError::Custom {
             message: format!(
                 "Cannot compare {} ({}) and {} ({})",
@@ -1006,6 +1083,7 @@ where
         return Ok(Value::Integer(0));
     }
     let has_distance = args.iter().any(|v| matches!(v, Value::Distance(_)));
+    let has_area = args.iter().any(|v| matches!(v, Value::Area(_)));
     let has_float = args.iter().any(|v| matches!(v, Value::Float(_)));
 
     if has_distance {
@@ -1028,6 +1106,26 @@ where
             }
         }
         Ok(Value::Distance(f(&nums)))
+    } else if has_area {
+        let mut nums = Vec::with_capacity(args.len());
+        for arg in args {
+            match arg {
+                Value::Area(a) => nums.push(*a),
+                Value::Integer(0) => nums.push(0.0),
+                other => {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "{}() cannot mix Area with {} ({})",
+                            name,
+                            other,
+                            other.type_name()
+                        ),
+                        span,
+                    });
+                }
+            }
+        }
+        Ok(Value::Area(f(&nums)))
     } else if has_float {
         let mut nums = Vec::with_capacity(args.len());
         for arg in args {

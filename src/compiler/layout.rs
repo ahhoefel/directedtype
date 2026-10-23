@@ -658,7 +658,7 @@ impl ResolvedLayout {
             if let Some(val) = node.properties.get(key) {
                 match val {
                     Value::Integer(i) => ports.push(format!("{}: {}", key, i)),
-                    Value::Float(n) | Value::Distance(n) => {
+                    Value::Float(n) | Value::Distance(n) | Value::Area(n) => {
                         ports.push(format!("{}: {}", key, format_num(*n)))
                     }
                     Value::Color(c) | Value::String(c) => ports.push(format!("{}: {}", key, c)),
@@ -751,6 +751,11 @@ pub fn resolve_layout(
                             Value::Float(n) => Expr::Literal(Literal::Float(n, part.span())),
                             Value::Distance(d) => Expr::Literal(Literal::Distance(
                                 d,
+                                crate::ast::DistanceUnit::Px,
+                                part.span(),
+                            )),
+                            Value::Area(a) => Expr::Literal(Literal::Area(
+                                a,
                                 crate::ast::DistanceUnit::Px,
                                 part.span(),
                             )),
@@ -870,6 +875,11 @@ pub fn update_resolved_layout(
                                 Value::Float(n) => Expr::Literal(Literal::Float(n, part.span())),
                                 Value::Distance(d) => Expr::Literal(Literal::Distance(
                                     d,
+                                    crate::ast::DistanceUnit::Px,
+                                    part.span(),
+                                )),
+                                Value::Area(a) => Expr::Literal(Literal::Area(
+                                    a,
                                     crate::ast::DistanceUnit::Px,
                                     part.span(),
                                 )),

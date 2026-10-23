@@ -15,6 +15,7 @@ pub enum StaticType {
     ZeroInteger,
     Float,
     Distance,
+    Area,
     String,
     Boolean,
     Color,
@@ -31,6 +32,7 @@ impl StaticType {
             StaticType::Integer | StaticType::ZeroInteger => "Integer".to_string(),
             StaticType::Float => "Float".to_string(),
             StaticType::Distance => "Distance".to_string(),
+            StaticType::Area => "Area".to_string(),
             StaticType::String => "String".to_string(),
             StaticType::Boolean => "Boolean".to_string(),
             StaticType::Color => "Color".to_string(),
@@ -67,6 +69,7 @@ impl StaticType {
             "Integer" => Ok(StaticType::Integer),
             "Float" => Ok(StaticType::Float),
             "Distance" => Ok(StaticType::Distance),
+            "Area" => Ok(StaticType::Area),
             "String" => Ok(StaticType::String),
             "Boolean" => Ok(StaticType::Boolean),
             "Color" => Ok(StaticType::Color),
@@ -103,7 +106,7 @@ impl StaticType {
         match (self, expected) {
             (
                 StaticType::ZeroInteger,
-                StaticType::Integer | StaticType::Float | StaticType::Distance,
+                StaticType::Integer | StaticType::Float | StaticType::Distance | StaticType::Area,
             ) => true,
             (StaticType::Integer, StaticType::ZeroInteger) => true,
             (StaticType::Integer, StaticType::Float) => true,
@@ -180,6 +183,11 @@ fn coerce_typed_binding_expr(mut expr: Expr, type_annotation: Option<&TypeRef>) 
             "Distance" => {
                 if let Expr::Literal(Literal::Integer(0, span)) = expr {
                     expr = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+                }
+            }
+            "Area" => {
+                if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                    expr = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, span));
                 }
             }
             "Float" => {
@@ -3252,6 +3260,10 @@ fn expand_component_instance(
                     if let Expr::Literal(Literal::Integer(0, span)) = expr {
                         *expr = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, *span));
                     }
+                } else if expected_type == "Area" {
+                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                        *expr = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, *span));
+                    }
                 } else if expected_type == "Float" {
                     if let Expr::Literal(Literal::Integer(i, span)) = expr {
                         *expr = Expr::Literal(Literal::Float(*i as f64, *span));
@@ -3298,6 +3310,7 @@ fn expand_component_instance(
                 Literal::Integer(i, _) => crate::compiler::value::Value::Integer(i),
                 Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
                 Literal::Distance(d, _, _) => crate::compiler::value::Value::Distance(d),
+                Literal::Area(a, _, _) => crate::compiler::value::Value::Area(a),
                 Literal::String(s, _) => crate::compiler::value::Value::String(s),
                 Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
                 Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
@@ -5589,6 +5602,7 @@ fn infer_expr_literal_for_typecheck<'a>(
                 Literal::Integer(i, _) => Some(Literal::Integer(-i, u.span)),
                 Literal::Float(f, _) => Some(Literal::Float(-f, u.span)),
                 Literal::Distance(d, unit, _) => Some(Literal::Distance(-d, unit, u.span)),
+                Literal::Area(a, unit, _) => Some(Literal::Area(-a, unit, u.span)),
                 _ => None,
             }
         }
@@ -5661,6 +5675,18 @@ fn infer_expr_literal_for_typecheck<'a>(
             None
         }
         Expr::Call(call) => {
+            if call.callee.as_str() == "sqrt" {
+                return match call
+                    .args
+                    .first()
+                    .and_then(|a| infer_expr_literal_for_typecheck(a, ctx))?
+                {
+                    Literal::Area(_, _, _) => {
+                        Some(Literal::Distance(0.0, DistanceUnit::Px, call.span))
+                    }
+                    _ => Some(Literal::Float(0.0, call.span)),
+                };
+            }
             if matches!(
                 call.callee.as_str(),
                 "distance_to_float"
@@ -5668,7 +5694,6 @@ fn infer_expr_literal_for_typecheck<'a>(
                     | "to_pt"
                     | "to_float"
                     | "to_number"
-                    | "sqrt"
                     | "sin"
                     | "cos"
                     | "tan"
@@ -5726,6 +5751,11 @@ fn infer_expr_literal_for_typecheck<'a>(
                     | (Literal::Integer(0, _), Literal::Distance(_, _, _)) => {
                         Some(Literal::Distance(0.0, DistanceUnit::Px, bin.span))
                     }
+                    (Literal::Area(_, _, _), Literal::Area(_, _, _))
+                    | (Literal::Area(_, _, _), Literal::Integer(0, _))
+                    | (Literal::Integer(0, _), Literal::Area(_, _, _)) => {
+                        Some(Literal::Area(0.0, DistanceUnit::Px, bin.span))
+                    }
                     (Literal::Integer(_, _), Literal::Integer(_, _)) => {
                         Some(Literal::Integer(1, bin.span))
                     }
@@ -5737,9 +5767,16 @@ fn infer_expr_literal_for_typecheck<'a>(
                     _ => None,
                 },
                 BinaryOp::Mul => match (&left, &right) {
+                    (Literal::Distance(_, _, _), Literal::Distance(_, _, _)) => {
+                        Some(Literal::Area(0.0, DistanceUnit::Px, bin.span))
+                    }
                     (Literal::Distance(_, _, _), Literal::Integer(_, _) | Literal::Float(_, _))
                     | (Literal::Integer(_, _) | Literal::Float(_, _), Literal::Distance(_, _, _)) => {
                         Some(Literal::Distance(0.0, DistanceUnit::Px, bin.span))
+                    }
+                    (Literal::Area(_, _, _), Literal::Integer(_, _) | Literal::Float(_, _))
+                    | (Literal::Integer(_, _) | Literal::Float(_, _), Literal::Area(_, _, _)) => {
+                        Some(Literal::Area(0.0, DistanceUnit::Px, bin.span))
                     }
                     (Literal::Integer(_, _), Literal::Integer(_, _)) => {
                         Some(Literal::Integer(1, bin.span))
@@ -5752,11 +5789,16 @@ fn infer_expr_literal_for_typecheck<'a>(
                     _ => None,
                 },
                 BinaryOp::Div => match (&left, &right) {
-                    (Literal::Distance(_, _, _), Literal::Distance(_, _, _)) => {
+                    (Literal::Distance(_, _, _), Literal::Distance(_, _, _))
+                    | (Literal::Area(_, _, _), Literal::Area(_, _, _)) => {
                         Some(Literal::Float(0.0, bin.span))
                     }
-                    (Literal::Distance(_, _, _), Literal::Integer(_, _) | Literal::Float(_, _)) => {
+                    (Literal::Area(_, _, _), Literal::Distance(_, _, _))
+                    | (Literal::Distance(_, _, _), Literal::Integer(_, _) | Literal::Float(_, _)) => {
                         Some(Literal::Distance(0.0, DistanceUnit::Px, bin.span))
+                    }
+                    (Literal::Area(_, _, _), Literal::Integer(_, _) | Literal::Float(_, _)) => {
+                        Some(Literal::Area(0.0, DistanceUnit::Px, bin.span))
                     }
                     (
                         Literal::Integer(_, _) | Literal::Float(_, _),
@@ -5877,9 +5919,16 @@ fn resolve_ident_or_member_to_literal<'a>(
                         (Literal::Float(n1, _), Literal::Float(n2, _)) => n1 == n2,
                         (Literal::Integer(i1, _), Literal::Float(n2, _)) => (*i1 as f64) == *n2,
                         (Literal::Float(n1, _), Literal::Integer(i2, _)) => *n1 == (*i2 as f64),
-                        (Literal::Distance(d1, u1, _), Literal::Distance(d2, u2, _)) if u1 == u2 => d1 == d2,
-                        (Literal::Distance(d1, _, _), Literal::Integer(0, _))
-                        | (Literal::Integer(0, _), Literal::Distance(d1, _, _)) => *d1 == 0.0,
+                        (Literal::Distance(d1, u1, _), Literal::Distance(d2, u2, _))
+                        | (Literal::Area(d1, u1, _), Literal::Area(d2, u2, _))
+                            if u1 == u2 =>
+                        {
+                            d1 == d2
+                        }
+                        (Literal::Distance(d1, _, _) | Literal::Area(d1, _, _), Literal::Integer(0, _))
+                        | (Literal::Integer(0, _), Literal::Distance(d1, _, _) | Literal::Area(d1, _, _)) => {
+                            *d1 == 0.0
+                        }
                         (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 == b2,
                         (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 == e2 && v1 == v2,
                         _ => false,
@@ -5893,9 +5942,16 @@ fn resolve_ident_or_member_to_literal<'a>(
                         (Literal::Float(n1, _), Literal::Float(n2, _)) => n1 != n2,
                         (Literal::Integer(i1, _), Literal::Float(n2, _)) => (*i1 as f64) != *n2,
                         (Literal::Float(n1, _), Literal::Integer(i2, _)) => *n1 != (*i2 as f64),
-                        (Literal::Distance(d1, u1, _), Literal::Distance(d2, u2, _)) if u1 == u2 => d1 != d2,
-                        (Literal::Distance(d1, _, _), Literal::Integer(0, _))
-                        | (Literal::Integer(0, _), Literal::Distance(d1, _, _)) => *d1 != 0.0,
+                        (Literal::Distance(d1, u1, _), Literal::Distance(d2, u2, _))
+                        | (Literal::Area(d1, u1, _), Literal::Area(d2, u2, _))
+                            if u1 == u2 =>
+                        {
+                            d1 != d2
+                        }
+                        (Literal::Distance(d1, _, _) | Literal::Area(d1, _, _), Literal::Integer(0, _))
+                        | (Literal::Integer(0, _), Literal::Distance(d1, _, _) | Literal::Area(d1, _, _)) => {
+                            *d1 != 0.0
+                        }
                         (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 != b2,
                         (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 != e2 || v1 != v2,
                         _ => true,
@@ -5931,6 +5987,7 @@ fn resolve_ident_or_member_to_literal<'a>(
                 Literal::Integer(i, _) => Some(Literal::Integer(-i, u.span)),
                 Literal::Float(f, _) => Some(Literal::Float(-f, u.span)),
                 Literal::Distance(d, unit, _) => Some(Literal::Distance(-d, unit, u.span)),
+                Literal::Area(a, unit, _) => Some(Literal::Area(-a, unit, u.span)),
                 _ => None,
             },
         },
@@ -6125,11 +6182,14 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 let mut chosen = rewrite_expr(chosen_raw, ctx)?;
                 if let Expr::Literal(Literal::Integer(0, span)) = chosen {
                     if let Ok(other_rewritten) = rewrite_expr(other_raw, ctx) {
-                        if matches!(
-                            infer_expr_literal_for_typecheck(&other_rewritten, ctx),
-                            Some(Literal::Distance(_, _, _))
-                        ) {
-                            chosen = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+                        match infer_expr_literal_for_typecheck(&other_rewritten, ctx) {
+                            Some(Literal::Distance(_, _, _)) => {
+                                chosen = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+                            }
+                            Some(Literal::Area(_, _, _)) => {
+                                chosen = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, span));
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -6149,6 +6209,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             Literal::Integer(i, _) => crate::compiler::value::Value::Integer(i),
                             Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
                             Literal::Distance(d, _, _) => crate::compiler::value::Value::Distance(d),
+                            Literal::Area(a, _, _) => crate::compiler::value::Value::Area(a),
                             Literal::String(s, _) => crate::compiler::value::Value::String(s),
                             Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
                             Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
@@ -6177,11 +6238,14 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 let mut chosen = rewrite_expr(chosen_raw, ctx)?;
                 if let Expr::Literal(Literal::Integer(0, span)) = chosen {
                     if let Ok(other_rewritten) = rewrite_expr(other_raw, ctx) {
-                        if matches!(
-                            infer_expr_literal_for_typecheck(&other_rewritten, ctx),
-                            Some(Literal::Distance(_, _, _))
-                        ) {
-                            chosen = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+                        match infer_expr_literal_for_typecheck(&other_rewritten, ctx) {
+                            Some(Literal::Distance(_, _, _)) => {
+                                chosen = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+                            }
+                            Some(Literal::Area(_, _, _)) => {
+                                chosen = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, span));
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -6582,6 +6646,8 @@ pub fn default_expr_for_state_with_enums(
         if let Expr::Literal(Literal::Integer(0, span)) = def {
             if ty_name == Some("Distance") {
                 return Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, *span));
+            } else if ty_name == Some("Area") {
+                return Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, *span));
             } else if ty_name == Some("Float") {
                 return Expr::Literal(Literal::Float(0.0, *span));
             }
@@ -6598,6 +6664,7 @@ pub fn default_expr_for_state_with_enums(
             "Color" => Expr::Literal(Literal::Color("#000000".to_string(), state.span)),
             "Float" => Expr::Literal(Literal::Float(0.0, state.span)),
             "Distance" => Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, state.span)),
+            "Area" => Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, state.span)),
             "Handler" => Expr::Ident(Ident::new("unset", state.span)),
             other => {
                 if let Some(enum_def) = enums.get(other) {
@@ -7051,6 +7118,7 @@ fn infer_expr_type(
             Literal::Integer(_, _) => StaticType::Integer,
             Literal::Float(_, _) => StaticType::Float,
             Literal::Distance(_, _, _) => StaticType::Distance,
+            Literal::Area(_, _, _) => StaticType::Area,
             Literal::String(_, _) => StaticType::String,
             Literal::Bool(_, _) => StaticType::Boolean,
             Literal::Color(_, _) => StaticType::Color,
@@ -7174,8 +7242,9 @@ fn infer_expr_type(
                     StaticType::Integer => Ok(StaticType::Integer),
                     StaticType::Float => Ok(StaticType::Float),
                     StaticType::Distance => Ok(StaticType::Distance),
+                    StaticType::Area => Ok(StaticType::Area),
                     other => Err(CompileError::TypeMismatch {
-                        expected: "Float, Integer, or Distance".to_string(),
+                        expected: "Float, Integer, Distance, or Area".to_string(),
                         actual: other.type_name(),
                         span: u.span,
                     }),
@@ -7199,6 +7268,9 @@ fn infer_expr_type(
                     (StaticType::Distance, StaticType::Distance)
                     | (StaticType::Distance, StaticType::ZeroInteger)
                     | (StaticType::ZeroInteger, StaticType::Distance) => Ok(StaticType::Distance),
+                    (StaticType::Area, StaticType::Area)
+                    | (StaticType::Area, StaticType::ZeroInteger)
+                    | (StaticType::ZeroInteger, StaticType::Area) => Ok(StaticType::Area),
                     (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
                         Ok(StaticType::Integer)
                     }
@@ -7213,6 +7285,16 @@ fn infer_expr_type(
                     }),
                     (other, StaticType::Distance) => Err(CompileError::TypeMismatch {
                         expected: "Distance".to_string(),
+                        actual: other.type_name(),
+                        span: bin.left.span(),
+                    }),
+                    (StaticType::Area, other) => Err(CompileError::TypeMismatch {
+                        expected: "Area".to_string(),
+                        actual: other.type_name(),
+                        span: bin.right.span(),
+                    }),
+                    (other, StaticType::Area) => Err(CompileError::TypeMismatch {
+                        expected: "Area".to_string(),
                         actual: other.type_name(),
                         span: bin.left.span(),
                     }),
@@ -7226,6 +7308,9 @@ fn infer_expr_type(
                     (StaticType::Distance, StaticType::Distance)
                     | (StaticType::Distance, StaticType::ZeroInteger)
                     | (StaticType::ZeroInteger, StaticType::Distance) => Ok(StaticType::Distance),
+                    (StaticType::Area, StaticType::Area)
+                    | (StaticType::Area, StaticType::ZeroInteger)
+                    | (StaticType::ZeroInteger, StaticType::Area) => Ok(StaticType::Area),
                     (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
                         Ok(StaticType::Integer)
                     }
@@ -7243,6 +7328,16 @@ fn infer_expr_type(
                         actual: other.type_name(),
                         span: bin.left.span(),
                     }),
+                    (StaticType::Area, other) => Err(CompileError::TypeMismatch {
+                        expected: "Area".to_string(),
+                        actual: other.type_name(),
+                        span: bin.right.span(),
+                    }),
+                    (other, StaticType::Area) => Err(CompileError::TypeMismatch {
+                        expected: "Area".to_string(),
+                        actual: other.type_name(),
+                        span: bin.left.span(),
+                    }),
                     _ => Err(CompileError::TypeMismatch {
                         expected: left_ty.type_name(),
                         actual: right_ty.type_name(),
@@ -7250,6 +7345,7 @@ fn infer_expr_type(
                     }),
                 },
                 BinaryOp::Mul => match (&left_ty, &right_ty) {
+                    (StaticType::Distance, StaticType::Distance) => Ok(StaticType::Area),
                     (
                         StaticType::Distance,
                         StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
@@ -7258,6 +7354,14 @@ fn infer_expr_type(
                         StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
                         StaticType::Distance,
                     ) => Ok(StaticType::Distance),
+                    (
+                        StaticType::Area,
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                    )
+                    | (
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                        StaticType::Area,
+                    ) => Ok(StaticType::Area),
                     (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
                         Ok(StaticType::Integer)
                     }
@@ -7266,28 +7370,36 @@ fn infer_expr_type(
                         StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
                     ) => Ok(StaticType::Float),
                     _ => Err(CompileError::TypeMismatch {
-                        expected: "Float or Integer".to_string(),
+                        expected: "Float, Integer, or Distance".to_string(),
                         actual: format!("{} * {}", left_ty.type_name(), right_ty.type_name()),
                         span: bin.span,
                     }),
                 },
                 BinaryOp::Div => match (&left_ty, &right_ty) {
-                    (StaticType::Distance, StaticType::Distance) => Ok(StaticType::Float),
+                    (StaticType::Distance, StaticType::Distance)
+                    | (StaticType::Area, StaticType::Area) => Ok(StaticType::Float),
+                    (StaticType::Area, StaticType::Distance) => Ok(StaticType::Distance),
                     (
                         StaticType::Distance,
                         StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
                     ) => Ok(StaticType::Distance),
                     (
+                        StaticType::Area,
+                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                    ) => Ok(StaticType::Area),
+                    (
                         StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
                         StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
                     ) => Ok(StaticType::Float),
                     _ => Err(CompileError::TypeMismatch {
-                        expected: "Float, Integer, or Distance".to_string(),
+                        expected: "Float, Integer, Distance, or Area".to_string(),
                         actual: format!("{} / {}", left_ty.type_name(), right_ty.type_name()),
                         span: bin.span,
                     }),
                 },
                 BinaryOp::Rem => match (&left_ty, &right_ty) {
+                    (StaticType::Distance, StaticType::Distance) => Ok(StaticType::Distance),
+                    (StaticType::Area, StaticType::Area) => Ok(StaticType::Area),
                     (
                         StaticType::Integer | StaticType::ZeroInteger,
                         StaticType::Integer | StaticType::ZeroInteger,
@@ -7307,6 +7419,9 @@ fn infer_expr_type(
                         (StaticType::Distance, StaticType::Distance)
                         | (StaticType::Distance, StaticType::ZeroInteger)
                         | (StaticType::ZeroInteger, StaticType::Distance)
+                        | (StaticType::Area, StaticType::Area)
+                        | (StaticType::Area, StaticType::ZeroInteger)
+                        | (StaticType::ZeroInteger, StaticType::Area)
                         | (
                             StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
                             StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
@@ -7318,6 +7433,16 @@ fn infer_expr_type(
                         }),
                         (other, StaticType::Distance) => Err(CompileError::TypeMismatch {
                             expected: "Distance".to_string(),
+                            actual: other.type_name(),
+                            span: bin.left.span(),
+                        }),
+                        (StaticType::Area, other) => Err(CompileError::TypeMismatch {
+                            expected: "Area".to_string(),
+                            actual: other.type_name(),
+                            span: bin.right.span(),
+                        }),
+                        (other, StaticType::Area) => Err(CompileError::TypeMismatch {
+                            expected: "Area".to_string(),
                             actual: other.type_name(),
                             span: bin.left.span(),
                         }),
@@ -7410,6 +7535,20 @@ fn infer_expr_type(
                     }
                     Ok(StaticType::Integer)
                 }
+                "sqrt" => {
+                    let mut first_ty = None;
+                    for (i, arg) in call.args.iter().enumerate() {
+                        let t = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        if i == 0 {
+                            first_ty = Some(t);
+                        }
+                    }
+                    if matches!(first_ty, Some(StaticType::Area)) {
+                        Ok(StaticType::Distance)
+                    } else {
+                        Ok(StaticType::Float)
+                    }
+                }
                 "round" | "floor" | "ceil" => {
                     let mut first_ty = None;
                     for (i, arg) in call.args.iter().enumerate() {
@@ -7418,10 +7557,10 @@ fn infer_expr_type(
                             first_ty = Some(t);
                         }
                     }
-                    if matches!(first_ty, Some(StaticType::Distance)) {
-                        Ok(StaticType::Distance)
-                    } else {
-                        Ok(StaticType::Integer)
+                    match first_ty {
+                        Some(StaticType::Distance) => Ok(StaticType::Distance),
+                        Some(StaticType::Area) => Ok(StaticType::Area),
+                        _ => Ok(StaticType::Integer),
                     }
                 }
                 "to_fixed" | "to_precision" => {

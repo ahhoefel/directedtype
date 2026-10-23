@@ -4228,3 +4228,49 @@ fn test_rect_per_side_and_per_corner_radii() {
     assert_eq!(r1, (4.0, 0.0, 8.0, 0.0));
 }
 
+#[test]
+fn test_area_type_and_operations() {
+    let input = r#"
+    \Component Rectangle(area: Area, width: Distance) {
+        \alias height = area / width;
+        \Rect(x: 0, y: 0, width: width, height: height, color: #ff0000)
+    }
+
+    \Component Rectangle(area: Area, height: Distance) {
+        \alias width = area / height;
+        \Rect(x: 0, y: 0, width: width, height: height, color: #00ff00)
+    }
+
+    \let r1 = \Rectangle(area: 100px * 1px, width: 20px);
+    \let r2 = \Rectangle(area: 200px * 1px, height: 10px);
+    \let sq_side = sqrt(r1.area + 125px * 1px);
+    \Rect(x: 0, y: 0, width: sq_side, height: (r2.area / r1.area) * 10px, color: #0000ff)
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("Should evaluate Area operations");
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 3);
+    assert_eq!(rects[0].rect.width, 20.0);
+    assert_eq!(rects[0].rect.height, 5.0);
+    assert_eq!(rects[1].rect.width, 20.0);
+    assert_eq!(rects[1].rect.height, 10.0);
+    assert_eq!(rects[2].rect.width, 15.0);
+    assert_eq!(rects[2].rect.height, 20.0);
+
+    // Passing Distance where Area is expected is a TypeMismatch
+    let err_dist = directedtype::evaluate_document(
+        &parse(
+            r#"
+            \Component Box(area: Area) { \Rect(x: 0, y: 0, width: area / 10px, height: 10px, color: #000) }
+            \Box(area: 100px)
+            "#,
+        )
+        .unwrap(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err_dist, CompileError::TypeMismatch { .. }),
+        "Expected TypeMismatch when passing Distance to Area parameter, got: {:?}",
+        err_dist
+    );
+}

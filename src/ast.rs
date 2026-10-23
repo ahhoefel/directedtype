@@ -271,7 +271,8 @@ pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
             (Literal::Float(n1, _), Literal::Float(n2, _)) => (n1 - n2).abs() < f64::EPSILON,
             (Literal::Integer(i1, _), Literal::Float(n2, _))
             | (Literal::Float(n2, _), Literal::Integer(i1, _)) => (*i1 as f64 - n2).abs() < f64::EPSILON,
-            (Literal::Distance(d1, u1, _), Literal::Distance(d2, u2, _)) => {
+            (Literal::Distance(d1, u1, _), Literal::Distance(d2, u2, _))
+            | (Literal::Area(d1, u1, _), Literal::Area(d2, u2, _)) => {
                 u1 == u2 && (d1 - d2).abs() < f64::EPSILON
             }
             (Literal::String(s1, _), Literal::String(s2, _)) => s1 == s2,
@@ -635,6 +636,7 @@ pub enum Literal {
     Integer(i64, Span),
     Float(f64, Span),
     Distance(f64, DistanceUnit, Span),
+    Area(f64, DistanceUnit, Span),
     String(String, Span),
     Bool(bool, Span),
     Color(String, Span),
@@ -647,6 +649,7 @@ impl Literal {
             Literal::Integer(_, span)
             | Literal::Float(_, span)
             | Literal::Distance(_, _, span)
+            | Literal::Area(_, _, span)
             | Literal::String(_, span)
             | Literal::Bool(_, span)
             | Literal::Color(_, span)
@@ -659,6 +662,7 @@ impl Literal {
             Literal::Integer(..) => "Integer",
             Literal::Float(..) => "Float",
             Literal::Distance(..) => "Distance",
+            Literal::Area(..) => "Area",
             Literal::String(..) => "String",
             Literal::Bool(..) => "Boolean",
             Literal::Color(..) => "Color",
@@ -671,6 +675,7 @@ impl Literal {
             "Integer" => matches!(self, Literal::Integer(..)),
             "Float" => matches!(self, Literal::Float(..) | Literal::Integer(..)),
             "Distance" => matches!(self, Literal::Distance(..) | Literal::Integer(0, _)),
+            "Area" => matches!(self, Literal::Area(..) | Literal::Integer(0, _)),
             "String" => matches!(self, Literal::String(..)),
             "Boolean" => matches!(self, Literal::Bool(..)),
             "Color" => matches!(self, Literal::Color(..)),
@@ -727,6 +732,13 @@ impl fmt::Display for Literal {
                     write!(f, "{}{}", *n as i64, u)
                 } else {
                     write!(f, "{}{}", n, u)
+                }
+            }
+            Literal::Area(n, u, _) => {
+                if n.fract() == 0.0 && n.abs() < 1e15 {
+                    write!(f, "{}{}^2", *n as i64, u)
+                } else {
+                    write!(f, "{}{}^2", n, u)
                 }
             }
             Literal::String(s, _) => write!(f, "\"{}\"", s),

@@ -224,7 +224,7 @@ fn host_to_guest_value(val: &Value) -> GuestValue {
     match val {
         Value::Integer(i) => GuestValue::Integer(*i),
         Value::Float(n) => GuestValue::Float(*n),
-        Value::Distance(d) => GuestValue::Distance(*d),
+        Value::Distance(d) | Value::Area(d) => GuestValue::Distance(*d),
         Value::String(s) => GuestValue::String(s.clone()),
         Value::Bool(b) => GuestValue::Bool(*b),
         Value::Color(c) => GuestValue::Color(c.clone()),

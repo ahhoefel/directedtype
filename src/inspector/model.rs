@@ -367,6 +367,7 @@ pub fn build_property_dag_trace(
             Value::Integer(_) => "Integer".to_string(),
             Value::Float(_) => "Float".to_string(),
             Value::Distance(_) => "Distance".to_string(),
+            Value::Area(_) => "Area".to_string(),
             Value::String(_) => "String".to_string(),
             Value::Bool(_) => "Boolean".to_string(),
             Value::Color(_) => "Color".to_string(),
