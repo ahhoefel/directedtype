@@ -90,3 +90,114 @@
         width: inner_width
     )
 }
+
+// 3. Minimum-Width Content-Fitting Card: at least `min_width` wide, and always wide enough
+// to contain its widest child plus horizontal padding without forcing children to shrink.
+\Component Card(
+    style: CardStyle,
+    min_width: Distance,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0,
+    focused_bg: Color = #eff6ff,
+    focused_border_color: Color = #3b82f6,
+    focused_border_width: Distance = 2px,
+    on_focus: Handler = self.focus,
+    on_blur: Handler = self.blur
+) {
+    \state focused: Boolean = false;
+
+    \let content_width = max(children.width) + (2 * style.padding_x);
+    \let resolved_width = max(min_width, content_width);
+
+    \alias right = x + resolved_width;
+    \alias width = resolved_width;
+    \alias height = sum(children.height) + max(0, children.len - 1) * gap + (2 * style.padding_y);
+    \alias bottom = y + height;
+
+    \let current_bg = focused ? focused_bg : style.bg;
+    \let current_border_color = focused ? focused_border_color : style.border_color;
+    \let current_border_width = focused ? focused_border_width : style.border_width;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: height,
+        color: current_bg,
+        radius: style.radius,
+        border_color: current_border_color,
+        border_width: current_border_width
+    )
+
+    \Children(
+        x: left + style.padding_x,
+        y: prev ? prev.bottom + gap : top + style.padding_y
+    )
+}
+
+// 4. Intrinsic Shrink-Wrapping Card: wraps width tightly to widest child plus horizontal padding
+\Component Card(
+    style: CardStyle,
+    shrink: Boolean,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    gap: Distance = 0,
+    focused_bg: Color = #eff6ff,
+    focused_border_color: Color = #3b82f6,
+    focused_border_width: Distance = 2px,
+    on_focus: Handler = self.focus,
+    on_blur: Handler = self.blur
+) {
+    \state focused: Boolean = false;
+
+    \let resolved_width = max(children.width) + (2 * style.padding_x);
+
+    \alias right = x + resolved_width;
+    \alias width = resolved_width;
+    \alias height = sum(children.height) + max(0, children.len - 1) * gap + (2 * style.padding_y);
+    \alias bottom = y + height;
+
+    \let current_bg = focused ? focused_bg : style.bg;
+    \let current_border_color = focused ? focused_border_color : style.border_color;
+    \let current_border_width = focused ? focused_border_width : style.border_width;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: height,
+        color: current_bg,
+        radius: style.radius,
+        border_color: current_border_color,
+        border_width: current_border_width
+    )
+
+    \Children(
+        x: left + style.padding_x,
+        y: prev ? prev.bottom + gap : top + style.padding_y
+    )
+}
+
+\Component CardFit(x: Distance, y: Distance, gap: Distance) {
+    \assert children.len == 1 as "Should have only one child.";
+    \alias width = only(children.width) + 2 * gap;
+    \alias height = only(children.height) + 2 * gap;
+
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: style.bg,
+        radius: style.radius,
+        border_color: style.border_color,
+        border_width: style.border_width
+    )
+
+    \Children(
+        x: x + gap,
+        y: y + gap,
+    )
+}

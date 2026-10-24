@@ -1,3 +1,6 @@
 /target/
 **/*.rs.bk
 Cargo.lock
+
+/docs/tutorial/images/**/*.png
+/docs/tutorial/*.md

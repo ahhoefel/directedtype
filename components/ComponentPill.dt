@@ -1,0 +1,78 @@
+// DirectedType Standard Component Library: ComponentPill
+// Horizontal segmented pill/card for displaying DOM nodes and ports in DAG diagrams.
+// Automatically rounds the left corners of the first \Part, keeps middle \Part segments straight,
+// and rounds the right corners of the last \Part.
+
+\Component ComponentPill(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    radius: Distance = 8px,
+    border_color: Color = #cbd5e1,
+    border_width: Distance = 1px,
+    padding_x: Distance = 12px,
+    padding_y: Distance = 8px
+) {
+    \let pill_height = max(children.content_height);
+
+    \alias width = sum(children.width);
+    \alias height = pill_height;
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Children(
+        x: prev ? prev.right : x,
+        y: y,
+        height: pill_height,
+        radius_left: prev ? 0 : radius,
+        radius_right: next ? 0 : radius,
+        border_color: border_color,
+        border_width: border_width,
+        padding_x: padding_x,
+        padding_y: padding_y
+    )
+}
+
+// DirectedType Standard Component Library: Part
+// A single labeled segment inside a \ComponentPill for DOM and DAG diagrams.
+
+\Component Part(
+    env font: Font = \Font(size: 14px, weight: 500),
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    color: Color = #f8fafc,
+    text_color: Color = #0f172a,
+    border_color: Color = #cbd5e1,
+    border_width: Distance = 1px,
+    padding_x: Distance = 12px,
+    padding_y: Distance = 8px,
+    radius: Distance = 0,
+    radius_left: Distance = radius,
+    radius_right: Distance = radius,
+    height: Distance = label.height + (2 * padding_y)
+) {
+    \alias content_height = label.height + (2 * padding_y);
+    \alias width = label.width + (2 * padding_x);
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: color,
+        radius_left: radius_left,
+        radius_right: radius_right,
+        border_color: border_color,
+        border_width: border_width
+    )
+
+    \let label = \Text(
+        x: x + padding_x,
+        y: y + (height - label.height) / 2,
+        font: font,
+        color: text_color
+    ) {
+        \Children
+    }
+}
