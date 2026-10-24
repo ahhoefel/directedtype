@@ -419,7 +419,8 @@ fn resolve_use_decl<R: FileResolver>(
             span: u.span,
         })?;
 
-        let parsed = parse_document_with_file(&source, &resolved_path).map_err(|e| {
+        let normalized_resolved = normalize_path(&resolved_path);
+        let parsed = parse_document_with_file(&source, &normalized_resolved).map_err(|e| {
             CompileError::ImportError {
                 path: u.path.clone(),
                 message: format!("Parse error in '{}': {}", u.path, e),

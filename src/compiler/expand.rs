@@ -3651,6 +3651,7 @@ fn expand_component_instance(
 
     let node = doc.get_node_mut(ctx.comp_node_id).unwrap();
     node.is_component = true;
+    node.component_path = comp_def.span.file_path();
     node.overload_params = comp_def
         .params
         .iter()

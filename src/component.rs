@@ -518,11 +518,42 @@ pub trait Component: Send + 'static {
 /// Constructor function for creating fresh component instances.
 pub type ComponentFactory = Box<dyn Fn() -> Box<dyn Component> + Send + Sync>;
 
-/// Registry mapping component names to their typed Rust constructors and companion files.
+fn canonical_companion_stem(path: &str) -> String {
+    let norm = crate::compiler::module::normalize_path(std::path::Path::new(path));
+    let without_ext = match norm.extension().and_then(|e| e.to_str()) {
+        Some("dt" | "rs" | "wasm") => norm.with_extension(""),
+        _ => norm,
+    };
+    without_ext.to_string_lossy().replace('\\', "/")
+}
+
+fn stems_match(stem_a: &str, stem_b: &str) -> bool {
+    if stem_a == stem_b {
+        return true;
+    }
+    let a_abs = stem_a.starts_with('/');
+    let b_abs = stem_b.starts_with('/');
+    if a_abs != b_abs {
+        let (abs, rel) = if a_abs {
+            (stem_a, stem_b)
+        } else {
+            (stem_b, stem_a)
+        };
+        if let Some(prefix) = abs.strip_suffix(rel) {
+            return prefix.ends_with('/');
+        }
+    }
+    false
+}
+
+/// Registry mapping component paths (and fallback names) to their typed Rust constructors and companion files.
 #[derive(Default)]
 pub struct ComponentRegistry {
     factories: HashMap<String, ComponentFactory>,
+    unqualified_factories: HashMap<String, ComponentFactory>,
+    path_factories: HashMap<String, ComponentFactory>,
     companion_files: HashMap<String, String>,
+    path_companion_files: HashMap<String, String>,
 }
 
 impl ComponentRegistry {
@@ -530,12 +561,20 @@ impl ComponentRegistry {
         Self::default()
     }
 
-    /// Registers a component constructor by name.
+    /// Registers an unqualified component constructor by name (used for inline/test components).
     pub fn register<F>(&mut self, name: impl Into<String>, factory: F)
     where
         F: Fn() -> Box<dyn Component> + Send + Sync + 'static,
     {
-        self.factories.insert(name.into(), Box::new(factory));
+        let name_str = name.into();
+        let shared = std::sync::Arc::new(factory);
+        let f1 = {
+            let shared = std::sync::Arc::clone(&shared);
+            Box::new(move || shared())
+        };
+        let f2 = Box::new(move || shared());
+        self.factories.insert(name_str.clone(), f1);
+        self.unqualified_factories.insert(name_str, f2);
     }
 
     /// Registers a component constructor along with its associated companion file path.
@@ -548,9 +587,28 @@ impl ComponentRegistry {
         F: Fn() -> Box<dyn Component> + Send + Sync + 'static,
     {
         let name_str = name.into();
-        self.companion_files
-            .insert(name_str.clone(), companion_path.into());
-        self.factories.insert(name_str, Box::new(factory));
+        let path_str = companion_path.into();
+        let stem = canonical_companion_stem(&path_str);
+        let qualified = format!("{}::{}", stem, name_str);
+
+        let shared = std::sync::Arc::new(factory);
+        let f_name = {
+            let shared = std::sync::Arc::clone(&shared);
+            Box::new(move || shared())
+        };
+        let f_stem = {
+            let shared = std::sync::Arc::clone(&shared);
+            Box::new(move || shared())
+        };
+        let f_qual = Box::new(move || shared());
+
+        self.companion_files.entry(name_str.clone()).or_insert_with(|| path_str.clone());
+        self.path_companion_files.insert(stem.clone(), path_str.clone());
+        self.path_companion_files.insert(qualified.clone(), path_str);
+
+        self.factories.entry(name_str).or_insert(f_name);
+        self.path_factories.insert(stem, f_stem);
+        self.path_factories.insert(qualified, f_qual);
     }
 
     /// Registers a WebAssembly companion component by reading its `.wasm` bytes.
@@ -573,9 +631,7 @@ impl ComponentRegistry {
     ) {
         let name_str = name.into();
         let path_str = companion_path.into();
-        self.companion_files
-            .insert(name_str.clone(), path_str);
-        self.register(name_str, move || {
+        self.register_companion(name_str, path_str, move || {
             match WasmComponent::from_bytes(&wasm_bytes) {
                 Ok(c) => Box::new(c),
                 Err(e) => panic!("Failed to instantiate WASM component: {}", e),
@@ -583,19 +639,89 @@ impl ComponentRegistry {
         });
     }
 
-    /// Instantiates a fresh `Component` instance for the given component name.
-    pub fn create_instance(&self, name: &str) -> Option<Box<dyn Component>> {
+    /// Instantiates a fresh `Component` instance for the given component name or path.
+    pub fn create_instance(&self, name_or_path: &str) -> Option<Box<dyn Component>> {
+        let stem = canonical_companion_stem(name_or_path);
+        if let Some(f) = self.path_factories.get(&stem) {
+            return Some(f());
+        }
+        for (k, f) in &self.path_factories {
+            if !k.contains("::") && stems_match(k, &stem) {
+                return Some(f());
+            }
+        }
+        self.factories.get(name_or_path).map(|f| f())
+    }
+
+    /// Instantiates a fresh `Component` instance resolved by its source `.dt` path and component name.
+    pub fn create_instance_for_node(
+        &self,
+        name: &str,
+        component_path: Option<&str>,
+    ) -> Option<Box<dyn Component>> {
+        if let Some(f) = self.unqualified_factories.get(name) {
+            return Some(f());
+        }
+        if let Some(comp_path) = component_path {
+            let stem = canonical_companion_stem(comp_path);
+            let qualified = format!("{}::{}", stem, name);
+            if let Some(f) = self.path_factories.get(&qualified) {
+                return Some(f());
+            }
+            if let Some(f) = self.path_factories.get(&stem) {
+                return Some(f());
+            }
+            for (k, f) in &self.path_factories {
+                if let Some((k_stem, k_name)) = k.split_once("::") {
+                    if k_name == name && stems_match(k_stem, &stem) {
+                        return Some(f());
+                    }
+                }
+            }
+            for (k, f) in &self.path_factories {
+                if !k.contains("::") && stems_match(k, &stem) {
+                    return Some(f());
+                }
+            }
+            return None;
+        }
         self.factories.get(name).map(|f| f())
     }
 
-    /// Checks if a component constructor is registered for the given name.
-    pub fn has_component(&self, name: &str) -> bool {
-        self.factories.contains_key(name)
+    /// Checks if a companion is registered for the given `.dt` / `.rs` / `.wasm` path.
+    pub fn has_companion_path(&self, path: &std::path::Path) -> bool {
+        let stem = canonical_companion_stem(&path.to_string_lossy());
+        if self.path_factories.contains_key(&stem) {
+            return true;
+        }
+        self.path_factories
+            .keys()
+            .any(|k| !k.contains("::") && stems_match(k, &stem))
     }
 
-    /// Returns the associated companion file path, if registered.
-    pub fn get_companion_path(&self, name: &str) -> Option<&str> {
-        self.companion_files.get(name).map(|s| s.as_str())
+    /// Checks if a component constructor is registered for the given name or path.
+    pub fn has_component(&self, name_or_path: &str) -> bool {
+        let stem = canonical_companion_stem(name_or_path);
+        self.path_factories.contains_key(&stem)
+            || self
+                .path_factories
+                .keys()
+                .any(|k| !k.contains("::") && stems_match(k, &stem))
+            || self.factories.contains_key(name_or_path)
+    }
+
+    /// Returns the associated companion file path for a component name or path, if registered.
+    pub fn get_companion_path(&self, name_or_path: &str) -> Option<&str> {
+        let stem = canonical_companion_stem(name_or_path);
+        if let Some(p) = self.path_companion_files.get(&stem) {
+            return Some(p.as_str());
+        }
+        for (k, p) in &self.path_companion_files {
+            if !k.contains("::") && stems_match(k, &stem) {
+                return Some(p.as_str());
+            }
+        }
+        self.companion_files.get(name_or_path).map(|s| s.as_str())
     }
 
     /// Discovers and registers any direct `.wasm` companion file adjacent to the given `.dt` path.
@@ -606,7 +732,7 @@ impl ComponentRegistry {
     ) {
         if let Some(wasm_path) = resolver.find_companion_wasm(dt_path) {
             if let Some(stem) = wasm_path.file_stem().and_then(|s| s.to_str()) {
-                if !self.has_component(stem) {
+                if !self.has_companion_path(&wasm_path) {
                     if let Ok(bytes) = resolver.read_bytes(&wasm_path) {
                         self.register_wasm_companion(stem, wasm_path.display().to_string(), bytes);
                     }
@@ -635,11 +761,17 @@ impl ComponentRegistry {
             match item {
                 crate::ast::Item::Component(comp) => {
                     let name = comp.name.as_str();
-                    if !self.has_component(name) {
-                        let candidate = base_dir.join(format!("{}.wasm", name));
+                    let candidate = base_dir.join(format!("{}.wasm", name));
+                    if !self.has_companion_path(&candidate) {
                         if let Ok(bytes) = resolver.read_bytes(&candidate) {
                             self.register_wasm_companion(name, candidate.display().to_string(), bytes);
-                        } else if let Some(ref doc_wasm) = doc_wasm_path {
+                            continue;
+                        }
+                    }
+                    if let Some(ref doc_wasm) = doc_wasm_path {
+                        let doc_stem = canonical_companion_stem(&doc_wasm.to_string_lossy());
+                        let qual_key = format!("{}::{}", doc_stem, name);
+                        if !self.path_factories.contains_key(&qual_key) {
                             if let Ok(bytes) = resolver.read_bytes(doc_wasm) {
                                 self.register_wasm_companion(name, doc_wasm.display().to_string(), bytes);
                             }
@@ -655,7 +787,7 @@ impl ComponentRegistry {
                     };
                     if let Some(wasm_path) = resolver.find_companion_wasm(&resolved) {
                         if let Some(stem) = wasm_path.file_stem().and_then(|s| s.to_str()) {
-                            if !self.has_component(stem) {
+                            if !self.has_companion_path(&wasm_path) {
                                 if let Ok(bytes) = resolver.read_bytes(&wasm_path) {
                                     self.register_wasm_companion(stem, wasm_path.display().to_string(), bytes);
                                 }
@@ -674,6 +806,9 @@ impl ComponentRegistry {
         registry.register_companion("Button", "components/Button.rs", || {
             Box::new(std_components::Button::default())
         });
+        registry.register_companion("Button", "components/material/Button.rs", || {
+            Box::new(material_components::Button::default())
+        });
         registry.register_companion("Link", "components/Link.rs", || {
             Box::new(std_components::Link::default())
         });
@@ -687,6 +822,98 @@ impl ComponentRegistry {
             Box::new(std_components::Slider::default())
         });
         registry
+    }
+}
+
+pub mod material_components {
+    use super::{Callback, Context, DispatchError, EmitCallback};
+    use directedtype_macros::component;
+
+    /// Material UI Button companion component (`components/material/Button.rs`).
+    #[derive(Default, Debug, Clone)]
+    pub struct Button {
+        pub disabled: bool,
+        pub hovered: bool,
+        pub focused: bool,
+        pub pressed: bool,
+        pub on_click: Option<Callback<()>>,
+    }
+
+    impl Button {
+        pub fn new() -> Self {
+            Self::default()
+        }
+    }
+
+    #[component]
+    impl Button {
+        pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
+            self.on_click = ctx.get_callback("on_click");
+            if let Some(d) = ctx.get_port_bool("disabled") {
+                self.disabled = d;
+            }
+        }
+
+        pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+            let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
+            if is_disabled {
+                return Ok(());
+            }
+            self.on_click.emit(ctx, ());
+            Ok(())
+        }
+
+        pub fn focus(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+            let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
+            if is_disabled {
+                return Ok(());
+            }
+            self.focused = true;
+            ctx.set_state("focused", true);
+            Ok(())
+        }
+
+        pub fn blur(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+            self.focused = false;
+            self.pressed = false;
+            ctx.set_state("focused", false);
+            ctx.set_state("pressed", false);
+            Ok(())
+        }
+
+        pub fn pointer_enter(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+            let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
+            if is_disabled {
+                return Ok(());
+            }
+            self.hovered = true;
+            ctx.set_state("hovered", true);
+            Ok(())
+        }
+
+        pub fn pointer_leave(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+            self.hovered = false;
+            self.pressed = false;
+            ctx.set_state("hovered", false);
+            ctx.set_state("pressed", false);
+            Ok(())
+        }
+
+        pub fn pointer_down(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+            let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
+            if is_disabled {
+                return Ok(());
+            }
+            self.pressed = true;
+            ctx.set_state("pressed", true);
+            Ok(())
+        }
+
+        pub fn pointer_up(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+            self.pressed = false;
+            ctx.set_state("pressed", false);
+            Ok(())
+        }
     }
 }
 

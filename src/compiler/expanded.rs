@@ -66,6 +66,7 @@ pub struct ExpandedNode {
     pub ambient_ports: HashSet<String>,
     pub overload_params: Vec<String>,
     pub is_component: bool,
+    pub component_path: Option<String>,
 }
 
 impl ExpandedNode {
@@ -96,6 +97,7 @@ impl ExpandedNode {
             ambient_ports: HashSet::new(),
             overload_params: Vec::new(),
             is_component: false,
+            component_path: None,
         }
     }
 

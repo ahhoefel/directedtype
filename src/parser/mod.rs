@@ -23,14 +23,11 @@ pub fn parse_document_with_file(
     source: &str,
     path: &std::path::Path,
 ) -> Result<Document, ParseError> {
-    let file_name = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or_default();
-    let cursor = if file_name.is_empty() {
+    let path_str = path.to_str().unwrap_or_default();
+    let cursor = if path_str.is_empty() {
         ParserCursor::new(source)
     } else {
-        ParserCursor::with_file(source, file_name)
+        ParserCursor::with_file(source, path_str)
     };
     parse_with_cursor(cursor)
 }

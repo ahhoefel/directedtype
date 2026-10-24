@@ -125,7 +125,9 @@ impl CompiledDocument {
         let mut initial_mutations = Vec::new();
 
         for node in &self.expanded.nodes {
-            if let Some(mut instance) = registry.create_instance(&node.name) {
+            if let Some(mut instance) =
+                registry.create_instance_for_node(&node.name, node.component_path.as_deref())
+            {
                 let resolved = match self.layout.get_node(node.id) {
                     Some(r) => r,
                     None => continue,

@@ -106,8 +106,18 @@ impl Span {
         }
     }
 
-    pub fn file_name(self) -> Option<String> {
+    pub fn file_path(self) -> Option<String> {
         lookup_file_name(self.file_id)
+    }
+
+    pub fn file_name(self) -> Option<String> {
+        lookup_file_name(self.file_id).map(|p| {
+            std::path::Path::new(&p)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_string())
+                .unwrap_or(p)
+        })
     }
 
     /// Formats the span's source location as `" (file:line:col)"`, `" (line:col)"`, or `""` if unknown.
