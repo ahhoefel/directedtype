@@ -1,0 +1,148 @@
+// DirectedType Material UI Component Gallery
+// Interactive showcase of @mui/material components reimplemented for DirectedType.
+
+\use "../components/Align.dt"
+\use "../components/VStack.dt"
+\use "../components/VStackStretch.dt"
+\use "../components/HStack.dt"
+\use "../components/Card.dt"
+\use "../components/CardStyle.dt"
+\use "../components/Divider.dt"
+\use "../components/Spacer.dt"
+\use "../components/material/Palette.dt"
+\use "../components/material/Button.dt"
+
+\Window(title: "Material UI Component Gallery")
+
+\let material_surface = \CardStyle(
+    bg: #ffffff,
+    border_color: #e0e0e0,
+    border_width: 1px,
+    radius: 8px,
+    padding: 20px
+);
+
+// Background Canvas (Material grey[100])
+\Rect(
+    x: 0,
+    y: 0,
+    width: max(window.width, page.right + 40px),
+    height: max(window.height, page.bottom + 40px),
+    color: #f5f5f5
+)
+
+\let target_card_width = min(max(0, window.width - 80px), 880px);
+
+// Main Gallery Layout
+\let page = \VStack(
+    shrink: true,
+    x: 40px,
+    y: 36px,
+    gap: 16px
+) {
+    // Header
+    \Text(
+        font: \Font(size: 26px, weight: 700),
+        color: #1976d2
+    ) {
+        Material UI Component Gallery
+    }
+
+    \Text(
+        font: \Font(size: 14px, weight: 400),
+        color: #616161
+    ) {
+        Interactive showcase of @mui/material components — hover, focus, and click buttons to see state transitions.
+    }
+
+    \Divider(width: max(target_card_width, 680px), color: #e0e0e0)
+    \Spacer(height: 4px)
+
+    // Section 1: Basic Button Variants
+    \Card("card_basic_variants"; style: material_surface, min_width: target_card_width, gap: 12px) {
+        \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            1. BUTTON VARIANTS (TEXT, CONTAINED, OUTLINED & DISABLED)
+        }
+        \HStack(gap: 12px, align: Align.Center) {
+            \Button("basic_text";) { Text }
+            \Button("basic_contained"; variant: ButtonVariant.Contained) { Contained }
+            \Button("basic_outlined"; variant: ButtonVariant.Outlined) { Outlined }
+            \Button("basic_disabled_text"; disabled: true) { Disabled Text }
+            \Button("basic_disabled_contained"; variant: ButtonVariant.Contained, disabled: true) { Disabled Contained }
+            \Button("basic_disabled_outlined"; variant: ButtonVariant.Outlined, disabled: true) { Disabled Outlined }
+        }
+    }
+
+    // Section 2: Semantic Palette Colors (Contained)
+    \Card("card_contained_colors"; style: material_surface, min_width: target_card_width, gap: 12px) {
+        \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            2. CONTAINED PALETTE COLORS
+        }
+        \HStack(gap: 12px, align: Align.Center) {
+            \Button("c_primary"; variant: ButtonVariant.Contained, color: MaterialColor.Primary, label: "Primary")
+            \Button("c_secondary"; variant: ButtonVariant.Contained, color: MaterialColor.Secondary, label: "Secondary")
+            \Button("c_success"; variant: ButtonVariant.Contained, color: MaterialColor.Success, label: "Success")
+            \Button("c_error"; variant: ButtonVariant.Contained, color: MaterialColor.Error, label: "Error")
+            \Button("c_info"; variant: ButtonVariant.Contained, color: MaterialColor.Info, label: "Info")
+            \Button("c_warning"; variant: ButtonVariant.Contained, color: MaterialColor.Warning, label: "Warning")
+            \Button("c_inherit"; variant: ButtonVariant.Contained, color: MaterialColor.Inherit, label: "Inherit")
+        }
+    }
+
+    // Section 3: Semantic Palette Colors (Outlined & Text)
+    \Card("card_outlined_text_colors"; style: material_surface, min_width: target_card_width, gap: 12px) {
+        \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            3. OUTLINED & TEXT PALETTE COLORS
+        }
+        \HStack(gap: 12px, align: Align.Center) {
+            \Button("o_primary"; variant: ButtonVariant.Outlined, color: MaterialColor.Primary) { Primary }
+            \Button("o_secondary"; variant: ButtonVariant.Outlined, color: MaterialColor.Secondary) { Secondary }
+            \Button("o_success"; variant: ButtonVariant.Outlined, color: MaterialColor.Success) { Success }
+            \Button("o_error"; variant: ButtonVariant.Outlined, color: MaterialColor.Error) { Error }
+            \Button("o_info"; variant: ButtonVariant.Outlined, color: MaterialColor.Info) { Info }
+            \Button("o_warning"; variant: ButtonVariant.Outlined, color: MaterialColor.Warning) { Warning }
+            \Button("o_inherit"; variant: ButtonVariant.Outlined, color: MaterialColor.Inherit) { Inherit }
+        }
+        \HStack(gap: 12px, align: Align.Center) {
+            \Button("t_primary"; variant: ButtonVariant.Text, color: MaterialColor.Primary) { Primary }
+            \Button("t_secondary"; variant: ButtonVariant.Text, color: MaterialColor.Secondary) { Secondary }
+            \Button("t_success"; variant: ButtonVariant.Text, color: MaterialColor.Success) { Success }
+            \Button("t_error"; variant: ButtonVariant.Text, color: MaterialColor.Error) { Error }
+            \Button("t_info"; variant: ButtonVariant.Text, color: MaterialColor.Info) { Info }
+            \Button("t_warning"; variant: ButtonVariant.Text, color: MaterialColor.Warning) { Warning }
+            \Button("t_inherit"; variant: ButtonVariant.Text, color: MaterialColor.Inherit) { Inherit }
+        }
+    }
+
+    // Section 4: Button Sizes (Small 30px, Medium 36px, Large 42px)
+    \Card("card_sizes"; style: material_surface, min_width: target_card_width, gap: 12px) {
+        \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            4. BUTTON SIZES (SMALL, MEDIUM, LARGE)
+        }
+        \HStack(gap: 12px, align: Align.Center) {
+            \Button("sz_t_sm"; variant: ButtonVariant.Text, size: ButtonSize.Small) { Small }
+            \Button("sz_t_md"; variant: ButtonVariant.Text, size: ButtonSize.Medium) { Medium }
+            \Button("sz_t_lg"; variant: ButtonVariant.Text, size: ButtonSize.Large) { Large }
+            \Spacer(width: 8px)
+            \Button("sz_o_sm"; variant: ButtonVariant.Outlined, size: ButtonSize.Small) { Small }
+            \Button("sz_o_md"; variant: ButtonVariant.Outlined, size: ButtonSize.Medium) { Medium }
+            \Button("sz_o_lg"; variant: ButtonVariant.Outlined, size: ButtonSize.Large) { Large }
+            \Spacer(width: 8px)
+            \Button("sz_c_sm"; variant: ButtonVariant.Contained, size: ButtonSize.Small) { Small }
+            \Button("sz_c_md"; variant: ButtonVariant.Contained, size: ButtonSize.Medium) { Medium }
+            \Button("sz_c_lg"; variant: ButtonVariant.Contained, size: ButtonSize.Large) { Large }
+        }
+    }
+
+    // Section 5: Intrinsic Min-Width vs Fixed Width Override
+    \Card("card_widths"; style: material_surface, min_width: target_card_width, gap: 12px) {
+        \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            5. INTRINSIC SIZING (64PX MIN-WIDTH) VS EXPLICIT WIDTH
+        }
+        \HStack(gap: 12px, align: Align.Center) {
+            \Button("w_short"; variant: ButtonVariant.Contained) { OK }
+            \Button("w_auto"; variant: ButtonVariant.Contained, color: MaterialColor.Secondary) { Auto-Sized to Label }
+            \Button("w_fixed"; width: 220px, variant: ButtonVariant.Outlined, color: MaterialColor.Primary) { Explicit Width (220px) }
+        }
+    }
+};

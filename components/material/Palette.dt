@@ -1,0 +1,107 @@
+// DirectedType Material UI Component Library: Palette
+// Standard @mui/material color palette tokens, semantic color enum, and ColorChannel bundles.
+
+\Enum MaterialColor {
+    Primary,
+    Secondary,
+    Success,
+    Error,
+    Info,
+    Warning,
+    Inherit,
+}
+
+\Component ColorChannel(
+    main: Color,
+    light: Color,
+    dark: Color,
+    contrast_text: Color,
+    hover_bg: Color,
+    focus_bg: Color,
+    active_bg: Color,
+    outlined_border: Color
+) {}
+
+// Standard @mui/material Light Theme Color Channels
+\let material_primary = \ColorChannel(
+    main: #1976d2,
+    light: #42a5f5,
+    dark: #1565c0,
+    contrast_text: #ffffff,
+    hover_bg: #1976d20a,
+    focus_bg: #1976d21f,
+    active_bg: #1976d229,
+    outlined_border: #1976d280
+);
+
+\let material_secondary = \ColorChannel(
+    main: #9c27b0,
+    light: #ba68c8,
+    dark: #7b1fa2,
+    contrast_text: #ffffff,
+    hover_bg: #9c27b00a,
+    focus_bg: #9c27b01f,
+    active_bg: #9c27b029,
+    outlined_border: #9c27b080
+);
+
+\let material_success = \ColorChannel(
+    main: #2e7d32,
+    light: #4caf50,
+    dark: #1b5e20,
+    contrast_text: #ffffff,
+    hover_bg: #2e7d320a,
+    focus_bg: #2e7d321f,
+    active_bg: #2e7d3229,
+    outlined_border: #2e7d3280
+);
+
+\let material_error = \ColorChannel(
+    main: #d32f2f,
+    light: #ef5350,
+    dark: #c62828,
+    contrast_text: #ffffff,
+    hover_bg: #d32f2f0a,
+    focus_bg: #d32f2f1f,
+    active_bg: #d32f2f29,
+    outlined_border: #d32f2f80
+);
+
+\let material_info = \ColorChannel(
+    main: #0288d1,
+    light: #03a9f4,
+    dark: #01579b,
+    contrast_text: #ffffff,
+    hover_bg: #0288d10a,
+    focus_bg: #0288d11f,
+    active_bg: #0288d129,
+    outlined_border: #0288d180
+);
+
+\let material_warning = \ColorChannel(
+    main: #ed6c02,
+    light: #ff9800,
+    dark: #e65100,
+    contrast_text: #ffffff,
+    hover_bg: #ed6c020a,
+    focus_bg: #ed6c021f,
+    active_bg: #ed6c0229,
+    outlined_border: #ed6c0280
+);
+
+\let material_inherit = \ColorChannel(
+    main: #212121,
+    light: #e0e0e0,
+    dark: #bdbdbd,
+    contrast_text: #000000de,
+    hover_bg: #0000000a,
+    focus_bg: #0000001f,
+    active_bg: #00000029,
+    outlined_border: #0000003b
+);
+
+// Standard @mui/material Action Disabled Tokens
+\let material_disabled_text = #00000042;
+\let material_disabled_bg = #0000001f;
+\let material_disabled_border = #0000001f;
+

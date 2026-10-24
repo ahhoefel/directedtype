@@ -1,0 +1,670 @@
+// DirectedType Material UI Component Library: Button
+// Reimplementation of @mui/material Button supporting Text, Contained, and Outlined variants,
+// semantic MaterialColor channels, Small/Medium/Large sizes, reactive hover/focus/pressed states,
+// and both `label: String` and child content overloads.
+
+\use "components/Center.dt"
+\use "components/material/Palette.dt"
+
+\Enum ButtonVariant {
+    Text,
+    Contained,
+    Outlined,
+}
+
+\Enum ButtonSize {
+    Small,
+    Medium,
+    Large,
+}
+
+// 1. Explicit Width Button with `label` prop
+\Component Button(
+    width: Distance,
+    label: String,
+    variant: ButtonVariant = ButtonVariant.Text,
+    color: MaterialColor = MaterialColor.Primary,
+    size: ButtonSize = ButtonSize.Medium,
+    disabled: Boolean = false,
+    radius: Distance = 4px,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = unset
+) {
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let is_contained = variant == ButtonVariant.Contained;
+    \let is_outlined = variant == ButtonVariant.Outlined;
+
+    \let is_small = size == ButtonSize.Small;
+    \let is_large = size == ButtonSize.Large;
+
+    \let btn_height = is_small ? 30px : (is_large ? 42px : 36px);
+    \let font_size = is_small ? 13px : (is_large ? 15px : 14px);
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_dark = is_primary ? #1565c0 : (
+        is_secondary ? #7b1fa2 : (
+            is_success ? #1b5e20 : (
+                is_error ? #c62828 : (
+                    is_info ? #01579b : (
+                        is_warning ? #e65100 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_contrast = (color == MaterialColor.Inherit) ? #000000de : #ffffff;
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_outlined_border = is_primary ? #1976d280 : (
+        is_secondary ? #9c27b080 : (
+            is_success ? #2e7d3280 : (
+                is_error ? #d32f2f80 : (
+                    is_info ? #0288d180 : (
+                        is_warning ? #ed6c0280 : #0000003b
+                    )
+                )
+            )
+        )
+    );
+
+    \let interactive_tint = pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : #00000000));
+    \let enabled_bg = is_contained
+        ? ((pressed || hovered || focused) ? ch_dark : ch_main)
+        : interactive_tint;
+    \let enabled_text = is_contained ? ch_contrast : ch_main;
+    \let enabled_border = is_outlined
+        ? ((pressed || hovered || focused) ? ch_main : ch_outlined_border)
+        : #00000000;
+
+    \let bg_color = disabled
+        ? (is_contained ? #0000001f : #00000000)
+        : enabled_bg;
+    \let text_color = disabled ? #00000042 : enabled_text;
+    \let border_color = disabled
+        ? (is_outlined ? #0000001f : #00000000)
+        : enabled_border;
+    \let border_w = is_outlined ? 1px : 0;
+
+    \alias right = x + width;
+    \alias bottom = y + btn_height;
+    \alias height = btn_height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: btn_height,
+        color: bg_color,
+        radius: radius,
+        border_color: border_color,
+        border_width: border_w,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    ) {
+        \Center {
+            \Text(
+                font: \Font(size: font_size, weight: 500),
+                color: text_color,
+                text: label
+            )
+        }
+    }
+}
+
+// 2. Intrinsic Width Button with `label` prop
+\Component Button(
+    label: String,
+    variant: ButtonVariant = ButtonVariant.Text,
+    color: MaterialColor = MaterialColor.Primary,
+    size: ButtonSize = ButtonSize.Medium,
+    disabled: Boolean = false,
+    radius: Distance = 4px,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = unset
+) {
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let is_contained = variant == ButtonVariant.Contained;
+    \let is_outlined = variant == ButtonVariant.Outlined;
+    \let is_text = variant == ButtonVariant.Text;
+
+    \let is_small = size == ButtonSize.Small;
+    \let is_large = size == ButtonSize.Large;
+
+    \let btn_height = is_small ? 30px : (is_large ? 42px : 36px);
+    \let font_size = is_small ? 13px : (is_large ? 15px : 14px);
+    \let pad_x = is_text
+        ? (is_small ? 4px : (is_large ? 11px : 8px))
+        : (is_small ? 10px : (is_large ? 22px : 16px));
+
+    \let measured_label_w = text_width(label, font_size, 500);
+    \let resolved_width = max(64px, measured_label_w + (2 * pad_x));
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_dark = is_primary ? #1565c0 : (
+        is_secondary ? #7b1fa2 : (
+            is_success ? #1b5e20 : (
+                is_error ? #c62828 : (
+                    is_info ? #01579b : (
+                        is_warning ? #e65100 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_contrast = (color == MaterialColor.Inherit) ? #000000de : #ffffff;
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_outlined_border = is_primary ? #1976d280 : (
+        is_secondary ? #9c27b080 : (
+            is_success ? #2e7d3280 : (
+                is_error ? #d32f2f80 : (
+                    is_info ? #0288d180 : (
+                        is_warning ? #ed6c0280 : #0000003b
+                    )
+                )
+            )
+        )
+    );
+
+    \let interactive_tint = pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : #00000000));
+    \let enabled_bg = is_contained
+        ? ((pressed || hovered || focused) ? ch_dark : ch_main)
+        : interactive_tint;
+    \let enabled_text = is_contained ? ch_contrast : ch_main;
+    \let enabled_border = is_outlined
+        ? ((pressed || hovered || focused) ? ch_main : ch_outlined_border)
+        : #00000000;
+
+    \let bg_color = disabled
+        ? (is_contained ? #0000001f : #00000000)
+        : enabled_bg;
+    \let text_color = disabled ? #00000042 : enabled_text;
+    \let border_color = disabled
+        ? (is_outlined ? #0000001f : #00000000)
+        : enabled_border;
+    \let border_w = is_outlined ? 1px : 0;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias bottom = y + btn_height;
+    \alias height = btn_height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: btn_height,
+        color: bg_color,
+        radius: radius,
+        border_color: border_color,
+        border_width: border_w,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    ) {
+        \Center {
+            \Text(
+                font: \Font(size: font_size, weight: 500),
+                color: text_color,
+                text: label
+            )
+        }
+    }
+}
+
+// 3. Explicit Width Button with child text content (`\Button(width: 120px) { Click Me }`)
+\Component Button(
+    width: Distance,
+    variant: ButtonVariant = ButtonVariant.Text,
+    color: MaterialColor = MaterialColor.Primary,
+    size: ButtonSize = ButtonSize.Medium,
+    disabled: Boolean = false,
+    radius: Distance = 4px,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = unset
+) {
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let is_contained = variant == ButtonVariant.Contained;
+    \let is_outlined = variant == ButtonVariant.Outlined;
+
+    \let is_small = size == ButtonSize.Small;
+    \let is_large = size == ButtonSize.Large;
+
+    \let btn_height = is_small ? 30px : (is_large ? 42px : 36px);
+    \let font_size = is_small ? 13px : (is_large ? 15px : 14px);
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_dark = is_primary ? #1565c0 : (
+        is_secondary ? #7b1fa2 : (
+            is_success ? #1b5e20 : (
+                is_error ? #c62828 : (
+                    is_info ? #01579b : (
+                        is_warning ? #e65100 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_contrast = (color == MaterialColor.Inherit) ? #000000de : #ffffff;
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_outlined_border = is_primary ? #1976d280 : (
+        is_secondary ? #9c27b080 : (
+            is_success ? #2e7d3280 : (
+                is_error ? #d32f2f80 : (
+                    is_info ? #0288d180 : (
+                        is_warning ? #ed6c0280 : #0000003b
+                    )
+                )
+            )
+        )
+    );
+
+    \let interactive_tint = pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : #00000000));
+    \let enabled_bg = is_contained
+        ? ((pressed || hovered || focused) ? ch_dark : ch_main)
+        : interactive_tint;
+    \let enabled_text = is_contained ? ch_contrast : ch_main;
+    \let enabled_border = is_outlined
+        ? ((pressed || hovered || focused) ? ch_main : ch_outlined_border)
+        : #00000000;
+
+    \let bg_color = disabled
+        ? (is_contained ? #0000001f : #00000000)
+        : enabled_bg;
+    \let text_color = disabled ? #00000042 : enabled_text;
+    \let border_color = disabled
+        ? (is_outlined ? #0000001f : #00000000)
+        : enabled_border;
+    \let border_w = is_outlined ? 1px : 0;
+
+    \alias right = x + width;
+    \alias bottom = y + btn_height;
+    \alias height = btn_height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: btn_height,
+        color: bg_color,
+        radius: radius,
+        border_color: border_color,
+        border_width: border_w,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    )
+
+    \let btn_text = \Text(
+        x: x + max(0, (width - btn_text.width) / 2),
+        y: y + max(0, (btn_height - btn_text.height) / 2),
+        font: \Font(size: font_size, weight: 500),
+        color: text_color,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    ) {
+        \Children
+    };
+}
+
+// 4. Intrinsic Width Button with child text content (`\Button { Click Me }`)
+\Component Button(
+    variant: ButtonVariant = ButtonVariant.Text,
+    color: MaterialColor = MaterialColor.Primary,
+    size: ButtonSize = ButtonSize.Medium,
+    disabled: Boolean = false,
+    radius: Distance = 4px,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = unset
+) {
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let is_contained = variant == ButtonVariant.Contained;
+    \let is_outlined = variant == ButtonVariant.Outlined;
+    \let is_text = variant == ButtonVariant.Text;
+
+    \let is_small = size == ButtonSize.Small;
+    \let is_large = size == ButtonSize.Large;
+
+    \let btn_height = is_small ? 30px : (is_large ? 42px : 36px);
+    \let font_size = is_small ? 13px : (is_large ? 15px : 14px);
+    \let pad_x = is_text
+        ? (is_small ? 4px : (is_large ? 11px : 8px))
+        : (is_small ? 10px : (is_large ? 22px : 16px));
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_dark = is_primary ? #1565c0 : (
+        is_secondary ? #7b1fa2 : (
+            is_success ? #1b5e20 : (
+                is_error ? #c62828 : (
+                    is_info ? #01579b : (
+                        is_warning ? #e65100 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_contrast = (color == MaterialColor.Inherit) ? #000000de : #ffffff;
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_outlined_border = is_primary ? #1976d280 : (
+        is_secondary ? #9c27b080 : (
+            is_success ? #2e7d3280 : (
+                is_error ? #d32f2f80 : (
+                    is_info ? #0288d180 : (
+                        is_warning ? #ed6c0280 : #0000003b
+                    )
+                )
+            )
+        )
+    );
+
+    \let interactive_tint = pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : #00000000));
+    \let enabled_bg = is_contained
+        ? ((pressed || hovered || focused) ? ch_dark : ch_main)
+        : interactive_tint;
+    \let enabled_text = is_contained ? ch_contrast : ch_main;
+    \let enabled_border = is_outlined
+        ? ((pressed || hovered || focused) ? ch_main : ch_outlined_border)
+        : #00000000;
+
+    \let bg_color = disabled
+        ? (is_contained ? #0000001f : #00000000)
+        : enabled_bg;
+    \let text_color = disabled ? #00000042 : enabled_text;
+    \let border_color = disabled
+        ? (is_outlined ? #0000001f : #00000000)
+        : enabled_border;
+    \let border_w = is_outlined ? 1px : 0;
+
+    \let resolved_width = max(64px, btn_text.width + (2 * pad_x));
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias bottom = y + btn_height;
+    \alias height = btn_height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: btn_height,
+        color: bg_color,
+        radius: radius,
+        border_color: border_color,
+        border_width: border_w,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    )
+
+    \let btn_text = \Text(
+        x: x + max(0, (resolved_width - btn_text.width) / 2),
+        y: y + max(0, (btn_height - btn_text.height) / 2),
+        font: \Font(size: font_size, weight: 500),
+        color: text_color,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    ) {
+        \Children
+    };
+}
