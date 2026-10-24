@@ -3,6 +3,7 @@
 // dynamic scrollbar tracking, and targeted navigation via \Link(url: "...", view: pane).
 
 \use "components/VStack.dt"
+\use "components/VStackStretch.dt"
 \use "components/HStack.dt"
 \use "components/Card.dt"
 \use "components/CardStyle.dt"

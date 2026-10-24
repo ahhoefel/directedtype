@@ -42,7 +42,7 @@ pub struct GraphNodeInfo {
     pub span: Span,
 }
 
-fn unmangle_component_name(name: &str) -> &str {
+pub fn unmangle_component_name(name: &str) -> &str {
     if let Some(rest) = name.strip_prefix("__dt_") {
         if let Some((hash_part, original)) = rest.split_once('_') {
             if !hash_part.is_empty() && hash_part.chars().all(|c| c.is_ascii_hexdigit()) {

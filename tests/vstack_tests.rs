@@ -57,6 +57,7 @@ fn test_vstack_default_left_alignment_and_gap() {
 fn test_vstack_center_and_centered_alignment() {
     let input = r#"
     \use "components/VStack.dt"
+    \use "components/Align.dt"
 
     \VStack(x: 0, y: 0, width: 400px, align: Align.Center, gap: 10px) {
         \Rect(width: 100px, height: 40px, color: #3b82f6)
@@ -88,6 +89,7 @@ fn test_vstack_center_and_centered_alignment() {
 fn test_vstack_right_alignment() {
     let input = r#"
     \use "components/VStack.dt"
+    \use "components/Align.dt"
 
     \VStack(x: 50px, y: 0, width: 400px, align: Align.Right) {
         \Rect(width: 120px, height: 40px, color: #ef4444)
@@ -117,7 +119,7 @@ fn test_vstack_right_alignment() {
 #[test]
 fn test_vstack_stretch_alignment() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/VStackStretch.dt"
 
     \VStackStretch(x: 0, y: 0, width: 500px) {
         \Rect(height: 50px, color: #8b5cf6)
@@ -152,7 +154,7 @@ fn test_vstack_stretch_alignment() {
 #[test]
 fn test_vstack_with_button_and_text_composition() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/VStackStretch.dt"
     \use "components/Button.dt"
     \use "theme/default.dt"
 
@@ -251,6 +253,7 @@ fn test_vstack_standalone_without_width_rejected() {
 fn test_vstack_shrink_wrap_width() {
     let input = r#"
     \use "components/VStack.dt"
+    \use "components/Align.dt"
 
     \VStack(shrink: true, x: 20px, y: 30px, gap: 10px, align: Align.Center) {
         \Rect(width: 140px, height: 40px, color: #3b82f6)

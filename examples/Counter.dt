@@ -2,6 +2,7 @@
 // Accompanied by native Rust companion file: Counter.rs
 \use "components/VStack.dt"
 \use "components/HStack.dt"
+\use "components/Align.dt"
 \use "components/Card.dt"
 \use "components/CardStyle.dt"
 \use "components/Button.dt"

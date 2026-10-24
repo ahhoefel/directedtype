@@ -939,5 +939,70 @@ fn test_cannot_import_transitive_symbol_from_intermediary() {
     }
 }
 
+#[test]
+fn test_transitive_component_not_exposed_to_caller() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "ui/Part.dt",
+        r#"
+        \Component Part(width: Distance = 40px, height: Distance = 20px) {
+            \Rect(x: 0, y: 0, width: width, height: height, color: #E2E8F0)
+        }
+        "#,
+    );
+    resolver.insert(
+        "ui/Pill.dt",
+        r#"
+        \use "./Part.dt";
+
+        \Component Pill() {
+            \Part(width: 50px, height: 25px)
+            \Children
+        }
+        "#,
+    );
+
+    // Main imports Pill.dt, which internally imports Part.dt.
+    // Using \Part directly in Main without explicitly importing Part.dt must fail.
+    let invalid_main_src = r#"
+    \use "./ui/Pill.dt";
+
+    \Pill {
+        \Part(width: 60px, height: 30px)
+    }
+    "#;
+
+    let doc = parse(invalid_main_src).expect("Failed to parse main");
+    let err = evaluate_document_with_resolver(&doc, 800.0, 600.0, Path::new("."), &resolver)
+        .expect_err("Transitively imported component Part should not be in caller scope");
+
+    match err {
+        CompileError::UndefinedComponent { name, .. } => {
+            assert_eq!(name, "Part");
+        }
+        other => panic!("Expected UndefinedComponent for Part, got {:?}", other),
+    }
+
+    // Explicitly importing Part.dt in Main alongside Pill.dt succeeds.
+    let valid_main_src = r#"
+    \use "./ui/Pill.dt";
+    \use "./ui/Part.dt";
+
+    \Pill {
+        \Part(width: 60px, height: 30px)
+    }
+    "#;
+
+    let valid_doc = parse(valid_main_src).expect("Failed to parse valid main");
+    let layout = evaluate_document_with_resolver(&valid_doc, 800.0, 600.0, Path::new("."), &resolver)
+        .expect("Explicitly importing Part.dt should succeed");
+
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+    assert_eq!(rects[0].rect.width, 50.0);
+    assert_eq!(rects[1].rect.width, 60.0);
+}
+
+
 
 

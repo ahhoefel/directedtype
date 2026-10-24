@@ -3,7 +3,6 @@
 // taking its off-axis (vertical) height top-down from its parent.
 // Anchors the child with minimum left alignment when available width is smaller than the child.
 // Caps width on the lower end by the width of its contents.
-\use "components/HCenterUp.dt"
 
 // 1. Explicit Width HCenter
 \Component HCenter(

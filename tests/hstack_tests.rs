@@ -60,6 +60,7 @@ fn test_hstack_default_top_alignment_and_gap() {
 fn test_hstack_center_and_centered_alignment() {
     let input = r#"
     \use "components/HStack.dt"
+    \use "components/Align.dt"
 
     \HStack(x: 0, y: 10px, align: Align.Center, gap: 10px) {
         \Rect(width: 100px, height: 60px, color: #3b82f6)
@@ -94,6 +95,7 @@ fn test_hstack_center_and_centered_alignment() {
 fn test_hstack_bottom_alignment() {
     let input = r#"
     \use "components/HStack.dt"
+    \use "components/Align.dt"
 
     \HStack(x: 0, y: 10px, align: Align.Bottom, gap: 10px) {
         \Rect(width: 80px, height: 70px, color: #ef4444)
@@ -252,7 +254,7 @@ fn test_hstack_default_zero_gap() {
 #[test]
 fn test_hstack_stretch_alignment() {
     let input = r#"
-    \use "components/HStack.dt"
+    \use "components/HStackStretch.dt"
 
     \HStackStretch(height: 120px, x: 10px, y: 20px, gap: 16px) {
         \Rect(width: 100px, color: #3b82f6)

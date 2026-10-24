@@ -337,7 +337,6 @@ pub fn resolve_imports_with_enums<R: FileResolver>(
     let mut active_stack = HashSet::new();
     let mut cache = HashMap::new();
     let mut module_exports = HashMap::new();
-    let mut visited_files = HashSet::new();
     let mut all_module_enums = HashMap::new();
 
     // 1. Index locally declared components in the root document
@@ -359,7 +358,6 @@ pub fn resolve_imports_with_enums<R: FileResolver>(
                 &mut active_stack,
                 &mut cache,
                 &mut module_exports,
-                &mut visited_files,
                 &mut all_module_enums,
             )?;
         }
@@ -378,7 +376,6 @@ fn resolve_use_decl<R: FileResolver>(
     active_stack: &mut HashSet<PathBuf>,
     cache: &mut HashMap<PathBuf, Document>,
     module_exports: &mut HashMap<PathBuf, HashMap<String, Vec<ComponentDef>>>,
-    visited_files: &mut HashSet<PathBuf>,
     all_module_enums: &mut HashMap<String, crate::ast::EnumDef>,
 ) -> Result<(), CompileError> {
     let raw_path = Path::new(&u.path);
@@ -412,8 +409,6 @@ fn resolve_use_decl<R: FileResolver>(
         });
     }
 
-    let is_first_visit = visited_files.insert(canonical_path.clone());
-
     // Fetch parsed document from cache or load and parse it
     let imported_doc = if let Some(cached) = cache.get(&canonical_path) {
         cached.clone()
@@ -438,7 +433,8 @@ fn resolve_use_decl<R: FileResolver>(
 
     let imported_base_dir = resolved_path.parent().unwrap_or(Path::new("."));
 
-    // Transitive imports first
+    // Resolve this module's own \use declarations into a hermetic module-local scope
+    let mut nested_registry: HashMap<String, Vec<ComponentDef>> = HashMap::new();
     let mut nested_imported_items = Vec::new();
     for item in &imported_doc.items {
         if let Item::Use(nested_u) = item {
@@ -446,16 +442,11 @@ fn resolve_use_decl<R: FileResolver>(
                 nested_u,
                 imported_base_dir,
                 resolver,
-                registry,
-                if u.is_named() {
-                    &mut nested_imported_items
-                } else {
-                    imported_items
-                },
+                &mut nested_registry,
+                &mut nested_imported_items,
                 active_stack,
                 cache,
                 module_exports,
-                visited_files,
                 all_module_enums,
             )?;
         }
@@ -470,7 +461,7 @@ fn resolve_use_decl<R: FileResolver>(
         }
     }
 
-    // Collect all enums in scope inside this module (including transitive imports)
+    // Collect all enums in scope inside this module (including its own imports)
     let mut module_scope_enums = available_enums.clone();
     module_scope_enums
         .entry("LineCap".to_string())
@@ -483,13 +474,13 @@ fn resolve_use_decl<R: FileResolver>(
             ],
             span: imported_doc.span,
         });
-    for item in imported_items.iter().chain(nested_imported_items.iter()) {
+    for item in &nested_imported_items {
         if let Item::Enum(e) = item {
             module_scope_enums.insert(e.name.as_str().to_string(), e.clone());
         }
     }
 
-    // Collect components from the imported file
+    // Collect components defined directly in the imported file
     let imported_components = if let Some(exported) = module_exports.get(&canonical_path) {
         exported.clone()
     } else {
@@ -505,19 +496,30 @@ fn resolve_use_decl<R: FileResolver>(
         components
     };
 
+    // Pool of all components in scope inside `imported_doc` (its own imports + its own definitions)
+    let mut available_components = nested_registry;
+    for (name, comps) in &imported_components {
+        available_components.insert(name.clone(), comps.clone());
+    }
+
+    let mut exported_comp_names: HashSet<String> = HashSet::new();
+    let mut exported_top_items: Vec<crate::ast::Item> = Vec::new();
+    let mut aliased_target_comp: Option<(String, String, crate::span::Span, Vec<ComponentDef>)> =
+        None;
+
     if !u.items.is_empty() {
         // Named symbol imports: \use { a, b as c } from "..."
         for use_item in &u.items {
             let symbol_name = use_item.name.as_str();
-            let target_name = use_item.bound_name();
             let mut found = false;
 
-            // 1. Check if it's a component
+            // 1. Check if it's a component defined directly in this file
             if imported_components.contains_key(symbol_name) {
                 found = true;
+                exported_comp_names.insert(symbol_name.to_string());
             }
 
-            // 2. Check if it's an available enum
+            // 2. Check if it's an available enum defined directly in this file
             if let Some(e) = available_enums.get(symbol_name) {
                 found = true;
                 let mut target_enum = e.clone();
@@ -525,15 +527,10 @@ fn resolve_use_decl<R: FileResolver>(
                     target_enum.name = Ident::new(alias.as_str(), alias.span);
                     all_module_enums.insert(alias.as_str().to_string(), target_enum.clone());
                 }
-                if !imported_items.iter().any(|existing| match existing {
-                    Item::Enum(ex_e) => ex_e.name.as_str() == target_name,
-                    _ => false,
-                }) {
-                    imported_items.push(Item::Enum(target_enum));
-                }
+                exported_top_items.push(Item::Enum(target_enum));
             }
 
-            // 3. Check top-level items (Let, Env, State)
+            // 3. Check top-level items (Let, Env, State) defined directly in this file
             for item in &imported_doc.items {
                 match item {
                     Item::Let(l) if l.name.as_str() == symbol_name => {
@@ -541,19 +538,18 @@ fn resolve_use_decl<R: FileResolver>(
                         let mut target_let = l.clone();
                         if let Some(val) = &mut target_let.value {
                             match val {
-                                crate::ast::LetValue::Node(n) => resolve_element_node_enum_literals(n, &module_scope_enums),
-                                crate::ast::LetValue::Expr(e) => resolve_expr_enum_literals(e, &module_scope_enums),
+                                crate::ast::LetValue::Node(n) => {
+                                    resolve_element_node_enum_literals(n, &module_scope_enums)
+                                }
+                                crate::ast::LetValue::Expr(e) => {
+                                    resolve_expr_enum_literals(e, &module_scope_enums)
+                                }
                             }
                         }
                         if let Some(alias) = &use_item.alias {
                             target_let.name = Ident::new(alias.as_str(), alias.span);
                         }
-                        if !imported_items.iter().any(|existing| match existing {
-                            Item::Let(ex_l) => ex_l.name.as_str() == target_name && ex_l.span == target_let.span,
-                            _ => false,
-                        }) {
-                            imported_items.push(Item::Let(target_let));
-                        }
+                        exported_top_items.push(Item::Let(target_let));
                     }
                     Item::Env(env) if env.name.as_str() == symbol_name => {
                         found = true;
@@ -564,12 +560,7 @@ fn resolve_use_decl<R: FileResolver>(
                         if let Some(alias) = &use_item.alias {
                             target_env.name = Ident::new(alias.as_str(), alias.span);
                         }
-                        if !imported_items.iter().any(|existing| match existing {
-                            Item::Env(ex_env) => ex_env.name.as_str() == target_name && ex_env.span == target_env.span,
-                            _ => false,
-                        }) {
-                            imported_items.push(Item::Env(target_env));
-                        }
+                        exported_top_items.push(Item::Env(target_env));
                     }
                     Item::State(s) if s.name.as_str() == symbol_name => {
                         found = true;
@@ -580,12 +571,7 @@ fn resolve_use_decl<R: FileResolver>(
                         if let Some(alias) = &use_item.alias {
                             target_state.name = Ident::new(alias.as_str(), alias.span);
                         }
-                        if !imported_items.iter().any(|existing| match existing {
-                            Item::State(ex_s) => ex_s.name.as_str() == target_name && ex_s.span == target_state.span,
-                            _ => false,
-                        }) {
-                            imported_items.push(Item::State(target_state));
-                        }
+                        exported_top_items.push(Item::State(target_state));
                     }
                     _ => {}
                 }
@@ -602,60 +588,177 @@ fn resolve_use_decl<R: FileResolver>(
                 });
             }
         }
+    } else if let Some(alias) = &u.alias {
+        for item in &imported_doc.items {
+            if let Item::Enum(e) = item {
+                let mut aliased_enum = e.clone();
+                aliased_enum.name = alias.clone();
+                all_module_enums.insert(alias.as_str().to_string(), aliased_enum.clone());
+                exported_top_items.push(Item::Enum(aliased_enum));
+            }
+        }
 
-        // Compute reachable components from the directly imported component symbols
-        let mut reachable: HashSet<String> = HashSet::new();
-        let mut worklist: Vec<String> = u
-            .items
-            .iter()
-            .map(|it| it.name.as_str().to_string())
-            .filter(|name| imported_components.contains_key(name))
-            .collect();
+        let alias_name = alias.as_str();
+        let file_stem = raw_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
 
-        while let Some(comp_name) = worklist.pop() {
-            if reachable.insert(comp_name.clone()) {
-                if let Some(overloads) = imported_components.get(&comp_name) {
-                    for o in overloads {
-                        let mut refs = HashSet::new();
-                        collect_referenced_component_names(o, &mut refs);
-                        for r in refs {
-                            if imported_components.contains_key(&r) && !reachable.contains(&r) {
-                                worklist.push(r);
+        if !imported_components.is_empty() {
+            let (original_name, target_comps) =
+                if let Some(comps) = imported_components.get(file_stem) {
+                    (file_stem.to_string(), comps.clone())
+                } else if imported_components.len() == 1 {
+                    let (name, comps) = imported_components.iter().next().unwrap();
+                    (name.clone(), comps.clone())
+                } else if let Some(comps) = imported_components.get(alias_name) {
+                    (alias_name.to_string(), comps.clone())
+                } else {
+                    return Err(CompileError::ImportError {
+                        path: u.path.clone(),
+                        message: format!(
+                            "Cannot alias import '{}' as '{}': file defines {} components ({:?}) and none matches file stem '{}'",
+                            u.path,
+                            alias_name,
+                            imported_components.len(),
+                            imported_components.keys().collect::<Vec<_>>(),
+                            file_stem
+                        ),
+                        span: alias.span,
+                    });
+                };
+
+            exported_comp_names.insert(original_name.clone());
+            aliased_target_comp = Some((
+                original_name,
+                alias_name.to_string(),
+                alias.span,
+                target_comps,
+            ));
+        }
+    } else {
+        // Plain \use "...": export only items and components defined directly in `imported_doc`
+        for item in &imported_doc.items {
+            match item {
+                Item::Let(l) => {
+                    let mut target_let = l.clone();
+                    if let Some(val) = &mut target_let.value {
+                        match val {
+                            crate::ast::LetValue::Node(n) => {
+                                resolve_element_node_enum_literals(n, &module_scope_enums)
                             }
+                            crate::ast::LetValue::Expr(e) => {
+                                resolve_expr_enum_literals(e, &module_scope_enums)
+                            }
+                        }
+                    }
+                    exported_top_items.push(Item::Let(target_let));
+                }
+                Item::Env(env) => {
+                    let mut target_env = env.clone();
+                    if let Some(e) = &mut target_env.value {
+                        resolve_expr_enum_literals(e, &module_scope_enums);
+                    }
+                    exported_top_items.push(Item::Env(target_env));
+                }
+                Item::Enum(e) => {
+                    exported_top_items.push(Item::Enum(e.clone()));
+                }
+                _ => {}
+            }
+        }
+        exported_comp_names.extend(imported_components.keys().cloned());
+    }
+
+    // Compute reachable components from exported components and exported top-level items
+    let mut reachable: HashSet<String> = HashSet::new();
+    let mut worklist: Vec<String> = exported_comp_names.iter().cloned().collect();
+    for item in &exported_top_items {
+        let mut refs = HashSet::new();
+        match item {
+            Item::Let(l) => {
+                if let Some(ty) = &l.type_annotation {
+                    refs.insert(ty.name.as_str().to_string());
+                }
+                if let Some(val) = &l.value {
+                    match val {
+                        LetValue::Node(n) => collect_from_element_node(n, &mut refs),
+                        LetValue::Expr(e) => collect_from_expr(e, &mut refs),
+                    }
+                }
+            }
+            Item::Env(env) => {
+                if let Some(ty) = &env.type_annotation {
+                    refs.insert(ty.name.as_str().to_string());
+                }
+                if let Some(e) = &env.value {
+                    collect_from_expr(e, &mut refs);
+                }
+            }
+            Item::State(s) => {
+                if let Some(ty) = &s.type_annotation {
+                    refs.insert(ty.name.as_str().to_string());
+                }
+                if let Some(e) = &s.default {
+                    collect_from_expr(e, &mut refs);
+                }
+            }
+            _ => {}
+        }
+        for r in refs {
+            if available_components.contains_key(&r) {
+                worklist.push(r);
+            }
+        }
+    }
+
+    while let Some(comp_name) = worklist.pop() {
+        if reachable.insert(comp_name.clone()) {
+            if let Some(overloads) = available_components.get(&comp_name) {
+                for o in overloads {
+                    let mut refs = HashSet::new();
+                    collect_referenced_component_names(o, &mut refs);
+                    for r in refs {
+                        if available_components.contains_key(&r) && !reachable.contains(&r) {
+                            worklist.push(r);
                         }
                     }
                 }
             }
         }
+    }
 
-        // Generate module unique hash
-        let mut hasher = DefaultHasher::new();
-        canonical_path.hash(&mut hasher);
-        let path_hash = hasher.finish();
+    // Generate module unique hash
+    let mut hasher = DefaultHasher::new();
+    canonical_path.hash(&mut hasher);
+    let path_hash = hasher.finish();
 
-        // Mangle unexported internal helper components and track alias renames
-        let mut renames: HashMap<String, String> = HashMap::new();
-        for comp_name in &reachable {
-            let is_exported = u.items.iter().any(|it| it.name.as_str() == comp_name);
-            if !is_exported {
-                let mangled = format!("__dt_{:x}_{}", path_hash, comp_name);
-                renames.insert(comp_name.clone(), mangled);
-            }
+    // Mangle unexported internal/transitive helper components
+    let mut renames: HashMap<String, String> = HashMap::new();
+    for comp_name in &reachable {
+        if !exported_comp_names.contains(comp_name) && !comp_name.starts_with("__dt_") {
+            let mangled = format!("__dt_{:x}_{}", path_hash, comp_name);
+            renames.insert(comp_name.clone(), mangled);
         }
+    }
 
-        // Register unexported helper components under mangled names
-        for (original_name, mangled_name) in &renames {
-            if let Some(overloads) = imported_components.get(original_name) {
+    // Register unexported reachable helper components under their mangled names
+    for comp_name in &reachable {
+        if !exported_comp_names.contains(comp_name) {
+            if let Some(overloads) = available_components.get(comp_name) {
+                let target_name = renames.get(comp_name).unwrap_or(comp_name);
                 for o in overloads {
                     let mut comp = o.clone();
                     rewrite_component_node_names(&mut comp, &renames);
-                    comp.name = Ident::new(mangled_name.clone(), comp.name.span);
+                    comp.name = Ident::new(target_name.clone(), comp.name.span);
                     register_component_overload(registry, comp)?;
                 }
             }
         }
+    }
 
-        // Register exported component symbols under their imported/aliased names
+    // Register exported components under their imported/aliased names
+    if !u.items.is_empty() {
         for use_item in &u.items {
             let symbol_name = use_item.name.as_str();
             let target_name = use_item.bound_name();
@@ -669,88 +772,102 @@ fn resolve_use_decl<R: FileResolver>(
                     rewrite_component_node_names(&mut comp, &local_renames);
                     comp.name = Ident::new(
                         target_name,
-                        use_item.alias.as_ref().map(|a| a.span).unwrap_or(use_item.name.span),
+                        use_item
+                            .alias
+                            .as_ref()
+                            .map(|a| a.span)
+                            .unwrap_or(use_item.name.span),
                     );
                     register_component_overload(registry, comp)?;
                 }
             }
         }
-    } else if let Some(alias) = &u.alias {
-        for item in &imported_doc.items {
-            if let Item::Enum(e) = item {
-                let mut aliased_enum = e.clone();
-                aliased_enum.name = alias.clone();
-                imported_items.push(Item::Enum(aliased_enum));
+    } else if let Some((original_name, alias_name, alias_span, target_comps)) = aliased_target_comp
+    {
+        for target_comp in target_comps {
+            let mut comp = target_comp.clone();
+            let mut local_renames = renames.clone();
+            if original_name != alias_name {
+                local_renames.insert(original_name.clone(), alias_name.clone());
             }
-        }
-
-        let alias_name = alias.as_str();
-        let file_stem = raw_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
-
-        if !imported_components.is_empty() {
-            let (original_name, target_comps) = if let Some(comps) = imported_components.get(file_stem) {
-                (file_stem.to_string(), comps.clone())
-            } else if imported_components.len() == 1 {
-                let (name, comps) = imported_components.iter().next().unwrap();
-                (name.clone(), comps.clone())
-            } else if let Some(comps) = imported_components.get(alias_name) {
-                (alias_name.to_string(), comps.clone())
-            } else {
-                return Err(CompileError::ImportError {
-                    path: u.path.clone(),
-                    message: format!(
-                        "Cannot alias import '{}' as '{}': file defines {} components ({:?}) and none matches file stem '{}'",
-                        u.path,
-                        alias_name,
-                        imported_components.len(),
-                        imported_components.keys().collect::<Vec<_>>(),
-                        file_stem
-                    ),
-                    span: alias.span,
-                });
-            };
-
-            for target_comp in target_comps {
-                let mut aliased = target_comp.clone();
-                aliased.name = Ident::new(alias_name, alias.span);
-                register_component_overload(registry, aliased)?;
-            }
-
-            // Also bring in transitive dependencies needed by target_comp
-            for (name, comps) in &imported_components {
-                if name != &original_name {
-                    for comp in comps {
-                        register_component_overload(registry, comp.clone())?;
-                    }
-                }
-            }
+            rewrite_component_node_names(&mut comp, &local_renames);
+            comp.name = Ident::new(&alias_name, alias_span);
+            register_component_overload(registry, comp)?;
         }
     } else {
-        if is_first_visit {
-            for item in &imported_doc.items {
-                match item {
-                    Item::Let(l) => {
-                        imported_items.push(Item::Let(l.clone()));
-                    }
-                    Item::Env(e) => {
-                        imported_items.push(Item::Env(e.clone()));
-                    }
-                    Item::Enum(e) => {
-                        imported_items.push(Item::Enum(e.clone()));
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        // No alias: import all components defined in the file
         for (_name, comps) in imported_components {
-            for comp in comps {
+            for mut comp in comps {
+                rewrite_component_node_names(&mut comp, &renames);
                 register_component_overload(registry, comp)?;
             }
+        }
+    }
+
+    // Rewrite and push exported top-level items (deduplicated)
+    for mut item in exported_top_items {
+        match &mut item {
+            Item::Let(target_let) => {
+                if let Some(ty) = &mut target_let.type_annotation {
+                    if let Some(new_name) = renames.get(ty.name.as_str()) {
+                        if !new_name.starts_with("__dt_") {
+                            ty.name = Ident::new(new_name, ty.name.span);
+                        }
+                    }
+                }
+                if let Some(val) = &mut target_let.value {
+                    match val {
+                        LetValue::Node(n) => rewrite_element_node(n, &renames),
+                        LetValue::Expr(e) => rewrite_expr(e, &renames),
+                    }
+                }
+                if !imported_items.iter().any(|existing| {
+                    matches!(existing, Item::Let(ex_l) if ex_l.name.as_str() == target_let.name.as_str() && ex_l.span == target_let.span)
+                }) {
+                    imported_items.push(item);
+                }
+            }
+            Item::Env(target_env) => {
+                if let Some(ty) = &mut target_env.type_annotation {
+                    if let Some(new_name) = renames.get(ty.name.as_str()) {
+                        if !new_name.starts_with("__dt_") {
+                            ty.name = Ident::new(new_name, ty.name.span);
+                        }
+                    }
+                }
+                if let Some(e) = &mut target_env.value {
+                    rewrite_expr(e, &renames);
+                }
+                if !imported_items.iter().any(|existing| {
+                    matches!(existing, Item::Env(ex_env) if ex_env.name.as_str() == target_env.name.as_str() && ex_env.span == target_env.span)
+                }) {
+                    imported_items.push(item);
+                }
+            }
+            Item::State(target_state) => {
+                if let Some(ty) = &mut target_state.type_annotation {
+                    if let Some(new_name) = renames.get(ty.name.as_str()) {
+                        if !new_name.starts_with("__dt_") {
+                            ty.name = Ident::new(new_name, ty.name.span);
+                        }
+                    }
+                }
+                if let Some(e) = &mut target_state.default {
+                    rewrite_expr(e, &renames);
+                }
+                if !imported_items.iter().any(|existing| {
+                    matches!(existing, Item::State(ex_s) if ex_s.name.as_str() == target_state.name.as_str() && ex_s.span == target_state.span)
+                }) {
+                    imported_items.push(item);
+                }
+            }
+            Item::Enum(target_enum) => {
+                if !imported_items.iter().any(|existing| {
+                    matches!(existing, Item::Enum(ex_e) if ex_e.name.as_str() == target_enum.name.as_str())
+                }) {
+                    imported_items.push(item);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -869,7 +986,9 @@ fn rewrite_component_node_names(comp: &mut ComponentDef, renames: &HashMap<Strin
     for param in &mut comp.params {
         if let Some(ty) = &mut param.type_annotation {
             if let Some(new_name) = renames.get(ty.name.as_str()) {
-                ty.name = Ident::new(new_name, ty.name.span);
+                if !new_name.starts_with("__dt_") {
+                    ty.name = Ident::new(new_name, ty.name.span);
+                }
             }
         }
         if let Some(default_edge) = &mut param.default_edge {
@@ -887,7 +1006,9 @@ fn rewrite_content_item(item: &mut ContentItem, renames: &HashMap<String, String
         ContentItem::Let(l) => {
             if let Some(ty) = &mut l.type_annotation {
                 if let Some(new_name) = renames.get(ty.name.as_str()) {
-                    ty.name = Ident::new(new_name, ty.name.span);
+                    if !new_name.starts_with("__dt_") {
+                        ty.name = Ident::new(new_name, ty.name.span);
+                    }
                 }
             }
             if let Some(val) = &mut l.value {
@@ -905,7 +1026,9 @@ fn rewrite_content_item(item: &mut ContentItem, renames: &HashMap<String, String
         ContentItem::Alias(a) => {
             if let Some(ty) = &mut a.type_annotation {
                 if let Some(new_name) = renames.get(ty.name.as_str()) {
-                    ty.name = Ident::new(new_name, ty.name.span);
+                    if !new_name.starts_with("__dt_") {
+                        ty.name = Ident::new(new_name, ty.name.span);
+                    }
                 }
             }
             rewrite_expr(&mut a.value, renames);
@@ -914,7 +1037,9 @@ fn rewrite_content_item(item: &mut ContentItem, renames: &HashMap<String, String
         ContentItem::State(s) => {
             if let Some(ty) = &mut s.type_annotation {
                 if let Some(new_name) = renames.get(ty.name.as_str()) {
-                    ty.name = Ident::new(new_name, ty.name.span);
+                    if !new_name.starts_with("__dt_") {
+                        ty.name = Ident::new(new_name, ty.name.span);
+                    }
                 }
             }
             if let Some(e) = &mut s.default {
@@ -924,7 +1049,9 @@ fn rewrite_content_item(item: &mut ContentItem, renames: &HashMap<String, String
         ContentItem::Env(env) => {
             if let Some(ty) = &mut env.type_annotation {
                 if let Some(new_name) = renames.get(ty.name.as_str()) {
-                    ty.name = Ident::new(new_name, ty.name.span);
+                    if !new_name.starts_with("__dt_") {
+                        ty.name = Ident::new(new_name, ty.name.span);
+                    }
                 }
             }
             if let Some(e) = &mut env.value {

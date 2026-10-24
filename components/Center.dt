@@ -2,7 +2,6 @@
 // Declarative container that centers its single child along both horizontal and vertical axes.
 // Anchors the child with minimum left/top alignment when available bounds are smaller than the child,
 // and caps width and height on the lower end by the dimensions of its child.
-\use "components/CenterNoClamp.dt"
 
 // 1. Explicit Spatial Bounds Center
 \Component Center(

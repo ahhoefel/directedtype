@@ -1,5 +1,6 @@
 \use "components/PadOut.dt"
 \use "components/VStack.dt"
+\use "components/VStackStretch.dt"
 \use "components/HStack.dt"
 \use "components/Card.dt"
 \use "components/CardStyle.dt"

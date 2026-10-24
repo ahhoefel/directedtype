@@ -2,7 +2,7 @@
 // Showcases hardware pointer capture, smooth dragging, and strongly-typed callbacks.
 
 \use "../components/PadOut.dt"
-\use "../components/HCenter.dt"
+\use "../components/HCenterUp.dt"
 \use "../components/VStack.dt"
 \use "../components/HStack.dt"
 \use "../components/Card.dt"

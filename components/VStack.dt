@@ -1,7 +1,6 @@
 // DirectedType Standard Component Library: VStack
 // Vertically stacked flow container with cross-axis alignment and child spacing (gap).
 \use "components/Align.dt"
-\use "components/VStackStretch.dt"
 
 // 1. Explicit Fixed Width & Fixed Height VStack: supports explicit bounds in both dimensions
 \Component VStack(

@@ -2,6 +2,7 @@
 // Showcases interactive variants, intrinsic text-metric sizing, and ambient Card surfaces.
 
 \use "../components/VStack.dt"
+\use "../components/VStackStretch.dt"
 \use "../components/HStack.dt"
 \use "../components/Card.dt"
 \use "../components/Button.dt"

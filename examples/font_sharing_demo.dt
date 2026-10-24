@@ -3,6 +3,7 @@
 // and typographic vertical centering using font.cap_height.
 
 \use "components/VStack.dt"
+\use "components/VStackStretch.dt"
 \use "components/Card.dt"
 \use "components/CardStyle.dt"
 

@@ -1,7 +1,6 @@
 // DirectedType Standard Component Library: HStack
 // Horizontally stacked flow container with cross-axis alignment and child spacing (gap).
 \use "components/Align.dt"
-\use "components/HStackStretch.dt"
 
 // 1. Explicit Fixed Width & Fixed Height HStack: supports cross-axis alignment
 \Component HStack(

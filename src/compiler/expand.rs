@@ -87,7 +87,11 @@ impl StaticType {
             _ => {
                 if enums.contains_key(name) {
                     Ok(StaticType::Enum(name.to_string()))
-                } else if registry.contains_key(name) {
+                } else if registry.contains_key(name)
+                    || registry
+                        .keys()
+                        .any(|k| crate::compiler::graph::unmangle_component_name(k) == name)
+                {
                     Ok(StaticType::Node(name.to_string()))
                 } else {
                     Err(CompileError::Custom {
@@ -226,7 +230,8 @@ fn validate_node_type_annotation(
     if let Some(ty_ref) = type_annotation {
         let expected =
             StaticType::from_type_name(ty_ref.name.as_str(), ty_ref.span, enums, registry)?;
-        let actual = StaticType::Node(elem_name.to_string());
+        let actual_name = crate::compiler::graph::unmangle_component_name(elem_name);
+        let actual = StaticType::Node(actual_name.to_string());
         if !actual.matches(&expected) {
             return Err(CompileError::TypeMismatch {
                 expected: expected.canonical_name(),
@@ -1486,7 +1491,8 @@ fn expand_element(
     }
 
     let node_id = NodeId(doc.nodes.len());
-    let mut expanded = ExpandedNode::new(node_id, elem.name.as_str(), elem.span);
+    let unmangled_elem_name = crate::compiler::graph::unmangle_component_name(elem.name.as_str());
+    let mut expanded = ExpandedNode::new(node_id, unmangled_elem_name, elem.span);
     expanded.handle = elem.handle;
     expanded.parent = ctx.parent_id;
     expanded.prev_sibling = ctx.prev_sibling_id;
@@ -7361,7 +7367,12 @@ fn infer_expr_type(
                     if let Some(builtin) = known_builtin_port_type(node_name, m.member.as_str()) {
                         return Ok(builtin);
                     }
-                    if let Some(overloads) = registry.get(node_name) {
+                    if let Some(overloads) = registry.get(node_name).or_else(|| {
+                        registry.iter().find_map(|(k, v)| {
+                            (crate::compiler::graph::unmangle_component_name(k) == node_name)
+                                .then_some(v)
+                        })
+                    }) {
                         for comp in overloads {
                             if let Some(param) =
                                 comp.params.iter().find(|p| p.name.as_str() == m.member.as_str())

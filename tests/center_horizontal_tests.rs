@@ -45,7 +45,7 @@ fn test_center_horizontal_inside_padding() {
     let input = r#"
     \use "components/PadIn.dt"
     \use "components/PadOut.dt"
-    \use "components/HCenter.dt"
+    \use "components/HCenterUp.dt"
 
     \PadIn(padding_x: 40px) {
         \HCenterUp {

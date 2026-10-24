@@ -123,7 +123,7 @@ fn test_padout_asymmetric_wrapping_hstack() {
 fn test_padin_asymmetric_insetting_vstack() {
     let input = r#"
     \use "components/PadIn.dt"
-    \use "components/VStack.dt"
+    \use "components/VStackStretch.dt"
 
     \PadIn(padding_x: 20px, padding_y: 24px, x: 10px, y: 20px) {
         \VStackStretch(gap: 16px) {

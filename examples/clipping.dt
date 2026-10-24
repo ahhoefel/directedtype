@@ -1,5 +1,6 @@
 // DirectedType (DTML) Clipping & Environmental Clip Contexts Example
 \use "components/VStack.dt"
+\use "components/VStackStretch.dt"
 
 // A rounded viewport container that establishes a GPU hardware clip boundary
 \Component ScrollView(
