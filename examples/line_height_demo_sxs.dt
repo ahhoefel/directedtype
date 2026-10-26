@@ -26,7 +26,7 @@
 }
 
 \Center{
-    \VStack(shrink: true, gap: 50px) {
+    \VStack(gap: 50px) {
         \Box(width: 1000px, height: 160px, font: \Font(family: "Arial", size: 120px, weight: 700))
         \Box(width: 1000px, height: 160px, font: \Font(family: "Times New Roman", size: 120px, weight: 700))
         \Box(width: 1000px, height: 160px, font: \Font(family: "Georgia", size: 120px, weight: 700))

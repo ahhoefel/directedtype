@@ -70,7 +70,7 @@
 
 \Center {
     \PadOut(padding_y: 30px) {
-        \VStack(shrink: true, gap: 50px) {
+        \VStack(gap: 50px) {
             \Box(width: 1000px, height: 200px, font: \Font(family: "Arial", size: 120px, line_height: 180px, weight: 700))
             \Box(width: 1000px, height: 200px, font: \Font(family: "Times New Roman", size: 120px, line_height: 180px, weight: 700))
             \Box(width: 1000px, height: 200px, font: \Font(family: "Georgia", size: 120px, line_height: 180px, weight: 700))

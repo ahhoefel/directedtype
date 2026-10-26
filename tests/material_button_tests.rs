@@ -386,25 +386,27 @@ fn test_material_gallery_cards_contain_contents_when_narrow() {
         "card_outlined_text_colors",
         "card_sizes",
         "card_widths",
+        "card_paper_elevations",
+        "card_paper_variants",
     ];
 
     for key in card_keys {
         let card_node = compiled
             .find_by_key(None, &ComponentKey::string(key))
-            .unwrap_or_else(|| panic!("Card '{}' found", key));
+            .unwrap_or_else(|| panic!("Paper '{}' found", key));
         let card_layout = compiled.layout.get_node(card_node.id).unwrap();
         let card_right = card_layout.rect.x + card_layout.rect.width;
 
-        // Every direct child of the card must fit inside the card's horizontal padding (20px)
+        // Every direct child of the Paper must fit inside its horizontal padding (20px)
         for child_id in &card_node.children {
             let child_layout = compiled.layout.get_node(*child_id).unwrap();
-            if child_layout.name == "Rect" {
-                continue; // card background rect itself
+            if child_layout.name == "Rect" || child_layout.name == "Shadow" {
+                continue;
             }
             let child_right = child_layout.rect.x + child_layout.rect.width;
             assert!(
                 card_right >= child_right + 19.5,
-                "Card '{}' right edge ({}) must contain child '{}' right edge ({}) + 20px padding",
+                "Paper '{}' right edge ({}) must contain child '{}' right edge ({}) + 20px padding",
                 key,
                 card_right,
                 child_layout.name,
@@ -426,4 +428,108 @@ fn test_material_gallery_cards_contain_contents_when_narrow() {
         content_w
     );
 }
+
+#[test]
+fn test_material_paper_variants_and_shadows() {
+    let input = r#"
+    \use "components/VStack.dt"
+    \use "components/material/Paper.dt"
+
+    // 1. Width pulled up from single child
+    \Paper("pulled_up"; elevation: 4, padding_x: 16px, padding_y: 12px) {
+        \VStack(gap: 8px) {
+            \Rect(width: 120px, height: 30px, color: #1976d2)
+            \Rect(width: 180px, height: 40px, color: #9c27b0)
+        }
+    }
+
+    // 2. Width pushed down to single child
+    \Paper("pushed_down"; width: 300px, y: 120px, variant: PaperVariant.Outlined, square: true, padding_x: 20px, padding_y: 10px) {
+        \VStack(gap: 10px) {
+            \Rect(width: parent.width, height: 50px, color: #2e7d32)
+        }
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile Paper ok");
+
+    // Verify pulled-up Paper dimensions: width = 180 + 2*16 = 212, height = (30 + 40 + 8) + 2*12 = 102
+    let pulled_up = compiled
+        .find_by_key(None, &ComponentKey::string("pulled_up"))
+        .unwrap();
+    let pulled_up_layout = compiled.layout.get_node(pulled_up.id).unwrap();
+    assert_eq!(pulled_up_layout.rect.width, 212.0);
+    assert_eq!(pulled_up_layout.rect.height, 102.0);
+
+    let pulled_up_rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.parent == Some(pulled_up.id) && n.name == "Rect")
+        .unwrap();
+    assert_eq!(
+        pulled_up_rect.properties.get("radius").and_then(|v| v.as_f64()),
+        Some(4.0)
+    );
+    assert_eq!(
+        pulled_up_rect.properties.get("border_width").and_then(|v| v.as_f64()),
+        Some(0.0)
+    );
+    assert!(
+        pulled_up_rect
+            .properties
+            .get("shadow_blur")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0)
+            > 0.0
+    );
+
+    // Verify pushed-down Outlined + Square Paper: width = 300, inner VStack width = 300 - 2*20 = 260
+    let pushed_down = compiled
+        .find_by_key(None, &ComponentKey::string("pushed_down"))
+        .unwrap();
+    let pushed_down_layout = compiled.layout.get_node(pushed_down.id).unwrap();
+    assert_eq!(pushed_down_layout.rect.width, 300.0);
+    assert_eq!(pushed_down_layout.rect.height, 70.0);
+
+    let pushed_down_rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.parent == Some(pushed_down.id) && n.name == "Rect")
+        .unwrap();
+    assert_eq!(
+        pushed_down_rect.properties.get("radius").and_then(|v| v.as_f64()),
+        Some(0.0)
+    );
+    assert_eq!(
+        pushed_down_rect.properties.get("border_width").and_then(|v| v.as_f64()),
+        Some(1.0)
+    );
+    assert_eq!(
+        pushed_down_rect.properties.get("shadow_blur").and_then(|v| v.as_f64()),
+        Some(0.0)
+    );
+
+    // Verify scene builds cleanly with blurred rounded rect shadows
+    let mut font_cx = parley::FontContext::new();
+    let mut layout_cx = parley::LayoutContext::new();
+    let _scene = directedtype::render::build_scene_without_cache(
+        &compiled.layout,
+        &mut font_cx,
+        &mut layout_cx,
+        &directedtype::render::SceneOptions::default(),
+    );
+}
+
 

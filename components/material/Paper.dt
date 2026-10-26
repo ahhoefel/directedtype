@@ -1,0 +1,117 @@
+// DirectedType Material UI Component Library: Paper
+// Foundational Material Design surface container with elevation shadows and outlined variant.
+// Reference: https://github.com/mui/material-ui/blob/master/packages/mui-material/src/Paper/Paper.js
+\use "components/Shadow.dt"
+
+\Enum PaperVariant {
+    Elevation,
+    Outlined
+}
+
+// 1. Width Pushed Down: explicit `width` parameter pushed down to single child
+\Component Paper(
+    width: Distance,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    variant: PaperVariant = PaperVariant.Elevation,
+    elevation: Integer = 1,
+    square: Boolean = false,
+    radius: Distance = 4px,
+    bg: Color = #ffffff,
+    border_color: Color = #0000001f,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 16px
+) {
+    \assert children.len == 1 as "Should have only one child.";
+
+    \let is_outlined = variant == PaperVariant.Outlined;
+    \let eff_elev = is_outlined ? 0 : min(24, max(0, elevation));
+    \let has_shadow = eff_elev > 0;
+    \let resolved_radius = square ? 0 : radius;
+    \let resolved_border_width = is_outlined ? 1px : 0;
+
+    \alias right = x + width;
+    \alias height = only(children.height) + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \let paper_shadow = \Shadow(
+        offset_x: 0,
+        offset_y: has_shadow ? (1px + (eff_elev * 0.75px)) : 0,
+        blur: has_shadow ? (3px + (eff_elev * 1.8px)) : 0,
+        spread: 0,
+        color: has_shadow ? #0000002e : #00000000
+    );
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg,
+        radius: resolved_radius,
+        border_color: border_color,
+        border_width: resolved_border_width,
+        shadow: paper_shadow
+    )
+
+    \let inner_width = width - (2 * padding_x);
+
+    \Children(
+        x: x + padding_x,
+        y: y + padding_y,
+        width: inner_width
+    )
+}
+
+// 2. Width Pulled Up: width and height derived bottom-up from single child
+\Component Paper(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    variant: PaperVariant = PaperVariant.Elevation,
+    elevation: Integer = 1,
+    square: Boolean = false,
+    radius: Distance = 4px,
+    bg: Color = #ffffff,
+    border_color: Color = #0000001f,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 16px
+) {
+    \assert children.len == 1 as "Should have only one child.";
+
+    \let is_outlined = variant == PaperVariant.Outlined;
+    \let eff_elev = is_outlined ? 0 : min(24, max(0, elevation));
+    \let has_shadow = eff_elev > 0;
+    \let resolved_radius = square ? 0 : radius;
+    \let resolved_border_width = is_outlined ? 1px : 0;
+
+    \alias width = only(children.width) + (2 * padding_x);
+    \alias right = x + width;
+    \alias height = only(children.height) + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \let paper_shadow = \Shadow(
+        offset_x: 0,
+        offset_y: has_shadow ? (1px + (eff_elev * 0.75px)) : 0,
+        blur: has_shadow ? (3px + (eff_elev * 1.8px)) : 0,
+        spread: 0,
+        color: has_shadow ? #0000002e : #00000000
+    );
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg,
+        radius: resolved_radius,
+        border_color: border_color,
+        border_width: resolved_border_width,
+        shadow: paper_shadow
+    )
+
+    \Children(
+        x: x + padding_x,
+        y: y + padding_y
+    )
+}
+

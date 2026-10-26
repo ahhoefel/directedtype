@@ -218,11 +218,16 @@ fn test_vstack_default_zero_gap() {
 }
 
 #[test]
-fn test_vstack_standalone_without_width_rejected() {
+fn test_vstack_standalone_without_width_shrink_wraps_and_supports_min_width() {
     let input = r#"
     \use "components/VStack.dt"
 
-    \VStack(gap: 12px) {
+    \VStack("natural"; gap: 12px) {
+        \Rect(width: 80px, height: 30px, color: #3b82f6)
+        \Rect(width: 90px, height: 40px, color: #10b981)
+    }
+
+    \VStack("clamped"; min_width: 240px, gap: 12px) {
         \Rect(width: 80px, height: 30px, color: #3b82f6)
         \Rect(width: 90px, height: 40px, color: #10b981)
     }
@@ -230,7 +235,7 @@ fn test_vstack_standalone_without_width_rejected() {
 
     let doc = parse(input).expect("parse ok");
     let registry = ComponentRegistry::standard();
-    let err = CompiledDocument::compile_with_registry(
+    let compiled = CompiledDocument::compile_with_registry(
         &doc,
         800.0,
         600.0,
@@ -238,15 +243,17 @@ fn test_vstack_standalone_without_width_rejected() {
         &directedtype::compiler::FsResolver,
         &registry,
     )
-    .expect_err("Standalone VStack without width or shrink must fail compilation");
+    .expect("Standalone VStack without width selects bottom-up overload");
 
-    match err {
-        directedtype::compiler::CompileError::NoMatchingOverload(details) => {
-            assert_eq!(details.name, "VStack");
-            assert!(details.provided_ports.contains(&"gap".to_string()));
-        }
-        _ => panic!("Expected NoMatchingOverload for VStack, got {:?}", err),
-    }
+    let vstacks: Vec<_> = compiled
+        .layout
+        .nodes
+        .iter()
+        .filter(|n| n.name == "VStack")
+        .collect();
+    assert_eq!(vstacks.len(), 2);
+    assert_eq!(vstacks[0].rect.width, 90.0);
+    assert_eq!(vstacks[1].rect.width, 240.0);
 }
 
 #[test]
@@ -255,7 +262,7 @@ fn test_vstack_shrink_wrap_width() {
     \use "components/VStack.dt"
     \use "components/Align.dt"
 
-    \VStack(shrink: true, x: 20px, y: 30px, gap: 10px, align: Align.Center) {
+    \VStack(x: 20px, y: 30px, gap: 10px, align: Align.Center) {
         \Rect(width: 140px, height: 40px, color: #3b82f6)
         \Rect(width: 200px, height: 50px, color: #10b981)
         \Rect(width: 80px, height: 30px, color: #f59e0b)
@@ -326,7 +333,7 @@ fn test_vstack_inside_center_shrink_wrap_no_cycle() {
     \use "components/VStack.dt"
 
     \Center {
-        \VStack(shrink: true, gap: 10px) {
+        \VStack(gap: 10px) {
             \Rect(width: 200px, height: 50px, color: #ef4444)
             \Rect(width: 150px, height: 60px, color: #22c55e)
         }

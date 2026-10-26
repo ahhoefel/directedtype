@@ -54,26 +54,28 @@
     )
 }
 
-// 3. Intrinsic Shrink-Wrapping Width VStack: wraps width to widest child
+// 3. Intrinsic / Content-Fitting Width VStack: wraps width to widest child (or min_width)
 \Component VStack(
-    shrink: Boolean,
     x: Distance = parent.left,
     y: Distance = parent.top,
+    min_width: Distance = 0,
     gap: Distance = 0,
     align: Align = Align.Left
 ) {
     \alias max_child_width = max(children.width);
+    \let content_width = max_child_width > 0 ? max_child_width : 0;
+    \let resolved_width = max(min_width, content_width);
     \let is_center = align == Align.Center;
     \let is_right = align == Align.Right;
 
-    \alias width = max_child_width > 0 ? max_child_width : 0;
+    \alias width = resolved_width;
     \alias right = x + width;
     \alias height = sum(children.height) + max(0, children.len - 1) * gap;
     \alias bottom = y + height;
 
     \Children(
-        x: is_center ? (x + (max_child_width - child.width) / 2) : (
-            is_right ? (x + max_child_width - child.width) : (
+        x: is_center ? (x + (resolved_width - child.width) / 2) : (
+            is_right ? (x + resolved_width - child.width) : (
                 x
             )
         ),
@@ -81,4 +83,5 @@
         text_align: align
     )
 }
+
 

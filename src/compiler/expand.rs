@@ -392,6 +392,65 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
             span: doc.span,
         }]
     });
+    registry.entry("Shadow".to_string()).or_insert_with(|| {
+        vec![ComponentDef {
+            name: Ident::new("Shadow", doc.span),
+            params: vec![
+                ParamDef {
+                    name: Ident::new("offset_x", doc.span),
+                    type_annotation: Some(TypeRef {
+                        name: Ident::new("Distance", doc.span),
+                        span: doc.span,
+                    }),
+                    default_edge: Some(Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, doc.span))),
+                    is_env: false,
+                    span: doc.span,
+                },
+                ParamDef {
+                    name: Ident::new("offset_y", doc.span),
+                    type_annotation: Some(TypeRef {
+                        name: Ident::new("Distance", doc.span),
+                        span: doc.span,
+                    }),
+                    default_edge: Some(Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, doc.span))),
+                    is_env: false,
+                    span: doc.span,
+                },
+                ParamDef {
+                    name: Ident::new("blur", doc.span),
+                    type_annotation: Some(TypeRef {
+                        name: Ident::new("Distance", doc.span),
+                        span: doc.span,
+                    }),
+                    default_edge: Some(Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, doc.span))),
+                    is_env: false,
+                    span: doc.span,
+                },
+                ParamDef {
+                    name: Ident::new("spread", doc.span),
+                    type_annotation: Some(TypeRef {
+                        name: Ident::new("Distance", doc.span),
+                        span: doc.span,
+                    }),
+                    default_edge: Some(Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, doc.span))),
+                    is_env: false,
+                    span: doc.span,
+                },
+                ParamDef {
+                    name: Ident::new("color", doc.span),
+                    type_annotation: Some(TypeRef {
+                        name: Ident::new("Color", doc.span),
+                        span: doc.span,
+                    }),
+                    default_edge: Some(Expr::Literal(Literal::Color("#00000000".to_string(), doc.span))),
+                    is_env: false,
+                    span: doc.span,
+                },
+            ],
+            body: Vec::new(),
+            span: doc.span,
+        }]
+    });
 
     let mut known_enums = all_module_enums;
     for (k, v) in &enums {
@@ -4387,7 +4446,7 @@ fn expand_primitive_element(
                     consumer_children: None,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
-                if inline_elem.name.as_str() != "Font" && inline_elem.name.as_str() != "TextBounds" {
+                if !matches!(inline_elem.name.as_str(), "Font" | "TextBounds" | "Shadow") {
                     child_ids.push(child_id);
                     last_child_id = Some(child_id);
                 }
@@ -4619,6 +4678,10 @@ fn expand_primitive_element(
                 | "border_width"
                 | "thickness"
                 | "stroke_width"
+                | "shadow_offset_x"
+                | "shadow_offset_y"
+                | "shadow_blur"
+                | "shadow_spread"
                 | "scroll_x"
                 | "scroll_y"
         ) {
@@ -5140,6 +5203,23 @@ fn expand_primitive_element(
                         span: elem.span,
                     }),
                 );
+            }
+        }
+    }
+
+    if elem.name.as_str() == "Rect" {
+        if let Some(sh_target) = ports.get("shadow").cloned() {
+            for field in ["offset_x", "offset_y", "blur", "spread", "color"] {
+                let prop_name = format!("shadow_{field}");
+                if !ports.contains_key(&prop_name) {
+                    let member_expr = Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(sh_target.clone()),
+                        member: Ident::new(field, elem.span),
+                        span: elem.span,
+                    });
+                    ports.insert(prop_name.clone(), member_expr.clone());
+                    authored_ports.insert(prop_name, member_expr);
+                }
             }
         }
     }
@@ -7075,11 +7155,17 @@ fn known_builtin_port_type(node_name: &str, port_name: &str) -> Option<StaticTyp
         | "head_length"
         | "head_width"
         | "length"
+        | "shadow_offset_x"
+        | "shadow_offset_y"
+        | "shadow_blur"
+        | "shadow_spread"
         | "scroll_x"
         | "scroll_y" => Some(StaticType::Distance),
         "z" | "weight" => Some(StaticType::Integer),
         "opacity" => Some(StaticType::Float),
-        "color" | "bg_color" | "border_color" | "stroke_color" => Some(StaticType::Color),
+        "color" | "bg_color" | "border_color" | "stroke_color" | "shadow_color" => {
+            Some(StaticType::Color)
+        }
         "family" | "text" | "content" | "cursor" | "url" | "name" | "path" | "id" => {
             Some(StaticType::String)
         }
@@ -7087,6 +7173,7 @@ fn known_builtin_port_type(node_name: &str, port_name: &str) -> Option<StaticTyp
         "clip" | "up" => Some(StaticType::Node("Clip".to_string())),
         "font" => Some(StaticType::Node("Font".to_string())),
         "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
+        "shadow" => Some(StaticType::Node("Shadow".to_string())),
         "start_at" => Some(StaticType::Enum("TextStart".to_string())),
         "end_at" => Some(StaticType::Enum("TextEnd".to_string())),
         "cap" | "line_cap" => Some(StaticType::Enum("LineCap".to_string())),

@@ -1,0 +1,11 @@
+// DirectedType Standard Component Library: Shadow
+// Styling bundle defining a blurred drop shadow for \Rect primitives.
+
+\Component Shadow(
+    offset_x: Distance = 0,
+    offset_y: Distance = 0,
+    blur: Distance = 0,
+    spread: Distance = 0,
+    color: Color = #00000000
+) {}
+

@@ -1684,7 +1684,7 @@ fn test_component_overload_signature_in_resolved_node() {
 \VStack("fixed_width"; x: 0, y: 220px, width: 300px) {
     \Rect(width: 100px, height: 40px, color: #10b981)
 }
-\VStack("shrink_wrap"; x: 0, y: 300px, shrink: true) {
+\VStack("shrink_wrap"; x: 0, y: 300px) {
     \Rect(width: 100px, height: 40px, color: #f59e0b)
 }
 "#;
@@ -1695,7 +1695,7 @@ fn test_component_overload_signature_in_resolved_node() {
     assert_eq!(vstacks.len(), 3);
     assert_eq!(vstacks[0].overload_signature(), r#"\VStack(width, height)"#);
     assert_eq!(vstacks[1].overload_signature(), r#"\VStack(width)"#);
-    assert_eq!(vstacks[2].overload_signature(), r#"\VStack(shrink)"#);
+    assert_eq!(vstacks[2].overload_signature(), r#"\VStack()"#);
 }
 
 #[test]

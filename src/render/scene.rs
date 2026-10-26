@@ -528,6 +528,72 @@ pub fn build_scene(
             let x1 = x0 + node.rect.width;
             let y1 = y0 + node.rect.height;
 
+            // Drop shadow (from \Shadow bundle or direct shadow_* properties)
+            if let Some(Value::Color(sc) | Value::String(sc)) = node.properties.get("shadow_color") {
+                let shadow_color = parse_color(sc);
+                if shadow_color.components[3] > 0.0 {
+                    let dx = node
+                        .properties
+                        .get("shadow_offset_x")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0);
+                    let dy = node
+                        .properties
+                        .get("shadow_offset_y")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0);
+                    let blur = node
+                        .properties
+                        .get("shadow_blur")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0);
+                    let spread = node
+                        .properties
+                        .get("shadow_spread")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0);
+
+                    if blur > 0.0 || spread != 0.0 || dx != 0.0 || dy != 0.0 {
+                        let sx0 = x0 + dx - spread;
+                        let sy0 = y0 + dy - spread;
+                        let sx1 = x1 + dx + spread;
+                        let sy1 = y1 + dy + spread;
+                        if sx1 > sx0 && sy1 > sy0 {
+                            let base_radius = tl.max(tr).max(br).max(bl);
+                            let shadow_radius = (base_radius + spread).max(0.0);
+                            let std_dev = (blur * 0.5).max(0.0);
+                            let shadow_rect = Rect::new(sx0, sy0, sx1, sy1);
+                            if std_dev > 0.0 {
+                                active_scene.draw_blurred_rounded_rect(
+                                    Affine::IDENTITY,
+                                    shadow_rect,
+                                    shadow_color,
+                                    shadow_radius,
+                                    std_dev,
+                                );
+                            } else if shadow_radius > 0.0 {
+                                let rrect = RoundedRect::new(sx0, sy0, sx1, sy1, shadow_radius);
+                                active_scene.fill(
+                                    Fill::NonZero,
+                                    Affine::IDENTITY,
+                                    Brush::Solid(shadow_color),
+                                    None,
+                                    &rrect,
+                                );
+                            } else {
+                                active_scene.fill(
+                                    Fill::NonZero,
+                                    Affine::IDENTITY,
+                                    Brush::Solid(shadow_color),
+                                    None,
+                                    &shadow_rect,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
             if color.components[3] > 0.0 {
                 if has_radius {
                     let rrect = RoundedRect::new(x0, y0, x1, y1, radii);

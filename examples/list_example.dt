@@ -5,7 +5,7 @@
 \env font = \Font(family: "Arial", size: 16px);
 \let inset = 20px;
 
-\VStack(shrink:true, x:10px, y:10px, gap: 10px){
+\VStack(x:10px, y:10px, gap: 10px){
     \List(inset, width: 200px, gap: 10px, item_gap: 10px, bullet_type: BulletType.Bullet) {
         \Item{One}
         \Item{Two}
