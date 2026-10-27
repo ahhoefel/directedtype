@@ -215,6 +215,8 @@ pub struct ResolvedNode {
     pub font: Option<NodeId>,
     pub var_name: Option<String>,
     pub overload_params: Vec<String>,
+    pub unfiltered_ports: HashMap<String, Expr>,
+    pub skipped_upstream: HashMap<String, Vec<VarId>>,
 }
 
 impl ResolvedNode {
@@ -799,6 +801,8 @@ pub fn resolve_layout(
             font,
             var_name: node.var_name.clone(),
             overload_params: node.overload_params.clone(),
+            unfiltered_ports: node.unfiltered_ports.clone(),
+            skipped_upstream: node.skipped_upstream.clone(),
         });
     }
 

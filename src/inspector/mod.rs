@@ -11,7 +11,7 @@ pub use components::{
 };
 pub use model::{
     build_property_dag_trace, format_dag_expr, BoxModelValues, DagPropertyTrace,
-    DagTraceDependency, InspectTargetInfo, PortEquationEntry, PortOriginKind,
+    DagTraceDependency, EquationSpan, InspectTargetInfo, PortEquationEntry, PortOriginKind,
 };
 pub use overlay::{InspectOverlayComponent, InspectOverlayStyle};
 pub use panel::{InspectPanelComponent, InspectorScrollbarKind, PanelHitResult};

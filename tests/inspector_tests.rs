@@ -1788,6 +1788,101 @@ fn test_inspect_component_env_properties() {
     }
 }
 
+#[test]
+fn test_inspector_skipped_upstream_and_strikethrough_spans() {
+    let source = r#"
+\use "components/Align.dt"
+\use "components/VStack.dt"
+\use "components/material/Divider.dt"
+
+\env font = \Font(size: 14px)
+
+\VStack("stack"; min_width: 260px) {
+    \Text("label";) { "Intrinsic Label" }
+    \Divider("div_center";) { "CENTER" }
+    \Divider("div_left"; text_align: Align.Left) { "LEFT" }
+}
+"#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document(&doc).expect("eval layout ok");
+
+    let stack_node = layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack found");
+    let label_node = layout.nodes.iter().find(|n| n.name == "Text").expect("Text found");
+    let div_nodes: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Divider").collect();
+    assert_eq!(div_nodes.len(), 2);
+
+    let trace = directedtype::inspector::build_property_dag_trace(&layout, stack_node.id, "max_child_width")
+        .expect("max_child_width trace must exist");
+
+    // 1. Equation spans should include the original authored formula prefix ("max(children.width) → ")
+    assert!(
+        trace.equation_spans.first().is_some_and(|s| s.is_authored_prefix && s.text == "max(children.width) → "),
+        "Expected authored prefix span 'max(children.width) → ', got: {:?}",
+        trace.equation_spans
+    );
+
+    // 2. Equation spans should contain the included Text.width (not struck through) and the two Divider.width args (struck through)
+    assert!(
+        trace.equation_spans.iter().any(|s| !s.strikethrough && s.text.contains("\\Text#label.width")),
+        "Expected non-strikethrough span containing \\Text#label.width, got: {:?}",
+        trace.equation_spans
+    );
+    let struck_spans: Vec<_> = trace.equation_spans.iter().filter(|s| s.strikethrough).collect();
+    assert_eq!(struck_spans.len(), 2, "Expected 2 strikethrough spans for skipped dividers: {:?}", trace.equation_spans);
+    assert_eq!(struck_spans[0].text, "\\Divider#div_center.width");
+    assert_eq!(struck_spans[1].text, "\\Divider#div_left.width");
+
+    // 3. Upstream dependencies vs Skipped upstream dependencies
+    assert_eq!(trace.upstream_dependencies.len(), 1);
+    assert_eq!(trace.upstream_dependencies[0].node_id, label_node.id);
+    assert_eq!(trace.upstream_dependencies[0].port_name, "width");
+
+    assert_eq!(trace.skipped_upstream_dependencies.len(), 2);
+    assert_eq!(trace.skipped_upstream_dependencies[0].node_id, div_nodes[0].id);
+    assert_eq!(trace.skipped_upstream_dependencies[0].port_name, "width");
+    assert_eq!(trace.skipped_upstream_dependencies[0].value_str, "260px");
+    assert_eq!(trace.skipped_upstream_dependencies[1].node_id, div_nodes[1].id);
+    assert_eq!(trace.skipped_upstream_dependencies[1].port_name, "width");
+    assert_eq!(trace.skipped_upstream_dependencies[1].value_str, "260px");
+
+    // 4. Panel hit-testing on UPSTREAM SKIPPED rows and headless rendering
+    let panel = directedtype::inspector::InspectPanelComponent::default();
+    let mut state = directedtype::inspector::InspectorState::new();
+    state.selected_id = Some(stack_node.id);
+    state.select_property(stack_node.id, "max_child_width");
+    let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
+
+    let win_h = 600.0;
+    let divider_y = panel.divider_y(win_h);
+    let detail_y = divider_y + panel.divider_height;
+    // Layout in property details:
+    // base_y + 10.0 + card (48.0 + 14.0) + UPSTREAM header (18.0) + 1 upstream row (18.0) + gap (10.0) + UPSTREAM SKIPPED header (18.0) + row 0 (18.0)
+    let skipped_row_0_y = detail_y + 10.0 + (48.0 + 14.0) + 18.0 + 18.0 + 10.0 + 18.0 + 5.0;
+    let hit = panel.handle_click(50.0, skipped_row_0_y, 0.0, win_h, &tree_items, &state, Some(&layout));
+    assert_eq!(
+        hit,
+        directedtype::inspector::PanelHitResult::PushProperty(
+            div_nodes[0].id,
+            "width".to_string(),
+            directedtype::inspector::PropertyTraceDirection::Upstream,
+        )
+    );
+
+    let mut scene = vello::Scene::new();
+    let mut font_cx = parley::FontContext::new();
+    let mut layout_cx = parley::LayoutContext::new();
+    panel.render_to_scene(
+        &mut scene,
+        0.0,
+        win_h,
+        &tree_items,
+        &state,
+        &layout,
+        &mut font_cx,
+        &mut layout_cx,
+    );
+}
+
 
 
 

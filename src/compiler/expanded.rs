@@ -68,6 +68,8 @@ pub struct ExpandedNode {
     pub is_component: bool,
     pub component_path: Option<String>,
     pub aggregated_ports: HashSet<String>,
+    pub unfiltered_ports: HashMap<String, Expr>,
+    pub skipped_upstream: HashMap<String, Vec<crate::compiler::graph::VarId>>,
 }
 
 impl ExpandedNode {
@@ -100,6 +102,8 @@ impl ExpandedNode {
             is_component: false,
             component_path: None,
             aggregated_ports: HashSet::new(),
+            unfiltered_ports: HashMap::new(),
+            skipped_upstream: HashMap::new(),
         }
     }
 

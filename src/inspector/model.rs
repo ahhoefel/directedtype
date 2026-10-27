@@ -240,6 +240,15 @@ pub struct DagTraceDependency {
     pub is_literal: bool,
 }
 
+/// A styled text span within a formatted DAG equation, supporting strike-through for skipped children
+/// and distinct styling for the original authored formula prefix.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EquationSpan {
+    pub text: String,
+    pub strikethrough: bool,
+    pub is_authored_prefix: bool,
+}
+
 /// Comprehensive DAG trace information for a specific property/port on a node.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DagPropertyTrace {
@@ -250,13 +259,117 @@ pub struct DagPropertyTrace {
     pub evaluated_value_str: String,
     pub value_type: String,
     pub equation_str: String,
+    pub equation_spans: Vec<EquationSpan>,
     pub origin_kind: PortOriginKind,
     pub origin_description: String,
     pub is_authored: bool,
     pub is_state: bool,
     pub upstream_dependencies: Vec<DagTraceDependency>,
+    pub skipped_upstream_dependencies: Vec<DagTraceDependency>,
     pub downstream_dependents: Vec<DagTraceDependency>,
     pub upstream_chain: Vec<DagTraceDependency>,
+}
+
+fn push_equation_span(
+    spans: &mut Vec<EquationSpan>,
+    text: impl Into<String>,
+    strikethrough: bool,
+    is_authored_prefix: bool,
+) {
+    let text = text.into();
+    if text.is_empty() {
+        return;
+    }
+    if let Some(last) = spans.last_mut() {
+        if last.strikethrough == strikethrough && last.is_authored_prefix == is_authored_prefix {
+            last.text.push_str(&text);
+            return;
+        }
+    }
+    spans.push(EquationSpan {
+        text,
+        strikethrough,
+        is_authored_prefix,
+    });
+}
+
+fn format_dag_expr_into_spans(
+    expr: &Expr,
+    layout: &ResolvedLayout,
+    skipped_set: &std::collections::HashSet<VarId>,
+    spans: &mut Vec<EquationSpan>,
+) {
+    match expr {
+        Expr::Literal(lit) => push_equation_span(spans, format!("{lit}"), false, false),
+        Expr::Ident(id) => {
+            let s = if id.as_str() == "__window" || id.as_str() == "window" {
+                "window".to_string()
+            } else if let Some(nid) = NodeId::from_canonical_name(id.as_str()) {
+                layout.node_display_label(nid)
+            } else {
+                id.to_string()
+            };
+            push_equation_span(spans, s, false, false);
+        }
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(id) = m.target.as_ref() {
+                if let Some(nid) = NodeId::from_canonical_name(id.as_str()) {
+                    let vid = VarId::new(nid, m.member.as_str());
+                    let is_skipped = skipped_set.contains(&vid);
+                    let s = format!("{}.{}", layout.node_display_label(nid), m.member);
+                    push_equation_span(spans, s, is_skipped, false);
+                    return;
+                }
+            }
+            format_dag_expr_into_spans(&m.target, layout, skipped_set, spans);
+            push_equation_span(spans, format!(".{}", m.member), false, false);
+        }
+        Expr::Binary(b) => {
+            format_dag_expr_into_spans(&b.left, layout, skipped_set, spans);
+            push_equation_span(spans, format!(" {} ", b.op), false, false);
+            format_dag_expr_into_spans(&b.right, layout, skipped_set, spans);
+        }
+        Expr::Unary(u) => {
+            push_equation_span(spans, format!("{}", u.op), false, false);
+            format_dag_expr_into_spans(&u.operand, layout, skipped_set, spans);
+        }
+        Expr::Call(c) => {
+            push_equation_span(spans, format!("{}(", c.callee), false, false);
+            for (idx, a) in c.args.iter().enumerate() {
+                if idx > 0 {
+                    push_equation_span(spans, ", ", false, false);
+                }
+                format_dag_expr_into_spans(a, layout, skipped_set, spans);
+            }
+            push_equation_span(spans, ")", false, false);
+        }
+        Expr::MethodCall(m) => {
+            format_dag_expr_into_spans(&m.target, layout, skipped_set, spans);
+            push_equation_span(spans, format!(".{}(", m.method), false, false);
+            for (idx, a) in m.args.iter().enumerate() {
+                if idx > 0 {
+                    push_equation_span(spans, ", ", false, false);
+                }
+                format_dag_expr_into_spans(a, layout, skipped_set, spans);
+            }
+            push_equation_span(spans, ")", false, false);
+        }
+        Expr::Ternary(t) => {
+            format_dag_expr_into_spans(&t.condition, layout, skipped_set, spans);
+            push_equation_span(spans, " ? ", false, false);
+            format_dag_expr_into_spans(&t.then_expr, layout, skipped_set, spans);
+            push_equation_span(spans, " : ", false, false);
+            format_dag_expr_into_spans(&t.else_expr, layout, skipped_set, spans);
+        }
+        Expr::Paren(inner, _) => {
+            push_equation_span(spans, "(", false, false);
+            format_dag_expr_into_spans(inner, layout, skipped_set, spans);
+            push_equation_span(spans, ")", false, false);
+        }
+        Expr::Node(node) => {
+            push_equation_span(spans, format!("\\{}(...)", node.name), false, false);
+        }
+    }
 }
 
 /// Formats an AST expression into a human-friendly equation string replacing canonical node IDs
@@ -387,21 +500,48 @@ pub fn build_property_dag_trace(
     let is_env = target_node_opt.is_some_and(|n| n.env_vars.contains_key(port));
     let is_authored = target_node_opt.is_some_and(|n| n.formulas.contains_key(port));
 
-    let equation_str = if let Some(graph) = &layout.graph {
-        if let Some(vnode) = graph.get_variable(&var_id) {
-            format_dag_expr(&vnode.equation, layout)
-        } else if let Some(n) = target_node_opt {
-            n.formulas.get(port).cloned().unwrap_or_else(|| evaluated_value_str.clone())
-        } else {
-            evaluated_value_str.clone()
+    let skipped_vars_list = target_node_opt
+        .and_then(|n| n.skipped_upstream.get(port))
+        .cloned()
+        .unwrap_or_default();
+    let skipped_set: std::collections::HashSet<VarId> = skipped_vars_list.iter().cloned().collect();
+
+    let authored_formula = target_node_opt.and_then(|n| n.formulas.get(port)).cloned();
+    let has_children_agg_formula = authored_formula
+        .as_deref()
+        .is_some_and(|f| f.contains("children."));
+
+    let mut equation_spans = Vec::new();
+    if has_children_agg_formula {
+        if let Some(ref af) = authored_formula {
+            push_equation_span(&mut equation_spans, format!("{af} → "), false, true);
         }
-    } else if let Some(n) = target_node_opt {
-        n.formulas.get(port).cloned().unwrap_or_else(|| evaluated_value_str.clone())
+    }
+
+    if let Some(unfilt_expr) = target_node_opt.and_then(|n| n.unfiltered_ports.get(port)) {
+        format_dag_expr_into_spans(unfilt_expr, layout, &skipped_set, &mut equation_spans);
+    } else if let Some(graph) = &layout.graph {
+        if let Some(vnode) = graph.get_variable(&var_id) {
+            format_dag_expr_into_spans(&vnode.equation, layout, &skipped_set, &mut equation_spans);
+        } else if let Some(ref af) = authored_formula {
+            equation_spans.clear();
+            push_equation_span(&mut equation_spans, af.clone(), false, false);
+        } else {
+            equation_spans.clear();
+            push_equation_span(&mut equation_spans, evaluated_value_str.clone(), false, false);
+        }
+    } else if let Some(ref af) = authored_formula {
+        equation_spans.clear();
+        push_equation_span(&mut equation_spans, af.clone(), false, false);
     } else {
-        evaluated_value_str.clone()
-    };
+        equation_spans.clear();
+        push_equation_span(&mut equation_spans, evaluated_value_str.clone(), false, false);
+    }
+
+    let equation_str: String = equation_spans.iter().map(|s| s.text.as_str()).collect();
 
     let mut upstream_dependencies = Vec::new();
+    let mut skipped_upstream_dependencies = Vec::new();
     let mut downstream_dependents = Vec::new();
     let mut upstream_chain = Vec::new();
 
@@ -428,6 +568,29 @@ pub fn build_property_dag_trace(
                     is_literal: is_lit,
                 });
             }
+        }
+
+        for dep in &skipped_vars_list {
+            let dep_label = layout.node_display_label(dep.node);
+            let dep_val = layout
+                .get_value(dep.node, &dep.port)
+                .or_else(|| layout.values.get(dep))
+                .map(|v| format!("{v}"))
+                .unwrap_or_else(|| "-".to_string());
+            let dep_eq = if let Some(vnode) = graph.get_variable(dep) {
+                format_dag_expr(&vnode.equation, layout)
+            } else {
+                String::new()
+            };
+            let is_lit = graph.upstream.get(dep).map_or(true, |u| u.is_empty());
+            skipped_upstream_dependencies.push(DagTraceDependency {
+                node_id: dep.node,
+                port_name: dep.port.clone(),
+                node_label: dep_label,
+                value_str: dep_val,
+                equation_str: dep_eq,
+                is_literal: is_lit,
+            });
         }
 
         if let Some(deps) = graph.downstream.get(&var_id) {
@@ -561,11 +724,13 @@ pub fn build_property_dag_trace(
         evaluated_value_str,
         value_type,
         equation_str,
+        equation_spans,
         origin_kind,
         origin_description,
         is_authored,
         is_state,
         upstream_dependencies,
+        skipped_upstream_dependencies,
         downstream_dependents,
         upstream_chain,
     })

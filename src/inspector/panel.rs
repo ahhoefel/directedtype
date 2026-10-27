@@ -180,6 +180,9 @@ impl InspectPanelComponent {
                         || st.property_trace_direction == Some(PropertyTraceDirection::Downstream);
                     if show_upstream {
                         h += 18.0 + trace.upstream_dependencies.len().max(1) as f64 * 18.0 + 10.0;
+                        if !trace.skipped_upstream_dependencies.is_empty() {
+                            h += 18.0 + trace.skipped_upstream_dependencies.len() as f64 * 18.0 + 10.0;
+                        }
                     }
                     if show_downstream {
                         h += 18.0 + trace.downstream_dependents.len().max(1) as f64 * 18.0 + 10.0;
@@ -274,7 +277,7 @@ impl InspectPanelComponent {
                         let show_downstream = stack.len() < 2
                             || st.property_trace_direction == Some(PropertyTraceDirection::Downstream);
                         if show_upstream {
-                            for dep in &trace.upstream_dependencies {
+                            for dep in trace.upstream_dependencies.iter().chain(trace.skipped_upstream_dependencies.iter()) {
                                 let has_formula = !dep.equation_str.is_empty() && dep.equation_str != dep.value_str;
                                 let mut w = 24.0 + (dep.node_label.len() + 1 + dep.port_name.len()) as f64 * 8.0 + dep.value_str.len() as f64 * 8.0 + 40.0;
                                 if has_formula {
@@ -556,6 +559,22 @@ impl InspectPanelComponent {
                                     cur_y += 18.0 + 10.0;
                                 } else {
                                     for dep in &trace.upstream_dependencies {
+                                        let row_h = 18.0;
+                                        if py >= cur_y && py < cur_y + row_h {
+                                            return PanelHitResult::PushProperty(
+                                                dep.node_id,
+                                                dep.port_name.clone(),
+                                                PropertyTraceDirection::Upstream,
+                                            );
+                                        }
+                                        cur_y += row_h;
+                                    }
+                                    cur_y += 10.0;
+                                }
+
+                                if !trace.skipped_upstream_dependencies.is_empty() {
+                                    cur_y += 18.0; // "UPSTREAM SKIPPED" header
+                                    for dep in &trace.skipped_upstream_dependencies {
                                         let row_h = 18.0;
                                         if py >= cur_y && py < cur_y + row_h {
                                             return PanelHitResult::PushProperty(
@@ -2243,19 +2262,56 @@ impl InspectPanelComponent {
                 cur_y + 7.0,
             );
 
-            // Line 2: Formula (no "Formula:" prefix)
-            self.draw_text_snippet(
-                scene,
-                font_cx,
-                layout_cx,
-                &trace.equation_str,
-                10.0,
-                FontWeight::NORMAL,
-                Color::from_rgb8(203, 213, 225), // slate 300
-                true,
-                card_x + 12.0,
-                cur_y + 26.0,
-            );
+            // Line 2: Formula spans (with strike-through on skipped children and authored prefix)
+            let mut eq_x = card_x + 12.0;
+            let eq_y = cur_y + 26.0;
+            if trace.equation_spans.is_empty() {
+                self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    &trace.equation_str,
+                    10.0,
+                    FontWeight::NORMAL,
+                    Color::from_rgb8(203, 213, 225), // slate 300
+                    true,
+                    eq_x,
+                    eq_y,
+                );
+            } else {
+                for span in &trace.equation_spans {
+                    let col = if span.strikethrough {
+                        Color::from_rgb8(248, 113, 113) // red 400
+                    } else if span.is_authored_prefix {
+                        Color::from_rgb8(148, 163, 184) // slate 400
+                    } else {
+                        Color::from_rgb8(203, 213, 225) // slate 300
+                    };
+                    let adv = self.draw_text_snippet(
+                        scene,
+                        font_cx,
+                        layout_cx,
+                        &span.text,
+                        10.0,
+                        FontWeight::NORMAL,
+                        col,
+                        true,
+                        eq_x,
+                        eq_y,
+                    );
+                    if span.strikethrough && adv > 0.0 {
+                        let strike_y = eq_y + 6.5;
+                        scene.stroke(
+                            &Stroke::new(1.25),
+                            Affine::IDENTITY,
+                            Brush::Solid(Color::from_rgb8(248, 113, 113)),
+                            None,
+                            &Line::new((eq_x, strike_y), (eq_x + adv, strike_y)),
+                        );
+                    }
+                    eq_x += adv;
+                }
+            }
 
             if idx + 1 < stack.len() {
                 cur_y += card_h + 8.0;
@@ -2345,6 +2401,140 @@ impl InspectPanelComponent {
                         prop_x + 12.0,
                         cur_y + 1.5,
                     );
+
+                    let sep_adv = self.draw_text_snippet(
+                        scene,
+                        font_cx,
+                        layout_cx,
+                        ": ",
+                        10.5,
+                        FontWeight::NORMAL,
+                        Color::from_rgb8(100, 116, 139), // slate 500
+                        true,
+                        prop_x + 12.0 + name_adv,
+                        cur_y + 1.5,
+                    );
+
+                    let mut val_x = prop_x + 12.0 + name_adv + sep_adv;
+
+                    if let Some(swatch_col) = parse_hex_color(&dep.value_str) {
+                        let swatch_rrect = RoundedRect::new(val_x, cur_y + 2.5, val_x + 11.0, cur_y + 13.5, 2.0);
+                        scene.fill(Fill::NonZero, Affine::IDENTITY, Brush::Solid(swatch_col), None, &swatch_rrect);
+                        let swatch_stroke = Stroke::new(1.0);
+                        scene.stroke(&swatch_stroke, Affine::IDENTITY, Brush::Solid(Color::from_rgb8(71, 85, 105)), None, &swatch_rrect);
+                        val_x += 16.0;
+                    }
+
+                    let val_col = if parse_hex_color(&dep.value_str).is_some() {
+                        Color::from_rgb8(241, 245, 249) // white
+                    } else if dep.value_str.starts_with('"') {
+                        Color::from_rgb8(251, 191, 36) // amber for strings
+                    } else {
+                        Color::from_rgb8(52, 211, 153) // emerald for numbers/bools
+                    };
+
+                    let val_adv = self.draw_text_snippet(
+                        scene,
+                        font_cx,
+                        layout_cx,
+                        &dep.value_str,
+                        10.5,
+                        FontWeight::BOLD,
+                        val_col,
+                        true,
+                        val_x,
+                        cur_y + 1.5,
+                    );
+
+                    if has_formula {
+                        let arrow_adv = self.draw_text_snippet(
+                            scene,
+                            font_cx,
+                            layout_cx,
+                            " ← ",
+                            10.5,
+                            FontWeight::NORMAL,
+                            Color::from_rgb8(100, 116, 139), // slate 500
+                            true,
+                            val_x + val_adv,
+                            cur_y + 1.5,
+                        );
+                        self.draw_text_snippet(
+                            scene,
+                            font_cx,
+                            layout_cx,
+                            &dep.equation_str,
+                            10.5,
+                            FontWeight::NORMAL,
+                            Color::from_rgb8(203, 213, 225), // slate 300
+                            true,
+                            val_x + val_adv + arrow_adv,
+                            cur_y + 1.5,
+                        );
+                    }
+
+                    cur_y += row_h;
+                }
+                cur_y += 10.0;
+            }
+
+            // 2b. Section: Upstream Skipped
+            if !trace.skipped_upstream_dependencies.is_empty() {
+                self.draw_text_snippet(
+                    scene,
+                    font_cx,
+                    layout_cx,
+                    "UPSTREAM SKIPPED",
+                    9.0,
+                    FontWeight::BOLD,
+                    Color::from_rgb8(248, 113, 113), // red 400
+                    false,
+                    base_x + 12.0,
+                    cur_y,
+                );
+                cur_y += 18.0;
+
+                for dep in &trace.skipped_upstream_dependencies {
+                    let row_h = 18.0;
+                    let prop_x = base_x + 12.0;
+                    let has_formula = !dep.equation_str.is_empty() && dep.equation_str != dep.value_str;
+
+                    self.draw_text_snippet(
+                        scene,
+                        font_cx,
+                        layout_cx,
+                        "↑",
+                        10.5,
+                        FontWeight::BOLD,
+                        Color::from_rgb8(248, 113, 113), // red 400
+                        true,
+                        prop_x,
+                        cur_y + 1.5,
+                    );
+
+                    let name_str = format!("{}.{}", dep.node_label, dep.port_name);
+                    let name_adv = self.draw_text_snippet(
+                        scene,
+                        font_cx,
+                        layout_cx,
+                        &name_str,
+                        10.5,
+                        FontWeight::BOLD,
+                        Color::from_rgb8(248, 113, 113), // red 400
+                        true,
+                        prop_x + 12.0,
+                        cur_y + 1.5,
+                    );
+                    if name_adv > 0.0 {
+                        let strike_y = cur_y + 8.5;
+                        scene.stroke(
+                            &Stroke::new(1.25),
+                            Affine::IDENTITY,
+                            Brush::Solid(Color::from_rgba8(248, 113, 113, 200)),
+                            None,
+                            &Line::new((prop_x + 12.0, strike_y), (prop_x + 12.0 + name_adv, strike_y)),
+                        );
+                    }
 
                     let sep_adv = self.draw_text_snippet(
                         scene,

@@ -4037,12 +4037,14 @@ fn resolve_and_filter_agg_expr(
     instantiated_children_ids: &[NodeId],
     parent_ports_by_member: &HashMap<String, HashSet<String>>,
     nodes: &[ExpandedNode],
-) -> Result<Expr, CompileError> {
+    skipped_out: &mut Vec<crate::compiler::graph::VarId>,
+) -> Result<(Expr, Expr), CompileError> {
     match expr {
         Expr::Call(call) => {
             let allow_filter = call.callee.as_str() != "only" || instantiated_children_ids.len() == 1;
             let mut new_args = Vec::with_capacity(call.args.len());
             let mut unfiltered_args = Vec::with_capacity(call.args.len());
+            let mut call_skipped = Vec::new();
             let mut had_filtered = false;
 
             for arg in &call.args {
@@ -4081,6 +4083,9 @@ fn resolve_and_filter_agg_expr(
                                                     nodes,
                                                 ) {
                                                     had_filtered = true;
+                                                    call_skipped.push(crate::compiler::graph::VarId::new(
+                                                        child_id, member,
+                                                    ));
                                                     continue;
                                                 }
                                             }
@@ -4094,7 +4099,7 @@ fn resolve_and_filter_agg_expr(
                         }
                     }
                 }
-                let resolved = resolve_and_filter_agg_expr(
+                let (filt, unfilt) = resolve_and_filter_agg_expr(
                     arg,
                     comp_id,
                     comp_name,
@@ -4102,37 +4107,54 @@ fn resolve_and_filter_agg_expr(
                     instantiated_children_ids,
                     parent_ports_by_member,
                     nodes,
+                    skipped_out,
                 )?;
-                unfiltered_args.push(resolved.clone());
-                new_args.push(resolved);
+                unfiltered_args.push(unfilt);
+                new_args.push(filt);
             }
 
             let final_args = if had_filtered && new_args.is_empty() {
-                unfiltered_args
+                unfiltered_args.clone()
             } else {
+                for v in call_skipped {
+                    if !skipped_out.contains(&v) {
+                        skipped_out.push(v);
+                    }
+                }
                 new_args
             };
 
-            Ok(Expr::Call(CallExpr {
-                callee: call.callee.clone(),
-                args: final_args,
-                span: call.span,
-            }))
+            Ok((
+                Expr::Call(CallExpr {
+                    callee: call.callee.clone(),
+                    args: final_args,
+                    span: call.span,
+                }),
+                Expr::Call(CallExpr {
+                    callee: call.callee.clone(),
+                    args: unfiltered_args,
+                    span: call.span,
+                }),
+            ))
         }
         Expr::MemberAccess(m) => {
-            let new_target = if let Expr::Ident(id) = m.target.as_ref() {
+            let (new_target, unfilt_target) = if let Expr::Ident(id) = m.target.as_ref() {
                 if let Some(idx_str) = id.as_str().strip_prefix(agg_prefix) {
                     if let Ok(idx) = idx_str.parse::<usize>() {
                         if let Some(&child_id) = instantiated_children_ids.get(idx) {
-                            Expr::Ident(Ident::new(child_id.canonical_name(), id.span))
+                            let resolved = Expr::Ident(Ident::new(child_id.canonical_name(), id.span));
+                            (resolved.clone(), resolved)
                         } else {
-                            m.target.as_ref().clone()
+                            let orig = m.target.as_ref().clone();
+                            (orig.clone(), orig)
                         }
                     } else {
-                        m.target.as_ref().clone()
+                        let orig = m.target.as_ref().clone();
+                        (orig.clone(), orig)
                     }
                 } else {
-                    m.target.as_ref().clone()
+                    let orig = m.target.as_ref().clone();
+                    (orig.clone(), orig)
                 }
             } else {
                 resolve_and_filter_agg_expr(
@@ -4143,16 +4165,24 @@ fn resolve_and_filter_agg_expr(
                     instantiated_children_ids,
                     parent_ports_by_member,
                     nodes,
+                    skipped_out,
                 )?
             };
-            Ok(Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(new_target),
-                member: m.member.clone(),
-                span: m.span,
-            }))
+            Ok((
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(new_target),
+                    member: m.member.clone(),
+                    span: m.span,
+                }),
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(unfilt_target),
+                    member: m.member.clone(),
+                    span: m.span,
+                }),
+            ))
         }
         Expr::MethodCall(mc) => {
-            let new_target = resolve_and_filter_agg_expr(
+            let (new_target, unfilt_target) = resolve_and_filter_agg_expr(
                 &mc.target,
                 comp_id,
                 comp_name,
@@ -4160,10 +4190,12 @@ fn resolve_and_filter_agg_expr(
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
+                skipped_out,
             )?;
             let mut new_args = Vec::with_capacity(mc.args.len());
+            let mut unfilt_args = Vec::with_capacity(mc.args.len());
             for a in &mc.args {
-                new_args.push(resolve_and_filter_agg_expr(
+                let (filt, unfilt) = resolve_and_filter_agg_expr(
                     a,
                     comp_id,
                     comp_name,
@@ -4171,18 +4203,28 @@ fn resolve_and_filter_agg_expr(
                     instantiated_children_ids,
                     parent_ports_by_member,
                     nodes,
-                )?);
+                    skipped_out,
+                )?;
+                new_args.push(filt);
+                unfilt_args.push(unfilt);
             }
-            Ok(Expr::MethodCall(MethodCallExpr {
-                target: Box::new(new_target),
-                method: mc.method.clone(),
-                args: new_args,
-                span: mc.span,
-            }))
+            Ok((
+                Expr::MethodCall(MethodCallExpr {
+                    target: Box::new(new_target),
+                    method: mc.method.clone(),
+                    args: new_args,
+                    span: mc.span,
+                }),
+                Expr::MethodCall(MethodCallExpr {
+                    target: Box::new(unfilt_target),
+                    method: mc.method.clone(),
+                    args: unfilt_args,
+                    span: mc.span,
+                }),
+            ))
         }
-        Expr::Binary(b) => Ok(Expr::Binary(BinaryExpr {
-            op: b.op,
-            left: Box::new(resolve_and_filter_agg_expr(
+        Expr::Binary(b) => {
+            let (l_filt, l_unfilt) = resolve_and_filter_agg_expr(
                 &b.left,
                 comp_id,
                 comp_name,
@@ -4190,8 +4232,9 @@ fn resolve_and_filter_agg_expr(
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
-            )?),
-            right: Box::new(resolve_and_filter_agg_expr(
+                skipped_out,
+            )?;
+            let (r_filt, r_unfilt) = resolve_and_filter_agg_expr(
                 &b.right,
                 comp_id,
                 comp_name,
@@ -4199,12 +4242,25 @@ fn resolve_and_filter_agg_expr(
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
-            )?),
-            span: b.span,
-        })),
-        Expr::Unary(u) => Ok(Expr::Unary(UnaryExpr {
-            op: u.op,
-            operand: Box::new(resolve_and_filter_agg_expr(
+                skipped_out,
+            )?;
+            Ok((
+                Expr::Binary(BinaryExpr {
+                    op: b.op,
+                    left: Box::new(l_filt),
+                    right: Box::new(r_filt),
+                    span: b.span,
+                }),
+                Expr::Binary(BinaryExpr {
+                    op: b.op,
+                    left: Box::new(l_unfilt),
+                    right: Box::new(r_unfilt),
+                    span: b.span,
+                }),
+            ))
+        }
+        Expr::Unary(u) => {
+            let (filt, unfilt) = resolve_and_filter_agg_expr(
                 &u.operand,
                 comp_id,
                 comp_name,
@@ -4212,11 +4268,23 @@ fn resolve_and_filter_agg_expr(
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
-            )?),
-            span: u.span,
-        })),
-        Expr::Ternary(t) => Ok(Expr::Ternary(TernaryExpr {
-            condition: Box::new(resolve_and_filter_agg_expr(
+                skipped_out,
+            )?;
+            Ok((
+                Expr::Unary(UnaryExpr {
+                    op: u.op,
+                    operand: Box::new(filt),
+                    span: u.span,
+                }),
+                Expr::Unary(UnaryExpr {
+                    op: u.op,
+                    operand: Box::new(unfilt),
+                    span: u.span,
+                }),
+            ))
+        }
+        Expr::Ternary(t) => {
+            let (c_filt, c_unfilt) = resolve_and_filter_agg_expr(
                 &t.condition,
                 comp_id,
                 comp_name,
@@ -4224,8 +4292,9 @@ fn resolve_and_filter_agg_expr(
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
-            )?),
-            then_expr: Box::new(resolve_and_filter_agg_expr(
+                skipped_out,
+            )?;
+            let (t_filt, t_unfilt) = resolve_and_filter_agg_expr(
                 &t.then_expr,
                 comp_id,
                 comp_name,
@@ -4233,8 +4302,9 @@ fn resolve_and_filter_agg_expr(
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
-            )?),
-            else_expr: Box::new(resolve_and_filter_agg_expr(
+                skipped_out,
+            )?;
+            let (e_filt, e_unfilt) = resolve_and_filter_agg_expr(
                 &t.else_expr,
                 comp_id,
                 comp_name,
@@ -4242,11 +4312,25 @@ fn resolve_and_filter_agg_expr(
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
-            )?),
-            span: t.span,
-        })),
-        Expr::Paren(inner, span) => Ok(Expr::Paren(
-            Box::new(resolve_and_filter_agg_expr(
+                skipped_out,
+            )?;
+            Ok((
+                Expr::Ternary(TernaryExpr {
+                    condition: Box::new(c_filt),
+                    then_expr: Box::new(t_filt),
+                    else_expr: Box::new(e_filt),
+                    span: t.span,
+                }),
+                Expr::Ternary(TernaryExpr {
+                    condition: Box::new(c_unfilt),
+                    then_expr: Box::new(t_unfilt),
+                    else_expr: Box::new(e_unfilt),
+                    span: t.span,
+                }),
+            ))
+        }
+        Expr::Paren(inner, span) => {
+            let (filt, unfilt) = resolve_and_filter_agg_expr(
                 inner,
                 comp_id,
                 comp_name,
@@ -4254,10 +4338,14 @@ fn resolve_and_filter_agg_expr(
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
-            )?),
-            *span,
-        )),
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => Ok(expr.clone()),
+                skipped_out,
+            )?;
+            Ok((
+                Expr::Paren(Box::new(filt), *span),
+                Expr::Paren(Box::new(unfilt), *span),
+            ))
+        }
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => Ok((expr.clone(), expr.clone())),
     }
 }
 
@@ -4393,12 +4481,12 @@ fn resolve_and_filter_component_aggregations(
             all_aggregated_ports.insert(p.clone());
         }
     }
-    if let Some(node) = doc.get_node_mut(comp_id) {
-        node.aggregated_ports = all_aggregated_ports;
-    }
 
-    for expr in rewritten_ports.values_mut() {
-        *expr = resolve_and_filter_agg_expr(
+    let mut comp_unfiltered_ports = HashMap::new();
+    let mut comp_skipped_upstream = HashMap::new();
+    for (port_name, expr) in rewritten_ports.iter_mut() {
+        let mut skipped_vars = Vec::new();
+        let (filt, unfilt) = resolve_and_filter_agg_expr(
             expr,
             comp_id,
             comp_name,
@@ -4406,14 +4494,29 @@ fn resolve_and_filter_component_aggregations(
             instantiated_children_ids,
             &parent_ports_by_member,
             &doc.nodes,
+            &mut skipped_vars,
         )?;
+        *expr = filt;
+        if !skipped_vars.is_empty() {
+            comp_unfiltered_ports.insert(port_name.clone(), unfilt);
+            comp_skipped_upstream.insert(port_name.clone(), skipped_vars);
+        }
+    }
+
+    if let Some(node) = doc.get_node_mut(comp_id) {
+        node.aggregated_ports = all_aggregated_ports;
+        node.unfiltered_ports = comp_unfiltered_ports;
+        node.skipped_upstream = comp_skipped_upstream;
     }
 
     let nodes_snapshot = doc.nodes.clone();
     for node_idx in start_node_idx..doc.nodes.len() {
         let node = &mut doc.nodes[node_idx];
-        for expr in node.ports.values_mut() {
-            *expr = resolve_and_filter_agg_expr(
+        let mut node_unfilt = HashMap::new();
+        let mut node_skipped = HashMap::new();
+        for (port_name, expr) in node.ports.iter_mut() {
+            let mut skipped_vars = Vec::new();
+            let (filt, unfilt) = resolve_and_filter_agg_expr(
                 expr,
                 comp_id,
                 comp_name,
@@ -4421,13 +4524,22 @@ fn resolve_and_filter_component_aggregations(
                 instantiated_children_ids,
                 &parent_ports_by_member,
                 &nodes_snapshot,
+                &mut skipped_vars,
             )?;
+            *expr = filt;
+            if !skipped_vars.is_empty() {
+                node_unfilt.insert(port_name.clone(), unfilt);
+                node_skipped.insert(port_name.clone(), skipped_vars);
+            }
         }
+        node.unfiltered_ports.extend(node_unfilt);
+        node.skipped_upstream.extend(node_skipped);
     }
 
     for binding_idx in start_local_bindings_idx..doc.local_bindings.len() {
         let (expr, _, _) = &mut doc.local_bindings[binding_idx];
-        *expr = resolve_and_filter_agg_expr(
+        let mut skipped_vars = Vec::new();
+        let (filt, _) = resolve_and_filter_agg_expr(
             expr,
             comp_id,
             comp_name,
@@ -4435,7 +4547,9 @@ fn resolve_and_filter_component_aggregations(
             instantiated_children_ids,
             &parent_ports_by_member,
             &doc.nodes,
+            &mut skipped_vars,
         )?;
+        *expr = filt;
     }
 
     Ok(())
