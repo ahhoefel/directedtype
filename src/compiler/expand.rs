@@ -3381,127 +3381,6 @@ fn expand_component_instance(
         }
     }
 
-    // Validate parameter types and coerce 0 -> 0px (for Distance) or Integer -> Float (for Float)
-    for param in &comp_def.params {
-        if let Some(type_ref) = &param.type_annotation {
-            let expected_type = type_ref.name.as_str();
-            let name = param.name.as_str();
-            let unlowered_lit = explicit_unlowered_ports
-                .get(name)
-                .or(param.default_edge.as_ref())
-                .and_then(|e| match e {
-                    Expr::Literal(lit) => Some(lit.clone()),
-                    _ => None,
-                });
-            if let Some(expr) = rewritten_ports.get_mut(name) {
-                if let Some(lit) = unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(expr, &scope_ctx)) {
-                    if !lit.matches_type_name(expected_type) {
-                        return Err(CompileError::TypeMismatch {
-                            expected: expected_type.to_string(),
-                            actual: lit.type_name().to_string(),
-                            span: expr.span(),
-                        });
-                    }
-                }
-                if expected_type == "Distance" {
-                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
-                        *expr = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, *span));
-                    }
-                } else if expected_type == "Area" {
-                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
-                        *expr = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, *span));
-                    }
-                } else if expected_type == "Float" {
-                    if let Expr::Literal(Literal::Integer(i, span)) = expr {
-                        *expr = Expr::Literal(Literal::Float(*i as f64, *span));
-                    }
-                } else if expected_type == "Integer" {
-                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
-                        *expr = Expr::Call(CallExpr {
-                            callee: Ident::new("to_integer", *span),
-                            args: vec![Expr::Literal(Literal::Integer(0, *span))],
-                            span: *span,
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    // Validate assertions in component body
-    let mut const_env = HashMap::new();
-    const_env.insert(
-        crate::compiler::graph::VarId::new(NodeId::WINDOW, "dpi"),
-        doc.window_ports
-            .get("dpi")
-            .and_then(|e| eval_expr(e, &HashMap::new()).ok())
-            .unwrap_or(crate::compiler::value::Value::Float(96.0)),
-    );
-    for n in &doc.nodes {
-        if n.name == "Font" {
-            if let Some(size_expr) = n.ports.get("size") {
-                if let Ok(val) = eval_expr(size_expr, &const_env) {
-                    const_env.insert(crate::compiler::graph::VarId::new(n.id, "size"), val);
-                }
-            }
-        }
-    }
-    for (port_name, port_expr) in rewritten_ports.iter() {
-        if let Some(states) = scope_ctx.declared_state_names {
-            if states.contains(port_name) {
-                continue;
-            }
-        }
-        if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, &scope_ctx) {
-            let val = match lit {
-                Literal::Integer(i, _) => crate::compiler::value::Value::Integer(i),
-                Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
-                Literal::Distance(d, _, _) => crate::compiler::value::Value::Distance(d),
-                Literal::Area(a, _, _) => crate::compiler::value::Value::Area(a),
-                Literal::String(s, _) => crate::compiler::value::Value::String(s),
-                Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
-                Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
-                Literal::Enum(e, v, _) => crate::compiler::value::Value::Enum { enum_name: e, variant: v },
-            };
-            const_env.insert(crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name), val.clone());
-            if let Some(parent) = ctx.parent_id {
-                const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
-            }
-        } else if let Ok(val) = eval_expr(port_expr, &const_env) {
-            const_env.insert(crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name), val.clone());
-            if let Some(parent) = ctx.parent_id {
-                const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
-            }
-        }
-    }
-
-    for item in &comp_def.body {
-        if let ComponentBodyItem::Assert(assert_dir) = item {
-            let mut rewritten = rewrite_expr(&assert_dir.condition, &scope_ctx)?;
-            rewritten = resolve_forward_scope_refs(&rewritten, &final_local_scope);
-            match eval_expr(&rewritten, &const_env) {
-                Ok(val) => {
-                    if !val.is_truthy() {
-                        let msg = assert_dir
-                            .message
-                            .clone()
-                            .unwrap_or_else(|| format!("Assertion failed: {}", assert_dir.condition));
-                        return Err(CompileError::AssertionFailed {
-                            message: msg,
-                            span: assert_dir.span,
-                        });
-                    }
-                }
-                Err(e) => {
-                    return Err(CompileError::Custom {
-                        message: format!("Could not evaluate assertion condition: {}", e),
-                        span: assert_dir.span,
-                    });
-                }
-            }
-        }
-    }
-
     let mut comp_authored_ports = HashMap::new();
     if let Some(ambient_map) = ctx.ambient_authored_ports {
         for (k, v) in ambient_map {
@@ -3671,6 +3550,168 @@ fn expand_component_instance(
         );
     }
 
+    resolve_and_filter_component_aggregations(
+        ctx.comp_node_id,
+        comp_def.name.as_str(),
+        &instantiated_children_ids,
+        &declared_state_names,
+        &mut rewritten_ports,
+        doc,
+        start_node_idx,
+        start_local_bindings_idx,
+    )?;
+
+    for (idx, &child_id) in instantiated_children_ids.iter().enumerate() {
+        final_local_scope.insert(
+            format!("__agg_child_of_{}_{}", ctx.comp_node_id.canonical_name(), idx),
+            LexicalBinding::Node(child_id),
+        );
+    }
+
+    let scope_ctx = ScopeContext {
+        current_node: ctx.comp_node_id,
+        parent_node: ctx.parent_id,
+        parent_name: ctx.parent_name,
+        prev_sibling: ctx.prev_sibling_id,
+        has_next_sibling: ctx.has_next_sibling,
+        child_ids: &instantiated_children_ids,
+        num_children: num_consumer_children,
+        child_node: None,
+        nodes: &doc.nodes,
+        shadowed_ports: Some(&comp_shadowed_ports),
+        is_event_port: false,
+        parent_ports: ctx.parent_ports,
+        current_ports: &comp_scope_ports,
+        lexical_scope: &final_local_scope,
+        env_scope: &internal_body_env_scope,
+        node_fonts: &*node_fonts,
+        enclosing_component: Some(ctx.comp_node_id),
+        comp_ports: Some(&comp_ports),
+        declared_state_names: Some(&declared_state_names),
+        enums: ctx.enums,
+    };
+
+    // Validate parameter types and coerce 0 -> 0px (for Distance) or Integer -> Float (for Float)
+    for param in &comp_def.params {
+        if let Some(type_ref) = &param.type_annotation {
+            let expected_type = type_ref.name.as_str();
+            let name = param.name.as_str();
+            let unlowered_lit = explicit_unlowered_ports
+                .get(name)
+                .or(param.default_edge.as_ref())
+                .and_then(|e| match e {
+                    Expr::Literal(lit) => Some(lit.clone()),
+                    _ => None,
+                });
+            if let Some(expr) = rewritten_ports.get_mut(name) {
+                if let Some(lit) = unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(expr, &scope_ctx)) {
+                    if !lit.matches_type_name(expected_type) {
+                        return Err(CompileError::TypeMismatch {
+                            expected: expected_type.to_string(),
+                            actual: lit.type_name().to_string(),
+                            span: expr.span(),
+                        });
+                    }
+                }
+                if expected_type == "Distance" {
+                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                        *expr = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, *span));
+                    }
+                } else if expected_type == "Area" {
+                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                        *expr = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, *span));
+                    }
+                } else if expected_type == "Float" {
+                    if let Expr::Literal(Literal::Integer(i, span)) = expr {
+                        *expr = Expr::Literal(Literal::Float(*i as f64, *span));
+                    }
+                } else if expected_type == "Integer" {
+                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                        *expr = Expr::Call(CallExpr {
+                            callee: Ident::new("to_integer", *span),
+                            args: vec![Expr::Literal(Literal::Integer(0, *span))],
+                            span: *span,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Validate assertions in component body
+    let mut const_env = HashMap::new();
+    const_env.insert(
+        crate::compiler::graph::VarId::new(NodeId::WINDOW, "dpi"),
+        doc.window_ports
+            .get("dpi")
+            .and_then(|e| eval_expr(e, &HashMap::new()).ok())
+            .unwrap_or(crate::compiler::value::Value::Float(96.0)),
+    );
+    for n in &doc.nodes {
+        if n.name == "Font" {
+            if let Some(size_expr) = n.ports.get("size") {
+                if let Ok(val) = eval_expr(size_expr, &const_env) {
+                    const_env.insert(crate::compiler::graph::VarId::new(n.id, "size"), val);
+                }
+            }
+        }
+    }
+    for (port_name, port_expr) in rewritten_ports.iter() {
+        if let Some(states) = scope_ctx.declared_state_names {
+            if states.contains(port_name) {
+                continue;
+            }
+        }
+        if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, &scope_ctx) {
+            let val = match lit {
+                Literal::Integer(i, _) => crate::compiler::value::Value::Integer(i),
+                Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
+                Literal::Distance(d, _, _) => crate::compiler::value::Value::Distance(d),
+                Literal::Area(a, _, _) => crate::compiler::value::Value::Area(a),
+                Literal::String(s, _) => crate::compiler::value::Value::String(s),
+                Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
+                Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
+                Literal::Enum(e, v, _) => crate::compiler::value::Value::Enum { enum_name: e, variant: v },
+            };
+            const_env.insert(crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name), val.clone());
+            if let Some(parent) = ctx.parent_id {
+                const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
+            }
+        } else if let Ok(val) = eval_expr(port_expr, &const_env) {
+            const_env.insert(crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name), val.clone());
+            if let Some(parent) = ctx.parent_id {
+                const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
+            }
+        }
+    }
+
+    for item in &comp_def.body {
+        if let ComponentBodyItem::Assert(assert_dir) = item {
+            let mut rewritten = rewrite_expr(&assert_dir.condition, &scope_ctx)?;
+            rewritten = resolve_forward_scope_refs(&rewritten, &final_local_scope);
+            match eval_expr(&rewritten, &const_env) {
+                Ok(val) => {
+                    if !val.is_truthy() {
+                        let msg = assert_dir
+                            .message
+                            .clone()
+                            .unwrap_or_else(|| format!("Assertion failed: {}", assert_dir.condition));
+                        return Err(CompileError::AssertionFailed {
+                            message: msg,
+                            span: assert_dir.span,
+                        });
+                    }
+                }
+                Err(e) => {
+                    return Err(CompileError::Custom {
+                        message: format!("Could not evaluate assertion condition: {}", e),
+                        span: assert_dir.span,
+                    });
+                }
+            }
+        }
+    }
+
     let mut node_port_types = HashMap::new();
     node_port_types.insert("clip".to_string(), "Clip".to_string());
     for sp in ["left", "top", "right", "bottom"] {
@@ -3743,6 +3784,659 @@ fn expand_component_instance(
     }
     node.port_types = node_port_types;
     node.ports = rewritten_ports;
+
+    Ok(())
+}
+
+fn collect_agg_members_and_parent_refs(
+    expr: &Expr,
+    agg_prefix: &str,
+    parent_canon: &str,
+    agg_members: &mut HashSet<String>,
+    parent_refs: &mut HashSet<String>,
+) {
+    match expr {
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(id) = m.target.as_ref() {
+                if id.as_str().starts_with(agg_prefix) {
+                    agg_members.insert(m.member.as_str().to_string());
+                } else if id.as_str() == parent_canon {
+                    parent_refs.insert(m.member.as_str().to_string());
+                }
+            }
+            collect_agg_members_and_parent_refs(&m.target, agg_prefix, parent_canon, agg_members, parent_refs);
+        }
+        Expr::Call(c) => {
+            for a in &c.args {
+                collect_agg_members_and_parent_refs(a, agg_prefix, parent_canon, agg_members, parent_refs);
+            }
+        }
+        Expr::MethodCall(mc) => {
+            collect_agg_members_and_parent_refs(&mc.target, agg_prefix, parent_canon, agg_members, parent_refs);
+            for a in &mc.args {
+                collect_agg_members_and_parent_refs(a, agg_prefix, parent_canon, agg_members, parent_refs);
+            }
+        }
+        Expr::Binary(b) => {
+            collect_agg_members_and_parent_refs(&b.left, agg_prefix, parent_canon, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&b.right, agg_prefix, parent_canon, agg_members, parent_refs);
+        }
+        Expr::Unary(u) => {
+            collect_agg_members_and_parent_refs(&u.operand, agg_prefix, parent_canon, agg_members, parent_refs);
+        }
+        Expr::Ternary(t) => {
+            collect_agg_members_and_parent_refs(&t.condition, agg_prefix, parent_canon, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&t.then_expr, agg_prefix, parent_canon, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&t.else_expr, agg_prefix, parent_canon, agg_members, parent_refs);
+        }
+        Expr::Paren(inner, _) => {
+            collect_agg_members_and_parent_refs(inner, agg_prefix, parent_canon, agg_members, parent_refs);
+        }
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => {}
+    }
+}
+
+fn scan_expr_for_parent_or_local_deps(
+    expr: &Expr,
+    parent_canon: &str,
+    agg_prefix: &str,
+    target_member: &str,
+    parent_ports_for_member: &HashSet<String>,
+    child_id: NodeId,
+    stack: &mut Vec<(NodeId, String)>,
+) -> bool {
+    match expr {
+        Expr::MemberAccess(ma) => {
+            if let Expr::Ident(id) = ma.target.as_ref() {
+                if id.as_str() == parent_canon {
+                    if parent_ports_for_member.contains(ma.member.as_str()) {
+                        return true;
+                    }
+                } else if id.as_str().starts_with(agg_prefix) && ma.member.as_str() == target_member {
+                    return true;
+                } else if let Some(target_node_id) = NodeId::from_canonical_name(id.as_str()) {
+                    if target_node_id.0 >= child_id.0 {
+                        stack.push((target_node_id, ma.member.as_str().to_string()));
+                    }
+                }
+            }
+            scan_expr_for_parent_or_local_deps(
+                &ma.target,
+                parent_canon,
+                agg_prefix,
+                target_member,
+                parent_ports_for_member,
+                child_id,
+                stack,
+            )
+        }
+        Expr::Call(c) => c.args.iter().any(|a| {
+            scan_expr_for_parent_or_local_deps(
+                a,
+                parent_canon,
+                agg_prefix,
+                target_member,
+                parent_ports_for_member,
+                child_id,
+                stack,
+            )
+        }),
+        Expr::MethodCall(mc) => {
+            scan_expr_for_parent_or_local_deps(
+                &mc.target,
+                parent_canon,
+                agg_prefix,
+                target_member,
+                parent_ports_for_member,
+                child_id,
+                stack,
+            ) || mc.args.iter().any(|a| {
+                scan_expr_for_parent_or_local_deps(
+                    a,
+                    parent_canon,
+                    agg_prefix,
+                    target_member,
+                    parent_ports_for_member,
+                    child_id,
+                    stack,
+                )
+            })
+        }
+        Expr::Binary(b) => {
+            scan_expr_for_parent_or_local_deps(
+                &b.left,
+                parent_canon,
+                agg_prefix,
+                target_member,
+                parent_ports_for_member,
+                child_id,
+                stack,
+            ) || scan_expr_for_parent_or_local_deps(
+                &b.right,
+                parent_canon,
+                agg_prefix,
+                target_member,
+                parent_ports_for_member,
+                child_id,
+                stack,
+            )
+        }
+        Expr::Unary(u) => scan_expr_for_parent_or_local_deps(
+            &u.operand,
+            parent_canon,
+            agg_prefix,
+            target_member,
+            parent_ports_for_member,
+            child_id,
+            stack,
+        ),
+        Expr::Ternary(t) => {
+            scan_expr_for_parent_or_local_deps(
+                &t.condition,
+                parent_canon,
+                agg_prefix,
+                target_member,
+                parent_ports_for_member,
+                child_id,
+                stack,
+            ) || scan_expr_for_parent_or_local_deps(
+                &t.then_expr,
+                parent_canon,
+                agg_prefix,
+                target_member,
+                parent_ports_for_member,
+                child_id,
+                stack,
+            ) || scan_expr_for_parent_or_local_deps(
+                &t.else_expr,
+                parent_canon,
+                agg_prefix,
+                target_member,
+                parent_ports_for_member,
+                child_id,
+                stack,
+            )
+        }
+        Expr::Paren(inner, _) => scan_expr_for_parent_or_local_deps(
+            inner,
+            parent_canon,
+            agg_prefix,
+            target_member,
+            parent_ports_for_member,
+            child_id,
+            stack,
+        ),
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => false,
+    }
+}
+
+fn child_port_depends_on_parent(
+    child_id: NodeId,
+    member: &str,
+    parent_id: NodeId,
+    agg_prefix: &str,
+    parent_ports_for_member: &HashSet<String>,
+    nodes: &[ExpandedNode],
+) -> bool {
+    let parent_canon = parent_id.canonical_name();
+    let mut visited: HashSet<(NodeId, String)> = HashSet::new();
+    let mut stack: Vec<(NodeId, String)> = Vec::new();
+    stack.push((child_id, member.to_string()));
+
+    while let Some((curr_id, curr_port)) = stack.pop() {
+        if !visited.insert((curr_id, curr_port.clone())) {
+            continue;
+        }
+        let Some(node) = nodes.get(curr_id.0) else {
+            continue;
+        };
+        if node.aggregated_ports.contains(&curr_port) {
+            continue;
+        }
+        let mut exprs_to_scan = Vec::new();
+        if let Some(e) = node.ports.get(&curr_port) {
+            exprs_to_scan.push(e);
+        } else if curr_port == "right" {
+            if let Some(e) = node.ports.get("x") {
+                exprs_to_scan.push(e);
+            }
+            if let Some(e) = node.ports.get("width") {
+                exprs_to_scan.push(e);
+            }
+        } else if curr_port == "bottom" {
+            if let Some(e) = node.ports.get("y") {
+                exprs_to_scan.push(e);
+            }
+            if let Some(e) = node.ports.get("height") {
+                exprs_to_scan.push(e);
+            }
+        }
+
+        for expr in exprs_to_scan {
+            if scan_expr_for_parent_or_local_deps(
+                expr,
+                &parent_canon,
+                agg_prefix,
+                member,
+                parent_ports_for_member,
+                child_id,
+                &mut stack,
+            ) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn resolve_and_filter_agg_expr(
+    expr: &Expr,
+    comp_id: NodeId,
+    comp_name: &str,
+    agg_prefix: &str,
+    instantiated_children_ids: &[NodeId],
+    parent_ports_by_member: &HashMap<String, HashSet<String>>,
+    nodes: &[ExpandedNode],
+) -> Result<Expr, CompileError> {
+    match expr {
+        Expr::Call(call) => {
+            let allow_filter = call.callee.as_str() != "only" || instantiated_children_ids.len() == 1;
+            let mut new_args = Vec::with_capacity(call.args.len());
+            let mut unfiltered_args = Vec::with_capacity(call.args.len());
+            let mut had_filtered = false;
+
+            for arg in &call.args {
+                if let Expr::MemberAccess(m) = arg {
+                    if let Expr::Ident(id) = m.target.as_ref() {
+                        if let Some(idx_str) = id.as_str().strip_prefix(agg_prefix) {
+                            if let Ok(idx) = idx_str.parse::<usize>() {
+                                if let Some(&child_id) = instantiated_children_ids.get(idx) {
+                                    let member = m.member.as_str();
+                                    let resolved_arg = Expr::MemberAccess(MemberAccessExpr {
+                                        target: Box::new(Expr::Ident(Ident::new(
+                                            child_id.canonical_name(),
+                                            id.span,
+                                        ))),
+                                        member: m.member.clone(),
+                                        span: m.span,
+                                    });
+                                    unfiltered_args.push(resolved_arg.clone());
+
+                                    if allow_filter {
+                                        if let Some(base_parent_ports) = parent_ports_by_member.get(member) {
+                                            if !base_parent_ports.is_empty() {
+                                                let mut parent_ports = base_parent_ports.clone();
+                                                if member == "width" && parent_ports.contains("width") {
+                                                    parent_ports.insert("right".to_string());
+                                                } else if member == "height" && parent_ports.contains("height") {
+                                                    parent_ports.insert("bottom".to_string());
+                                                }
+
+                                                if child_port_depends_on_parent(
+                                                    child_id,
+                                                    member,
+                                                    comp_id,
+                                                    agg_prefix,
+                                                    &parent_ports,
+                                                    nodes,
+                                                ) {
+                                                    had_filtered = true;
+                                                    continue;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    new_args.push(resolved_arg);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+                let resolved = resolve_and_filter_agg_expr(
+                    arg,
+                    comp_id,
+                    comp_name,
+                    agg_prefix,
+                    instantiated_children_ids,
+                    parent_ports_by_member,
+                    nodes,
+                )?;
+                unfiltered_args.push(resolved.clone());
+                new_args.push(resolved);
+            }
+
+            let final_args = if had_filtered && new_args.is_empty() {
+                unfiltered_args
+            } else {
+                new_args
+            };
+
+            Ok(Expr::Call(CallExpr {
+                callee: call.callee.clone(),
+                args: final_args,
+                span: call.span,
+            }))
+        }
+        Expr::MemberAccess(m) => {
+            let new_target = if let Expr::Ident(id) = m.target.as_ref() {
+                if let Some(idx_str) = id.as_str().strip_prefix(agg_prefix) {
+                    if let Ok(idx) = idx_str.parse::<usize>() {
+                        if let Some(&child_id) = instantiated_children_ids.get(idx) {
+                            Expr::Ident(Ident::new(child_id.canonical_name(), id.span))
+                        } else {
+                            m.target.as_ref().clone()
+                        }
+                    } else {
+                        m.target.as_ref().clone()
+                    }
+                } else {
+                    m.target.as_ref().clone()
+                }
+            } else {
+                resolve_and_filter_agg_expr(
+                    &m.target,
+                    comp_id,
+                    comp_name,
+                    agg_prefix,
+                    instantiated_children_ids,
+                    parent_ports_by_member,
+                    nodes,
+                )?
+            };
+            Ok(Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(new_target),
+                member: m.member.clone(),
+                span: m.span,
+            }))
+        }
+        Expr::MethodCall(mc) => {
+            let new_target = resolve_and_filter_agg_expr(
+                &mc.target,
+                comp_id,
+                comp_name,
+                agg_prefix,
+                instantiated_children_ids,
+                parent_ports_by_member,
+                nodes,
+            )?;
+            let mut new_args = Vec::with_capacity(mc.args.len());
+            for a in &mc.args {
+                new_args.push(resolve_and_filter_agg_expr(
+                    a,
+                    comp_id,
+                    comp_name,
+                    agg_prefix,
+                    instantiated_children_ids,
+                    parent_ports_by_member,
+                    nodes,
+                )?);
+            }
+            Ok(Expr::MethodCall(MethodCallExpr {
+                target: Box::new(new_target),
+                method: mc.method.clone(),
+                args: new_args,
+                span: mc.span,
+            }))
+        }
+        Expr::Binary(b) => Ok(Expr::Binary(BinaryExpr {
+            op: b.op,
+            left: Box::new(resolve_and_filter_agg_expr(
+                &b.left,
+                comp_id,
+                comp_name,
+                agg_prefix,
+                instantiated_children_ids,
+                parent_ports_by_member,
+                nodes,
+            )?),
+            right: Box::new(resolve_and_filter_agg_expr(
+                &b.right,
+                comp_id,
+                comp_name,
+                agg_prefix,
+                instantiated_children_ids,
+                parent_ports_by_member,
+                nodes,
+            )?),
+            span: b.span,
+        })),
+        Expr::Unary(u) => Ok(Expr::Unary(UnaryExpr {
+            op: u.op,
+            operand: Box::new(resolve_and_filter_agg_expr(
+                &u.operand,
+                comp_id,
+                comp_name,
+                agg_prefix,
+                instantiated_children_ids,
+                parent_ports_by_member,
+                nodes,
+            )?),
+            span: u.span,
+        })),
+        Expr::Ternary(t) => Ok(Expr::Ternary(TernaryExpr {
+            condition: Box::new(resolve_and_filter_agg_expr(
+                &t.condition,
+                comp_id,
+                comp_name,
+                agg_prefix,
+                instantiated_children_ids,
+                parent_ports_by_member,
+                nodes,
+            )?),
+            then_expr: Box::new(resolve_and_filter_agg_expr(
+                &t.then_expr,
+                comp_id,
+                comp_name,
+                agg_prefix,
+                instantiated_children_ids,
+                parent_ports_by_member,
+                nodes,
+            )?),
+            else_expr: Box::new(resolve_and_filter_agg_expr(
+                &t.else_expr,
+                comp_id,
+                comp_name,
+                agg_prefix,
+                instantiated_children_ids,
+                parent_ports_by_member,
+                nodes,
+            )?),
+            span: t.span,
+        })),
+        Expr::Paren(inner, span) => Ok(Expr::Paren(
+            Box::new(resolve_and_filter_agg_expr(
+                inner,
+                comp_id,
+                comp_name,
+                agg_prefix,
+                instantiated_children_ids,
+                parent_ports_by_member,
+                nodes,
+            )?),
+            *span,
+        )),
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => Ok(expr.clone()),
+    }
+}
+
+fn fold_const_ternaries(
+    expr: &Expr,
+    const_env: &HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
+) -> Expr {
+    match expr {
+        Expr::Ternary(t) => {
+            let cond = fold_const_ternaries(&t.condition, const_env);
+            let then_e = fold_const_ternaries(&t.then_expr, const_env);
+            let else_e = fold_const_ternaries(&t.else_expr, const_env);
+            if let Ok(val) = eval_expr(&cond, const_env) {
+                if val.is_truthy() {
+                    return then_e;
+                } else {
+                    return else_e;
+                }
+            }
+            Expr::Ternary(TernaryExpr {
+                condition: Box::new(cond),
+                then_expr: Box::new(then_e),
+                else_expr: Box::new(else_e),
+                span: t.span,
+            })
+        }
+        Expr::Binary(b) => Expr::Binary(BinaryExpr {
+            op: b.op,
+            left: Box::new(fold_const_ternaries(&b.left, const_env)),
+            right: Box::new(fold_const_ternaries(&b.right, const_env)),
+            span: b.span,
+        }),
+        Expr::Unary(u) => Expr::Unary(UnaryExpr {
+            op: u.op,
+            operand: Box::new(fold_const_ternaries(&u.operand, const_env)),
+            span: u.span,
+        }),
+        Expr::Call(c) => Expr::Call(CallExpr {
+            callee: c.callee.clone(),
+            args: c.args.iter().map(|a| fold_const_ternaries(a, const_env)).collect(),
+            span: c.span,
+        }),
+        Expr::MethodCall(mc) => Expr::MethodCall(MethodCallExpr {
+            target: Box::new(fold_const_ternaries(&mc.target, const_env)),
+            method: mc.method.clone(),
+            args: mc.args.iter().map(|a| fold_const_ternaries(a, const_env)).collect(),
+            span: mc.span,
+        }),
+        Expr::MemberAccess(m) => Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(fold_const_ternaries(&m.target, const_env)),
+            member: m.member.clone(),
+            span: m.span,
+        }),
+        Expr::Paren(inner, span) => {
+            Expr::Paren(Box::new(fold_const_ternaries(inner, const_env)), *span)
+        }
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => expr.clone(),
+    }
+}
+
+fn resolve_and_filter_component_aggregations(
+    comp_id: NodeId,
+    comp_name: &str,
+    instantiated_children_ids: &[NodeId],
+    declared_state_names: &HashSet<String>,
+    rewritten_ports: &mut HashMap<String, Expr>,
+    doc: &mut ExpandedDocument,
+    start_node_idx: usize,
+    start_local_bindings_idx: usize,
+) -> Result<(), CompileError> {
+    let parent_canon = comp_id.canonical_name();
+    let agg_prefix = format!("__agg_child_of_{}_", parent_canon);
+
+    let mut const_env: HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value> =
+        HashMap::new();
+    for _ in 0..3 {
+        for (port_name, port_expr) in rewritten_ports.iter() {
+            if declared_state_names.contains(port_name) {
+                continue;
+            }
+            if let Ok(val) = eval_expr(port_expr, &const_env) {
+                const_env.insert(crate::compiler::graph::VarId::new(comp_id, port_name), val);
+            }
+        }
+        for expr in rewritten_ports.values_mut() {
+            *expr = fold_const_ternaries(expr, &const_env);
+        }
+    }
+
+    let mut parent_ports_by_member: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut port_to_parent_refs: Vec<(String, HashSet<String>)> = Vec::new();
+
+    for (port_name, expr) in rewritten_ports.iter() {
+        let mut agg_members = HashSet::new();
+        let mut parent_refs = HashSet::new();
+        collect_agg_members_and_parent_refs(
+            expr,
+            &agg_prefix,
+            &parent_canon,
+            &mut agg_members,
+            &mut parent_refs,
+        );
+        for m in agg_members {
+            let entry = parent_ports_by_member.entry(m).or_default();
+            entry.insert(port_name.clone());
+        }
+        port_to_parent_refs.push((port_name.clone(), parent_refs));
+    }
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (port_name, refs) in &port_to_parent_refs {
+            for set in parent_ports_by_member.values_mut() {
+                if refs.iter().any(|r| set.contains(r)) {
+                    if set.insert(port_name.clone()) {
+                        changed = true;
+                    }
+                    if port_name == "width" && set.insert("right".to_string()) {
+                        changed = true;
+                    }
+                    if port_name == "height" && set.insert("bottom".to_string()) {
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    let mut all_aggregated_ports = HashSet::new();
+    for set in parent_ports_by_member.values() {
+        for p in set {
+            all_aggregated_ports.insert(p.clone());
+        }
+    }
+    if let Some(node) = doc.get_node_mut(comp_id) {
+        node.aggregated_ports = all_aggregated_ports;
+    }
+
+    for expr in rewritten_ports.values_mut() {
+        *expr = resolve_and_filter_agg_expr(
+            expr,
+            comp_id,
+            comp_name,
+            &agg_prefix,
+            instantiated_children_ids,
+            &parent_ports_by_member,
+            &doc.nodes,
+        )?;
+    }
+
+    let nodes_snapshot = doc.nodes.clone();
+    for node_idx in start_node_idx..doc.nodes.len() {
+        let node = &mut doc.nodes[node_idx];
+        for expr in node.ports.values_mut() {
+            *expr = resolve_and_filter_agg_expr(
+                expr,
+                comp_id,
+                comp_name,
+                &agg_prefix,
+                instantiated_children_ids,
+                &parent_ports_by_member,
+                &nodes_snapshot,
+            )?;
+        }
+    }
+
+    for binding_idx in start_local_bindings_idx..doc.local_bindings.len() {
+        let (expr, _, _) = &mut doc.local_bindings[binding_idx];
+        *expr = resolve_and_filter_agg_expr(
+            expr,
+            comp_id,
+            comp_name,
+            &agg_prefix,
+            instantiated_children_ids,
+            &parent_ports_by_member,
+            &doc.nodes,
+        )?;
+    }
 
     Ok(())
 }
@@ -6759,11 +7453,16 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         if target_id.as_str() == "children" && m.member.as_str() != "len" {
                             had_children = true;
                             children_member = Some(m.member.as_str().to_string());
-                            if ctx.child_ids.len() == ctx.num_children {
-                                for &child_id in ctx.child_ids {
+                            if let Some(comp_id) = ctx.enclosing_component {
+                                for idx in 0..ctx.num_children {
+                                    let target_name = format!(
+                                        "__agg_child_of_{}_{}",
+                                        comp_id.canonical_name(),
+                                        idx
+                                    );
                                     let child_access = Expr::MemberAccess(MemberAccessExpr {
                                         target: Box::new(Expr::Ident(Ident::new(
-                                            child_id.canonical_name(),
+                                            target_name,
                                             target_id.span,
                                         ))),
                                         member: m.member.clone(),
@@ -6771,22 +7470,11 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                                     });
                                     rewritten_args.push(child_access);
                                 }
-                            } else if let Some(comp_id) = ctx.enclosing_component {
-                                for idx in 0..ctx.num_children {
-                                    let target_name = ctx
-                                        .child_ids
-                                        .get(idx)
-                                        .map(|id| id.canonical_name())
-                                        .unwrap_or_else(|| {
-                                            format!(
-                                                "__child_of_{}_{}",
-                                                comp_id.canonical_name(),
-                                                idx
-                                            )
-                                        });
+                            } else if ctx.child_ids.len() == ctx.num_children {
+                                for &child_id in ctx.child_ids {
                                     let child_access = Expr::MemberAccess(MemberAccessExpr {
                                         target: Box::new(Expr::Ident(Ident::new(
-                                            target_name,
+                                            child_id.canonical_name(),
                                             target_id.span,
                                         ))),
                                         member: m.member.clone(),

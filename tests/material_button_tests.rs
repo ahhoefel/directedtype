@@ -388,6 +388,7 @@ fn test_material_gallery_cards_contain_contents_when_narrow() {
         "card_widths",
         "card_paper_elevations",
         "card_paper_variants",
+        "card_dividers",
     ];
 
     for key in card_keys {
@@ -531,5 +532,213 @@ fn test_material_paper_variants_and_shadows() {
         &directedtype::render::SceneOptions::default(),
     );
 }
+
+#[test]
+fn test_material_divider_in_bottom_up_vstack_and_hstack() {
+    let input = r#"
+    \use "components/VStack.dt"
+    \use "components/HStack.dt"
+    \use "components/Align.dt"
+    \use "components/material/Paper.dt"
+    \use "components/material/Button.dt"
+    \use "components/material/Divider.dt"
+
+    \Paper("outer_paper"; padding_x: 16px, padding_y: 12px) {
+        \VStack("inner_stack"; gap: 8px) {
+            \Rect("item_a"; width: 200px, height: 30px, color: #3b82f6)
+            \Divider("div_full"; variant: DividerVariant.FullWidth)
+            \Rect("item_b"; width: 140px, height: 30px, color: #10b981)
+            \Divider("div_inset"; variant: DividerVariant.Inset)
+            \Divider("div_middle"; variant: DividerVariant.Middle)
+            \Divider("div_text";) {
+                \Text(font: \Font(size: 12px)) { OR }
+            }
+            \Button("stretched_btn"; width: parent.width) { Full Width Action }
+            \HStack("row_stack"; gap: 10px, align: Align.Center) {
+                \Rect(width: 50px, height: 36px, color: #ef4444)
+                \Divider("div_vert"; orientation: DividerOrientation.Vertical)
+                \Divider("div_vert_mid"; orientation: DividerOrientation.Vertical, variant: DividerVariant.Middle)
+                \Rect(width: 60px, height: 24px, color: #f59e0b)
+            }
+        }
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile Divider in bottom-up VStack and HStack ok");
+
+    // inner_stack width should be determined by its bottom-up children (max(200, 140, row_stack.width) = 200)
+    let inner_stack = compiled
+        .find_by_key(None, &ComponentKey::string("inner_stack"))
+        .unwrap();
+    let inner_stack_layout = compiled.layout.get_node(inner_stack.id).unwrap();
+    assert_eq!(inner_stack_layout.rect.width, 200.0);
+
+    // outer_paper width should pull up 200 + 2*16 = 232
+    let outer_paper = compiled
+        .find_by_key(None, &ComponentKey::string("outer_paper"))
+        .unwrap();
+    let outer_paper_layout = compiled.layout.get_node(outer_paper.id).unwrap();
+    assert_eq!(outer_paper_layout.rect.width, 232.0);
+
+    // FullWidth Divider should span 200px
+    let div_full = compiled
+        .find_by_key(None, &ComponentKey::string("div_full"))
+        .unwrap();
+    let div_full_rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.parent == Some(div_full.id) && n.name == "Rect")
+        .unwrap();
+    assert_eq!(div_full_rect.rect.width, 200.0);
+    assert_eq!(div_full_rect.rect.height, 1.0);
+
+    // Inset Divider should be inset 72px from left -> width = 200 - 72 = 128px
+    let div_inset = compiled
+        .find_by_key(None, &ComponentKey::string("div_inset"))
+        .unwrap();
+    let div_inset_rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.parent == Some(div_inset.id) && n.name == "Rect")
+        .unwrap();
+    assert_eq!(div_inset_rect.rect.x, inner_stack_layout.rect.x + 72.0);
+    assert_eq!(div_inset_rect.rect.width, 128.0);
+
+    // Middle Divider should be inset 16px on both sides -> width = 200 - 32 = 168px
+    let div_middle = compiled
+        .find_by_key(None, &ComponentKey::string("div_middle"))
+        .unwrap();
+    let div_middle_rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.parent == Some(div_middle.id) && n.name == "Rect")
+        .unwrap();
+    assert_eq!(div_middle_rect.rect.x, inner_stack_layout.rect.x + 16.0);
+    assert_eq!(div_middle_rect.rect.width, 168.0);
+
+    // Divider with child text inside VStack should keep its default text_align = Align.Center (equal left & right rules)
+    let div_text = compiled
+        .find_by_key(None, &ComponentKey::string("div_text"))
+        .unwrap();
+    let div_text_rects: Vec<_> = compiled
+        .layout
+        .nodes
+        .iter()
+        .filter(|n| n.parent == Some(div_text.id) && n.name == "Rect")
+        .collect();
+    assert_eq!(div_text_rects.len(), 2);
+    assert!(
+        (div_text_rects[0].rect.width - div_text_rects[1].rect.width).abs() < 1e-4,
+        "Centered Divider rules should have equal width, got {} and {}",
+        div_text_rects[0].rect.width,
+        div_text_rects[1].rect.width
+    );
+
+    // Stretched Button should receive parent.width = 200px
+    let stretched_btn = compiled
+        .find_by_key(None, &ComponentKey::string("stretched_btn"))
+        .unwrap();
+    assert_eq!(
+        compiled.layout.get_node(stretched_btn.id).unwrap().rect.width,
+        200.0
+    );
+
+    // Vertical Divider inside bottom-up HStack should stretch to HStack height (36px)
+    let div_vert = compiled
+        .find_by_key(None, &ComponentKey::string("div_vert"))
+        .unwrap();
+    let div_vert_rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.parent == Some(div_vert.id) && n.name == "Rect")
+        .unwrap();
+    assert_eq!(div_vert_rect.rect.width, 1.0);
+    assert_eq!(div_vert_rect.rect.height, 36.0);
+
+    // Vertical Middle Divider should be inset 8px top & bottom -> height = 36 - 16 = 20px
+    let div_vert_mid = compiled
+        .find_by_key(None, &ComponentKey::string("div_vert_mid"))
+        .unwrap();
+    let div_vert_mid_rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.parent == Some(div_vert_mid.id) && n.name == "Rect")
+        .unwrap();
+    assert_eq!(div_vert_mid_rect.rect.width, 1.0);
+    assert_eq!(div_vert_mid_rect.rect.height, 20.0);
+}
+
+#[test]
+fn test_all_children_depending_on_parent_width_or_multi_level_cycle_rejected() {
+    // 1. All children in a bottom-up VStack depend on parent.width -> must fail with CyclicDependency
+    let all_top_down = r#"
+    \use "components/VStack.dt"
+    \use "components/material/Divider.dt"
+
+    \VStack {
+        \Divider
+    }
+    "#;
+    let doc1 = parse(all_top_down).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let err1 = CompiledDocument::compile_with_registry(
+        &doc1,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect_err("VStack with only top-down Divider child must fail compilation");
+    assert!(
+        matches!(err1, directedtype::compiler::CompileError::CyclicDependency { .. }),
+        "Expected CyclicDependency error, got: {:?}",
+        err1
+    );
+
+    // 2. Ambiguous 2-level cycle across nested bottom-up VStacks -> must fail with CyclicDependency
+    let multi_level_cycle = r#"
+    \use "components/VStack.dt"
+
+    \VStack("outer";) {
+        \Rect(width: 100px, height: 20px, color: #000000)
+        \VStack("inner";) {
+            \Rect(width: 80px, height: 20px, color: #000000)
+            \Rect(width: parent.parent.width, height: 20px, color: #ff0000)
+        }
+    }
+    "#;
+    let doc2 = parse(multi_level_cycle).expect("parse ok");
+    let err2 = CompiledDocument::compile_with_registry(
+        &doc2,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect_err("Multi-level cycle across two VStacks must fail compilation");
+    assert!(
+        matches!(err2, directedtype::compiler::CompileError::CyclicDependency { .. }),
+        "Expected CyclicDependency error, got: {:?}",
+        err2
+    );
+}
+
 
 

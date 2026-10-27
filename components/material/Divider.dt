@@ -1,0 +1,88 @@
+// Material UI Component Library: Divider
+// Thin, unobtrusive line for grouping elements in lists and layouts.
+// Supports Horizontal and Vertical orientations, FullWidth/Inset/Middle variants,
+// light opacity mode, and optional child content (text, chip, or button) with Left/Center/Right alignment.
+
+\use "components/Align.dt"
+
+\Enum DividerVariant {
+    FullWidth,
+    Inset,
+    Middle
+}
+
+\Enum DividerOrientation {
+    Horizontal,
+    Vertical
+}
+
+\Component Divider(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    orientation: DividerOrientation = DividerOrientation.Horizontal,
+    variant: DividerVariant = DividerVariant.FullWidth,
+    text_align: Align = Align.Center,
+    light: Boolean = false,
+    color: Color = #0000001f,
+    thickness: Distance = 1px,
+    width: Distance = (orientation == DividerOrientation.Vertical) ? thickness : parent.width,
+    height: Distance = (orientation == DividerOrientation.Vertical) ? parent.height : (children.len > 0 ? max(thickness, max(children.height)) : thickness)
+) {
+    \assert children.len <= 1 as "Divider accepts at most one child.";
+
+    \let is_vertical = orientation == DividerOrientation.Vertical;
+    \let has_children = (children.len > 0) && !is_vertical;
+    \let is_inset = variant == DividerVariant.Inset;
+    \let is_middle = variant == DividerVariant.Middle;
+    \let resolved_color: Color = light ? #00000014 : color;
+
+    \let left_inset: Distance = is_vertical ? 0px : (is_inset ? 72px : (is_middle ? 16px : 0px));
+    \let right_inset: Distance = is_vertical ? 0px : (is_middle ? 16px : 0px);
+    \let top_inset: Distance = is_vertical ? (is_middle ? 8px : 0px) : 0px;
+    \let bottom_inset: Distance = is_vertical ? (is_middle ? 8px : 0px) : 0px;
+
+    \let line_x: Distance = x + left_inset;
+    \let line_w: Distance = max(0px, width - left_inset - right_inset);
+    \let line_y: Distance = y + top_inset;
+    \let line_h: Distance = max(0px, height - top_inset - bottom_inset);
+
+    \let child_w: Distance = has_children ? max(children.width) : 0px;
+    \let child_h: Distance = has_children ? max(children.height) : 0px;
+    \let pad_x: Distance = 16px;
+    \let total_child_span: Distance = has_children ? (child_w + pad_x * 2) : 0px;
+    \let avail_line_w: Distance = max(0px, line_w - total_child_span);
+
+    \let left_ratio: Float = (text_align == Align.Left) ? 0.1 : (
+        (text_align == Align.Right) ? 0.9 : 0.5
+    );
+    \let left_rule_w: Distance = has_children ? (avail_line_w * left_ratio) : line_w;
+    \let right_rule_w: Distance = has_children ? (avail_line_w - left_rule_w) : 0px;
+
+    \let rule_y: Distance = is_vertical ? line_y : (y + (height - thickness) / 2);
+    \let rule_h: Distance = is_vertical ? line_h : thickness;
+
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Rect(
+        x: line_x,
+        y: rule_y,
+        width: left_rule_w,
+        height: rule_h,
+        color: resolved_color
+    )
+
+    \Children(
+        x: line_x + left_rule_w + pad_x,
+        y: y + (height - child_h) / 2
+    )
+
+    \Rect(
+        x: line_x + left_rule_w + total_child_span,
+        y: rule_y,
+        width: right_rule_w,
+        height: has_children ? thickness : 0px,
+        color: has_children ? resolved_color : #00000000
+    )
+}
+

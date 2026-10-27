@@ -5,11 +5,11 @@
 \use "../components/VStack.dt"
 \use "../components/HStack.dt"
 \use "../components/Center.dt"
-\use "../components/Divider.dt"
 \use "../components/Spacer.dt"
 \use "../components/material/Palette.dt"
 \use "../components/material/Button.dt"
 \use "../components/material/Paper.dt"
+\use "../components/material/Divider.dt"
 
 \Window(title: "Material UI Component Gallery")
 
@@ -45,7 +45,7 @@
         Interactive showcase of @mui/material components — hover, focus, and click components to see state transitions.
     }
 
-    \Divider(width: max(target_inner_width + 40px, 680px), color: #e0e0e0)
+    \Divider
     \Spacer(height: 4px)
 
     // Section 1: Basic Button Variants
@@ -232,6 +232,82 @@
                 \Paper("p_outlined_square"; variant: PaperVariant.Outlined, square: true) {
                     \Center(width: 140px, height: 56px) {
                         \Text(font: \Font(size: 13px, weight: 500), color: #212121) { Outlined (Square) }
+                    }
+                }
+            }
+        }
+    }
+
+    // Section 8: Dividers (Variants, With Children & Vertical Orientation)
+    \Paper("card_dividers"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
+        \VStack(min_width: target_inner_width, gap: 16px) {
+            \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+                8. DIVIDERS (VARIANTS, WITH CHILDREN & VERTICAL ORIENTATION)
+            }
+            \HStack(gap: 24px, align: Align.Top) {
+                // 8a. FullWidth, Inset & Middle Variants in a bottom-up Paper + VStack
+                \Paper("div_variants_box"; variant: PaperVariant.Outlined, padding_x: 0px, padding_y: 12px) {
+                    \VStack(gap: 10px) {
+                        \HStack(gap: 16px) {
+                            \Spacer(width: 16px)
+                            \Text(font: \Font(size: 13px, weight: 500), color: #212121) { FullWidth Divider below }
+                            \Spacer(width: 48px)
+                        }
+                        \Divider("div_full"; variant: DividerVariant.FullWidth)
+                        \HStack(gap: 16px) {
+                            \Spacer(width: 16px)
+                            \Text(font: \Font(size: 13px, weight: 500), color: #212121) { Inset Divider below (72px left) }
+                            \Spacer(width: 24px)
+                        }
+                        \Divider("div_inset"; variant: DividerVariant.Inset)
+                        \HStack(gap: 16px) {
+                            \Spacer(width: 16px)
+                            \Text(font: \Font(size: 13px, weight: 500), color: #212121) { Middle Divider below (16px sides) }
+                            \Spacer(width: 16px)
+                        }
+                        \Divider("div_middle"; variant: DividerVariant.Middle)
+                        \HStack(gap: 16px) {
+                            \Spacer(width: 16px)
+                            \Text(font: \Font(size: 13px, weight: 400), color: #757575) { Bottom item in intrinsic VStack }
+                            \Spacer(width: 16px)
+                        }
+                    }
+                }
+
+                // 8b. Dividers with Child Content (Center, Left, Right)
+                \Paper("div_children_box"; variant: PaperVariant.Outlined, padding_x: 16px, padding_y: 12px) {
+                    \VStack(min_width: 260px, gap: 12px) {
+                        \Text(font: \Font(size: 12px, weight: 600), color: #757575) {
+                            Dividers with Children (Center, Left, Right)
+                        }
+                        \Divider("div_text_center";) {
+                            \Text(font: \Font(size: 12px, weight: 600), color: #757575) { CENTER }
+                        }
+                        \Divider("div_text_left"; text_align: Align.Left) {
+                            \Text(font: \Font(size: 12px, weight: 600), color: #757575) { LEFT }
+                        }
+                        \Divider("div_text_right"; text_align: Align.Right) {
+                            \Text(font: \Font(size: 12px, weight: 600), color: #757575) { RIGHT }
+                        }
+                        \Divider("div_with_button";) {
+                            \Button(size: ButtonSize.Small, variant: ButtonVariant.Outlined) { Action }
+                        }
+                    }
+                }
+
+                // 8c. Vertical Dividers in an HStack
+                \Paper("div_vertical_box"; variant: PaperVariant.Outlined, padding_x: 16px, padding_y: 12px) {
+                    \VStack(gap: 12px) {
+                        \Text(font: \Font(size: 12px, weight: 600), color: #757575) {
+                            Vertical (FullWidth & Middle)
+                        }
+                        \HStack(gap: 12px, align: Align.Center) {
+                            \Button(size: ButtonSize.Small) { Cut }
+                            \Divider("div_vert_full"; orientation: DividerOrientation.Vertical)
+                            \Button(size: ButtonSize.Small) { Copy }
+                            \Divider("div_vert_middle"; orientation: DividerOrientation.Vertical, variant: DividerVariant.Middle)
+                            \Button(size: ButtonSize.Small) { Paste }
+                        }
                     }
                 }
             }
