@@ -1677,25 +1677,31 @@ fn test_inspector_panel_resize_updates_main_panel_layout_and_scroll() {
 fn test_component_overload_signature_in_resolved_node() {
     let source = r#"
 \use "components/VStack.dt"
+\use "components/material/Paper.dt"
 
-\VStack("fixed_both"; width: 300px, height: 200px) {
-    \Rect(width: 100px, height: 40px, color: #3b82f6)
+\Paper("top_down"; width: 300px) {
+    \VStack("stack_a"; width: 260px, height: 200px) {
+        \Rect(width: 100px, height: 40px, color: #3b82f6)
+    }
 }
-\VStack("fixed_width"; x: 0, y: 220px, width: 300px) {
-    \Rect(width: 100px, height: 40px, color: #10b981)
-}
-\VStack("shrink_wrap"; x: 0, y: 300px) {
-    \Rect(width: 100px, height: 40px, color: #f59e0b)
+\Paper("bottom_up"; y: 240px) {
+    \VStack("stack_b";) {
+        \Rect(width: 100px, height: 40px, color: #f59e0b)
+    }
 }
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
     let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0).expect("eval layout ok");
 
+    let papers: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Paper").collect();
+    assert_eq!(papers.len(), 2);
+    assert_eq!(papers[0].overload_signature(), r#"\Paper(width)"#);
+    assert_eq!(papers[1].overload_signature(), r#"\Paper()"#);
+
     let vstacks: Vec<_> = layout.nodes.iter().filter(|n| n.name == "VStack").collect();
-    assert_eq!(vstacks.len(), 3);
-    assert_eq!(vstacks[0].overload_signature(), r#"\VStack(width, height)"#);
-    assert_eq!(vstacks[1].overload_signature(), r#"\VStack(width)"#);
-    assert_eq!(vstacks[2].overload_signature(), r#"\VStack()"#);
+    assert_eq!(vstacks.len(), 2);
+    assert_eq!(vstacks[0].overload_signature(), r#"\VStack()"#);
+    assert_eq!(vstacks[1].overload_signature(), r#"\VStack()"#);
 }
 
 #[test]
@@ -1811,13 +1817,13 @@ fn test_inspector_skipped_upstream_and_strikethrough_spans() {
     let div_nodes: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Divider").collect();
     assert_eq!(div_nodes.len(), 2);
 
-    let trace = directedtype::inspector::build_property_dag_trace(&layout, stack_node.id, "max_child_width")
-        .expect("max_child_width trace must exist");
+    let trace = directedtype::inspector::build_property_dag_trace(&layout, stack_node.id, "width")
+        .expect("width trace must exist");
 
-    // 1. Equation spans should include the original authored formula prefix ("max(children.width) → ")
+    // 1. Equation spans should include the original authored formula prefix ("max(min_width, max(children.width)) → ")
     assert!(
-        trace.equation_spans.first().is_some_and(|s| s.is_authored_prefix && s.text == "max(children.width) → "),
-        "Expected authored prefix span 'max(children.width) → ', got: {:?}",
+        trace.equation_spans.first().is_some_and(|s| s.is_authored_prefix && s.text == "max(min_width, max(children.width)) → "),
+        "Expected authored prefix span 'max(min_width, max(children.width)) → ', got: {:?}",
         trace.equation_spans
     );
 
@@ -1833,9 +1839,13 @@ fn test_inspector_skipped_upstream_and_strikethrough_spans() {
     assert_eq!(struck_spans[1].text, "\\Divider#div_left.width");
 
     // 3. Upstream dependencies vs Skipped upstream dependencies
-    assert_eq!(trace.upstream_dependencies.len(), 1);
-    assert_eq!(trace.upstream_dependencies[0].node_id, label_node.id);
-    assert_eq!(trace.upstream_dependencies[0].port_name, "width");
+    assert_eq!(trace.upstream_dependencies.len(), 2);
+    assert!(
+        trace.upstream_dependencies.iter().any(|d| d.node_id == stack_node.id && d.port_name == "min_width")
+    );
+    assert!(
+        trace.upstream_dependencies.iter().any(|d| d.node_id == label_node.id && d.port_name == "width")
+    );
 
     assert_eq!(trace.skipped_upstream_dependencies.len(), 2);
     assert_eq!(trace.skipped_upstream_dependencies[0].node_id, div_nodes[0].id);
@@ -1849,15 +1859,15 @@ fn test_inspector_skipped_upstream_and_strikethrough_spans() {
     let panel = directedtype::inspector::InspectPanelComponent::default();
     let mut state = directedtype::inspector::InspectorState::new();
     state.selected_id = Some(stack_node.id);
-    state.select_property(stack_node.id, "max_child_width");
+    state.select_property(stack_node.id, "width");
     let tree_items = directedtype::inspector::build_tree_items_from_layout(&layout, &state);
 
     let win_h = 600.0;
     let divider_y = panel.divider_y(win_h);
     let detail_y = divider_y + panel.divider_height;
     // Layout in property details:
-    // base_y + 10.0 + card (48.0 + 14.0) + UPSTREAM header (18.0) + 1 upstream row (18.0) + gap (10.0) + UPSTREAM SKIPPED header (18.0) + row 0 (18.0)
-    let skipped_row_0_y = detail_y + 10.0 + (48.0 + 14.0) + 18.0 + 18.0 + 10.0 + 18.0 + 5.0;
+    // base_y + 10.0 + card (48.0 + 14.0) + UPSTREAM header (18.0) + 2 upstream rows (36.0) + gap (10.0) + UPSTREAM SKIPPED header (18.0) + row 0 (18.0)
+    let skipped_row_0_y = detail_y + 10.0 + (48.0 + 14.0) + 18.0 + 36.0 + 10.0 + 18.0 + 5.0;
     let hit = panel.handle_click(50.0, skipped_row_0_y, 0.0, win_h, &tree_items, &state, Some(&layout));
     assert_eq!(
         hit,

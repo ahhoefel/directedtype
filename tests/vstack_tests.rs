@@ -408,3 +408,39 @@ fn test_vstack_inside_center_explicit_width_no_cycle() {
     assert_eq!(vstack_node.rect.y, 255.0);
 }
 
+#[test]
+fn test_vstack_min_height_and_explicit_height_with_intrinsic_width() {
+    let input = r#"
+    \use "components/VStack.dt"
+
+    \VStack("clamped_height"; min_height: 150px, gap: 10px) {
+        \Rect(width: 120px, height: 40px, color: #3b82f6)
+        \Rect(width: 90px, height: 30px, color: #10b981)
+    }
+
+    \VStack("fixed_height_only"; height: 220px, gap: 10px) {
+        \Rect(width: 160px, height: 40px, color: #ef4444)
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let vstacks: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "VStack").collect();
+    assert_eq!(vstacks.len(), 2);
+    assert_eq!(vstacks[0].rect.width, 120.0);
+    assert_eq!(vstacks[0].rect.height, 150.0);
+    assert_eq!(vstacks[1].rect.width, 160.0);
+    assert_eq!(vstacks[1].rect.height, 220.0);
+}
+
+

@@ -320,3 +320,41 @@ fn test_hstack_inside_center_no_cycle() {
     assert_eq!(hstack_node.rect.y, 270.0);
 }
 
+#[test]
+fn test_hstack_min_dimensions_and_explicit_overrides() {
+    let input = r#"
+    \use "components/HStack.dt"
+    \use "components/Align.dt"
+
+    \HStack("clamped"; min_width: 300px, min_height: 80px, gap: 10px, align: Align.Center) {
+        \Rect(width: 60px, height: 30px, color: #3b82f6)
+        \Rect(width: 80px, height: 40px, color: #10b981)
+    }
+
+    \HStack("fixed_height"; height: 100px, gap: 10px, align: Align.Bottom) {
+        \Rect(width: 50px, height: 30px, color: #ef4444)
+        \Rect(width: 70px, height: 40px, color: #f59e0b)
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let hstacks: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "HStack").collect();
+    assert_eq!(hstacks.len(), 2);
+    assert_eq!(hstacks[0].rect.width, 300.0);
+    assert_eq!(hstacks[0].rect.height, 80.0);
+    assert_eq!(hstacks[1].rect.width, 130.0);
+    assert_eq!(hstacks[1].rect.height, 100.0);
+}
+
+

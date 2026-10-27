@@ -2,102 +2,26 @@
 // Horizontally stacked flow container with cross-axis alignment and child spacing (gap).
 \use "components/Align.dt"
 
-// 1. Explicit Fixed Width & Fixed Height HStack: supports cross-axis alignment
 \Component HStack(
-    width: Distance,
-    height: Distance,
     x: Distance = parent.left,
     y: Distance = parent.top,
+    min_width: Distance = 0,
+    min_height: Distance = 0,
     gap: Distance = 0,
-    align: Align = Align.Top
+    align: Align = Align.Top,
+    width: Distance = max(min_width, sum(children.width) + max(0, children.len - 1) * gap),
+    height: Distance = max(min_height, max(children.height))
 ) {
     \let is_center = align == Align.Center;
     \let is_bottom = align == Align.Bottom;
 
-    \alias right = x + width;
-    \alias bottom = y + height;
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
 
     \Children(
         x: prev ? prev.right + gap : x,
         y: is_center ? (y + (height - child.height) / 2) : (
             is_bottom ? (y + height - child.height) : (
-                y
-            )
-        )
-    )
-}
-
-// 2. Intrinsic Width & Fixed Height HStack: content-wrapping width with cross-axis alignment
-\Component HStack(
-    height: Distance,
-    x: Distance = parent.left,
-    y: Distance = parent.top,
-    gap: Distance = 0,
-    align: Align = Align.Top
-) {
-    \let is_center = align == Align.Center;
-    \let is_bottom = align == Align.Bottom;
-
-    \alias width = sum(children.width) + max(0, children.len - 1) * gap;
-    \alias right = x + width;
-    \alias bottom = y + height;
-
-    \Children(
-        x: prev ? prev.right + gap : x,
-        y: is_center ? (y + (height - child.height) / 2) : (
-            is_bottom ? (y + height - child.height) : (
-                y
-            )
-        )
-    )
-}
-
-// 3. Explicit / Fixed Width HStack: specifies width directly, intrinsic height
-\Component HStack(
-    width: Distance,
-    x: Distance = parent.left,
-    y: Distance = parent.top,
-    gap: Distance = 0,
-    align: Align = Align.Top
-) {
-    \let is_center = align == Align.Center;
-    \let is_bottom = align == Align.Bottom;
-
-    \alias max_child_height = max(children.height);
-    \alias height = max_child_height > 0 ? max_child_height : 0;
-    \alias right = x + width;
-    \alias bottom = y + height;
-
-    \Children(
-        x: prev ? prev.right + gap : x,
-        y: is_center ? (y + (max_child_height - child.height) / 2) : (
-            is_bottom ? (y + max_child_height - child.height) : (
-                y
-            )
-        )
-    )
-}
-
-// 4. Intrinsic / Content-Wrapping HStack: automatically sizes width and height to wrap children
-\Component HStack(
-    x: Distance = parent.left,
-    y: Distance = parent.top,
-    gap: Distance = 0,
-    align: Align = Align.Top
-) {
-    \let is_center = align == Align.Center;
-    \let is_bottom = align == Align.Bottom;
-
-    \alias max_child_height = max(children.height);
-    \alias width = sum(children.width) + max(0, children.len - 1) * gap;
-    \alias right = x + width;
-    \alias height = max_child_height > 0 ? max_child_height : 0;
-    \alias bottom = y + height;
-
-    \Children(
-        x: prev ? prev.right + gap : x,
-        y: is_center ? (y + (max_child_height - child.height) / 2) : (
-            is_bottom ? (y + max_child_height - child.height) : (
                 y
             )
         )
