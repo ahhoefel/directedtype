@@ -1020,6 +1020,7 @@ impl Dom {
                         }
                     }
                     ContentItem::Children(_)
+                    | ContentItem::ParagraphBreak(_)
                     | ContentItem::Alias(_)
                     | ContentItem::State(_)
                     | ContentItem::Env(_)

@@ -199,48 +199,89 @@ impl<'a> ParserCursor<'a> {
             if buf.is_empty() {
                 return;
             }
-            let normalized = normalize_whitespace(buf);
-            let has_newline = buf.contains('\n');
-            buf.clear();
+            let pieces = split_on_paragraph_breaks(buf);
+            let num_pieces = pieces.len();
 
-            let loc = line_index.location(start);
-            let span = Span::with_file_location(start, end, loc.line, loc.column, file_id);
+            for (idx, piece) in pieces.into_iter().enumerate() {
+                match piece {
+                    ParagraphPiece::Break(rel_start, rel_end) => {
+                        // Trim any trailing unescaped space on the immediately preceding Text item
+                        if let Some(ContentItem::Text(prev_text)) = items.last_mut() {
+                            let trimmed_len = prev_text.text.trim_ascii_end().len();
+                            prev_text.text.truncate(trimmed_len);
+                            if prev_text.text.is_empty() {
+                                items.pop();
+                            }
+                        }
+                        let has_visual = items.iter().any(is_visual_content_item);
+                        let already_break = matches!(items.last(), Some(ContentItem::ParagraphBreak(_)));
+                        if has_visual && !already_break {
+                            let abs_start = (start + rel_start).min(end);
+                            let abs_end = (start + rel_end).min(end);
+                            let loc = line_index.location(abs_start);
+                            let brk_span = Span::with_file_location(
+                                abs_start,
+                                abs_end,
+                                loc.line,
+                                loc.column,
+                                file_id,
+                            );
+                            items.push(ContentItem::ParagraphBreak(brk_span));
+                        }
+                    }
+                    ParagraphPiece::Segment(seg_raw, rel_start, rel_end) => {
+                        let abs_start = (start + rel_start).min(end);
+                        let abs_end = (start + rel_end).min(end);
+                        let loc = line_index.location(abs_start);
+                        let seg_span = Span::with_file_location(
+                            abs_start,
+                            abs_end,
+                            loc.line,
+                            loc.column,
+                            file_id,
+                        );
 
-            // Discard pure whitespace chunks between elements or at boundaries
-            if normalized.trim().is_empty() {
-                // If it is horizontal whitespace between elements on the same line,
-                // preserve it as a single space " " (unless the previous item is text ending in whitespace).
-                if !items.is_empty() && !is_end && !has_newline {
-                    let already_ends_with_space = match items.last() {
-                        Some(ContentItem::Text(t)) => t.text.ends_with(char::is_whitespace),
-                        _ => false,
-                    };
-                    if !already_ends_with_space {
-                        items.push(ContentItem::Text(TextChunk {
-                            text: " ".to_string(),
-                            span,
-                        }));
+                        let is_first_piece = idx == 0;
+                        let is_last_piece = idx + 1 == num_pieces;
+
+                        let prev_is_visual = items.last().is_some_and(is_visual_content_item);
+                        let prev_text_ends_with_space = matches!(
+                            items.last(),
+                            Some(ContentItem::Text(t)) if t.text.ends_with(' ')
+                        );
+
+                        let mut slice = seg_raw;
+                        if !is_first_piece || !prev_is_visual || prev_text_ends_with_space {
+                            slice = slice.trim_ascii_start();
+                        }
+                        if !is_last_piece || is_end {
+                            slice = slice.trim_ascii_end();
+                        }
+
+                        if slice.is_empty() {
+                            continue;
+                        }
+
+                        let normalized = normalize_ascii_whitespace(slice);
+                        if !normalized.is_empty() {
+                            if let Some(ContentItem::Text(prev_text)) = items.last_mut() {
+                                if prev_text.text.ends_with(' ') && normalized.starts_with(' ') {
+                                    prev_text.text.push_str(&normalized[1..]);
+                                } else {
+                                    prev_text.text.push_str(&normalized);
+                                }
+                                prev_text.span = prev_text.span.merge(seg_span);
+                            } else {
+                                items.push(ContentItem::Text(TextChunk {
+                                    text: normalized,
+                                    span: seg_span,
+                                }));
+                            }
+                        }
                     }
                 }
-                return;
             }
-
-            let trimmed = if items.is_empty() && is_end {
-                normalized.trim().to_string()
-            } else if items.is_empty() {
-                normalized.trim_start().to_string()
-            } else if is_end {
-                normalized.trim_end().to_string()
-            } else {
-                normalized
-            };
-
-            if !trimmed.is_empty() {
-                items.push(ContentItem::Text(TextChunk {
-                    text: trimmed,
-                    span,
-                }));
-            }
+            buf.clear();
         };
 
         loop {
@@ -256,7 +297,15 @@ impl<'a> ParserCursor<'a> {
             // Closing brace ends the content slot
             if rem.starts_with('}') {
                 if mode == SlotMode::ContentSlot {
-                    flush_text(&self.line_index, &mut raw_buf, &mut items, text_start, self.pos, true);
+                    flush_text(
+                        &self.line_index,
+                        &mut raw_buf,
+                        &mut items,
+                        text_start,
+                        self.pos,
+                        true,
+                    );
+                    finalize_content_slot_items(&mut items);
                 }
                 let close_span = self.span(self.pos, self.pos + 1);
                 self.reset_pos(self.pos + 1);
@@ -270,25 +319,38 @@ impl<'a> ParserCursor<'a> {
 
             // Single line comment `//`
             if rem.starts_with("//") {
-                if mode == SlotMode::ContentSlot {
-                    flush_text(&self.line_index, &mut raw_buf, &mut items, text_start, self.pos, false);
-                }
                 self.pos += 2;
                 while self.pos < self.source.len() && self.source.as_bytes()[self.pos] != b'\n' {
                     self.pos += 1;
                 }
                 if self.pos < self.source.len() && self.source.as_bytes()[self.pos] == b'\n' {
                     self.pos += 1;
+                    if mode == SlotMode::ContentSlot {
+                        // Consume leading horizontal indentation on the line following `//`
+                        while self.pos < self.source.len() {
+                            let b = self.source.as_bytes()[self.pos];
+                            if b == b' ' || b == b'\t' || b == b'\r' {
+                                self.pos += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        // If the next line is a blank line, preserve the comment line's newline
+                        // so that the blank line triggers a ParagraphBreak.
+                        if self.pos < self.source.len() && self.source.as_bytes()[self.pos] == b'\n'
+                        {
+                            raw_buf.push('\n');
+                        }
+                    }
                 }
-                text_start = self.pos;
+                if mode == SlotMode::ComponentDef {
+                    text_start = self.pos;
+                }
                 continue;
             }
 
             // Multi-line comment `/* ... */`
             if rem.starts_with("/*") {
-                if mode == SlotMode::ContentSlot {
-                    flush_text(&self.line_index, &mut raw_buf, &mut items, text_start, self.pos, false);
-                }
                 self.pos += 2;
                 while self.pos + 1 < self.source.len()
                     && !self.source[self.pos..].starts_with("*/")
@@ -298,7 +360,9 @@ impl<'a> ParserCursor<'a> {
                 if self.source[self.pos..].starts_with("*/") {
                     self.pos += 2;
                 }
-                text_start = self.pos;
+                if mode == SlotMode::ComponentDef {
+                    text_start = self.pos;
+                }
                 continue;
             }
 
@@ -327,6 +391,14 @@ impl<'a> ParserCursor<'a> {
                         raw_buf.push('}');
                         self.pos += 2;
                         continue;
+                    } else if after_backslash.starts_with(' ') {
+                        raw_buf.push(ESCAPED_SPACE_SENTINEL);
+                        self.pos += 2;
+                        continue;
+                    } else if after_backslash.starts_with('~') {
+                        raw_buf.push('~');
+                        self.pos += 2;
+                        continue;
                     }
                 }
 
@@ -336,7 +408,14 @@ impl<'a> ParserCursor<'a> {
                     .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
                 {
                     if mode == SlotMode::ContentSlot {
-                        flush_text(&self.line_index, &mut raw_buf, &mut items, text_start, self.pos, false);
+                        flush_text(
+                            &self.line_index,
+                            &mut raw_buf,
+                            &mut items,
+                            text_start,
+                            self.pos,
+                            false,
+                        );
                     }
                     self.reset_pos(self.pos);
                     let inline_item = parse_inline(self)?;
@@ -389,7 +468,14 @@ impl<'a> ParserCursor<'a> {
                 });
             }
 
-            // Regular text character (in ElementContent mode)
+            // Tilde `~` in ContentSlot mode produces a non-breaking space (U+00A0)
+            if rem.starts_with('~') {
+                raw_buf.push('\u{00A0}');
+                self.pos += 1;
+                continue;
+            }
+
+            // Regular text character (in ContentSlot mode)
             let ch = rem.chars().next().unwrap();
             raw_buf.push(ch);
             self.pos += ch.len_utf8();
@@ -405,12 +491,80 @@ impl<'a> ParserCursor<'a> {
     }
 }
 
-/// Collapses any sequence of whitespace characters into a single space `' '`.
-fn normalize_whitespace(input: &str) -> String {
+/// Sentinel character used internally during content slot parsing to represent an escaped space (`\ `)
+/// so that it is preserved across ASCII whitespace trimming before being converted to `' '`.
+const ESCAPED_SPACE_SENTINEL: char = '\u{E000}';
+
+fn is_visual_content_item(item: &ContentItem) -> bool {
+    match item {
+        ContentItem::Text(_) | ContentItem::Node(_) | ContentItem::Children(_) => true,
+        ContentItem::Let(l) => matches!(l.value, Some(crate::ast::LetValue::Node(_))),
+        ContentItem::ParagraphBreak(_)
+        | ContentItem::Alias(_)
+        | ContentItem::State(_)
+        | ContentItem::Env(_)
+        | ContentItem::Assert(_) => false,
+    }
+}
+
+enum ParagraphPiece<'a> {
+    Segment(&'a str, usize, usize),
+    Break(usize, usize),
+}
+
+/// Splits a raw text buffer on contiguous ASCII whitespace runs containing two or more newlines (`\n`).
+fn split_on_paragraph_breaks(input: &str) -> Vec<ParagraphPiece<'_>> {
+    let mut pieces = Vec::new();
+    let bytes = input.as_bytes();
+    let len = bytes.len();
+    let mut seg_start = 0;
+    let mut i = 0;
+
+    while i < len {
+        if bytes[i].is_ascii_whitespace() {
+            let ws_start = i;
+            let mut newline_count = 0;
+            while i < len && bytes[i].is_ascii_whitespace() {
+                if bytes[i] == b'\n' {
+                    newline_count += 1;
+                }
+                i += 1;
+            }
+            let ws_end = i;
+            if newline_count >= 2 {
+                if seg_start < ws_start {
+                    pieces.push(ParagraphPiece::Segment(
+                        &input[seg_start..ws_start],
+                        seg_start,
+                        ws_start,
+                    ));
+                }
+                pieces.push(ParagraphPiece::Break(ws_start, ws_end));
+                seg_start = ws_end;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    if seg_start < len {
+        pieces.push(ParagraphPiece::Segment(
+            &input[seg_start..len],
+            seg_start,
+            len,
+        ));
+    }
+
+    pieces
+}
+
+/// Collapses any contiguous sequence of ASCII whitespace characters into a single space `' '`.
+/// Non-ASCII whitespace (such as `\u{00A0}` from `~`) and `ESCAPED_SPACE_SENTINEL` are preserved.
+fn normalize_ascii_whitespace(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
     let mut in_ws = false;
     for c in input.chars() {
-        if c.is_whitespace() {
+        if c.is_ascii_whitespace() {
             if !in_ws {
                 result.push(' ');
                 in_ws = true;
@@ -421,4 +575,42 @@ fn normalize_whitespace(input: &str) -> String {
         }
     }
     result
+}
+
+/// Cleans up trailing paragraph breaks, trailing unescaped spaces on the last visual text chunk,
+/// and converts `ESCAPED_SPACE_SENTINEL` back to `' '`.
+fn finalize_content_slot_items(items: &mut Vec<ContentItem>) {
+    // 1. Remove any ParagraphBreak that appears after the last visual item
+    while let Some(pos) = items
+        .iter()
+        .rposition(|item| matches!(item, ContentItem::ParagraphBreak(_)))
+    {
+        let has_visual_after = items[pos + 1..].iter().any(is_visual_content_item);
+        if !has_visual_after {
+            items.remove(pos);
+        } else {
+            break;
+        }
+    }
+
+    // 2. If the last visual item is a Text chunk (e.g. followed only by non-visual directives),
+    // strip any trailing unescaped ASCII whitespace from it.
+    if let Some(last_visual_idx) = items.iter().rposition(is_visual_content_item) {
+        if let ContentItem::Text(chunk) = &mut items[last_visual_idx] {
+            let trimmed_len = chunk.text.trim_ascii_end().len();
+            chunk.text.truncate(trimmed_len);
+            if chunk.text.is_empty() {
+                items.remove(last_visual_idx);
+            }
+        }
+    }
+
+    // 3. Replace ESCAPED_SPACE_SENTINEL with literal ' ' in all Text chunks
+    for item in items.iter_mut() {
+        if let ContentItem::Text(chunk) = item {
+            if chunk.text.contains(ESCAPED_SPACE_SENTINEL) {
+                chunk.text = chunk.text.replace(ESCAPED_SPACE_SENTINEL, " ");
+            }
+        }
+    }
 }

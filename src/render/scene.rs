@@ -1122,6 +1122,8 @@ mod tests {
             font: None,
             var_name: None,
             overload_params: Vec::new(),
+            unfiltered_ports: HashMap::new(),
+            skipped_upstream: HashMap::new(),
         };
 
         let mut layout = ResolvedLayout {
@@ -1190,6 +1192,8 @@ mod tests {
             font: None,
             var_name: None,
             overload_params: Vec::new(),
+            unfiltered_ports: HashMap::new(),
+            skipped_upstream: HashMap::new(),
         };
 
         let clip_node = ResolvedNode {
@@ -1219,6 +1223,8 @@ mod tests {
             font: None,
             var_name: None,
             overload_params: Vec::new(),
+            unfiltered_ports: HashMap::new(),
+            skipped_upstream: HashMap::new(),
         };
 
         let child_node = ResolvedNode {
@@ -1247,6 +1253,8 @@ mod tests {
             font: None,
             var_name: None,
             overload_params: Vec::new(),
+            unfiltered_ports: HashMap::new(),
+            skipped_upstream: HashMap::new(),
         };
 
         let mut values = HashMap::new();

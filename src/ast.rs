@@ -420,6 +420,7 @@ pub struct ContentSlot {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ContentItem {
     Text(TextChunk),
+    ParagraphBreak(Span),
     Node(ElementNode),
     Children(ChildrenDirective),
     Let(LetBinding),
@@ -433,6 +434,7 @@ impl ContentItem {
     pub fn span(&self) -> Span {
         match self {
             ContentItem::Text(t) => t.span,
+            ContentItem::ParagraphBreak(s) => *s,
             ContentItem::Node(n) => n.span,
             ContentItem::Children(c) => c.span,
             ContentItem::Let(l) => l.span,

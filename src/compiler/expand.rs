@@ -175,7 +175,10 @@ fn validate_content_items_type_annotations(
                     validate_content_items_type_annotations(&slot.items, enums, registry)?;
                 }
             }
-            ContentItem::Children(_) | ContentItem::Text(_) | ContentItem::Assert(_) => {}
+            ContentItem::Children(_)
+            | ContentItem::Text(_)
+            | ContentItem::ParagraphBreak(_)
+            | ContentItem::Assert(_) => {}
         }
     }
     Ok(())
@@ -1311,7 +1314,7 @@ fn collect_nested_lets<'a>(items: &'a [ContentItem], out: &mut Vec<&'a LetBindin
                 }
             }
             ContentItem::Assert(a) => collect_expr_lets(&a.condition, out),
-            ContentItem::Text(_) => {}
+            ContentItem::Text(_) | ContentItem::ParagraphBreak(_) => {}
         }
     }
 }
@@ -2432,7 +2435,11 @@ fn expand_component_instance(
                         });
                     }
                 }
-                ContentItem::Alias(_) | ContentItem::State(_) | ContentItem::Env(_) | ContentItem::Assert(_) => {}
+                ContentItem::Alias(_)
+                | ContentItem::State(_)
+                | ContentItem::Env(_)
+                | ContentItem::Assert(_)
+                | ContentItem::ParagraphBreak(_) => {}
             }
         }
     }
@@ -3303,10 +3310,11 @@ fn expand_component_instance(
                     );
                 }
             }
-            ComponentBodyItem::Alias(_) => {}
-            ComponentBodyItem::State(_) => {}
-            ComponentBodyItem::Text(_) => {}
-            ComponentBodyItem::Assert(_) => {}
+            ComponentBodyItem::Alias(_)
+            | ComponentBodyItem::State(_)
+            | ComponentBodyItem::Text(_)
+            | ComponentBodyItem::ParagraphBreak(_)
+            | ComponentBodyItem::Assert(_) => {}
         }
     }
 
@@ -4989,7 +4997,11 @@ fn expand_primitive_element(
                         }
                     }
                 }
-                ContentItem::Alias(_) | ContentItem::State(_) | ContentItem::Env(_) | ContentItem::Assert(_) => {}
+                ContentItem::Alias(_)
+                | ContentItem::State(_)
+                | ContentItem::Env(_)
+                | ContentItem::Assert(_)
+                | ContentItem::ParagraphBreak(_) => {}
                 ContentItem::Children(dir) => {
                     for port in &dir.ports {
                         if port.name.as_str() == "parent" {

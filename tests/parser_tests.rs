@@ -204,7 +204,7 @@ fn test_spec_applying_flow_with_raw_text() {
             assert_eq!(flow.ports[0].name.as_str(), "gap");
 
             let content = flow.content.as_ref().expect("Expected Flow to have content");
-            assert_eq!(content.items.len(), 2);
+            assert_eq!(content.items.len(), 3);
 
             // Child 1: \Header(size: 32) { Welcome to DAG-UI }
             match &content.items[0] {
@@ -224,8 +224,16 @@ fn test_spec_applying_flow_with_raw_text() {
                 _ => panic!("Expected Header node"),
             }
 
-            // Child 2: \Paragraph { This layout is mathematically provable. }
+            // Inter-element single newline normalized to space
             match &content.items[1] {
+                ContentItem::Text(space) => {
+                    assert_eq!(space.text, " ");
+                }
+                _ => panic!("Expected inter-element space chunk"),
+            }
+
+            // Child 2: \Paragraph { This layout is mathematically provable. }
+            match &content.items[2] {
                 ContentItem::Node(para) => {
                     assert_eq!(para.name.as_str(), "Paragraph");
                     assert_eq!(para.ports.len(), 0);
@@ -482,7 +490,12 @@ fn test_full_document_with_components_and_nodes() {
         Item::Node(n) => {
             assert_eq!(n.name.as_str(), "Flow");
             let slot = n.content.as_ref().unwrap();
-            assert_eq!(slot.items.len(), 2);
+            let node_count = slot
+                .items
+                .iter()
+                .filter(|it| matches!(it, ContentItem::Node(_)))
+                .count();
+            assert_eq!(node_count, 2);
         }
         _ => panic!("Expected Node"),
     }
@@ -1465,3 +1478,189 @@ fn test_strict_type_and_value_syntax_rules() {
     assert!(parse(r#"\env x: Distance: 10px;"#).is_err());
     assert!(parse(r#"\Component Foo(x: Distance = 0) { \alias right: Distance: x + 10px; }"#).is_err());
 }
+
+#[test]
+fn test_stage1_paragraph_breaks_and_whitespace_normalization() {
+    let input = r#"\VStack {
+
+        First paragraph with   multiple   spaces
+        and a wrapped line.
+
+        Second paragraph after a blank line.
+   	 
+        Third paragraph after whitespace-only blank line,
+
+
+        and fourth after multiple blank lines.
+
+    }"#;
+
+    let doc = parse(input).expect("Failed to parse paragraphs");
+    match &doc.items[0] {
+        Item::Node(vstack) => {
+            let slot = vstack.content.as_ref().expect("Expected content slot");
+            assert_eq!(slot.items.len(), 7);
+            match &slot.items[0] {
+                ContentItem::Text(t) => {
+                    assert_eq!(
+                        t.text,
+                        "First paragraph with multiple spaces and a wrapped line."
+                    );
+                }
+                other => panic!("Expected Text[0], got {other:?}"),
+            }
+            assert!(matches!(slot.items[1], ContentItem::ParagraphBreak(_)));
+            match &slot.items[2] {
+                ContentItem::Text(t) => {
+                    assert_eq!(t.text, "Second paragraph after a blank line.");
+                }
+                other => panic!("Expected Text[2], got {other:?}"),
+            }
+            assert!(matches!(slot.items[3], ContentItem::ParagraphBreak(_)));
+            match &slot.items[4] {
+                ContentItem::Text(t) => {
+                    assert_eq!(
+                        t.text,
+                        "Third paragraph after whitespace-only blank line,"
+                    );
+                }
+                other => panic!("Expected Text[4], got {other:?}"),
+            }
+            assert!(matches!(slot.items[5], ContentItem::ParagraphBreak(_)));
+            match &slot.items[6] {
+                ContentItem::Text(t) => {
+                    assert_eq!(t.text, "and fourth after multiple blank lines.");
+                }
+                other => panic!("Expected Text[6], got {other:?}"),
+            }
+        }
+        _ => panic!("Expected VStack node"),
+    }
+}
+
+#[test]
+fn test_stage1_single_newline_between_adjacent_inline_tags() {
+    let input = r#"\Text {
+        \Link(url: "https://a.com"){A}
+        \Link(url: "https://b.com"){B}
+
+        \Link(url: "https://c.com"){C}
+    }"#;
+
+    let doc = parse(input).expect("Failed to parse newline-separated inline tags");
+    match &doc.items[0] {
+        Item::Node(node) => {
+            let slot = node.content.as_ref().expect("Expected content slot");
+            assert_eq!(slot.items.len(), 5);
+            assert!(matches!(&slot.items[0], ContentItem::Node(n) if n.name.as_str() == "Link"));
+            match &slot.items[1] {
+                ContentItem::Text(t) => assert_eq!(t.text, " "),
+                other => panic!("Expected single space Text between Link A and Link B, got {other:?}"),
+            }
+            assert!(matches!(&slot.items[2], ContentItem::Node(n) if n.name.as_str() == "Link"));
+            assert!(matches!(&slot.items[3], ContentItem::ParagraphBreak(_)));
+            assert!(matches!(&slot.items[4], ContentItem::Node(n) if n.name.as_str() == "Link"));
+        }
+        _ => panic!("Expected Text node"),
+    }
+}
+
+#[test]
+fn test_stage1_comments_in_content_slots() {
+    // 1. Line-joining with `//` (no space before `//`) vs space before `//` vs blank line after `//`
+    let input = r#"\Text {
+        Joined// comment eats newline and next-line indent
+        Word
+        Spaced // comment preserves space before it
+        Next
+        \Link(url: "https://a.com"){A}// tight join between tags across lines
+        \Link(url: "https://b.com"){B}
+        ParaOne// comment followed by blank line still breaks paragraph
+
+        ParaTwo /* inline block comment */ Unified
+    }"#;
+
+    let doc = parse(input).expect("Failed to parse comments in content slot");
+    match &doc.items[0] {
+        Item::Node(node) => {
+            let slot = node.content.as_ref().expect("Expected content slot");
+            assert_eq!(slot.items.len(), 6);
+            match &slot.items[0] {
+                ContentItem::Text(t) => {
+                    assert_eq!(t.text, "JoinedWord Spaced Next ");
+                }
+                other => panic!("Expected Text[0], got {other:?}"),
+            }
+            assert!(matches!(&slot.items[1], ContentItem::Node(n) if n.name.as_str() == "Link"));
+            assert!(matches!(&slot.items[2], ContentItem::Node(n) if n.name.as_str() == "Link"));
+            match &slot.items[3] {
+                ContentItem::Text(t) => {
+                    assert_eq!(t.text, " ParaOne");
+                }
+                other => panic!("Expected Text[3], got {other:?}"),
+            }
+            assert!(matches!(&slot.items[4], ContentItem::ParagraphBreak(_)));
+            match &slot.items[5] {
+                ContentItem::Text(t) => {
+                    assert_eq!(t.text, "ParaTwo Unified");
+                }
+                other => panic!("Expected Text[5], got {other:?}"),
+            }
+        }
+        _ => panic!("Expected Text node"),
+    }
+}
+
+#[test]
+fn test_stage1_non_visual_directives_transparent_to_boundary_trimming() {
+    let input = r#"\VStack {
+        \let x = 10;
+        \alias y = x + 5;
+
+        Hello World
+
+        \assert(x > 0);
+    }"#;
+
+    let doc = parse(input).expect("Failed to parse content slot with directives");
+    match &doc.items[0] {
+        Item::Node(node) => {
+            let slot = node.content.as_ref().expect("Expected content slot");
+            // Should have: Let(x), Alias(y), Text("Hello World"), Assert
+            // No leading/trailing ParagraphBreak or leading/trailing space around "Hello World"!
+            assert_eq!(slot.items.len(), 4);
+            assert!(matches!(slot.items[0], ContentItem::Let(_)));
+            assert!(matches!(slot.items[1], ContentItem::Alias(_)));
+            match &slot.items[2] {
+                ContentItem::Text(t) => assert_eq!(t.text, "Hello World"),
+                other => panic!("Expected trimmed 'Hello World', got {other:?}"),
+            }
+            assert!(matches!(slot.items[3], ContentItem::Assert(_)));
+        }
+        _ => panic!("Expected VStack node"),
+    }
+}
+
+#[test]
+fn test_stage1_escapes_and_non_breaking_space() {
+    let input = r#"\Text {   \ Leading and trailing escaped space, Fig.~1 costs \~5\    }"#;
+
+    let doc = parse(input).expect("Failed to parse escaped spaces and tilde");
+    match &doc.items[0] {
+        Item::Node(node) => {
+            let slot = node.content.as_ref().expect("Expected content slot");
+            assert_eq!(slot.items.len(), 1);
+            match &slot.items[0] {
+                ContentItem::Text(t) => {
+                    assert_eq!(
+                        t.text,
+                        " Leading and trailing escaped space, Fig.\u{00A0}1 costs ~5 "
+                    );
+                }
+                other => panic!("Expected Text[0], got {other:?}"),
+            }
+        }
+        _ => panic!("Expected Text node"),
+    }
+}
+

@@ -932,7 +932,7 @@ fn collect_from_content_item(item: &ContentItem, out: &mut HashSet<String>) {
                 collect_from_expr(e, out);
             }
         }
-        ContentItem::Text(_) => {}
+        ContentItem::Text(_) | ContentItem::ParagraphBreak(_) => {}
     }
 }
 
@@ -1059,7 +1059,7 @@ fn rewrite_content_item(item: &mut ContentItem, renames: &HashMap<String, String
                 rewrite_expr(e, renames);
             }
         }
-        ContentItem::Text(_) => {}
+        ContentItem::Text(_) | ContentItem::ParagraphBreak(_) => {}
     }
 }
 
@@ -1157,7 +1157,7 @@ fn resolve_content_item_enum_literals(
                 resolve_expr_enum_literals(e, enums);
             }
         }
-        ContentItem::Text(_) => {}
+        ContentItem::Text(_) | ContentItem::ParagraphBreak(_) => {}
     }
 }
 
