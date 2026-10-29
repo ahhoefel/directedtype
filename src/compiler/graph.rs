@@ -380,7 +380,8 @@ pub fn build_variable_graph_with_window(
                 if target_node.private_ports.contains(&dep.port) {
                     let source_node = doc.get_node(var_id.node);
                     let is_internal = var_id.node == dep.node
-                        || source_node.and_then(|n| n.enclosing_component) == Some(dep.node);
+                        || source_node.and_then(|n| n.enclosing_component) == Some(dep.node)
+                        || (target_node.is_span && dep.port == "baseline_shift");
                     let is_ambient = source_node.map_or(false, |n| n.ambient_ports.contains(&var_id.port));
 
                     if !is_internal && !is_ambient {

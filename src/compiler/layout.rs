@@ -908,28 +908,33 @@ pub fn update_resolved_layout(
     project_inline_fragments(layout);
 }
 
-/// Projects Parley line fragments onto inline child nodes within rich text blocks.
+/// Projects Parley line fragments and post-shaping metrics onto inline child nodes within rich text blocks.
 pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
-    let text_nodes: Vec<(
-        NodeId,
-        String,
-        f64,
-        f64,
-        Option<String>,
-        Option<f64>,
-        Option<String>,
-        Vec<TextSpan>,
-        f64,
-        f64,
-    )> = layout
+    let nodes_with_text: std::collections::HashSet<NodeId> = layout
+        .nodes
+        .iter()
+        .filter(|n| n.text_content.is_some())
+        .map(|n| n.id)
+        .collect();
+
+    let text_root_ids: Vec<NodeId> = layout
         .nodes
         .iter()
         .filter(|n| {
-            n.name == "Text"
-                && n.text_content.is_some()
-                && n.text_spans.iter().any(|s| s.node_id.is_some())
+            n.text_content.is_some()
+                && n.text_spans.iter().any(|s| s.node_id.is_some() || !s.node_ids.is_empty())
+                && !n.parent.map_or(false, |pid| nodes_with_text.contains(&pid))
         })
-        .map(|n| {
+        .map(|n| n.id)
+        .collect();
+
+    for text_id in text_root_ids {
+        let Some(text_node_idx) = layout.nodes.iter().position(|n| n.id == text_id) else {
+            continue;
+        };
+
+        let (text, font_size, font_weight, font_family, max_width, line_height, align, ox, oy, raw_spans) = {
+            let n = &layout.nodes[text_node_idx];
             let text = n.text_content.clone().unwrap_or_default();
             let font_size = n
                 .properties
@@ -953,6 +958,11 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             } else {
                 None
             };
+            let line_height = n
+                .properties
+                .get("line_height")
+                .and_then(|v| v.as_f64())
+                .filter(|&h| h > 0.0);
             let align = n
                 .properties
                 .get("align")
@@ -965,67 +975,194 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 .properties
                 .get("start_at")
                 .and_then(|v| v.as_str());
-            let y_offset = crate::compiler::text::text_y_offset(font_size, font_weight, font_family.as_deref(), start_at);
+            let y_offset = crate::compiler::text::text_y_offset(
+                font_size,
+                font_weight,
+                font_family.as_deref(),
+                start_at,
+            );
             (
-                n.id,
                 text,
                 font_size,
                 font_weight,
                 font_family,
                 max_width,
+                line_height,
                 align,
-                n.text_spans.clone(),
                 n.rect.x,
                 n.rect.y + y_offset,
+                n.text_spans.clone(),
             )
-        })
-        .collect();
+        };
 
-    for (_text_id, text, size, weight, family, max_w, align, spans, ox, oy) in text_nodes {
-        let child_frags = crate::compiler::text::compute_span_fragments(
+        // Refresh each TextSpan's style from evaluated properties of its `node_ids` (outermost to innermost)
+        let mut spans = raw_spans;
+        let mut child_shifts: std::collections::HashMap<NodeId, f64> = std::collections::HashMap::new();
+
+        for span in &mut spans {
+            let mut chain = span.node_ids.clone();
+            if chain.is_empty() {
+                if let Some(id) = span.node_id {
+                    chain.push(id);
+                }
+            }
+            for &span_id in chain.iter().rev() {
+                if let Some(snode) = layout.nodes.iter().find(|n| n.id == span_id) {
+                    let font_id = snode
+                        .font
+                        .or_else(|| snode.properties.get("font").and_then(|v| v.as_node()));
+                    if let Some(fid) = font_id {
+                        if let Some(fnode) = layout.nodes.iter().find(|n| n.id == fid) {
+                            if let Some(sz) = fnode.properties.get("size").and_then(|v| v.as_f64()) {
+                                if sz > 0.0 {
+                                    span.style.font_size = Some(sz);
+                                }
+                            }
+                            if let Some(wt) = fnode.properties.get("weight").and_then(|v| v.as_f64()) {
+                                if wt > 0.0 {
+                                    span.style.font_weight = Some(wt);
+                                }
+                            }
+                            if let Some(fam) = fnode.properties.get("family").and_then(|v| v.as_str()) {
+                                if !fam.is_empty() {
+                                    span.style.font_family = Some(fam.to_string());
+                                }
+                            }
+                            if let Some(col) = fnode.properties.get("color").and_then(|v| v.as_str()) {
+                                if !col.is_empty() && col != "#00000000" {
+                                    span.style.color = Some(col.to_string());
+                                }
+                            }
+                            if let Some(it) = fnode.properties.get("italic").and_then(|v| v.as_bool()) {
+                                if it {
+                                    span.style.italic = true;
+                                }
+                            }
+                        }
+                    }
+                    if let Some(sz) = snode.properties.get("size").and_then(|v| v.as_f64()) {
+                        if sz > 0.0 {
+                            span.style.font_size = Some(sz);
+                        }
+                    }
+                    if let Some(wt) = snode.properties.get("weight").and_then(|v| v.as_f64()) {
+                        if wt > 0.0 {
+                            span.style.font_weight = Some(wt);
+                        }
+                    }
+                    if let Some(fam) = snode.properties.get("family").and_then(|v| v.as_str()) {
+                        if !fam.is_empty() {
+                            span.style.font_family = Some(fam.to_string());
+                        }
+                    }
+                    if let Some(c) = snode
+                        .properties
+                        .get("current_color")
+                        .or_else(|| snode.properties.get("color"))
+                        .and_then(|v| v.as_str())
+                    {
+                        if !c.is_empty() && c != "#00000000" {
+                            span.style.color = Some(c.to_string());
+                        }
+                    }
+                    if let Some(bg) = snode
+                        .properties
+                        .get("current_bg")
+                        .or_else(|| snode.properties.get("bg"))
+                        .and_then(|v| v.as_str())
+                    {
+                        if !bg.is_empty() {
+                            span.style.bg_color = Some(bg.to_string());
+                        }
+                    }
+                    if let Some(u) = snode
+                        .properties
+                        .get("current_underline")
+                        .or_else(|| snode.properties.get("underline"))
+                        .and_then(|v| v.as_bool())
+                    {
+                        span.style.underline = u;
+                    }
+                    if let Some(it) = snode.properties.get("italic").and_then(|v| v.as_bool()) {
+                        span.style.italic = it;
+                    }
+                    if let Some(bs) = snode.properties.get("baseline_shift").and_then(|v| v.as_f64()) {
+                        span.style.baseline_shift = bs;
+                        child_shifts.insert(span_id, bs);
+                    }
+                    if let Some(u) = snode.properties.get("url").and_then(|v| v.as_str()) {
+                        span.style.url = Some(u.to_string());
+                    }
+                }
+            }
+            for &span_id in &chain {
+                child_shifts.entry(span_id).or_insert(span.style.baseline_shift);
+            }
+        }
+
+        layout.nodes[text_node_idx].text_spans = spans.clone();
+
+        let child_metrics = crate::compiler::text::compute_span_fragments_with_metrics(
             &text,
-            size,
-            weight,
-            family.as_deref(),
-            max_w,
+            font_size,
+            font_weight,
+            font_family.as_deref(),
+            max_width,
+            line_height,
             align.as_deref(),
             &spans,
+            &child_shifts,
             ox,
             oy,
         );
 
-        for (child_id, fragments) in child_frags {
-            if let Some(union_rect) = Rect::bounding_union(&fragments) {
-                let span_style = spans.iter().find(|s| s.node_id == Some(child_id)).map(|s| &s.style);
+        for (child_id, metrics) in child_metrics {
+            let span_style = spans
+                .iter()
+                .find(|s| s.node_id == Some(child_id) || s.node_ids.contains(&child_id))
+                .map(|s| &s.style);
 
-                if let Some(child_node) = layout.nodes.iter_mut().find(|n| n.id == child_id) {
-                    child_node.fragments = fragments;
+            if let Some(child_node) = layout.nodes.iter_mut().find(|n| n.id == child_id) {
+                child_node.fragments = metrics.fragments;
+
+                if child_id != text_id {
+                    let union_rect = metrics.rect;
                     child_node.rect = union_rect;
 
                     child_node.properties.insert("x".to_string(), Value::Distance(union_rect.x));
                     child_node.properties.insert("y".to_string(), Value::Distance(union_rect.y));
                     child_node.properties.insert("width".to_string(), Value::Distance(union_rect.width));
                     child_node.properties.insert("height".to_string(), Value::Distance(union_rect.height));
-
-                    if let Some(style) = span_style {
-                        if let Some(ref u) = style.url {
-                            child_node.properties.insert("url".to_string(), Value::String(u.clone()));
-                            layout.values.insert(VarId::new(child_id, "url"), Value::String(u.clone()));
-                        }
-                        if let Some(ref c) = style.cursor {
-                            let c_str = match c {
-                                CursorKind::Pointer => "Pointer",
-                                CursorKind::Default => "Default",
-                                CursorKind::Text => "Text",
-                            };
-                            child_node.properties.insert("cursor".to_string(), Value::String(c_str.to_string()));
-                        }
-                    }
+                    child_node.properties.insert("baseline".to_string(), Value::Distance(metrics.baseline));
+                    child_node.properties.insert("left".to_string(), Value::Distance(union_rect.x));
+                    child_node.properties.insert("top".to_string(), Value::Distance(union_rect.y));
+                    child_node.properties.insert("right".to_string(), Value::Distance(union_rect.x + union_rect.width));
+                    child_node.properties.insert("bottom".to_string(), Value::Distance(union_rect.y + union_rect.height));
 
                     layout.values.insert(VarId::new(child_id, "x"), Value::Distance(union_rect.x));
                     layout.values.insert(VarId::new(child_id, "y"), Value::Distance(union_rect.y));
                     layout.values.insert(VarId::new(child_id, "width"), Value::Distance(union_rect.width));
                     layout.values.insert(VarId::new(child_id, "height"), Value::Distance(union_rect.height));
+                    layout.values.insert(VarId::new(child_id, "baseline"), Value::Distance(metrics.baseline));
+                    layout.values.insert(VarId::new(child_id, "left"), Value::Distance(union_rect.x));
+                    layout.values.insert(VarId::new(child_id, "top"), Value::Distance(union_rect.y));
+                    layout.values.insert(VarId::new(child_id, "right"), Value::Distance(union_rect.x + union_rect.width));
+                    layout.values.insert(VarId::new(child_id, "bottom"), Value::Distance(union_rect.y + union_rect.height));
+                }
+
+                if let Some(style) = span_style {
+                    if let Some(ref u) = style.url {
+                        child_node.properties.insert("url".to_string(), Value::String(u.clone()));
+                        layout.values.insert(VarId::new(child_id, "url"), Value::String(u.clone()));
+                    }
+                    if let Some(ref c) = style.cursor {
+                        let c_str = match c {
+                            CursorKind::Pointer => "Pointer",
+                            CursorKind::Default => "Default",
+                            CursorKind::Text => "Text",
+                        };
+                        child_node.properties.insert("cursor".to_string(), Value::String(c_str.to_string()));
+                    }
                 }
             }
         }

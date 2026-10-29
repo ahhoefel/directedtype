@@ -4449,4 +4449,235 @@ fn test_stage2_text_explicit_font_forwards_env_font_to_children() {
     assert_eq!(rects[1].rect.width, 700.0);
 }
 
+#[test]
+fn test_stage3_span_body_and_call_site_validation() {
+    // 1. Visual primitive directly inside \Span body must fail
+    let bad_body_node = r#"
+    \Span BadSpan(env font: Font) {
+        \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #ff0000)
+        \Children
+    }
+    \Text(font: \Font(size: 16px)) { \BadSpan { hello } }
+    "#;
+    let doc = parse(bad_body_node).expect("parse ok");
+    let err = directedtype::evaluate_document(&doc).expect_err("Expected error for visual node in Span body");
+    assert!(
+        err.to_string().contains("is not allowed inside a \\Span definition ('BadSpan')"),
+        "Unexpected error: {}",
+        err
+    );
+
+    // 2. Non-Font \let node inside \Span body must fail
+    let bad_body_let = r#"
+    \Span BadLetSpan(env font: Font) {
+        \let r = \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #ff0000);
+        \Children
+    }
+    \Text(font: \Font(size: 16px)) { \BadLetSpan { hello } }
+    "#;
+    let doc2 = parse(bad_body_let).expect("parse ok");
+    let err2 = directedtype::evaluate_document(&doc2).expect_err("Expected error for non-Font let node in Span body");
+    assert!(
+        err2.to_string().contains("is not allowed inside a \\Span definition ('BadLetSpan')"),
+        "Unexpected error: {}",
+        err2
+    );
+
+    // 3. Block \Component placed inside \Span call site must fail
+    let bad_call_site_block = r#"
+    \Component BlockBox() {
+        \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #ff0000)
+    }
+    \Span Bold(env font: Font) {
+        \env font = \Font(font: self.font, weight: 700);
+        \Children
+    }
+    \Text(font: \Font(size: 16px)) {
+        \Bold { text \BlockBox() }
+    }
+    "#;
+    let doc3 = parse(bad_call_site_block).expect("parse ok");
+    let err3 = directedtype::evaluate_document(&doc3).expect_err("Expected error for block component inside Span call site");
+    assert!(
+        err3.to_string().contains("Cannot place non-span component 'BlockBox' inside inline \\Span 'Bold'"),
+        "Unexpected error: {}",
+        err3
+    );
+
+    // 4. Paragraph break (blank line) inside \Span call site must fail
+    let bad_call_site_para = r#"
+    \Span Bold(env font: Font) {
+        \env font = \Font(font: self.font, weight: 700);
+        \Children
+    }
+    \Text(font: \Font(size: 16px)) {
+        \Bold {
+            First line
+
+            Second paragraph
+        }
+    }
+    "#;
+    let doc4 = parse(bad_call_site_para).expect("parse ok");
+    let err4 = directedtype::evaluate_document(&doc4).expect_err("Expected error for paragraph break inside Span");
+    assert!(
+        err4.to_string().contains("Paragraph break (blank line) is not permitted inside inline \\Span 'Bold'"),
+        "Unexpected error: {}",
+        err4
+    );
+}
+
+#[test]
+fn test_stage3_nested_spans_flattening_and_combined_styles() {
+    let input = r#"
+    \Span Bold(env font: Font, weight: Integer = 700) {
+        \env font = \Font(font: self.font, weight: weight);
+        \Children
+    }
+    \Span Italic(env font: Font) {
+        \env font = \Font(font: self.font, italic: true);
+        \Children
+    }
+
+    \env font = \Font(family: "Arial", size: 16px, weight: 400);
+
+    \Text(x: 0, y: 0, width: 400px) {
+        Plain \Bold { bold \Italic { both } }
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+    let text_node = layout.nodes.iter().find(|n| n.name == "Text").expect("Text node");
+
+    assert_eq!(text_node.text_content.as_deref(), Some("Plain bold both"));
+    assert_eq!(text_node.text_spans.len(), 3);
+
+    // Span 0: "Plain " (0..6)
+    assert_eq!(text_node.text_spans[0].range, 0..6);
+    assert_eq!(text_node.text_spans[0].node_id, None);
+
+    // Span 1: "bold " (6..11) -> Bold only
+    assert_eq!(text_node.text_spans[1].range, 6..11);
+    assert_eq!(text_node.text_spans[1].style.font_weight, Some(700.0));
+    assert!(!text_node.text_spans[1].style.italic);
+
+    // Span 2: "both" (11..15) -> Bold + Italic combined
+    assert_eq!(text_node.text_spans[2].range, 11..15);
+    assert_eq!(text_node.text_spans[2].style.font_weight, Some(700.0));
+    assert!(text_node.text_spans[2].style.italic);
+
+    let bold_node = layout.nodes.iter().find(|n| n.name == "Bold").expect("Bold node");
+    let italic_node = layout.nodes.iter().find(|n| n.name == "Italic").expect("Italic node");
+
+    // Bold covers "bold both" so its width is strictly greater than Italic ("both")
+    assert!(bold_node.rect.width > italic_node.rect.width);
+    assert!(italic_node.rect.x > bold_node.rect.x);
+}
+
+#[test]
+fn test_stage3_span_post_shaping_output_ports_in_dag() {
+    let input = r#"
+    \Span Bold(env font: Font) {
+        \env font = \Font(font: self.font, weight: 700);
+        \Children
+    }
+
+    \env font = \Font(family: "Arial", size: 20px, weight: 400);
+
+    \Text(x: 10px, y: 20px, width: 400px) {
+        Prefix \let b = \Bold { target } suffix
+    }
+
+    \Rect(
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+        color: #ff0000
+    )
+
+    \Rect(
+        x: b.right,
+        y: b.baseline,
+        width: b.left,
+        height: b.bottom,
+        color: #00ff00
+    )
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+
+    let bold_node = layout.nodes.iter().find(|n| n.name == "Bold").expect("Bold node");
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+
+    // Bold span starts after "Prefix " at x > 10.0 and has positive dimensions
+    assert!(bold_node.rect.x > 10.0, "Expected b.x > 10.0, got {}", bold_node.rect.x);
+    assert!(bold_node.rect.width > 20.0, "Expected b.width > 20.0, got {}", bold_node.rect.width);
+    assert!(bold_node.rect.height > 10.0, "Expected b.height > 10.0, got {}", bold_node.rect.height);
+
+    // Rect 0 mirrors b.x, b.y, b.width, b.height via DAG equations
+    assert!((rects[0].rect.x - bold_node.rect.x).abs() < 1e-3);
+    assert!((rects[0].rect.y - bold_node.rect.y).abs() < 1e-3);
+    assert!((rects[0].rect.width - bold_node.rect.width).abs() < 1e-3);
+    assert!((rects[0].rect.height - bold_node.rect.height).abs() < 1e-3);
+
+    // Rect 1 mirrors b.right, b.baseline, b.left, b.bottom
+    let b_baseline = bold_node.properties.get("baseline").and_then(|v| v.as_f64()).unwrap();
+    assert!((rects[1].rect.x - (bold_node.rect.x + bold_node.rect.width)).abs() < 1e-3);
+    assert!((rects[1].rect.y - b_baseline).abs() < 1e-3);
+    assert!((rects[1].rect.width - bold_node.rect.x).abs() < 1e-3);
+    assert!((rects[1].rect.height - (bold_node.rect.y + bold_node.rect.height)).abs() < 1e-3);
+}
+
+#[test]
+fn test_stage3_standard_library_spans_bold_italic_code_sup() {
+    let input = r#"
+    \use "components/Bold.dt";
+    \use "components/Italic.dt";
+    \use "components/Code.dt";
+    \use "components/Sup.dt";
+
+    \env font = \Font(family: "Arial", size: 20px, weight: 400);
+
+    \Text(x: 0, y: 20px, width: 500px) {
+        Normal \let b = \Bold { bold } \let i = \Italic { italic } \let c = \Code { code() } word\let s = \Sup { 1 }
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document_with_base_dir(&doc, std::path::Path::new("."))
+        .expect("layout ok");
+
+    let text_node = layout.nodes.iter().find(|n| n.name == "Text").expect("Text node");
+    let bold_node = layout.nodes.iter().find(|n| n.name == "Bold").expect("Bold node");
+    let sup_node = layout.nodes.iter().find(|n| n.name == "Sup").expect("Sup node");
+
+    // Verify Code span style has monospace family and background highlight
+    let code_span = text_node
+        .text_spans
+        .iter()
+        .find(|ts| ts.style.font_family.as_deref() == Some("monospace"))
+        .expect("Code span with monospace family");
+    assert_eq!(code_span.style.bg_color.as_deref(), Some("#f1f5f9"));
+    assert_eq!(code_span.style.font_size, Some(18.0)); // 20px * 0.9
+
+    // Verify Sup span has scaled font size (15px) and negative baseline shift (-7px)
+    let sup_span = text_node
+        .text_spans
+        .iter()
+        .find(|ts| ts.node_id == Some(sup_node.id))
+        .expect("Sup span");
+    assert_eq!(sup_span.style.font_size, Some(15.0)); // 20px * 0.75
+    assert!((sup_span.style.baseline_shift - (-7.0)).abs() < 1e-5); // -20px * 0.35
+
+    // Sup baseline is shifted above Bold baseline by 7px
+    let bold_baseline = bold_node.properties.get("baseline").and_then(|v| v.as_f64()).unwrap();
+    let sup_baseline = sup_node.properties.get("baseline").and_then(|v| v.as_f64()).unwrap();
+    assert!((sup_baseline - (bold_baseline - 7.0)).abs() < 1e-3);
+}
+
+
 

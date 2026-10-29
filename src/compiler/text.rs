@@ -1,4 +1,4 @@
-use parley::style::{FontFamily, FontWeight, StyleProperty};
+use parley::style::{FontFamily, FontStyle, FontWeight, StyleProperty};
 use parley::{FontContext, LayoutContext};
 use std::cell::RefCell;
 
@@ -81,6 +81,31 @@ pub fn measure_text_bounds(
     start_at: Option<&str>,
     line_height: Option<f64>,
 ) -> (f64, f64) {
+    measure_rich_text_bounds(
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        max_width,
+        end_at,
+        start_at,
+        line_height,
+        &[],
+    )
+}
+
+/// Measures the layout boundaries `(width, height)` of rich text with styled inline spans using Parley.
+pub fn measure_rich_text_bounds(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    max_width: Option<f64>,
+    end_at: Option<&str>,
+    start_at: Option<&str>,
+    line_height: Option<f64>,
+    spans: &[TextSpan],
+) -> (f64, f64) {
     if text.is_empty() {
         return (0.0, 0.0);
     }
@@ -107,6 +132,28 @@ pub fn measure_text_bounds(
             if let Some(lh) = line_height {
                 if lh > 0.0 {
                     builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
+                }
+            }
+            for span in spans {
+                if !span.range.is_empty() && span.range.end <= text.len() {
+                    if let Some(sz) = span.style.font_size {
+                        if sz > 0.0 {
+                            builder.push(StyleProperty::FontSize(sz as f32), span.range.clone());
+                        }
+                    }
+                    if let Some(wt) = span.style.font_weight {
+                        if wt > 0.0 {
+                            builder.push(StyleProperty::FontWeight(FontWeight::new(wt as f32)), span.range.clone());
+                        }
+                    }
+                    if let Some(fam) = &span.style.font_family {
+                        if !fam.is_empty() {
+                            builder.push(StyleProperty::FontFamily(FontFamily::named(fam)), span.range.clone());
+                        }
+                    }
+                    if span.style.italic {
+                        builder.push(StyleProperty::FontStyle(FontStyle::Italic), span.range.clone());
+                    }
                 }
             }
 
@@ -393,6 +440,14 @@ use crate::compiler::layout::Rect;
 use std::collections::HashMap;
 use std::ops::Range;
 
+/// Computed layout metrics and line fragments for an inline span.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpanLayoutMetrics {
+    pub fragments: Vec<Rect>,
+    pub rect: Rect,
+    pub baseline: f64,
+}
+
 /// Measures a rich text layout and returns the line fragment bounding boxes for each span.
 pub fn compute_span_fragments(
     text: &str,
@@ -405,13 +460,66 @@ pub fn compute_span_fragments(
     origin_x: f64,
     origin_y: f64,
 ) -> HashMap<NodeId, Vec<Rect>> {
-    let mut result: HashMap<NodeId, Vec<Rect>> = HashMap::new();
+    compute_span_fragments_with_metrics(
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        max_width,
+        None,
+        align,
+        spans,
+        &HashMap::new(),
+        origin_x,
+        origin_y,
+    )
+    .into_iter()
+    .map(|(k, v)| (k, v.fragments))
+    .collect()
+}
+
+/// Measures a rich text layout and returns full `SpanLayoutMetrics` (fragments, union rect, and first-line baseline)
+/// for every inline `NodeId` referenced in `spans` (including outer spans in `span.node_ids`).
+pub fn compute_span_fragments_with_metrics(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    max_width: Option<f64>,
+    line_height: Option<f64>,
+    align: Option<&str>,
+    spans: &[TextSpan],
+    child_shifts: &HashMap<NodeId, f64>,
+    origin_x: f64,
+    origin_y: f64,
+) -> HashMap<NodeId, SpanLayoutMetrics> {
+    let mut result: HashMap<NodeId, SpanLayoutMetrics> = HashMap::new();
     if text.is_empty() || spans.is_empty() {
         return result;
     }
 
     let size = if font_size > 0.0 { font_size as f32 } else { 16.0 };
     let weight = if font_weight > 0.0 { font_weight as f32 } else { 400.0 };
+    let m = measure_font_metrics(font_size, font_weight, font_family);
+
+    // Collect all unique NodeIds across `node_id` and `node_ids`
+    let mut all_node_ids: Vec<NodeId> = Vec::new();
+    for span in spans {
+        if let Some(id) = span.node_id {
+            if !all_node_ids.contains(&id) {
+                all_node_ids.push(id);
+            }
+        }
+        for &id in &span.node_ids {
+            if !all_node_ids.contains(&id) {
+                all_node_ids.push(id);
+            }
+        }
+    }
+
+    let mut frags_by_node: HashMap<NodeId, Vec<Rect>> = HashMap::new();
+    let mut baseline_by_node: HashMap<NodeId, f64> = HashMap::new();
+    let mut default_first_baseline = m.baseline;
 
     FONT_CONTEXT.with(|font_cx_cell| {
         let mut font_cx = font_cx_cell.borrow_mut();
@@ -428,10 +536,33 @@ pub fn compute_span_fragments(
                 builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
             }
         }
+        if let Some(lh) = line_height {
+            if lh > 0.0 {
+                builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
+            }
+        }
         for (idx, span) in spans.iter().enumerate() {
-            if !span.range.is_empty() {
+            if !span.range.is_empty() && span.range.end <= text.len() {
                 let brush_id = ((idx + 1) % 250 + 1) as u8;
                 builder.push(StyleProperty::Brush([brush_id, 0, 0, 255]), span.range.clone());
+                if let Some(sz) = span.style.font_size {
+                    if sz > 0.0 {
+                        builder.push(StyleProperty::FontSize(sz as f32), span.range.clone());
+                    }
+                }
+                if let Some(wt) = span.style.font_weight {
+                    if wt > 0.0 {
+                        builder.push(StyleProperty::FontWeight(FontWeight::new(wt as f32)), span.range.clone());
+                    }
+                }
+                if let Some(fam) = &span.style.font_family {
+                    if !fam.is_empty() {
+                        builder.push(StyleProperty::FontFamily(FontFamily::named(fam)), span.range.clone());
+                    }
+                }
+                if span.style.italic {
+                    builder.push(StyleProperty::FontStyle(FontStyle::Italic), span.range.clone());
+                }
                 if span.style.underline {
                     builder.push(StyleProperty::Underline(true), span.range.clone());
                 }
@@ -453,17 +584,244 @@ pub fn compute_span_fragments(
         };
         layout.align(alignment, parley::layout::AlignmentOptions::default());
 
+        if let Some(first_line) = layout.lines().next() {
+            default_first_baseline = first_line.metrics().baseline as f64;
+        }
+
         for line in layout.lines() {
             let line_metrics = line.metrics();
-            let line_top = origin_y + line_metrics.block_min_coord as f64;
-            let line_height = (line_metrics.block_max_coord - line_metrics.block_min_coord) as f64;
+            let line_top_base = origin_y + line_metrics.block_min_coord as f64;
+            let line_height_val = (line_metrics.block_max_coord - line_metrics.block_min_coord) as f64;
+            let line_baseline_base = origin_y + line_metrics.baseline as f64;
+
+            for &child_id in &all_node_ids {
+                let own_shift = child_shifts
+                    .get(&child_id)
+                    .copied()
+                    .or_else(|| {
+                        spans
+                            .iter()
+                            .find(|s| s.node_id == Some(child_id) || s.node_ids.contains(&child_id))
+                            .map(|s| s.style.baseline_shift)
+                    })
+                    .unwrap_or(0.0);
+
+                let mut min_gx = f32::MAX;
+                let mut max_gx = f32::MIN;
+
+                for (idx, span) in spans.iter().enumerate() {
+                    if span.node_id == Some(child_id) || span.node_ids.contains(&child_id) {
+                        let expected_brush_id = ((idx + 1) % 250 + 1) as u8;
+                        for item in line.items() {
+                            if let parley::layout::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                                if glyph_run.style().brush[0] == expected_brush_id {
+                                    for g in glyph_run.positioned_glyphs() {
+                                        if g.x < min_gx {
+                                            min_gx = g.x;
+                                        }
+                                        let gx_end = g.x + g.advance;
+                                        if gx_end > max_gx {
+                                            max_gx = gx_end;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if min_gx < max_gx {
+                    let frag_rect = Rect::new(
+                        origin_x + min_gx as f64,
+                        line_top_base + own_shift,
+                        (max_gx - min_gx) as f64,
+                        line_height_val,
+                    );
+                    frags_by_node.entry(child_id).or_default().push(frag_rect);
+                    baseline_by_node
+                        .entry(child_id)
+                        .or_insert(line_baseline_base + own_shift);
+                }
+            }
+        }
+    });
+
+    // Handle zero-width inline bookmark spans (e.g. \Anchor("bookmark") or empty \Span inside \Text)
+    for &child_id in &all_node_ids {
+        let own_shift = child_shifts
+            .get(&child_id)
+            .copied()
+            .or_else(|| {
+                spans
+                    .iter()
+                    .find(|s| s.node_id == Some(child_id) || s.node_ids.contains(&child_id))
+                    .map(|s| s.style.baseline_shift)
+            })
+            .unwrap_or(0.0);
+        if !frags_by_node.contains_key(&child_id) {
+            if let Some(span) = spans
+                .iter()
+                .find(|s| s.node_id == Some(child_id) || s.node_ids.contains(&child_id))
+            {
+                let char_offset = span.range.start;
+                let prefix_text = &text[0..char_offset.min(text.len())];
+                let (px, py) = measure_rich_text_bounds(
+                    prefix_text,
+                    font_size,
+                    font_weight,
+                    font_family,
+                    max_width,
+                    None,
+                    None,
+                    line_height,
+                    spans,
+                );
+                let frag_rect = Rect::new(origin_x + px, origin_y + py + own_shift, 0.0, font_size);
+                frags_by_node.insert(child_id, vec![frag_rect]);
+                baseline_by_node.insert(child_id, origin_y + default_first_baseline + own_shift);
+            }
+        }
+    }
+
+    for child_id in all_node_ids {
+        if let Some(fragments) = frags_by_node.remove(&child_id) {
+            if let Some(rect) = Rect::bounding_union(&fragments) {
+                let baseline = baseline_by_node
+                    .remove(&child_id)
+                    .unwrap_or(origin_y + default_first_baseline);
+                result.insert(
+                    child_id,
+                    SpanLayoutMetrics {
+                        fragments,
+                        rect,
+                        baseline,
+                    },
+                );
+            }
+        }
+    }
+
+    result
+}
+
+/// Computes the post-shaping `SpanLayoutMetrics` for a specific byte range `span_range` inside a rich text block.
+pub fn compute_span_range_metrics(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    max_width: Option<f64>,
+    start_at: Option<&str>,
+    line_height: Option<f64>,
+    align: Option<&str>,
+    spans: &[TextSpan],
+    text_x: f64,
+    text_y: f64,
+    span_range: Range<usize>,
+    own_shift: f64,
+) -> SpanLayoutMetrics {
+    let y_offset = text_y_offset(font_size, font_weight, font_family, start_at);
+    let origin_x = text_x;
+    let origin_y = text_y + y_offset;
+
+    if text.is_empty() {
+        return SpanLayoutMetrics {
+            fragments: Vec::new(),
+            rect: Rect::new(text_x, text_y + own_shift, 0.0, 0.0),
+            baseline: text_y + text_baseline_offset(font_size, font_weight, font_family, start_at) + own_shift,
+        };
+    }
+
+    let size = if font_size > 0.0 { font_size as f32 } else { 16.0 };
+    let weight = if font_weight > 0.0 { font_weight as f32 } else { 400.0 };
+    let m = measure_font_metrics(font_size, font_weight, font_family);
+
+    let mut fragments = Vec::new();
+    let mut first_line_baseline: Option<f64> = None;
+    let mut default_first_baseline = m.baseline;
+
+    FONT_CONTEXT.with(|font_cx_cell| {
+        let mut font_cx = font_cx_cell.borrow_mut();
+        let mut layout_cx = LayoutContext::<[u8; 4]>::new();
+
+        let mut builder = layout_cx.ranged_builder(&mut font_cx, text, 1.0, true);
+        builder.push_default(StyleProperty::FontSize(size));
+        builder.push_default(StyleProperty::Brush([0u8, 0u8, 0u8, 255u8]));
+        if (weight - 400.0).abs() > 1.0 {
+            builder.push_default(StyleProperty::FontWeight(FontWeight::new(weight)));
+        }
+        if let Some(family) = font_family {
+            if !family.is_empty() {
+                builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
+            }
+        }
+        if let Some(lh) = line_height {
+            if lh > 0.0 {
+                builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
+            }
+        }
+        for (idx, span) in spans.iter().enumerate() {
+            if !span.range.is_empty() && span.range.end <= text.len() {
+                let brush_id = ((idx + 1) % 250 + 1) as u8;
+                builder.push(StyleProperty::Brush([brush_id, 0, 0, 255]), span.range.clone());
+                if let Some(sz) = span.style.font_size {
+                    if sz > 0.0 {
+                        builder.push(StyleProperty::FontSize(sz as f32), span.range.clone());
+                    }
+                }
+                if let Some(wt) = span.style.font_weight {
+                    if wt > 0.0 {
+                        builder.push(StyleProperty::FontWeight(FontWeight::new(wt as f32)), span.range.clone());
+                    }
+                }
+                if let Some(fam) = &span.style.font_family {
+                    if !fam.is_empty() {
+                        builder.push(StyleProperty::FontFamily(FontFamily::named(fam)), span.range.clone());
+                    }
+                }
+                if span.style.italic {
+                    builder.push(StyleProperty::FontStyle(FontStyle::Italic), span.range.clone());
+                }
+                if span.style.underline {
+                    builder.push(StyleProperty::Underline(true), span.range.clone());
+                }
+            }
+        }
+
+        let mut layout = builder.build(text);
+        if let Some(w) = max_width {
+            if w > 0.0 {
+                layout.break_all_lines(Some(w as f32));
+            }
+        }
+
+        let alignment = match align {
+            Some("center") | Some("Center") => parley::Alignment::Center,
+            Some("right") | Some("Right") | Some("end") | Some("End") => parley::Alignment::End,
+            Some("justify") | Some("Justify") => parley::Alignment::Justify,
+            _ => parley::Alignment::Start,
+        };
+        layout.align(alignment, parley::layout::AlignmentOptions::default());
+
+        if let Some(first_line) = layout.lines().next() {
+            default_first_baseline = first_line.metrics().baseline as f64;
+        }
+
+        for line in layout.lines() {
+            let line_metrics = line.metrics();
+            let line_top_base = origin_y + line_metrics.block_min_coord as f64;
+            let line_height_val = (line_metrics.block_max_coord - line_metrics.block_min_coord) as f64;
+            let line_baseline_base = origin_y + line_metrics.baseline as f64;
+
+            let mut min_gx = f32::MAX;
+            let mut max_gx = f32::MIN;
 
             for (idx, span) in spans.iter().enumerate() {
-                if let Some(child_id) = span.node_id {
+                if !span.range.is_empty()
+                    && span.range.start >= span_range.start
+                    && span.range.end <= span_range.end
+                {
                     let expected_brush_id = ((idx + 1) % 250 + 1) as u8;
-                    let mut min_gx = f32::MAX;
-                    let mut max_gx = f32::MIN;
-
                     for item in line.items() {
                         if let parley::layout::PositionedLayoutItem::GlyphRun(glyph_run) = item {
                             if glyph_run.style().brush[0] == expected_brush_id {
@@ -479,37 +837,50 @@ pub fn compute_span_fragments(
                             }
                         }
                     }
+                }
+            }
 
-                    if min_gx < max_gx {
-                        let frag_rect = Rect::new(
-                            origin_x + min_gx as f64,
-                            line_top,
-                            (max_gx - min_gx) as f64,
-                            line_height,
-                        );
-                        result.entry(child_id).or_default().push(frag_rect);
-                    }
+            if min_gx < max_gx {
+                fragments.push(Rect::new(
+                    origin_x + min_gx as f64,
+                    line_top_base + own_shift,
+                    (max_gx - min_gx) as f64,
+                    line_height_val,
+                ));
+                if first_line_baseline.is_none() {
+                    first_line_baseline = Some(line_baseline_base + own_shift);
                 }
             }
         }
     });
 
-    // Handle zero-width inline bookmark spans (e.g. \Anchor("bookmark") inside \Text)
-    for span in spans {
-        if span.range.is_empty() {
-            if let Some(child_id) = span.node_id {
-                result.entry(child_id).or_insert_with(|| {
-                    let char_offset = span.range.start;
-                    let prefix_text = &text[0..char_offset.min(text.len())];
-                    let (px, py) = measure_text_bounds(prefix_text, font_size, font_weight, font_family, max_width, None, None, None);
-                    let frag_rect = Rect::new(origin_x + px, origin_y + py, 0.0, font_size);
-                    vec![frag_rect]
-                });
-            }
-        }
+    if fragments.is_empty() {
+        let char_offset = span_range.start.min(text.len());
+        let prefix_text = &text[0..char_offset];
+        let (px, py) = measure_rich_text_bounds(
+            prefix_text,
+            font_size,
+            font_weight,
+            font_family,
+            max_width,
+            None,
+            None,
+            line_height,
+            spans,
+        );
+        let frag_rect = Rect::new(origin_x + px, origin_y + py + own_shift, 0.0, font_size);
+        fragments.push(frag_rect);
     }
 
-    result
+    let rect = Rect::bounding_union(&fragments)
+        .unwrap_or_else(|| Rect::new(text_x, text_y + own_shift, 0.0, 0.0));
+    let baseline = first_line_baseline.unwrap_or(origin_y + default_first_baseline + own_shift);
+
+    SpanLayoutMetrics {
+        fragments,
+        rect,
+        baseline,
+    }
 }
 
 /// A styled range of text within a parent text element.
@@ -517,8 +888,10 @@ pub fn compute_span_fragments(
 pub struct TextSpan {
     /// Byte range within the parent node's concatenated `text_content`.
     pub range: Range<usize>,
-    /// Associated inline component (e.g. NodeId of \Link), if this span corresponds to a node.
+    /// Innermost inline component (e.g. NodeId of \Link or \Bold), if this span corresponds to a node.
     pub node_id: Option<NodeId>,
+    /// Chain of inline component NodeIds covering this range, from innermost to outermost.
+    pub node_ids: Vec<NodeId>,
     /// Typographic style overrides for this range.
     pub style: SpanStyle,
 }
@@ -528,13 +901,26 @@ impl TextSpan {
         Self {
             range,
             node_id: None,
+            node_ids: Vec::new(),
             style: SpanStyle::default(),
         }
     }
 
     pub fn with_node(mut self, node_id: NodeId) -> Self {
         self.node_id = Some(node_id);
+        if !self.node_ids.contains(&node_id) {
+            self.node_ids.push(node_id);
+        }
         self
+    }
+
+    pub fn push_parent_node(&mut self, node_id: NodeId) {
+        if self.node_id.is_none() {
+            self.node_id = Some(node_id);
+        }
+        if !self.node_ids.contains(&node_id) {
+            self.node_ids.push(node_id);
+        }
     }
 
     pub fn with_style(mut self, style: SpanStyle) -> Self {
@@ -547,10 +933,13 @@ impl TextSpan {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SpanStyle {
     pub color: Option<String>,
+    pub bg_color: Option<String>,
     pub font_size: Option<f64>,
     pub font_weight: Option<f64>,
     pub font_family: Option<String>,
+    pub italic: bool,
     pub underline: bool,
+    pub baseline_shift: f64,
     pub url: Option<String>,
     pub cursor: Option<CursorKind>,
 }

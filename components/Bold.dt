@@ -1,0 +1,7 @@
+// DirectedType Standard Component Library: Bold
+// Inline span that sets font weight to bold (700 by default) while preserving inherited font properties.
+
+\Span Bold(env font: Font, weight: Integer = 700) {
+    \env font = \Font(font: self.font, weight: weight);
+    \Children
+}

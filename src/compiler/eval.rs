@@ -820,7 +820,45 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let line_height = evaluated_args.get(7).and_then(|v| v.as_f64());
                     validate_font_family(family, c.span)?;
 
-                    let h = crate::compiler::text::measure_text_height(text, size, weight, family, max_width, end_at, start_at, line_height);
+                    let mut spans = Vec::new();
+                    let mut idx = 8;
+                    while idx + 6 < evaluated_args.len() {
+                        let s_start = evaluated_args[idx].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                        let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                        let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
+                        let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
+                        let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
+                        if let Some(ref fam) = s_family {
+                            validate_font_family(Some(fam.as_str()), c.span)?;
+                        }
+                        let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
+                        let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
+                        spans.push(
+                            crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
+                                crate::compiler::text::SpanStyle {
+                                    font_size: s_size,
+                                    font_weight: s_weight,
+                                    font_family: s_family,
+                                    italic: s_italic,
+                                    baseline_shift: s_shift,
+                                    ..Default::default()
+                                },
+                            ),
+                        );
+                        idx += 7;
+                    }
+
+                    let (_, h) = crate::compiler::text::measure_rich_text_bounds(
+                        text,
+                        size,
+                        weight,
+                        family,
+                        Some(max_width),
+                        end_at,
+                        start_at,
+                        line_height,
+                        &spans,
+                    );
                     Ok(Value::Distance(h))
                 }
                 "text_baseline_offset" => {
@@ -840,8 +878,116 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let family = get_family_from_val(evaluated_args.get(3), env);
                     validate_font_family(family, c.span)?;
 
-                    let w = crate::compiler::text::measure_text_width(text, size, weight, family);
+                    let mut spans = Vec::new();
+                    let mut idx = 4;
+                    while idx + 6 < evaluated_args.len() {
+                        let s_start = evaluated_args[idx].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                        let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                        let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
+                        let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
+                        let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
+                        if let Some(ref fam) = s_family {
+                            validate_font_family(Some(fam.as_str()), c.span)?;
+                        }
+                        let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
+                        let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
+                        spans.push(
+                            crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
+                                crate::compiler::text::SpanStyle {
+                                    font_size: s_size,
+                                    font_weight: s_weight,
+                                    font_family: s_family,
+                                    italic: s_italic,
+                                    baseline_shift: s_shift,
+                                    ..Default::default()
+                                },
+                            ),
+                        );
+                        idx += 7;
+                    }
+
+                    let (w, _) = crate::compiler::text::measure_rich_text_bounds(
+                        text,
+                        size,
+                        weight,
+                        family,
+                        None,
+                        None,
+                        None,
+                        None,
+                        &spans,
+                    );
                     Ok(Value::Distance(w))
+                }
+                "span_metric" => {
+                    let metric = evaluated_args.first().and_then(|v| v.as_str()).unwrap_or("x");
+                    let span_start = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0).max(0.0) as usize;
+                    let span_end = evaluated_args.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0).max(0.0) as usize;
+                    let own_shift = evaluated_args.get(3).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let text = evaluated_args.get(4).and_then(|v| v.as_str()).unwrap_or("");
+                    let text_x = evaluated_args.get(5).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let text_y = evaluated_args.get(6).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let max_width = evaluated_args.get(7).and_then(|v| v.as_f64()).filter(|&w| w > 0.0);
+                    let size = evaluated_args.get(8).and_then(|v| v.as_f64()).unwrap_or(16.0);
+                    let weight = evaluated_args.get(9).and_then(|v| v.as_f64()).unwrap_or(400.0);
+                    let family = get_family_from_val(evaluated_args.get(10), env);
+                    let start_at = evaluated_args.get(11).and_then(|v| v.as_str());
+                    let line_height = evaluated_args.get(12).and_then(|v| v.as_f64()).filter(|&h| h > 0.0);
+                    let align = evaluated_args.get(13).and_then(|v| v.as_str());
+                    validate_font_family(family, c.span)?;
+
+                    let mut spans = Vec::new();
+                    let mut idx = 14;
+                    while idx + 6 < evaluated_args.len() {
+                        let s_start = evaluated_args[idx].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                        let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                        let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
+                        let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
+                        let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
+                        if let Some(ref fam) = s_family {
+                            validate_font_family(Some(fam.as_str()), c.span)?;
+                        }
+                        let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
+                        let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
+                        spans.push(
+                            crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
+                                crate::compiler::text::SpanStyle {
+                                    font_size: s_size,
+                                    font_weight: s_weight,
+                                    font_family: s_family,
+                                    italic: s_italic,
+                                    baseline_shift: s_shift,
+                                    ..Default::default()
+                                },
+                            ),
+                        );
+                        idx += 7;
+                    }
+
+                    let sm = crate::compiler::text::compute_span_range_metrics(
+                        text,
+                        size,
+                        weight,
+                        family,
+                        max_width,
+                        start_at,
+                        line_height,
+                        align,
+                        &spans,
+                        text_x,
+                        text_y,
+                        span_start..span_end,
+                        own_shift,
+                    );
+                    let val = match metric {
+                        "x" => sm.rect.x,
+                        "y" => sm.rect.y,
+                        "width" => sm.rect.width,
+                        "height" => sm.rect.height,
+                        "baseline" => sm.baseline,
+                        _ => 0.0,
+                    };
+                    Ok(Value::Distance(val))
                 }
                 "font_cap_height" => {
                     let size = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(16.0);

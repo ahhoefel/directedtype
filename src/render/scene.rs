@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 use parley::layout::{AlignmentOptions, PositionedLayoutItem};
-use parley::style::{FontFamily, FontWeight, StyleProperty};
+use parley::style::{FontFamily, FontStyle, FontWeight, StyleProperty};
 use parley::{Alignment, FontContext, LayoutContext};
 use vello::kurbo::{Affine, Cap, Line, Rect, RoundedRect, RoundedRectRadii, Stroke};
 use vello::peniko::{Brush, Color, Fill};
@@ -20,6 +20,11 @@ pub struct SpanRenderKey {
     pub color: Option<String>,
     pub underline: bool,
     pub bg_color: Option<String>,
+    pub font_size: Option<u64>,
+    pub font_weight: Option<u64>,
+    pub font_family: Option<String>,
+    pub italic: bool,
+    pub baseline_shift: u64,
 }
 
 /// The set of input properties that determine a text node's local glyph layout and visual presentation.
@@ -713,7 +718,13 @@ pub fn build_scene(
         }
 
         // Render text
+        let is_standalone_span_text = node.text_content.is_some()
+            && !node
+                .parent
+                .and_then(|pid| layout.get_node(pid))
+                .map_or(false, |p| p.text_content.is_some());
         let is_text_primitive = node.name == "Text"
+            || is_standalone_span_text
             || (node.children.is_empty()
                 && (node.properties.contains_key("text") || node.properties.contains_key("content")));
         if !is_text_primitive {
@@ -808,17 +819,32 @@ pub fn build_scene(
                 for span in &node.text_spans {
                     let mut color_str = span.style.color.clone();
                     let mut underline = span.style.underline;
-                    let mut bg_str = None;
+                    let mut bg_str = span.style.bg_color.clone();
 
                     if let Some(child_id) = span.node_id {
                         if let Some(child_node) = layout.get_node(child_id) {
-                            if let Some(bg) = child_node.properties.get("current_bg").and_then(|v| v.as_str()) {
+                            if let Some(bg) = child_node
+                                .properties
+                                .get("current_bg")
+                                .or_else(|| child_node.properties.get("bg"))
+                                .and_then(|v| v.as_str())
+                            {
                                 bg_str = Some(bg.to_string());
                             }
-                            if let Some(c) = child_node.properties.get("current_color").and_then(|v| v.as_str()) {
+                            if let Some(c) = child_node
+                                .properties
+                                .get("current_color")
+                                .or_else(|| child_node.properties.get("color"))
+                                .and_then(|v| v.as_str())
+                            {
                                 color_str = Some(c.to_string());
                             }
-                            if let Some(u) = child_node.properties.get("current_underline").and_then(|v| v.as_bool()) {
+                            if let Some(u) = child_node
+                                .properties
+                                .get("current_underline")
+                                .or_else(|| child_node.properties.get("underline"))
+                                .and_then(|v| v.as_bool())
+                            {
                                 underline = u;
                             }
                         }
@@ -829,6 +855,11 @@ pub fn build_scene(
                         color: color_str,
                         underline,
                         bg_color: bg_str,
+                        font_size: span.style.font_size.map(|v| v.to_bits()),
+                        font_weight: span.style.font_weight.map(|v| v.to_bits()),
+                        font_family: span.style.font_family.clone(),
+                        italic: span.style.italic,
+                        baseline_shift: span.style.baseline_shift.to_bits(),
                     });
                 }
 
@@ -883,11 +914,17 @@ pub fn build_scene(
                     builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
                 }
 
-                // Draw any span background highlights (e.g. focused_bg on links) in local coordinates
+                // Draw any span background highlights (e.g. focused_bg on links or bg on \Code) in local coordinates
                 for span in &node.text_spans {
                     if let Some(child_id) = span.node_id {
                         if let Some(child_node) = layout.get_node(child_id) {
-                            if let Some(bg_str) = child_node.properties.get("current_bg").and_then(|v| v.as_str()) {
+                            let bg_opt = child_node
+                                .properties
+                                .get("current_bg")
+                                .or_else(|| child_node.properties.get("bg"))
+                                .and_then(|v| v.as_str())
+                                .or(span.style.bg_color.as_deref());
+                            if let Some(bg_str) = bg_opt {
                                 let bg_color = parse_color(bg_str);
                                 if bg_color.components[3] > 0.0 {
                                     for frag in &child_node.fragments {
@@ -914,22 +951,50 @@ pub fn build_scene(
                     }
                 }
 
-                // Push span styles (colors & underlines) to range builder
+                // Push span styles (fonts, colors, italic, underlines) to range builder
                 for span in &node.text_spans {
                     let mut color_str = span.style.color.as_deref();
                     let mut underline = span.style.underline;
 
                     if let Some(child_id) = span.node_id {
                         if let Some(child_node) = layout.get_node(child_id) {
-                            if let Some(c) = child_node.properties.get("current_color").and_then(|v| v.as_str()) {
+                            if let Some(c) = child_node
+                                .properties
+                                .get("current_color")
+                                .or_else(|| child_node.properties.get("color"))
+                                .and_then(|v| v.as_str())
+                            {
                                 color_str = Some(c);
                             }
-                            if let Some(u) = child_node.properties.get("current_underline").and_then(|v| v.as_bool()) {
+                            if let Some(u) = child_node
+                                .properties
+                                .get("current_underline")
+                                .or_else(|| child_node.properties.get("underline"))
+                                .and_then(|v| v.as_bool())
+                            {
                                 underline = u;
                             }
                         }
                     }
 
+                    if let Some(sz) = span.style.font_size {
+                        if sz > 0.0 {
+                            builder.push(StyleProperty::FontSize(sz as f32), span.range.clone());
+                        }
+                    }
+                    if let Some(wt) = span.style.font_weight {
+                        if wt > 0.0 {
+                            builder.push(StyleProperty::FontWeight(FontWeight::new(wt as f32)), span.range.clone());
+                        }
+                    }
+                    if let Some(ref fam) = span.style.font_family {
+                        if !fam.is_empty() {
+                            builder.push(StyleProperty::FontFamily(FontFamily::named(fam)), span.range.clone());
+                        }
+                    }
+                    if span.style.italic {
+                        builder.push(StyleProperty::FontStyle(FontStyle::Italic), span.range.clone());
+                    }
                     if let Some(c_str) = color_str {
                         let c = parse_color(c_str);
                         builder.push(StyleProperty::Brush(color_to_rgba8(&c)), span.range.clone());
@@ -957,6 +1022,13 @@ pub fn build_scene(
                     for item in line.items() {
                         if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
                             let run = glyph_run.run();
+                            let run_range = run.text_range();
+                            let y_shift = node
+                                .text_spans
+                                .iter()
+                                .find(|s| !s.range.is_empty() && s.range.start <= run_range.start && run_range.end <= s.range.end)
+                                .map(|s| s.style.baseline_shift as f32)
+                                .unwrap_or(0.0);
                             let font = run.font();
                             let brush_u8 = glyph_run.style().brush;
                             let run_color = Color::from_rgba8(brush_u8[0], brush_u8[1], brush_u8[2], brush_u8[3]);
@@ -964,7 +1036,7 @@ pub fn build_scene(
                             let glyphs = glyph_run.positioned_glyphs().map(|g| vello::Glyph {
                                 id: g.id,
                                 x: g.x,
-                                y: g.y,
+                                y: g.y + y_shift,
                             });
                             local_scene
                                 .draw_glyphs(font)
@@ -986,7 +1058,7 @@ pub fn build_scene(
                                     if end_x > max_gx {
                                         max_gx = end_x;
                                     }
-                                    gy = g.y;
+                                    gy = g.y + y_shift;
                                 }
 
                                 if min_gx < max_gx {

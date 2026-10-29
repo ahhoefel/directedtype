@@ -3,7 +3,7 @@
 // styled by an environmental LinkStyle bundle with reactive hover and focus styling.
 \use "components/LinkStyle.dt"
 
-\Component Link(
+\Span Link(
     url: String,
     env link_style: LinkStyle,
     env font: Font,
@@ -24,27 +24,12 @@
     \let active_underline = focused ? link_style.focused_underline : (hovered ? link_style.hover_underline : link_style.underline);
     \let active_bg = focused ? link_style.focused_bg : (hovered ? link_style.hover_bg : link_style.bg);
 
+    \alias color = active_color;
+    \alias underline = active_underline;
+    \alias bg = active_bg;
     \alias current_color = active_color;
     \alias current_underline = active_underline;
     \alias current_bg = active_bg;
 
-    \let link_text = \Text(
-        x: x,
-        y: y,
-        font: font,
-        color: active_color,
-        underline: active_underline,
-        on_click: on_click,
-        on_focus: on_focus,
-        on_blur: on_blur,
-        on_pointer_enter: on_pointer_enter,
-        on_pointer_leave: on_pointer_leave
-    ) {
-        \Children
-    };
-
-    \alias width = link_text.width;
-    \alias height = link_text.height;
-    \alias right = x + link_text.width;
-    \alias bottom = y + link_text.height;
+    \Children
 }

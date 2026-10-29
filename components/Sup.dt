@@ -1,0 +1,9 @@
+// DirectedType Standard Component Library: Sup
+// Inline superscript span that scales font size and shifts the baseline upward.
+
+\Span Sup(env font: Font) {
+    \env font = \Font(font: self.font, size: self.font.size * 0.75);
+    \let baseline_shift = -self.font.size * 0.35;
+    \Children
+}
+

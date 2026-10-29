@@ -83,10 +83,32 @@ pub fn parse_param_list(cursor: &mut ParserCursor<'_>) -> Result<(Vec<ParamDef>,
     Ok((params, span))
 }
 
-/// Parses a component definition: `\Component Name(params) { body }`
+/// Parses a component definition: `\Component Name(params) { body }` or `\Span Name(params) { body }`
 pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef, ParseError> {
     let slash_span = cursor.consume_token(&Token::Backslash)?;
-    let comp_span = cursor.consume_token(&Token::Component)?;
+    let (kind, comp_span) = match cursor.peek_token()?.cloned() {
+        Some((Token::Component, _)) => (
+            crate::ast::ComponentKind::Component,
+            cursor.consume_token(&Token::Component)?,
+        ),
+        Some((Token::Span, _)) => (
+            crate::ast::ComponentKind::Span,
+            cursor.consume_token(&Token::Span)?,
+        ),
+        Some((other, span)) => {
+            return Err(ParseError::UnexpectedToken {
+                expected: "Component or Span".to_string(),
+                found: other.to_string(),
+                span,
+            });
+        }
+        None => {
+            return Err(ParseError::UnexpectedEof {
+                expected: "Component or Span".to_string(),
+                span: slash_span,
+            });
+        }
+    };
     let name = parse_ident(cursor)?;
 
     let (params, _) = if let Some((Token::LParen, _)) = cursor.peek_token()? {
@@ -102,6 +124,7 @@ pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef
     let span = slash_span.merge(comp_span).merge(slot.span);
 
     Ok(ComponentDef {
+        kind,
         name,
         params,
         body: slot.items,

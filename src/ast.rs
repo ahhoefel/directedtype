@@ -102,9 +102,19 @@ impl UseDeclaration {
     }
 }
 
-/// Component definition: `\Component Name(params) { body }`
+/// Kind of a component definition: `\Component`, `\Span`, or `\InlineBox`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum ComponentKind {
+    #[default]
+    Component,
+    Span,
+    InlineBox,
+}
+
+/// Component definition: `\Component Name(params) { body }` or `\Span Name(params) { body }`
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComponentDef {
+    pub kind: ComponentKind,
     pub name: Ident,
     pub params: Vec<ParamDef>,
     pub body: Vec<ComponentBodyItem>,

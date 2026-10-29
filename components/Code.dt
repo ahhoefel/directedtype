@@ -1,0 +1,12 @@
+// DirectedType Standard Component Library: Code
+// Inline monospace code span with optional background highlight and text color.
+
+\Span Code(
+    env font: Font,
+    family: String = "monospace",
+    bg: Color = #f1f5f9,
+    color: Color = #0f172a
+) {
+    \env font = \Font(font: self.font, family: family, size: self.font.size * 0.9);
+    \Children
+}

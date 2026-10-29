@@ -1,0 +1,8 @@
+// DirectedType Standard Component Library: Italic
+// Inline span that enables italic posture while preserving inherited font properties.
+
+\Span Italic(env font: Font) {
+    \env font = \Font(font: self.font, italic: true);
+    \Children
+}
+
