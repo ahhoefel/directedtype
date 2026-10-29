@@ -4336,3 +4336,117 @@ fn test_children_refers_to_enclosing_component_while_parent_is_context_sensitive
     assert_eq!(rects[2].rect.height, 30.0);
 }
 
+#[test]
+fn test_stage2_derived_font_from_ambient_env_font() {
+    let input = r#"
+    \env font = \Font(family: "Arial", size: 20px, weight: 400, line_height: 30px);
+    \let bold_font = \Font(weight: 700);
+    \let sub_font = \Font(size: 0.75em);
+
+    \let r_bold = \Rect(
+        x: bold_font.size,
+        y: bold_font.line_height,
+        width: bold_font.weight * 1px,
+        height: 10px,
+        color: #000000
+    );
+    \let r_sub = \Rect(
+        x: sub_font.size,
+        y: 0,
+        width: sub_font.weight * 1px,
+        height: 10px,
+        color: #000000
+    );
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+
+    // bold_font inherits size: 20px, line_height: 30px, overrides weight: 700
+    assert_eq!(rects[0].rect.x, 20.0);
+    assert_eq!(rects[0].rect.y, 30.0);
+    assert_eq!(rects[0].rect.width, 700.0);
+
+    // sub_font resolves 0.75em against base font (20px -> 15px) and inherits weight: 400
+    assert_eq!(rects[1].rect.x, 15.0);
+    assert_eq!(rects[1].rect.width, 400.0);
+}
+
+#[test]
+fn test_stage2_derived_font_explicit_font_port_and_shadowed_self_font() {
+    let input = r#"
+    \Component SupBox(env font: Font, x: Distance = 0, y: Distance = 0) {
+        \env font = \Font(font: self.font, size: 0.75em, weight: 600);
+        \alias baseline_shift = self.font.size * 0.35;
+        \Rect(
+            x: font.size,
+            y: baseline_shift,
+            width: font.weight * 1px,
+            height: self.font.size,
+            color: #000000
+        )
+    }
+
+    \env font = \Font(family: "Arial", size: 20px, weight: 400);
+    \SupBox()
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").expect("Rect found");
+
+    // Local `font` has size = 0.75 * 20 = 15px, weight = 600
+    assert_eq!(rect.rect.x, 15.0);
+    assert_eq!(rect.rect.width, 600.0);
+    // `self.font` still refers to the incoming 20px font parameter (not the 15px shadow)
+    assert!((rect.rect.y - 7.0).abs() < 1e-5);
+    assert_eq!(rect.rect.height, 20.0);
+}
+
+#[test]
+fn test_stage2_text_explicit_font_forwards_env_font_to_children() {
+    let input = r#"
+    \Component FontProbe(env font: Font) {
+        \Rect(
+            x: font.size,
+            y: 0,
+            width: font.weight * 1px,
+            height: 10px,
+            color: #000000
+        )
+    }
+
+    \Component H1(x: Distance = 0, y: Distance = 0) {
+        \Text(x: x, y: y, font: \Font(family: "Arial", size: 32px, weight: 700)) {
+            \Children
+        }
+    }
+
+    \env font = \Font(family: "Arial", size: 16px, weight: 400);
+
+    \Text(x: 0, y: 0, font: \Font(family: "Arial", size: 24px, weight: 600)) {
+        Hello \FontProbe()
+    }
+
+    \H1(x: 0, y: 50px) {
+        Heading \FontProbe()
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+    let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 2);
+
+    // Direct child inside \Text(font: \Font(size: 24px, weight: 600)) receives 24px, weight 600
+    assert_eq!(rects[0].rect.x, 24.0);
+    assert_eq!(rects[0].rect.width, 600.0);
+
+    // Consumer child passed through \H1's \Text(font: \Font(size: 32px, weight: 700)) { \Children } receives 32px, weight 700
+    assert_eq!(rects[1].rect.x, 32.0);
+    assert_eq!(rects[1].rect.width, 700.0);
+}
+
+
