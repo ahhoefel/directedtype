@@ -1,0 +1,169 @@
+// DirectedType Example: TeX-Inspired Plain Text, Paragraph Flow, & Inline Spans
+// Demonstrates:
+// 1. Automatic paragraph coalescing inside block containers (\VStackStretch, \Card)
+//    without manually wrapping paragraphs in \Text { ... }
+// 2. Blank lines (\n\n) splitting contiguous prose into separate paragraphs
+// 3. Derived \Font(weight: ..., size: ...) overloads and \Text font forwarding
+// 4. Standard library & custom \Span components (\Bold, \Italic, \Code, \Sup, \Link)
+// 5. Post-shaping \Span output ports (\let n1 = \Sup { [1] } -> n1.baseline)
+//    powering baseline-aligned margin sidenotes across the layout DAG!
+
+\use "components/VStackStretch.dt"
+\use "components/Card.dt"
+\use "components/CardStyle.dt"
+\use "components/Divider.dt"
+\use "components/LinkStyle.dt"
+\use "components/Link.dt"
+\use "components/Bold.dt"
+\use "components/Italic.dt"
+\use "components/Code.dt"
+\use "components/Sup.dt"
+\use "theme/default.dt"
+
+\env font = \Font(family: "Arial", size: 15px, line_height: 23px);
+\env link_style = link_default;
+
+// Custom \Span for inline highlight markers
+\Span Highlight(
+    env font: Font,
+    color: Color = #854d0e,
+    bg: Color = #fef08a
+) {
+    \Children
+}
+
+// Single-Text Context Heading Components (\Text { \Children }):
+// Inline spans (\Code, \Italic) inside \H1 or \H2 automatically inherit the heading's font!
+\Component H1(
+    env font: Font,
+    width: Distance = parent.width,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    color: Color = #0f172a
+) {
+    \let h_font = \Font(size: 28px, weight: 700, line_height: 36px);
+    \let t = \Text(x: x, y: y, width: width, font: h_font, color: color) {
+        \Children
+    };
+    \alias height = t.height;
+    \alias bottom = y + height;
+}
+
+\Component H2(
+    env font: Font,
+    width: Distance = parent.width,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    color: Color = #1e293b
+) {
+    \let h_font = \Font(size: 19px, weight: 700, line_height: 26px);
+    \let t = \Text(x: x, y: y, width: width, font: h_font, color: color) {
+        \Children
+    };
+    \alias height = t.height;
+    \alias bottom = y + height;
+}
+
+\let callout_style = \CardStyle(
+    bg: #f8fafc,
+    border_color: #cbd5e1,
+    border_width: 1px,
+    radius: 10px,
+    padding_x: 20px,
+    padding_y: 16px
+);
+
+\let sidenote_font = \Font(size: 13px, line_height: 18px);
+
+// Main Article Column (Block Container Context)
+\let article = \VStackStretch(
+    x: 40px,
+    y: 36px,
+    width: 480px,
+    gap: 16px
+) {
+    \H1 {
+        \Bold{Directed}//
+        \Italic{Type} Flow & \Code{\\Span} Architecture
+    }
+
+    In DirectedType, you can write natural multi-paragraph prose directly inside block
+    containers like \Code{\\VStackStretch} and \Code{\\Card} without wrapping every
+    paragraph in an explicit \Code{\\Text \{ ... \}} block.\let n1 = \Sup { [1] }
+    Contiguous runs of plain text and inline spans are automatically coalesced into
+    synthesized paragraphs, while blank lines split paragraphs cleanly.
+
+    Inline spans such as \Bold{bold}, \Italic{italic}, \Bold{\Italic{bold italic}},
+    \Highlight{highlighted phrases}, and \Link(url: "https://example.com"){hyperlinks}
+    wrap seamlessly across line boundaries. Single newlines between adjacent tags like
+    \Bold{first}
+    \Italic{second}
+    collapse to a single space, whereas ending a line with a \Code{\/\/} comment joins
+    tokens flush without a space.
+
+    \Divider(color: #e2e8f0)
+
+    \H2 {
+        Post-Shaping \Code{\\Span} Geometry in the DAG
+    }
+
+    Every \Code{\\Span} instance exposes read-only post-shaping output ports—including
+    \Code{x}, \Code{y}, \Code{width}, \Code{height}, and \Code{baseline}—once Parley
+    finishes line breaking.\let n2 = \Sup { [2] } External elements outside the
+    paragraph can reference those ports directly in their algebraic layout equations!
+
+    \Card(style: callout_style, gap: 10px) {
+        \Bold{Callout Card with Multi-Paragraph Flow}
+
+        Because \Code{\\Card} is also a Block Container Context, plain text inside a
+        card coalesces into paragraphs separated by blank lines. Non-breaking spaces
+        like \Code{100~px} keep quantities together on the same line.
+
+        Even inside a nested container, inline \Code{\\Span} styles compose naturally
+        with the ambient \Code{\\env font} and \Code{\\env link_style}.
+    }
+};
+
+// Margin Sidenote 1: Baseline-aligned to inline superscript `n1`!
+\Rect(
+    x: article.right + 20px,
+    y: n1_note.top - 8px,
+    width: 220px,
+    height: n1_note.height + 16px,
+    color: #eff6ff,
+    border_color: #bfdbfe,
+    border_width: 1px,
+    radius: 8px
+)
+\let n1_note = \Text(
+    x: article.right + 32px,
+    baseline: n1.baseline,
+    width: 196px,
+    font: sidenote_font,
+    color: #1e3a8a
+) {
+    \Bold{[1] TeX-Style Rules:} Leading/trailing whitespace inside \Code{\{ ... \}} is
+    trimmed, and blank lines emit \Code{ParagraphBreak}.
+};
+
+// Margin Sidenote 2: Baseline-aligned to inline superscript `n2`!
+\Rect(
+    x: article.right + 20px,
+    y: n2_note.top - 8px,
+    width: 220px,
+    height: n2_note.height + 16px,
+    color: #fdf2f8,
+    border_color: #fbcfe8,
+    border_width: 1px,
+    radius: 8px
+)
+\let n2_note = \Text(
+    x: article.right + 32px,
+    baseline: n2.baseline,
+    width: 196px,
+    font: sidenote_font,
+    color: #831843
+) {
+    \Bold{[2] Sidenote Alignment:} This note's \Code{baseline} is wired directly to
+    \Code{n2.baseline} (\Sup{[2]} in the paragraph on the left).
+};

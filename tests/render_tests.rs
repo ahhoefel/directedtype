@@ -1024,3 +1024,41 @@ fn test_viewer_zoom_and_reset() {
     assert!((app.scroll_y() - 0.0).abs() < 1e-6);
 }
 
+#[test]
+fn test_text_flow_demo_compiles_and_renders() {
+    let source =
+        std::fs::read_to_string("examples/text_flow_demo.dt").expect("read text_flow_demo.dt");
+    let doc = directedtype::parse(&source).expect("parse text_flow_demo.dt");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        820.0,
+        720.0,
+        std::path::Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("text_flow_demo.dt must compile");
+
+    for node in &compiled.layout.nodes {
+        if matches!(node.name.as_str(), "VStackStretch" | "H1" | "H2" | "Card") {
+            assert!(
+                node.text_content.is_none(),
+                "Container node {} ({:?}) should not have ghost text_content, found {:?}",
+                node.name,
+                node.id,
+                node.text_content
+            );
+        }
+    }
+
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let options = SceneOptions::default();
+    let img = renderer
+        .render_layout(&compiled.layout, 820, 720, &options)
+        .expect("render layout ok");
+    assert_eq!(img.width(), 820);
+    assert_eq!(img.height(), 720);
+}
+
+

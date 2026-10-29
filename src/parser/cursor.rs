@@ -399,6 +399,14 @@ impl<'a> ParserCursor<'a> {
                         raw_buf.push('~');
                         self.pos += 2;
                         continue;
+                    } else if after_backslash.starts_with('/') {
+                        raw_buf.push('/');
+                        self.pos += 2;
+                        continue;
+                    } else if after_backslash.starts_with('*') {
+                        raw_buf.push('*');
+                        self.pos += 2;
+                        continue;
                     }
                 }
 
@@ -419,9 +427,9 @@ impl<'a> ParserCursor<'a> {
                     }
                     self.reset_pos(self.pos);
                     let inline_item = parse_inline(self)?;
+                    let item_end = inline_item.span().end;
                     items.push(inline_item);
-                    self.pos = self.current_pos();
-                    self.peeked.clear();
+                    self.reset_pos(item_end);
                     text_start = self.pos;
                     continue;
                 } else if mode == SlotMode::ContentSlot {

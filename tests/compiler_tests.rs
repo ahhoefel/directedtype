@@ -4408,14 +4408,8 @@ fn test_stage2_derived_font_explicit_font_port_and_shadowed_self_font() {
 #[test]
 fn test_stage2_text_explicit_font_forwards_env_font_to_children() {
     let input = r#"
-    \Component FontProbe(env font: Font) {
-        \Rect(
-            x: font.size,
-            y: 0,
-            width: font.weight * 1px,
-            height: 10px,
-            color: #000000
-        )
+    \Span FontProbe(env font: Font) {
+        \Children
     }
 
     \Component H1(x: Distance = 0, y: Distance = 0) {
@@ -4427,12 +4421,15 @@ fn test_stage2_text_explicit_font_forwards_env_font_to_children() {
     \env font = \Font(family: "Arial", size: 16px, weight: 400);
 
     \Text(x: 0, y: 0, font: \Font(family: "Arial", size: 24px, weight: 600)) {
-        Hello \FontProbe()
+        Hello \let p1 = \FontProbe { probe1 }
     }
 
     \H1(x: 0, y: 50px) {
-        Heading \FontProbe()
+        Heading \let p2 = \FontProbe { probe2 }
     }
+
+    \Rect(x: p1.size, y: 0, width: p1.weight * 1px, height: 10px, color: #000000)
+    \Rect(x: p2.size, y: 0, width: p2.weight * 1px, height: 10px, color: #000000)
     "#;
 
     let doc = parse(input).expect("parse ok");
@@ -4679,5 +4676,221 @@ fn test_stage3_standard_library_spans_bold_italic_code_sup() {
     assert!((sup_baseline - (bold_baseline - 7.0)).abs() < 1e-3);
 }
 
+#[test]
+fn test_stage4_block_components_not_wrapped_in_paragraphs() {
+    let input = r#"
+    \use "components/VStack.dt";
 
+    \Component BoxA(x: Distance = parent.left, y: Distance = parent.top, width: Distance = 100px, height: Distance = 30px) {
+        \Rect(x: x, y: y, width: width, height: height, color: #ff0000)
+    }
 
+    \Component BoxB(x: Distance = parent.left, y: Distance = parent.top, width: Distance = 100px, height: Distance = 40px) {
+        \Rect(x: x, y: y, width: width, height: height, color: #0000ff)
+    }
+
+    \VStack(x: 0, y: 0, width: 200px, gap: 10px) {
+        \BoxA()
+        \BoxB()
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document_with_base_dir(&doc, std::path::Path::new("."))
+        .expect("layout ok");
+
+    let vstack = layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack node");
+    assert_eq!(vstack.children.len(), 2, "Expected exactly 2 direct children in VStack");
+    assert_eq!(layout.nodes[vstack.children[0].0].name, "BoxA");
+    assert_eq!(layout.nodes[vstack.children[1].0].name, "BoxB");
+
+    // Zero synthetic \Text nodes should exist anywhere in the document
+    assert!(
+        !layout.nodes.iter().any(|n| n.name == "Text"),
+        "Expected no synthetic Text nodes when only block components are placed in VStack"
+    );
+    assert_eq!(vstack.rect.height, 80.0); // 30 + 10 + 40
+}
+
+#[test]
+fn test_stage4_contiguous_inline_runs_coalesce_and_paragraph_breaks_split() {
+    let input = r#"
+    \use "components/VStack.dt";
+    \use "components/Bold.dt";
+    \use "components/Sup.dt";
+
+    \env font = \Font(family: "Arial", size: 20px, weight: 400);
+
+    \VStack(x: 40px, y: 40px, width: 500px, gap: 16px) {
+        Paragraph one has \Bold { bold text } and a \let n1 = \Sup { [1] }
+        reference marker.
+
+        Paragraph two flows below as a separate paragraph.
+    }
+
+    \let note = \Text(x: 560px, baseline: n1.baseline, width: 180px) {
+        [1] Margin note
+    };
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document_with_base_dir(&doc, std::path::Path::new("."))
+        .expect("layout ok");
+
+    let vstack = layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack node");
+    assert_eq!(vstack.children.len(), 2, "Expected 2 coalesced paragraph Text children in VStack");
+
+    let para1 = &layout.nodes[vstack.children[0].0];
+    let para2 = &layout.nodes[vstack.children[1].0];
+    assert_eq!(para1.name, "Text");
+    assert_eq!(para2.name, "Text");
+
+    assert_eq!(
+        para1.text_content.as_deref(),
+        Some("Paragraph one has bold text and a [1] reference marker.")
+    );
+    assert_eq!(
+        para2.text_content.as_deref(),
+        Some("Paragraph two flows below as a separate paragraph.")
+    );
+
+    // Verify vertical stacking with 16px gap
+    assert!((para2.rect.y - (para1.rect.y + para1.rect.height + 16.0)).abs() < 1e-3);
+
+    // Verify external margin note baseline aligns with inline \let n1 = \Sup { [1] }
+    let sup_node = layout.nodes.iter().find(|n| n.name == "Sup").expect("Sup node");
+    let note_node = layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("note"))
+        .expect("note node");
+    let sup_baseline = sup_node.properties.get("baseline").and_then(|v| v.as_f64()).unwrap();
+    let note_baseline = note_node.properties.get("baseline").and_then(|v| v.as_f64()).unwrap();
+    assert!((note_baseline - sup_baseline).abs() < 1e-3);
+}
+
+#[test]
+fn test_stage4_mixed_headings_paragraphs_and_cards_in_container() {
+    let input = r#"
+    \use "components/VStack.dt";
+    \use "components/Bold.dt";
+
+    \Component H1(env font: Font, x: Distance = parent.left, y: Distance = parent.top, width: Distance = parent.width) {
+        \let t = \Text(x: x, y: y, width: width, font: \Font(size: 32px, weight: 700)) { \Children };
+        \alias height = t.height;
+    }
+
+    \Component Divider(x: Distance = parent.left, y: Distance = parent.top, width: Distance = parent.width, height: Distance = 2px) {
+        \Rect(x: x, y: y, width: width, height: height, color: #cbd5e1)
+    }
+
+    \env font = \Font(family: "Arial", size: 16px, weight: 400);
+
+    \VStack(x: 0, y: 0, width: 400px, gap: 12px) {
+        \H1 { DirectedType \Bold { Flow } }
+        First paragraph after heading.
+
+        Second paragraph after blank line.
+        \Divider()
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::compiler::evaluate_document_with_base_dir(&doc, std::path::Path::new("."))
+        .expect("layout ok");
+
+    let vstack = layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack node");
+    assert_eq!(vstack.children.len(), 4, "Expected [H1, Text(Para 1), Text(Para 2), Divider]");
+
+    let child0 = &layout.nodes[vstack.children[0].0];
+    let child1 = &layout.nodes[vstack.children[1].0];
+    let child2 = &layout.nodes[vstack.children[2].0];
+    let child3 = &layout.nodes[vstack.children[3].0];
+
+    assert_eq!(child0.name, "H1");
+    assert_eq!(child1.name, "Text");
+    assert_eq!(child1.text_content.as_deref(), Some("First paragraph after heading."));
+    assert_eq!(child2.name, "Text");
+    assert_eq!(child2.text_content.as_deref(), Some("Second paragraph after blank line."));
+    assert_eq!(child3.name, "Divider");
+
+    // Verify H1 inner Text preserved the space before \Bold { Flow }
+    let h1_text = &layout.nodes[child0.children[0].0];
+    assert_eq!(h1_text.name, "Text");
+    assert_eq!(h1_text.text_content.as_deref(), Some("DirectedType Flow"));
+}
+
+#[test]
+fn test_stage4_single_text_context_rejects_block_components_and_paragraph_breaks() {
+    // 1. Block component inside \Text must fail
+    let bad_text_block = r#"
+    \Component Box() {
+        \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #ff0000)
+    }
+    \Text(font: \Font(size: 16px)) {
+        Hello \Box()
+    }
+    "#;
+    let doc1 = parse(bad_text_block).expect("parse ok");
+    let err1 = directedtype::evaluate_document(&doc1).expect_err("Expected error for block component in Text");
+    assert!(
+        err1.to_string().contains("Block component 'Box' cannot be placed inside \\Text"),
+        "Unexpected error: {}",
+        err1
+    );
+
+    // 2. Block component inside single-text component (\H1) must fail
+    let bad_h1_block = r#"
+    \Component Box() {
+        \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #ff0000)
+    }
+    \Component H1(x: Distance = 0, y: Distance = 0) {
+        \Text(x: x, y: y, font: \Font(size: 32px, weight: 700)) { \Children }
+    }
+    \H1 {
+        Title \Box()
+    }
+    "#;
+    let doc2 = parse(bad_h1_block).expect("parse ok");
+    let err2 = directedtype::evaluate_document(&doc2).expect_err("Expected error for block component in H1");
+    assert!(
+        err2.to_string().contains("Block component 'Box' cannot be placed inside single-text component 'H1'"),
+        "Unexpected error: {}",
+        err2
+    );
+
+    // 3. Paragraph break inside \Text must fail
+    let bad_text_para = r#"
+    \Text(font: \Font(size: 16px)) {
+        Para 1
+
+        Para 2
+    }
+    "#;
+    let doc3 = parse(bad_text_para).expect("parse ok");
+    let err3 = directedtype::evaluate_document(&doc3).expect_err("Expected error for paragraph break in Text");
+    assert!(
+        err3.to_string().contains("Paragraph break (blank line) is not permitted inside single \\Text element"),
+        "Unexpected error: {}",
+        err3
+    );
+
+    // 4. Paragraph break inside single-text component (\H1) must fail
+    let bad_h1_para = r#"
+    \Component H1(x: Distance = 0, y: Distance = 0) {
+        \Text(x: x, y: y, font: \Font(size: 32px, weight: 700)) { \Children }
+    }
+    \H1 {
+        Para 1
+
+        Para 2
+    }
+    "#;
+    let doc4 = parse(bad_h1_para).expect("parse ok");
+    let err4 = directedtype::evaluate_document(&doc4).expect_err("Expected error for paragraph break in H1");
+    assert!(
+        err4.to_string().contains("Paragraph break (blank line) is not permitted inside single-text component 'H1'"),
+        "Unexpected error: {}",
+        err4
+    );
+}

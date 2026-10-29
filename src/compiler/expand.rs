@@ -1647,16 +1647,22 @@ fn expand_element(
         expanded.key = Some(ComponentKey::new(rewritten_parts, key.span));
     }
 
-    // Check if element has text content directly in content slot
-    if let Some(content_slot) = &elem.content {
-        let mut text_parts = Vec::new();
-        for item in &content_slot.items {
-            if let ContentItem::Text(chunk) = item {
-                text_parts.push(chunk.text.as_str());
+    // Check if element has text content directly in content slot (only for primitives or \Span components,
+    // never for block \Component or \InlineBox containers which expand text into child \Text nodes)
+    let is_non_span_component = registry
+        .get(elem.name.as_str())
+        .is_some_and(|defs| defs.iter().all(|d| d.kind != crate::ast::ComponentKind::Span));
+    if !is_non_span_component {
+        if let Some(content_slot) = &elem.content {
+            let mut text_parts = Vec::new();
+            for item in &content_slot.items {
+                if let ContentItem::Text(chunk) = item {
+                    text_parts.push(chunk.text.as_str());
+                }
             }
-        }
-        if !text_parts.is_empty() {
-            expanded.text_content = Some(text_parts.join(" "));
+            if !text_parts.is_empty() {
+                expanded.text_content = Some(text_parts.join(" "));
+            }
         }
     }
 
@@ -1740,6 +1746,246 @@ fn expand_element(
     Ok(node_id)
 }
 
+fn is_span_element(
+    elem: &ElementNode,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> bool {
+    if let Some(overloads) = registry.get(elem.name.as_str()) {
+        return overloads
+            .iter()
+            .any(|def| def.kind == crate::ast::ComponentKind::Span);
+    }
+    elem.name.as_str() == "Link"
+}
+
+fn is_inline_box_element(
+    elem: &ElementNode,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> bool {
+    if let Some(overloads) = registry.get(elem.name.as_str()) {
+        return overloads
+            .iter()
+            .any(|def| def.kind == crate::ast::ComponentKind::InlineBox);
+    }
+    false
+}
+
+fn is_inline_element(
+    elem: &ElementNode,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> bool {
+    is_span_element(elem, registry) || is_inline_box_element(elem, registry)
+}
+
+fn is_allowed_in_single_text(
+    elem: &ElementNode,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> bool {
+    if is_inline_element(elem, registry) {
+        return true;
+    }
+    if registry.contains_key(elem.name.as_str()) {
+        return false;
+    }
+    matches!(elem.name.as_str(), "Font" | "Anchor" | "Text" | "Link")
+}
+
+fn element_places_children_in_single_text(
+    elem: &ElementNode,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    visited: &mut HashSet<String>,
+) -> Option<bool> {
+    let slot = elem.content.as_ref()?;
+    let has_direct_children_directive = slot
+        .items
+        .iter()
+        .any(|it| matches!(it, ContentItem::Children(_)));
+    if has_direct_children_directive {
+        if elem.name.as_str() == "Text" {
+            return Some(true);
+        }
+        if let Some(overloads) = registry.get(elem.name.as_str()) {
+            if visited.insert(elem.name.as_str().to_string()) {
+                for def in overloads {
+                    if component_children_is_single_text_with_visited(def, registry, visited) {
+                        visited.remove(elem.name.as_str());
+                        return Some(true);
+                    }
+                }
+                visited.remove(elem.name.as_str());
+            }
+            return Some(false);
+        }
+        return Some(false);
+    }
+    for item in &slot.items {
+        match item {
+            ContentItem::Node(child) => {
+                if let Some(res) =
+                    element_places_children_in_single_text(child, registry, visited)
+                {
+                    return Some(res);
+                }
+            }
+            ContentItem::Let(l) => {
+                if let Some(LetValue::Node(child)) = &l.value {
+                    if let Some(res) =
+                        element_places_children_in_single_text(child, registry, visited)
+                    {
+                        return Some(res);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn component_children_is_single_text_with_visited(
+    comp_def: &ComponentDef,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    visited: &mut HashSet<String>,
+) -> bool {
+    if comp_def.kind == crate::ast::ComponentKind::Span {
+        return true;
+    }
+    for item in &comp_def.body {
+        match item {
+            ComponentBodyItem::Children(_) => return false,
+            ComponentBodyItem::Node(elem) => {
+                if let Some(res) =
+                    element_places_children_in_single_text(elem, registry, visited)
+                {
+                    return res;
+                }
+            }
+            ComponentBodyItem::Let(l) => {
+                if let Some(LetValue::Node(elem)) = &l.value {
+                    if let Some(res) =
+                        element_places_children_in_single_text(elem, registry, visited)
+                    {
+                        return res;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+fn component_children_is_single_text(
+    comp_def: &ComponentDef,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> bool {
+    let mut visited = HashSet::new();
+    visited.insert(comp_def.name.as_str().to_string());
+    component_children_is_single_text_with_visited(comp_def, registry, &mut visited)
+}
+
+fn count_consumer_children(
+    slot: Option<&ContentSlot>,
+    is_inline_context: bool,
+    outer_children_len: usize,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> usize {
+    let Some(slot) = slot else {
+        return 0;
+    };
+    if is_inline_context {
+        return slot
+            .items
+            .iter()
+            .map(|item| match item {
+                ContentItem::Node(_) => 1,
+                ContentItem::Text(chunk) if !chunk.text.is_empty() => 1,
+                ContentItem::Children(_) => outer_children_len,
+                ContentItem::Let(l) if matches!(l.value, Some(LetValue::Node(_))) => 1,
+                _ => 0,
+            })
+            .sum();
+    }
+    let mut count = 0;
+    let mut pending_has_text_or_span = false;
+    let mut pending_inline_boxes = 0usize;
+    let flush = |count: &mut usize,
+                 pending_has_text_or_span: &mut bool,
+                 pending_inline_boxes: &mut usize| {
+        if *pending_has_text_or_span {
+            *count += 1;
+        } else {
+            *count += *pending_inline_boxes;
+        }
+        *pending_has_text_or_span = false;
+        *pending_inline_boxes = 0;
+    };
+    for item in &slot.items {
+        match item {
+            ContentItem::Text(chunk) => {
+                if !chunk.text.trim().is_empty() {
+                    pending_has_text_or_span = true;
+                }
+            }
+            ContentItem::Node(child_elem) => {
+                if is_span_element(child_elem, registry) {
+                    pending_has_text_or_span = true;
+                } else if is_inline_box_element(child_elem, registry) {
+                    pending_inline_boxes += 1;
+                } else {
+                    flush(
+                        &mut count,
+                        &mut pending_has_text_or_span,
+                        &mut pending_inline_boxes,
+                    );
+                    count += 1;
+                }
+            }
+            ContentItem::Let(l) => {
+                if let Some(LetValue::Node(child_elem)) = &l.value {
+                    if is_span_element(child_elem, registry) {
+                        pending_has_text_or_span = true;
+                    } else if is_inline_box_element(child_elem, registry) {
+                        pending_inline_boxes += 1;
+                    } else {
+                        flush(
+                            &mut count,
+                            &mut pending_has_text_or_span,
+                            &mut pending_inline_boxes,
+                        );
+                        count += 1;
+                    }
+                }
+            }
+            ContentItem::ParagraphBreak(_) => {
+                flush(
+                    &mut count,
+                    &mut pending_has_text_or_span,
+                    &mut pending_inline_boxes,
+                );
+            }
+            ContentItem::Children(_) => {
+                flush(
+                    &mut count,
+                    &mut pending_has_text_or_span,
+                    &mut pending_inline_boxes,
+                );
+                count += outer_children_len;
+            }
+            ContentItem::Alias(_)
+            | ContentItem::State(_)
+            | ContentItem::Env(_)
+            | ContentItem::Assert(_) => {}
+        }
+    }
+    flush(
+        &mut count,
+        &mut pending_has_text_or_span,
+        &mut pending_inline_boxes,
+    );
+    count
+}
+
 /// Expands a component instance, wiring parameters, component body, and consumer children.
 #[allow(clippy::too_many_arguments)]
 fn expand_component_instance(
@@ -1754,6 +2000,8 @@ fn expand_component_instance(
 ) -> Result<(), CompileError> {
     // 1. Gather parameter definitions and map consumer arguments
     let is_span_def = comp_def.kind == crate::ast::ComponentKind::Span;
+    let is_single_text_context =
+        !is_span_def && component_children_is_single_text(comp_def, registry);
     if is_span_def {
         doc.get_node_mut(ctx.comp_node_id).unwrap().is_span = true;
     }
@@ -2005,22 +2253,12 @@ fn expand_component_instance(
     let empty_ports: [String; 0] = [];
     let empty_children: [NodeId; 0] = [];
     let instantiated_children_ids = RefCell::new(Vec::new());
-    let num_consumer_children = instance.content.as_ref().map_or(0, |slot| {
-        slot.items
-            .iter()
-            .map(|item| match item {
-                ContentItem::Node(_) => 1,
-                ContentItem::Text(chunk)
-                    if (is_span_def && !chunk.text.is_empty()) || !chunk.text.trim().is_empty() =>
-                {
-                    1
-                }
-                ContentItem::Children(_) => ctx.consumer_children.map_or(0, |c| c.len()),
-                ContentItem::Let(l) if matches!(l.value, Some(LetValue::Node(_))) => 1,
-                _ => 0,
-            })
-            .sum()
-    });
+    let num_consumer_children = count_consumer_children(
+        instance.content.as_ref(),
+        is_span_def || is_single_text_context,
+        ctx.consumer_children.map_or(0, |c| c.len()),
+        registry,
+    );
 
     // Pre-resolve explicit "font" port if passed on this component instance so sibling ports (e.g. `1em`) see it
     if let Some(font_port) = instance.ports.iter().find(|p| p.name.as_str() == "font") {
@@ -2395,125 +2633,435 @@ fn expand_component_instance(
     // 2. Collect consumer children passed to this component instance
     let mut consumer_child_entries: Vec<ConsumerChildEntry<'_>> = Vec::new();
     if let Some(slot) = &instance.content {
-        for item in &slot.items {
-            match item {
-                ContentItem::Node(child_elem) => {
-                    consumer_child_entries.push(ConsumerChildEntry {
-                        elem: child_elem.clone(),
-                        var_name: None,
-                        raw_text: None,
-                        caller_lexical_scope: lexical_scope,
-                        caller_env_scope: caller_env_scope.clone(),
-                        caller_enclosing_component_id: ctx.enclosing_component_id,
-                        caller_enclosing_num_children: ctx.enclosing_num_children,
-                        caller_enclosing_instantiated_children: ctx.enclosing_instantiated_children,
-                        caller_shadowed_ports: ctx.shadowed_ports,
-                        instantiated_ids: vec![&instantiated_children_ids],
-                        forwarded_directives: Vec::new(),
-                    });
-                }
-                ContentItem::Text(chunk) => {
-                    let trimmed = chunk.text.trim();
-                    if (is_span_def && !chunk.text.is_empty()) || !trimmed.is_empty() {
-                        let synthetic_text = ElementNode {
-                            name: Ident::new("Text", chunk.span),
-                            key: None,
-                            ports: Vec::new(),
-                            content: Some(ContentSlot {
-                                items: vec![ContentItem::Text(chunk.clone())],
-                                span: chunk.span,
-                            }),
-                            span: chunk.span,
-                            handle: None,
-                        };
-                        consumer_child_entries.push(ConsumerChildEntry {
-                            elem: synthetic_text,
-                            var_name: None,
-                            raw_text: Some(chunk.clone()),
-                            caller_lexical_scope: lexical_scope,
-                            caller_env_scope: caller_env_scope.clone(),
-                            caller_enclosing_component_id: ctx.enclosing_component_id,
-                            caller_enclosing_num_children: ctx.enclosing_num_children,
-                            caller_enclosing_instantiated_children: ctx.enclosing_instantiated_children,
-                            caller_shadowed_ports: ctx.shadowed_ports,
-                            instantiated_ids: vec![&instantiated_children_ids],
-                            forwarded_directives: Vec::new(),
-                        });
-                    }
-                }
-                ContentItem::Children(forward_dir) => {
-                    for port in &forward_dir.ports {
-                        if port.name.as_str() == "parent" {
-                            return Err(CompileError::ReservedPort {
-                                node: "Children".to_string(),
-                                port: "parent".to_string(),
-                                span: port.name.span,
+        if is_span_def || is_single_text_context {
+            for item in &slot.items {
+                match item {
+                    ContentItem::Node(child_elem) => {
+                        if is_single_text_context && !is_allowed_in_single_text(child_elem, registry) {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Block component '{}' cannot be placed inside single-text component '{}'; only plain text, \\Span, and \\InlineBox are allowed",
+                                    child_elem.name.as_str(),
+                                    comp_def.name.as_str()
+                                ),
+                                span: child_elem.span,
                             });
                         }
-                    }
-                    if let Some(outer_entries) = ctx.consumer_children {
-                        for outer_entry in outer_entries {
-                            let mut entry = outer_entry.clone();
-                            entry.instantiated_ids.push(&instantiated_children_ids);
-                            if !forward_dir.ports.is_empty() {
-                                entry.forwarded_directives.push(ForwardedChildrenDirective {
-                                    ports: &forward_dir.ports,
-                                    parent_id: ctx.comp_node_id,
-                                    parent_name: comp_def.name.as_str(),
-                                    parent_ports: comp_scope_ports.clone(),
-                                    lexical_scope,
-                                    env_scope: caller_env_scope.clone(),
-                                    enclosing_component_id: ctx.enclosing_component_id,
-                                    enclosing_num_children: ctx.enclosing_num_children,
-                                    enclosing_instantiated_children: ctx.enclosing_instantiated_children,
-                                    shadowed_ports: ctx.shadowed_ports,
-                                    comp_ports: None,
-                                    declared_state_names: None,
-                                });
-                            }
-                            consumer_child_entries.push(entry);
-                        }
-                    }
-                }
-                ContentItem::Let(l) => {
-                    if let Some(LetValue::Node(child_elem)) = &l.value {
-                        validate_node_type_annotation(
-                            child_elem.name.as_str(),
-                            child_elem.span,
-                            l.type_annotation.as_ref(),
-                            ctx.enums,
-                            registry,
-                        )?;
                         consumer_child_entries.push(ConsumerChildEntry {
                             elem: child_elem.clone(),
-                            var_name: Some(l.name.as_str().to_string()),
+                            var_name: None,
                             raw_text: None,
                             caller_lexical_scope: lexical_scope,
                             caller_env_scope: caller_env_scope.clone(),
                             caller_enclosing_component_id: ctx.enclosing_component_id,
                             caller_enclosing_num_children: ctx.enclosing_num_children,
-                            caller_enclosing_instantiated_children: ctx.enclosing_instantiated_children,
+                            caller_enclosing_instantiated_children: ctx
+                                .enclosing_instantiated_children,
                             caller_shadowed_ports: ctx.shadowed_ports,
                             instantiated_ids: vec![&instantiated_children_ids],
                             forwarded_directives: Vec::new(),
                         });
                     }
-                }
-                ContentItem::ParagraphBreak(span) => {
-                    if is_span_def {
+                    ContentItem::Text(chunk) => {
+                        if !chunk.text.is_empty() {
+                            let synthetic_text = ElementNode {
+                                name: Ident::new("Text", chunk.span),
+                                key: None,
+                                ports: Vec::new(),
+                                content: Some(ContentSlot {
+                                    items: vec![ContentItem::Text(chunk.clone())],
+                                    span: chunk.span,
+                                }),
+                                span: chunk.span,
+                                handle: None,
+                            };
+                            consumer_child_entries.push(ConsumerChildEntry {
+                                elem: synthetic_text,
+                                var_name: None,
+                                raw_text: Some(chunk.clone()),
+                                caller_lexical_scope: lexical_scope,
+                                caller_env_scope: caller_env_scope.clone(),
+                                caller_enclosing_component_id: ctx.enclosing_component_id,
+                                caller_enclosing_num_children: ctx.enclosing_num_children,
+                                caller_enclosing_instantiated_children: ctx
+                                    .enclosing_instantiated_children,
+                                caller_shadowed_ports: ctx.shadowed_ports,
+                                instantiated_ids: vec![&instantiated_children_ids],
+                                forwarded_directives: Vec::new(),
+                            });
+                        }
+                    }
+                    ContentItem::Children(forward_dir) => {
+                        for port in &forward_dir.ports {
+                            if port.name.as_str() == "parent" {
+                                return Err(CompileError::ReservedPort {
+                                    node: "Children".to_string(),
+                                    port: "parent".to_string(),
+                                    span: port.name.span,
+                                });
+                            }
+                        }
+                        if let Some(outer_entries) = ctx.consumer_children {
+                            for outer_entry in outer_entries {
+                                let mut entry = outer_entry.clone();
+                                entry.instantiated_ids.push(&instantiated_children_ids);
+                                if !forward_dir.ports.is_empty() {
+                                    entry.forwarded_directives.push(ForwardedChildrenDirective {
+                                        ports: &forward_dir.ports,
+                                        parent_id: ctx.comp_node_id,
+                                        parent_name: comp_def.name.as_str(),
+                                        parent_ports: comp_scope_ports.clone(),
+                                        lexical_scope,
+                                        env_scope: caller_env_scope.clone(),
+                                        enclosing_component_id: ctx.enclosing_component_id,
+                                        enclosing_num_children: ctx.enclosing_num_children,
+                                        enclosing_instantiated_children: ctx
+                                            .enclosing_instantiated_children,
+                                        shadowed_ports: ctx.shadowed_ports,
+                                        comp_ports: None,
+                                        declared_state_names: None,
+                                    });
+                                }
+                                consumer_child_entries.push(entry);
+                            }
+                        }
+                    }
+                    ContentItem::Let(l) => {
+                        if let Some(LetValue::Node(child_elem)) = &l.value {
+                            validate_node_type_annotation(
+                                child_elem.name.as_str(),
+                                child_elem.span,
+                                l.type_annotation.as_ref(),
+                                ctx.enums,
+                                registry,
+                            )?;
+                            if is_single_text_context && !is_allowed_in_single_text(child_elem, registry) {
+                                return Err(CompileError::Custom {
+                                    message: format!(
+                                        "Block component '{}' cannot be placed inside single-text component '{}'; only plain text, \\Span, and \\InlineBox are allowed",
+                                        child_elem.name.as_str(),
+                                        comp_def.name.as_str()
+                                    ),
+                                    span: child_elem.span,
+                                });
+                            }
+                            consumer_child_entries.push(ConsumerChildEntry {
+                                elem: child_elem.clone(),
+                                var_name: Some(l.name.as_str().to_string()),
+                                raw_text: None,
+                                caller_lexical_scope: lexical_scope,
+                                caller_env_scope: caller_env_scope.clone(),
+                                caller_enclosing_component_id: ctx.enclosing_component_id,
+                                caller_enclosing_num_children: ctx.enclosing_num_children,
+                                caller_enclosing_instantiated_children: ctx
+                                    .enclosing_instantiated_children,
+                                caller_shadowed_ports: ctx.shadowed_ports,
+                                instantiated_ids: vec![&instantiated_children_ids],
+                                forwarded_directives: Vec::new(),
+                            });
+                        }
+                    }
+                    ContentItem::ParagraphBreak(span) => {
+                        let kind_label = if is_span_def {
+                            "inline \\Span"
+                        } else {
+                            "single-text component"
+                        };
                         return Err(CompileError::Custom {
                             message: format!(
-                                "Paragraph break (blank line) is not permitted inside inline \\Span '{}'",
+                                "Paragraph break (blank line) is not permitted inside {} '{}'",
+                                kind_label,
                                 comp_def.name.as_str()
                             ),
                             span: *span,
                         });
                     }
+                    ContentItem::Alias(_)
+                    | ContentItem::State(_)
+                    | ContentItem::Env(_)
+                    | ContentItem::Assert(_) => {}
                 }
-                ContentItem::Alias(_)
-                | ContentItem::State(_)
-                | ContentItem::Env(_)
-                | ContentItem::Assert(_) => {}
+            }
+        } else {
+            let mut pending_inline_items: Vec<ContentItem> = Vec::new();
+            let drain_flushed_inline_items =
+                |pending_inline_items: &mut Vec<ContentItem>| -> Vec<(ElementNode, Option<String>, Option<TextChunk>)> {
+                    if pending_inline_items.is_empty() {
+                        return Vec::new();
+                    }
+                    let has_text_or_span = pending_inline_items.iter().any(|it| match it {
+                        ContentItem::Text(t) => !t.text.trim().is_empty(),
+                        ContentItem::Node(e) => is_span_element(e, registry),
+                        ContentItem::Let(l) => l.value.as_ref().is_some_and(
+                            |v| matches!(v, LetValue::Node(e) if is_span_element(e, registry)),
+                        ),
+                        _ => false,
+                    });
+
+                    if has_text_or_span {
+                        while let Some(ContentItem::Text(first_chunk)) =
+                            pending_inline_items.first_mut()
+                        {
+                            let trimmed = first_chunk.text.trim_start();
+                            if trimmed.is_empty() {
+                                pending_inline_items.remove(0);
+                            } else {
+                                if trimmed.len() != first_chunk.text.len() {
+                                    first_chunk.text = trimmed.to_string();
+                                }
+                                break;
+                            }
+                        }
+                        while let Some(ContentItem::Text(last_chunk)) =
+                            pending_inline_items.last_mut()
+                        {
+                            let trimmed = last_chunk.text.trim_end();
+                            if trimmed.is_empty() {
+                                pending_inline_items.pop();
+                            } else {
+                                if trimmed.len() != last_chunk.text.len() {
+                                    last_chunk.text = trimmed.to_string();
+                                }
+                                break;
+                            }
+                        }
+                        if pending_inline_items.is_empty() {
+                            return Vec::new();
+                        }
+                        let first_span = pending_inline_items.first().unwrap().span();
+                        let last_span = pending_inline_items.last().unwrap().span();
+                        let para_span = Span::new(first_span.start, last_span.end);
+                        let raw_text = if pending_inline_items.len() == 1 {
+                            if let ContentItem::Text(chunk) = &pending_inline_items[0] {
+                                Some(chunk.clone())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                        let items = std::mem::take(pending_inline_items);
+                        let synthetic_text = ElementNode {
+                            name: Ident::new("Text", para_span),
+                            key: None,
+                            ports: Vec::new(),
+                            content: Some(ContentSlot {
+                                items,
+                                span: para_span,
+                            }),
+                            span: para_span,
+                            handle: None,
+                        };
+                        vec![(synthetic_text, None, raw_text)]
+                    } else {
+                        let mut out = Vec::new();
+                        for item in pending_inline_items.drain(..) {
+                            match item {
+                                ContentItem::Node(child_elem) => {
+                                    out.push((child_elem, None, None));
+                                }
+                                ContentItem::Let(l) => {
+                                    if let Some(LetValue::Node(child_elem)) = l.value {
+                                        out.push((
+                                            child_elem,
+                                            Some(l.name.as_str().to_string()),
+                                            None,
+                                        ));
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        out
+                    }
+                };
+
+            for item in &slot.items {
+                match item {
+                    ContentItem::Text(chunk) => {
+                        pending_inline_items.push(ContentItem::Text(chunk.clone()));
+                    }
+                    ContentItem::Node(child_elem) => {
+                        if is_inline_element(child_elem, registry) {
+                            pending_inline_items.push(ContentItem::Node(child_elem.clone()));
+                        } else {
+                            for (elem, var_name, raw_text) in
+                                drain_flushed_inline_items(&mut pending_inline_items)
+                            {
+                                consumer_child_entries.push(ConsumerChildEntry {
+                                    elem,
+                                    var_name,
+                                    raw_text,
+                                    caller_lexical_scope: lexical_scope,
+                                    caller_env_scope: caller_env_scope.clone(),
+                                    caller_enclosing_component_id: ctx.enclosing_component_id,
+                                    caller_enclosing_num_children: ctx.enclosing_num_children,
+                                    caller_enclosing_instantiated_children: ctx
+                                        .enclosing_instantiated_children,
+                                    caller_shadowed_ports: ctx.shadowed_ports,
+                                    instantiated_ids: vec![&instantiated_children_ids],
+                                    forwarded_directives: Vec::new(),
+                                });
+                            }
+                            consumer_child_entries.push(ConsumerChildEntry {
+                                elem: child_elem.clone(),
+                                var_name: None,
+                                raw_text: None,
+                                caller_lexical_scope: lexical_scope,
+                                caller_env_scope: caller_env_scope.clone(),
+                                caller_enclosing_component_id: ctx.enclosing_component_id,
+                                caller_enclosing_num_children: ctx.enclosing_num_children,
+                                caller_enclosing_instantiated_children: ctx
+                                    .enclosing_instantiated_children,
+                                caller_shadowed_ports: ctx.shadowed_ports,
+                                instantiated_ids: vec![&instantiated_children_ids],
+                                forwarded_directives: Vec::new(),
+                            });
+                        }
+                    }
+                    ContentItem::Let(l) => {
+                        if let Some(LetValue::Node(child_elem)) = &l.value {
+                            validate_node_type_annotation(
+                                child_elem.name.as_str(),
+                                child_elem.span,
+                                l.type_annotation.as_ref(),
+                                ctx.enums,
+                                registry,
+                            )?;
+                            if is_inline_element(child_elem, registry) {
+                                pending_inline_items.push(ContentItem::Let(l.clone()));
+                            } else {
+                                for (elem, var_name, raw_text) in
+                                    drain_flushed_inline_items(&mut pending_inline_items)
+                                {
+                                    consumer_child_entries.push(ConsumerChildEntry {
+                                        elem,
+                                        var_name,
+                                        raw_text,
+                                        caller_lexical_scope: lexical_scope,
+                                        caller_env_scope: caller_env_scope.clone(),
+                                        caller_enclosing_component_id: ctx.enclosing_component_id,
+                                        caller_enclosing_num_children: ctx.enclosing_num_children,
+                                        caller_enclosing_instantiated_children: ctx
+                                            .enclosing_instantiated_children,
+                                        caller_shadowed_ports: ctx.shadowed_ports,
+                                        instantiated_ids: vec![&instantiated_children_ids],
+                                        forwarded_directives: Vec::new(),
+                                    });
+                                }
+                                consumer_child_entries.push(ConsumerChildEntry {
+                                    elem: child_elem.clone(),
+                                    var_name: Some(l.name.as_str().to_string()),
+                                    raw_text: None,
+                                    caller_lexical_scope: lexical_scope,
+                                    caller_env_scope: caller_env_scope.clone(),
+                                    caller_enclosing_component_id: ctx.enclosing_component_id,
+                                    caller_enclosing_num_children: ctx.enclosing_num_children,
+                                    caller_enclosing_instantiated_children: ctx
+                                        .enclosing_instantiated_children,
+                                    caller_shadowed_ports: ctx.shadowed_ports,
+                                    instantiated_ids: vec![&instantiated_children_ids],
+                                    forwarded_directives: Vec::new(),
+                                });
+                            }
+                        }
+                    }
+                    ContentItem::ParagraphBreak(_) => {
+                        for (elem, var_name, raw_text) in
+                            drain_flushed_inline_items(&mut pending_inline_items)
+                        {
+                            consumer_child_entries.push(ConsumerChildEntry {
+                                elem,
+                                var_name,
+                                raw_text,
+                                caller_lexical_scope: lexical_scope,
+                                caller_env_scope: caller_env_scope.clone(),
+                                caller_enclosing_component_id: ctx.enclosing_component_id,
+                                caller_enclosing_num_children: ctx.enclosing_num_children,
+                                caller_enclosing_instantiated_children: ctx
+                                    .enclosing_instantiated_children,
+                                caller_shadowed_ports: ctx.shadowed_ports,
+                                instantiated_ids: vec![&instantiated_children_ids],
+                                forwarded_directives: Vec::new(),
+                            });
+                        }
+                    }
+                    ContentItem::Children(forward_dir) => {
+                        for (elem, var_name, raw_text) in
+                            drain_flushed_inline_items(&mut pending_inline_items)
+                        {
+                            consumer_child_entries.push(ConsumerChildEntry {
+                                elem,
+                                var_name,
+                                raw_text,
+                                caller_lexical_scope: lexical_scope,
+                                caller_env_scope: caller_env_scope.clone(),
+                                caller_enclosing_component_id: ctx.enclosing_component_id,
+                                caller_enclosing_num_children: ctx.enclosing_num_children,
+                                caller_enclosing_instantiated_children: ctx
+                                    .enclosing_instantiated_children,
+                                caller_shadowed_ports: ctx.shadowed_ports,
+                                instantiated_ids: vec![&instantiated_children_ids],
+                                forwarded_directives: Vec::new(),
+                            });
+                        }
+                        for port in &forward_dir.ports {
+                            if port.name.as_str() == "parent" {
+                                return Err(CompileError::ReservedPort {
+                                    node: "Children".to_string(),
+                                    port: "parent".to_string(),
+                                    span: port.name.span,
+                                });
+                            }
+                        }
+                        if let Some(outer_entries) = ctx.consumer_children {
+                            for outer_entry in outer_entries {
+                                let mut entry = outer_entry.clone();
+                                entry.instantiated_ids.push(&instantiated_children_ids);
+                                if !forward_dir.ports.is_empty() {
+                                    entry.forwarded_directives.push(ForwardedChildrenDirective {
+                                        ports: &forward_dir.ports,
+                                        parent_id: ctx.comp_node_id,
+                                        parent_name: comp_def.name.as_str(),
+                                        parent_ports: comp_scope_ports.clone(),
+                                        lexical_scope,
+                                        env_scope: caller_env_scope.clone(),
+                                        enclosing_component_id: ctx.enclosing_component_id,
+                                        enclosing_num_children: ctx.enclosing_num_children,
+                                        enclosing_instantiated_children: ctx
+                                            .enclosing_instantiated_children,
+                                        shadowed_ports: ctx.shadowed_ports,
+                                        comp_ports: None,
+                                        declared_state_names: None,
+                                    });
+                                }
+                                consumer_child_entries.push(entry);
+                            }
+                        }
+                    }
+                    ContentItem::Alias(_)
+                    | ContentItem::State(_)
+                    | ContentItem::Env(_)
+                    | ContentItem::Assert(_) => {}
+                }
+            }
+            for (elem, var_name, raw_text) in
+                drain_flushed_inline_items(&mut pending_inline_items)
+            {
+                consumer_child_entries.push(ConsumerChildEntry {
+                    elem,
+                    var_name,
+                    raw_text,
+                    caller_lexical_scope: lexical_scope,
+                    caller_env_scope: caller_env_scope.clone(),
+                    caller_enclosing_component_id: ctx.enclosing_component_id,
+                    caller_enclosing_num_children: ctx.enclosing_num_children,
+                    caller_enclosing_instantiated_children: ctx
+                        .enclosing_instantiated_children,
+                    caller_shadowed_ports: ctx.shadowed_ports,
+                    instantiated_ids: vec![&instantiated_children_ids],
+                    forwarded_directives: Vec::new(),
+                });
             }
         }
     }
@@ -5310,6 +5858,17 @@ fn expand_primitive_element(
                     }
                 }
                 ContentItem::Node(child_elem) => {
+                    if elem.name.as_str() == "Text"
+                        && !is_allowed_in_single_text(child_elem, registry)
+                    {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Block component '{}' cannot be placed inside \\Text; only plain text, \\Span, and \\InlineBox are allowed",
+                                child_elem.name.as_str()
+                            ),
+                            span: child_elem.span,
+                        });
+                    }
                     let child_ctx = ElementContext {
                         parent_id: Some(node_id),
                         parent_name: Some(elem.name.as_str()),
@@ -5461,6 +6020,17 @@ fn expand_primitive_element(
                             ctx.enums,
                             registry,
                         )?;
+                        if elem.name.as_str() == "Text"
+                            && !is_allowed_in_single_text(child_elem, registry)
+                        {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Block component '{}' cannot be placed inside \\Text; only plain text, \\Span, and \\InlineBox are allowed",
+                                    child_elem.name.as_str()
+                                ),
+                                span: child_elem.span,
+                            });
+                        }
                         let child_ctx = ElementContext {
                             parent_id: Some(node_id),
                             parent_name: Some(elem.name.as_str()),
@@ -5609,11 +6179,18 @@ fn expand_primitive_element(
                         }
                     }
                 }
+                ContentItem::ParagraphBreak(span) => {
+                    if elem.name.as_str() == "Text" {
+                        return Err(CompileError::Custom {
+                            message: "Paragraph break (blank line) is not permitted inside single \\Text element".to_string(),
+                            span: *span,
+                        });
+                    }
+                }
                 ContentItem::Alias(_)
                 | ContentItem::State(_)
                 | ContentItem::Env(_)
-                | ContentItem::Assert(_)
-                | ContentItem::ParagraphBreak(_) => {}
+                | ContentItem::Assert(_) => {}
                 ContentItem::Children(dir) => {
                     for port in &dir.ports {
                         if port.name.as_str() == "parent" {
@@ -5644,6 +6221,18 @@ fn expand_primitive_element(
 
                             let has_next_sibling = child_idx + 1 < num_consumer_children;
                             let child_elem = &entry.elem;
+                            if elem.name.as_str() == "Text"
+                                && entry.raw_text.is_none()
+                                && !is_allowed_in_single_text(child_elem, registry)
+                            {
+                                return Err(CompileError::Custom {
+                                    message: format!(
+                                        "Block component '{}' cannot be placed inside \\Text; only plain text, \\Span, and \\InlineBox are allowed",
+                                        child_elem.name.as_str()
+                                    ),
+                                    span: child_elem.span,
+                                });
+                            }
                             let mut merged_ports = HashMap::new();
                             let mut authored_ambient_ports = HashMap::new();
                             let child_node_id = NodeId(doc.nodes.len());
