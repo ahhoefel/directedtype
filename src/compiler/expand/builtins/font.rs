@@ -247,6 +247,10 @@ impl BuiltinPrimitive for FontPrimitive {
         true
     }
 
+    fn accepts_port(&self, _port_name: &str) -> bool {
+        true
+    }
+
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
             "size" | "line_height" | "cap_height" | "x_height" | "ascent" | "descent"

@@ -17,8 +17,37 @@ impl BuiltinPrimitive for LinePrimitive {
         "Line"
     }
 
-    fn ignores_ambient_box_ports(&self) -> bool {
-        true
+    fn is_immutable_alias_port(&self, port_name: &str) -> bool {
+        matches!(
+            port_name,
+            "left" | "top" | "right" | "bottom" | "x" | "y" | "width" | "height" | "length"
+        )
+    }
+
+    fn accepts_port(&self, port_name: &str) -> bool {
+        matches!(
+            port_name,
+            "x1" | "y1"
+                | "x2"
+                | "y2"
+                | "start_x"
+                | "start_y"
+                | "end_x"
+                | "end_y"
+                | "z"
+                | "thickness"
+                | "stroke_width"
+                | "border_width"
+                | "color"
+                | "stroke_color"
+                | "border_color"
+                | "cap"
+                | "line_cap"
+                | "clip"
+                | "cursor"
+                | "opacity"
+                | "id"
+        ) || port_name.starts_with("on_")
     }
 
     fn register_types(

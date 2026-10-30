@@ -222,20 +222,15 @@ impl ComponentSchema {
         })
     }
 
-    /// Validates that caller-authored ports on `instance` do not attempt to override immutable
-    /// alias ports or set private state / let / env bindings.
+    /// Validates that caller-authored or container-injected ports on `instance` do not attempt to
+    /// override immutable alias ports or set private state / let / env bindings.
     pub fn validate_caller_ports(
         &self,
         comp_def: &ComponentDef,
         instance: &ElementNode,
-        ambient_authored_ports: Option<&HashMap<String, Expr>>,
     ) -> Result<(), CompileError> {
         for port in &instance.ports {
             let name = port.name.as_str();
-            let is_purely_ambient = ambient_authored_ports.is_some_and(|a| a.contains_key(name));
-            if is_purely_ambient {
-                continue;
-            }
             if self.declared_aliases.contains_key(name)
                 || matches!(name, "left" | "top" | "right" | "bottom")
             {
@@ -509,36 +504,21 @@ pub(super) fn select_component_overload<'a>(
     overloads: &'a [ComponentDef],
     comp_name: &str,
     elem: &ElementNode,
-    ambient_authored_ports: Option<&HashMap<String, Expr>>,
     env_scope: &HashMap<String, EnvEntry>,
     span: Span,
 ) -> Result<&'a ComponentDef, CompileError> {
     let explicit_ports: HashSet<String> =
         elem.ports.iter().map(|p| p.name.as_str().to_string()).collect();
 
-    let any_overload_accepts = |port_name: &str| -> bool {
-        overloads.iter().any(|o| o.param_names().contains(port_name))
-    };
-
     let matching: Vec<&ComponentDef> = overloads
         .iter()
         .filter(|o| {
             let all = o.param_names();
-            // 1. All caller-authored ports must be accepted by this overload.
-            // Purely ambient ports injected by a container or standard spatial properties
-            // (x, y, z, clip) only disqualify an overload if at least one overload of this
-            // component actually accepts the port (e.g. ambient width injected by stretch).
+            // 1. All provided ports (caller-authored or container-injected via \Children)
+            // must be accepted by this overload.
             for port in &elem.ports {
                 let name = port.name.as_str();
-                let is_purely_ambient = ambient_authored_ports.is_some_and(|a| a.contains_key(name));
-                let is_unrelated_ambient = is_purely_ambient && !any_overload_accepts(name);
-                let is_standard_spatial = matches!(name, "x" | "y" | "z" | "clip");
-                let is_unrelated_spatial = is_standard_spatial && !any_overload_accepts(name);
-                if !is_unrelated_ambient
-                    && !is_unrelated_spatial
-                    && !all.contains(name)
-                    && !name.starts_with("on_")
-                {
+                if name != "clip" && !all.contains(name) && !name.starts_with("on_") {
                     return false;
                 }
             }
@@ -568,10 +548,7 @@ pub(super) fn select_component_overload<'a>(
         _ => {
             let mut provided: Vec<String> = explicit_ports
                 .into_iter()
-                .filter(|p| {
-                    let is_ambient = ambient_authored_ports.is_some_and(|a| a.contains_key(p));
-                    (!is_ambient || any_overload_accepts(p)) && !p.starts_with("on_")
-                })
+                .filter(|p| p != "clip" && !p.starts_with("on_"))
                 .collect();
             provided.sort();
             let available_signatures: Vec<Vec<String>> = overloads

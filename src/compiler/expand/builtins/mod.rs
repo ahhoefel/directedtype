@@ -59,9 +59,15 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
         false
     }
 
-    /// Returns true if this primitive ignores ambient `x`, `y`, `width`, `height` ports (`\Line`).
-    fn ignores_ambient_box_ports(&self) -> bool {
-        false
+    /// Returns true if `port_name` is a read-only derived spatial alias on this primitive.
+    fn is_immutable_alias_port(&self, port_name: &str) -> bool {
+        matches!(port_name, "left" | "top" | "right" | "bottom")
+    }
+
+    /// Returns true if `port_name` is an accepted input port on this primitive.
+    fn accepts_port(&self, port_name: &str) -> bool {
+        !self.is_immutable_alias_port(port_name)
+            && (self.port_type(port_name).is_some() || port_name.starts_with("on_"))
     }
 
     /// Returns true if child elements inside this primitive's content slot default `x`/`y` to `self.left`/`self.top` (`\Anchor`, `\AnchorScope`).
@@ -527,18 +533,23 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
         doc: &'a mut ExpandedDocument,
         node_fonts: &'a mut HashMap<NodeId, NodeId>,
     ) -> Result<Self, CompileError> {
-        // Validate that caller does not attempt to override immutable spatial alias ports
+        // Validate that caller or container does not attempt to override immutable spatial alias ports
+        // or pass unsupported properties to this primitive.
         for port in &elem.ports {
-            let is_purely_ambient = ctx
-                .ambient_authored_ports
-                .is_some_and(|a| a.contains_key(port.name.as_str()));
-            if is_purely_ambient {
-                continue;
-            }
-            if matches!(port.name.as_str(), "left" | "top" | "right" | "bottom") {
+            if primitive.is_immutable_alias_port(port.name.as_str()) {
                 return Err(CompileError::ImmutableAliasPort {
                     node: elem.name.as_str().to_string(),
                     port: port.name.as_str().to_string(),
+                    span: port.name.span,
+                });
+            }
+            if !primitive.accepts_port(port.name.as_str()) {
+                return Err(CompileError::Custom {
+                    message: format!(
+                        "Node '{}' does not accept property '{}'",
+                        elem.name.as_str(),
+                        port.name.as_str()
+                    ),
                     span: port.name.span,
                 });
             }
@@ -1143,16 +1154,6 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             }
 
             for (port_name, expr) in resolved_port_exprs {
-                let is_ambient = self
-                    .ctx
-                    .ambient_authored_ports
-                    .is_some_and(|m| m.contains_key(&port_name));
-                if self.primitive.ignores_ambient_box_ports()
-                    && is_ambient
-                    && matches!(port_name.as_str(), "x" | "y" | "width" | "height")
-                {
-                    continue;
-                }
                 if let Some(ambient_expr) = self
                     .ctx
                     .ambient_authored_ports

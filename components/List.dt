@@ -1,5 +1,3 @@
-\use { Align } from "components/Align.dt";
-
 \Enum BulletType {
     Bullet,
     Number,
@@ -44,7 +42,6 @@
     \let bullet_node = \Text(
         x: x - bullet_node.width - item_gap,
         y: y,
-        align: Align.Right,
         font: font,
         text: bullet_type == BulletType.Number ? ("" + index + ".") : bullet);
     \Children(

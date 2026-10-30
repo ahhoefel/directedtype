@@ -94,6 +94,55 @@ impl BuiltinPrimitive for TextPrimitive {
             });
     }
 
+    fn is_immutable_alias_port(&self, port_name: &str) -> bool {
+        matches!(
+            port_name,
+            "left"
+                | "top"
+                | "right"
+                | "bottom"
+                | "cap_height"
+                | "x_height"
+                | "ascent"
+                | "descent"
+                | "em_top"
+                | "line_gap"
+                | "gap_bottom"
+        )
+    }
+
+    fn accepts_port(&self, port_name: &str) -> bool {
+        matches!(
+            port_name,
+            "x" | "y"
+                | "width"
+                | "height"
+                | "z"
+                | "baseline"
+                | "text"
+                | "content"
+                | "color"
+                | "font"
+                | "family"
+                | "size"
+                | "weight"
+                | "line_height"
+                | "italic"
+                | "underline"
+                | "text_bounds"
+                | "start_at"
+                | "starts_at"
+                | "end_at"
+                | "ends_at"
+                | "clip"
+                | "cursor"
+                | "opacity"
+                | "name"
+                | "path"
+                | "id"
+        ) || port_name.starts_with("on_")
+    }
+
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
             "baseline" | "size" | "line_height" => Some(StaticType::Distance),

@@ -17,6 +17,52 @@ impl BuiltinPrimitive for RectPrimitive {
         "Rect"
     }
 
+    fn accepts_port(&self, port_name: &str) -> bool {
+        matches!(
+            port_name,
+            "x" | "y"
+                | "width"
+                | "height"
+                | "z"
+                | "color"
+                | "bg_color"
+                | "border_color"
+                | "border_width"
+                | "radius"
+                | "corner_radius"
+                | "radius_left"
+                | "radius_right"
+                | "radius_top"
+                | "radius_bottom"
+                | "left_radius"
+                | "right_radius"
+                | "top_radius"
+                | "bottom_radius"
+                | "radius_top_left"
+                | "radius_top_right"
+                | "radius_bottom_right"
+                | "radius_bottom_left"
+                | "top_left_radius"
+                | "top_right_radius"
+                | "bottom_right_radius"
+                | "bottom_left_radius"
+                | "shadow"
+                | "shadow_offset_x"
+                | "shadow_offset_y"
+                | "shadow_blur"
+                | "shadow_spread"
+                | "shadow_color"
+                | "scroll_x"
+                | "scroll_y"
+                | "clip"
+                | "cursor"
+                | "opacity"
+                | "name"
+                | "path"
+                | "id"
+        ) || port_name.starts_with("on_")
+    }
+
     fn register_types(
         &self,
         _enums: &mut HashMap<String, EnumDef>,

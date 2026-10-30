@@ -5073,3 +5073,106 @@ fn test_stage5_inline_box_standalone_in_hstack() {
     assert!((k2.rect.y - 50.0).abs() < 0.01);
 }
 
+#[test]
+fn test_strict_child_port_acceptance() {
+    // 1. Passing an unaccepted port via \Children(...) to a single-overload component is rejected
+    let unaccepted_single_overload = r#"
+    \Component Row(x: Distance = 0, y: Distance = 0) {
+        \Children(x: x, y: y, foo: 10px)
+    }
+    \Component BoxItem(x: Distance = 0, y: Distance = 0) {
+        \Rect(x: x, y: y, width: 20px, height: 20px, color: #000)
+    }
+    \Row() {
+        \BoxItem()
+    }
+    "#;
+    let err1 = compile_to_graph(&parse(unaccepted_single_overload).unwrap())
+        .expect_err("Should reject unaccepted port passed via \\Children to single-overload component");
+    assert!(
+        err1.to_string().contains("Node 'BoxItem' does not accept property 'foo'"),
+        "Expected 'does not accept property' error, got: {}",
+        err1
+    );
+
+    // 2. Passing a port via \Children(...) that collides with a child's \alias is rejected
+    let alias_collision = r#"
+    \Component Column(x: Distance = 0, y: Distance = 0, width: Distance = 100px) {
+        \Children(x: x, y: y, width: width)
+    }
+    \Component FixedPill(x: Distance = 0, y: Distance = 0) {
+        \alias width = 50px;
+        \alias height = 20px;
+        \Rect(x: x, y: y, width: 50px, height: 20px, color: #000)
+    }
+    \Column() {
+        \FixedPill()
+    }
+    "#;
+    let err2 = compile_to_graph(&parse(alias_collision).unwrap())
+        .expect_err("Should reject \\Children port colliding with child \\alias");
+    assert!(
+        matches!(err2, CompileError::ImmutableAliasPort { ref node, ref port, .. } if node == "FixedPill" && port == "width"),
+        "Expected ImmutableAliasPort for 'width' on 'FixedPill', got: {:?}",
+        err2
+    );
+
+    // 3. Passing an unaccepted port via \Children(...) to an overloaded component is rejected
+    let unaccepted_overloaded = r#"
+    \Component Container(x: Distance = 0, y: Distance = 0) {
+        \Children(x: x, y: y, extra: 5px)
+    }
+    \Component Widget(x: Distance = 0, y: Distance = 0, width: Distance = 10px) {
+        \Rect(x: x, y: y, width: width, height: 10px, color: #000)
+    }
+    \Component Widget(x: Distance = 0, y: Distance = 0, size: Distance) {
+        \Rect(x: x, y: y, width: size, height: size, color: #000)
+    }
+    \Container() {
+        \Widget(width: 20px)
+    }
+    "#;
+    let err3 = compile_to_graph(&parse(unaccepted_overloaded).unwrap())
+        .expect_err("Should reject unaccepted port passed via \\Children to overloaded component");
+    assert!(
+        matches!(err3, CompileError::NoMatchingOverload(_)),
+        "Expected NoMatchingOverload for 'Widget', got: {:?}",
+        err3
+    );
+
+    // 4. Passing x/y via \Children(...) to \Line is rejected as an immutable alias port
+    let line_in_stack = r#"
+    \Component Stack(x: Distance = 0, y: Distance = 0) {
+        \Children(x: x, y: y)
+    }
+    \Stack() {
+        \Line(x1: 0, y1: 0, x2: 10px, y2: 10px)
+    }
+    "#;
+    let err4 = compile_to_graph(&parse(line_in_stack).unwrap())
+        .expect_err("Should reject x/y passed via \\Children to \\Line");
+    assert!(
+        matches!(err4, CompileError::ImmutableAliasPort { ref node, ref port, .. } if node == "Line" && (port == "x" || port == "y")),
+        "Expected ImmutableAliasPort on 'Line', got: {:?}",
+        err4
+    );
+
+    // 5. Passing an unaccepted port via \Children(...) to \Rect or \Text is rejected
+    let rect_unaccepted = r#"
+    \Component Stack(x: Distance = 0, y: Distance = 0) {
+        \Children(x: x, y: y, gap: 8px)
+    }
+    \Stack() {
+        \Rect(width: 20px, height: 20px, color: #000)
+    }
+    "#;
+    let err5 = compile_to_graph(&parse(rect_unaccepted).unwrap())
+        .expect_err("Should reject unaccepted port passed via \\Children to \\Rect");
+    assert!(
+        err5.to_string().contains("Node 'Rect' does not accept property 'gap'"),
+        "Expected 'Node Rect does not accept property gap', got: {}",
+        err5
+    );
+}
+
+

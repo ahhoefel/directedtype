@@ -80,7 +80,7 @@ impl<'a> ComponentExpander<'a> {
         instantiated_children_ids: &'a RefCell<Vec<NodeId>>,
     ) -> Result<Self, CompileError> {
         let schema = ComponentSchema::from_def(comp_def)?;
-        schema.validate_caller_ports(comp_def, instance, ctx.ambient_authored_ports)?;
+        schema.validate_caller_ports(comp_def, instance)?;
         let is_single_text_context =
             !schema.is_span_def && component_children_is_single_text(comp_def, registry);
         if schema.is_span_def {
@@ -447,23 +447,28 @@ impl<'a> ComponentExpander<'a> {
             }
         }
 
-        // Any remaining explicit ports not defined in signature (e.g. ad-hoc ports)
         let parent_is_text_or_span = self
             .ctx
             .parent_id
             .and_then(|pid| self.doc.get_node(pid))
             .is_some_and(|p| p.name == "Text" || p.is_span);
         for (name, expr) in explicit_ports {
-            let is_purely_ambient = self
-                .ctx
-                .ambient_authored_ports
-                .is_some_and(|a| a.contains_key(&name));
-            let allow_standalone_span_ambient =
-                (self.schema.is_span_def || self.schema.is_inline_box_def)
-                    && !parent_is_text_or_span
-                    && matches!(name.as_str(), "x" | "y" | "width");
-            if is_purely_ambient && name != "clip" && !allow_standalone_span_ambient {
-                continue;
+            if name != "clip" && !name.starts_with("on_") {
+                let port_span = self
+                    .instance
+                    .ports
+                    .iter()
+                    .find(|p| p.name.as_str() == name)
+                    .map(|p| p.name.span)
+                    .unwrap_or(self.instance.span);
+                return Err(CompileError::Custom {
+                    message: format!(
+                        "Node '{}' does not accept property '{}'",
+                        comp_def.name.as_str(),
+                        name
+                    ),
+                    span: port_span,
+                });
             }
             if !self.schema.comp_scope_ports.contains(&name) {
                 self.schema.comp_scope_ports.push(name.clone());

@@ -598,12 +598,6 @@ fn expand_element(
     if let Some(overloads) = registry.get(elem.name.as_str()) {
         for port in &elem.ports {
             let name = port.name.as_str();
-            let is_purely_ambient = ctx
-                .ambient_authored_ports
-                .is_some_and(|a| a.contains_key(name));
-            if is_purely_ambient {
-                continue;
-            }
             let is_accepted_param = overloads.iter().any(|o| o.param_names().contains(name));
             if !is_accepted_param
                 && (matches!(name, "left" | "top" | "right" | "bottom")
@@ -628,7 +622,6 @@ fn expand_element(
                 overloads,
                 elem.name.as_str(),
                 elem,
-                ctx.ambient_authored_ports,
                 ctx.env_scope,
                 elem.span,
             )?
