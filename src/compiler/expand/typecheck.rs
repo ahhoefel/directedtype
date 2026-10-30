@@ -662,90 +662,12 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
 
 pub(super) fn known_builtin_port_type(node_name: &str, port_name: &str) -> Option<StaticType> {
     if node_name == "Window" {
-        match port_name {
-            "x" | "y" | "width" | "height" | "left" | "top" | "right" | "bottom"
-            | "scroll_x" | "scroll_y" => return Some(StaticType::Distance),
-            "dpi" => return Some(StaticType::Float),
-            "clip" => return Some(StaticType::Node("Clip".to_string())),
-            _ => {}
-        }
+        return super::builtins::window::window_port_type(port_name);
     }
-    match port_name {
-        "x"
-        | "y"
-        | "x1"
-        | "y1"
-        | "x2"
-        | "y2"
-        | "start_x"
-        | "start_y"
-        | "end_x"
-        | "end_y"
-        | "width"
-        | "height"
-        | "left"
-        | "top"
-        | "right"
-        | "bottom"
-        | "size"
-        | "line_height"
-        | "baseline"
-        | "cap_height"
-        | "x_height"
-        | "ascent"
-        | "descent"
-        | "em_top"
-        | "line_gap"
-        | "gap_bottom"
-        | "radius"
-        | "corner_radius"
-        | "radius_left"
-        | "radius_right"
-        | "radius_top"
-        | "radius_bottom"
-        | "left_radius"
-        | "right_radius"
-        | "top_radius"
-        | "bottom_radius"
-        | "radius_top_left"
-        | "radius_top_right"
-        | "radius_bottom_right"
-        | "radius_bottom_left"
-        | "top_left_radius"
-        | "top_right_radius"
-        | "bottom_right_radius"
-        | "bottom_left_radius"
-        | "border_width"
-        | "thickness"
-        | "stroke_width"
-        | "head_length"
-        | "head_width"
-        | "length"
-        | "shadow_offset_x"
-        | "shadow_offset_y"
-        | "shadow_blur"
-        | "shadow_spread"
-        | "scroll_x"
-        | "scroll_y" => Some(StaticType::Distance),
-        "z" | "weight" => Some(StaticType::Integer),
-        "opacity" => Some(StaticType::Float),
-        "color" | "bg_color" | "border_color" | "stroke_color" | "shadow_color" => {
-            Some(StaticType::Color)
-        }
-        "family" | "text" | "content" | "cursor" | "url" | "name" | "path" | "id" => {
-            Some(StaticType::String)
-        }
-        "underline" | "italic" => Some(StaticType::Boolean),
-        "clip" | "up" => Some(StaticType::Node("Clip".to_string())),
-        "font" => Some(StaticType::Node("Font".to_string())),
-        "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
-        "shadow" => Some(StaticType::Node("Shadow".to_string())),
-        "start_at" => Some(StaticType::Enum("TextStart".to_string())),
-        "end_at" => Some(StaticType::Enum("TextEnd".to_string())),
-        "cap" | "line_cap" => Some(StaticType::Enum("LineCap".to_string())),
-        p if p.starts_with("on_") => Some(StaticType::Handler),
-        _ => None,
+    if let Some(prim) = super::builtins::lookup_builtin(node_name, true) {
+        return prim.port_type(port_name);
     }
+    super::builtins::default_builtin_port_type(port_name)
 }
 
 /// Strictly type-checks all expanded node ports, window ports, and local bindings at compile time.

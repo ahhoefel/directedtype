@@ -209,3 +209,16 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
     Ok(window_scope_ports)
 }
 
+/// Returns the static type of a built-in port on the `\Window` root node.
+pub(in crate::compiler::expand) fn window_port_type(
+    port_name: &str,
+) -> Option<crate::compiler::expand::StaticType> {
+    use crate::compiler::expand::StaticType;
+    match port_name {
+        "x" | "y" | "width" | "height" | "left" | "top" | "right" | "bottom" | "scroll_x"
+        | "scroll_y" => Some(StaticType::Distance),
+        "dpi" => Some(StaticType::Float),
+        "clip" => Some(StaticType::Node("Clip".to_string())),
+        _ => super::default_builtin_port_type(port_name),
+    }
+}

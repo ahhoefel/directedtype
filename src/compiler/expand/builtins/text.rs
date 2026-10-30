@@ -1,5 +1,6 @@
 use crate::ast::{
-    BinaryExpr, BinaryOp, CallExpr, DistanceUnit, Expr, Ident, Literal, MemberAccessExpr,
+    BinaryExpr, BinaryOp, CallExpr, ComponentDef, DistanceUnit, ElementNode, Expr, Ident, Literal,
+    MemberAccessExpr,
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
@@ -8,13 +9,93 @@ use crate::compiler::expand::builtins::{
 };
 use crate::compiler::expand::context::{EnvEntry, ScopeContext};
 use crate::compiler::expand::rewrite::rewrite_expr;
-use crate::compiler::expanded::NodeId;
+use crate::compiler::expand::text_flow::{accumulate_text_child, is_allowed_in_single_text};
+use crate::compiler::expanded::{ExpandedDocument, NodeId};
+use crate::compiler::text::{InlineBoxSpan, TextSpan};
+use crate::span::Span;
+use std::collections::HashMap;
 
 pub struct TextPrimitive;
 
 impl BuiltinPrimitive for TextPrimitive {
     fn name(&self) -> &'static str {
         "Text"
+    }
+
+    fn forwards_font_to_content_env(&self) -> bool {
+        true
+    }
+
+    fn validate_content_child(
+        &self,
+        child_elem: &ElementNode,
+        registry: &HashMap<String, Vec<ComponentDef>>,
+    ) -> Result<(), CompileError> {
+        if !is_allowed_in_single_text(child_elem, registry) {
+            return Err(CompileError::Custom {
+                message: format!(
+                    "Block component '{}' cannot be placed inside \\Text; only plain text, \\Span, and \\InlineBox are allowed",
+                    child_elem.name.as_str()
+                ),
+                span: child_elem.span,
+            });
+        }
+        Ok(())
+    }
+
+    fn on_paragraph_break(&self, span: Span) -> Result<(), CompileError> {
+        Err(CompileError::Custom {
+            message: "Paragraph break (blank line) is not permitted inside single \\Text element"
+                .to_string(),
+            span,
+        })
+    }
+
+    fn on_content_text(&self, text: &str, full_text: &mut String, text_spans: &mut Vec<TextSpan>) {
+        let start = full_text.len();
+        full_text.push_str(text);
+        let end = full_text.len();
+        text_spans.push(TextSpan::new(start..end));
+    }
+
+    fn on_content_child(
+        &self,
+        doc: &mut ExpandedDocument,
+        child_id: NodeId,
+        child_elem: &ElementNode,
+        full_text: &mut String,
+        text_spans: &mut Vec<TextSpan>,
+        inline_boxes: &mut Vec<InlineBoxSpan>,
+        apply_own_style: bool,
+    ) {
+        if child_elem.name.as_str() != "Font" {
+            accumulate_text_child(
+                doc,
+                child_id,
+                child_elem,
+                full_text,
+                text_spans,
+                inline_boxes,
+                apply_own_style,
+            );
+        }
+    }
+
+    fn finish_content(
+        &self,
+        node_id: NodeId,
+        doc: &mut ExpandedDocument,
+        full_text: String,
+        text_spans: Vec<TextSpan>,
+        inline_boxes: Vec<InlineBoxSpan>,
+    ) {
+        if !full_text.is_empty() || !inline_boxes.is_empty() {
+            doc.nodes[node_id.0].text_content = Some(full_text);
+            doc.nodes[node_id.0].text_spans = text_spans;
+            doc.nodes[node_id.0].inline_boxes = inline_boxes;
+        } else if let Some(tc) = &doc.nodes[node_id.0].text_content {
+            doc.nodes[node_id.0].text_spans = vec![TextSpan::new(0..tc.len())];
+        }
     }
 
     fn scope_ports(&self) -> Vec<String> {
@@ -101,7 +182,7 @@ impl BuiltinPrimitive for TextPrimitive {
                     node_id,
                     ctx,
                     &state.doc.nodes,
-                    &*lexical_borrow,
+                    &lexical_borrow,
                     state.node_fonts,
                     enclosing_child_ids,
                 );

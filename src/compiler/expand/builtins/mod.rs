@@ -8,24 +8,24 @@ pub mod text;
 pub mod window;
 
 use crate::ast::{
-    BinaryExpr, BinaryOp, CallExpr, ComponentDef, ContentItem, DistanceUnit, ElementNode, EnumDef,
-    Expr, Ident, LetValue, Literal, MemberAccessExpr, ParamDef, PortBinding, TypeRef,
+    AssertDirective, BinaryExpr, BinaryOp, CallExpr, ChildrenDirective, ComponentDef, ContentItem,
+    DistanceUnit, ElementNode, EnumDef, Expr, Ident, LetBinding, LetValue, Literal,
+    MemberAccessExpr, ParamDef, PortBinding, TypeRef,
 };
-use crate::span::Span;
 use crate::compiler::error::CompileError;
 use crate::compiler::eval::eval_expr;
 use crate::compiler::expand::children::apply_forwarded_directives;
 use crate::compiler::expand::context::{ElementContext, EnvEntry, LexicalBinding, ScopeContext};
 use crate::compiler::expand::expand_element;
 use crate::compiler::expand::rewrite::{extract_event_binding, rewrite_expr};
-use crate::compiler::expand::text_flow::{accumulate_text_child, is_allowed_in_single_text};
 use crate::compiler::expand::typecheck::{
-    infer_expr_literal_for_typecheck, validate_node_type_annotation,
+    infer_expr_literal_for_typecheck, validate_node_type_annotation, StaticType,
 };
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::scope::ScopeId;
-use crate::compiler::text::TextSpan;
+use crate::compiler::text::{InlineBoxSpan, TextSpan};
 use crate::component::EventHandlerBinding;
+use crate::span::Span;
 use std::collections::HashMap;
 
 /// Shared mutable state passed to `BuiltinPrimitive::finalize_ports`.
@@ -44,7 +44,7 @@ pub(in crate::compiler::expand) struct PrimitiveExpandState<'a, 'ctx> {
     pub event_handlers: HashMap<String, EventHandlerBinding>,
 }
 
-/// Encapsulates the schema, scope behavior, and port finalization of a built-in primitive element.
+/// Encapsulates the schema, scope behavior, content-slot hooks, and port finalization of a built-in primitive element.
 pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
     /// Canonical primitive name (e.g. `"Rect"`, `"Line"`, `"Text"`).
     fn name(&self) -> &'static str;
@@ -62,6 +62,16 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
     /// Returns true if child elements inside this primitive's content slot default `x`/`y` to `self.left`/`self.top` (`\Anchor`, `\AnchorScope`).
     fn wires_child_origin_to_self(&self) -> bool {
         false
+    }
+
+    /// Returns true if an explicit or ambient `font` on this primitive is forwarded into `env font` for its content slot (`\Text`).
+    fn forwards_font_to_content_env(&self) -> bool {
+        false
+    }
+
+    /// Static type of a built-in port on this primitive.
+    fn port_type(&self, port_name: &str) -> Option<StaticType> {
+        default_builtin_port_type(port_name)
     }
 
     /// Default ports exposed in scope to children inside this primitive's content slot.
@@ -94,6 +104,51 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
         Ok(ctx.active_scope_id)
     }
 
+    /// Validates whether `child_elem` is permitted inside this primitive's content slot.
+    fn validate_content_child(
+        &self,
+        _child_elem: &ElementNode,
+        _registry: &HashMap<String, Vec<ComponentDef>>,
+    ) -> Result<(), CompileError> {
+        Ok(())
+    }
+
+    /// Hook invoked when a blank-line paragraph break appears in this primitive's content slot.
+    fn on_paragraph_break(&self, _span: Span) -> Result<(), CompileError> {
+        Ok(())
+    }
+
+    /// Hook invoked when a plain text chunk appears in this primitive's content slot.
+    fn on_content_text(&self, _text: &str, _full_text: &mut String, _text_spans: &mut Vec<TextSpan>) {}
+
+    /// Hook invoked after a child element in this primitive's content slot has been expanded.
+    #[allow(clippy::too_many_arguments)]
+    fn on_content_child(
+        &self,
+        _doc: &mut ExpandedDocument,
+        _child_id: NodeId,
+        _child_elem: &ElementNode,
+        _full_text: &mut String,
+        _text_spans: &mut Vec<TextSpan>,
+        _inline_boxes: &mut Vec<InlineBoxSpan>,
+        _apply_own_style: bool,
+    ) {
+    }
+
+    /// Hook invoked after all items in this primitive's content slot have been expanded.
+    fn finish_content(
+        &self,
+        node_id: NodeId,
+        doc: &mut ExpandedDocument,
+        _full_text: String,
+        _text_spans: Vec<TextSpan>,
+        _inline_boxes: Vec<InlineBoxSpan>,
+    ) {
+        if let Some(tc) = &doc.nodes[node_id.0].text_content {
+            doc.nodes[node_id.0].text_spans = vec![TextSpan::new(0..tc.len())];
+        }
+    }
+
     /// Validates required ports and synthesizes primitive-specific default and derived ports.
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError>;
 
@@ -116,6 +171,113 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
                 "height".to_string(),
             ]
         }
+    }
+}
+
+/// Returns the static type of standard built-in spatial, typographic, visual, and handler ports.
+pub(in crate::compiler::expand) fn default_builtin_port_type(port_name: &str) -> Option<StaticType> {
+    match port_name {
+        "x"
+        | "y"
+        | "x1"
+        | "y1"
+        | "x2"
+        | "y2"
+        | "start_x"
+        | "start_y"
+        | "end_x"
+        | "end_y"
+        | "width"
+        | "height"
+        | "left"
+        | "top"
+        | "right"
+        | "bottom"
+        | "size"
+        | "line_height"
+        | "baseline"
+        | "cap_height"
+        | "x_height"
+        | "ascent"
+        | "descent"
+        | "em_top"
+        | "line_gap"
+        | "gap_bottom"
+        | "radius"
+        | "corner_radius"
+        | "radius_left"
+        | "radius_right"
+        | "radius_top"
+        | "radius_bottom"
+        | "left_radius"
+        | "right_radius"
+        | "top_radius"
+        | "bottom_radius"
+        | "radius_top_left"
+        | "radius_top_right"
+        | "radius_bottom_right"
+        | "radius_bottom_left"
+        | "top_left_radius"
+        | "top_right_radius"
+        | "bottom_right_radius"
+        | "bottom_left_radius"
+        | "border_width"
+        | "thickness"
+        | "stroke_width"
+        | "head_length"
+        | "head_width"
+        | "length"
+        | "shadow_offset_x"
+        | "shadow_offset_y"
+        | "shadow_blur"
+        | "shadow_spread"
+        | "scroll_x"
+        | "scroll_y" => Some(StaticType::Distance),
+        "z" | "weight" => Some(StaticType::Integer),
+        "opacity" => Some(StaticType::Float),
+        "color" | "bg_color" | "border_color" | "stroke_color" | "shadow_color" => {
+            Some(StaticType::Color)
+        }
+        "family" | "text" | "content" | "cursor" | "url" | "name" | "path" | "id" => {
+            Some(StaticType::String)
+        }
+        "underline" | "italic" => Some(StaticType::Boolean),
+        "clip" | "up" => Some(StaticType::Node("Clip".to_string())),
+        "font" => Some(StaticType::Node("Font".to_string())),
+        "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
+        "shadow" => Some(StaticType::Node("Shadow".to_string())),
+        "start_at" => Some(StaticType::Enum("TextStart".to_string())),
+        "end_at" => Some(StaticType::Enum("TextEnd".to_string())),
+        "cap" | "line_cap" => Some(StaticType::Enum("LineCap".to_string())),
+        p if p.starts_with("on_") => Some(StaticType::Handler),
+        _ => None,
+    }
+}
+
+/// Evaluates an `\assert(...)` directive in the given `scope_ctx`.
+pub(in crate::compiler::expand) fn eval_assert_directive(
+    assert_dir: &AssertDirective,
+    scope_ctx: &ScopeContext<'_>,
+) -> Result<(), CompileError> {
+    let rewritten = rewrite_expr(&assert_dir.condition, scope_ctx)?;
+    match eval_expr(&rewritten, &HashMap::new()) {
+        Ok(val) => {
+            if !val.is_truthy() {
+                let msg = assert_dir
+                    .message
+                    .clone()
+                    .unwrap_or_else(|| format!("Assertion failed: {}", assert_dir.condition));
+                return Err(CompileError::AssertionFailed {
+                    message: msg,
+                    span: assert_dir.span,
+                });
+            }
+            Ok(())
+        }
+        Err(e) => Err(CompileError::Custom {
+            message: format!("Could not evaluate assertion condition: {}", e),
+            span: assert_dir.span,
+        }),
     }
 }
 
@@ -577,6 +739,721 @@ pub(super) fn resolve_default_spatial_dimensions(
     Ok(())
 }
 
+struct PreResolvedFont {
+    font_node_id: Option<NodeId>,
+    pre_expanded_font_expr: Option<Expr>,
+    pre_rewritten_font_expr: Option<Expr>,
+    ambient_font_port_expr: Option<Expr>,
+}
+
+/// Pre-resolves an explicit `font` port or ambient `env font` before expanding the primitive's content slot.
+fn pre_resolve_primitive_font(
+    node_id: NodeId,
+    elem: &ElementNode,
+    ctx: &ElementContext<'_>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    doc: &mut ExpandedDocument,
+    node_fonts: &mut HashMap<NodeId, NodeId>,
+    child_ids: &mut Vec<NodeId>,
+    last_child_id: &mut Option<NodeId>,
+) -> Result<PreResolvedFont, CompileError> {
+    let mut font_node_id = None;
+    let mut pre_expanded_font_expr: Option<Expr> = None;
+    let mut pre_rewritten_font_expr: Option<Expr> = None;
+    let mut ambient_font_port_expr: Option<Expr> = None;
+
+    if let Some(font_port) = elem.ports.iter().find(|p| p.name.as_str() == "font") {
+        match &font_port.expr {
+            Expr::Node(inline_elem) => {
+                let parent_id = if ctx.is_let {
+                    ctx.parent_id
+                } else {
+                    Some(node_id)
+                };
+                let parent_name = if ctx.is_let {
+                    ctx.parent_name
+                } else {
+                    Some(elem.name.as_str())
+                };
+                let child_ctx = ElementContext {
+                    parent_id,
+                    parent_name,
+                    prev_sibling_id: *last_child_id,
+                    has_next_sibling: false,
+                    parent_ports: ctx.parent_ports,
+                    lexical_scope: ctx.lexical_scope,
+                    env_scope: ctx.env_scope,
+                    enclosing_component_id: ctx.enclosing_component_id,
+                    enclosing_num_children: ctx.enclosing_num_children,
+                    enclosing_instantiated_children: ctx.enclosing_instantiated_children,
+                    shadowed_ports: ctx.shadowed_ports,
+                    is_let: ctx.is_let,
+                    ambient_authored_ports: None,
+                    enums: ctx.enums,
+                    active_scope_id: ctx.active_scope_id,
+                    consumer_children: None,
+                };
+                let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
+                if !matches!(inline_elem.name.as_str(), "Font" | "TextBounds" | "Shadow") {
+                    child_ids.push(child_id);
+                    *last_child_id = Some(child_id);
+                }
+                let ident_expr =
+                    Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span));
+                font_node_id = Some(child_id);
+                pre_expanded_font_expr = Some(ident_expr.clone());
+                pre_rewritten_font_expr = Some(ident_expr);
+            }
+            other => {
+                let empty_enclosing_children: [NodeId; 0] = [];
+                let enclosing_children_borrow =
+                    ctx.enclosing_instantiated_children.map(|c| c.borrow());
+                let enclosing_child_ids: &[NodeId] = match &enclosing_children_borrow {
+                    Some(b) => b.as_slice(),
+                    None => &empty_enclosing_children,
+                };
+                let lexical_borrow = ctx.lexical_scope.borrow();
+                let temp_scope_ctx = ScopeContext::from_element(
+                    node_id,
+                    ctx,
+                    &doc.nodes,
+                    &lexical_borrow,
+                    node_fonts,
+                    enclosing_child_ids,
+                );
+                if let Ok(rewritten) = rewrite_expr(other, &temp_scope_ctx) {
+                    if let Expr::Ident(id) = &rewritten {
+                        if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                            font_node_id = Some(fid);
+                        }
+                    }
+                    pre_rewritten_font_expr = Some(rewritten);
+                }
+            }
+        }
+    } else if let Some(EnvEntry::Bound(env_expr)) = ctx.env_scope.get("font") {
+        let empty_enclosing_children: [NodeId; 0] = [];
+        let enclosing_children_borrow = ctx.enclosing_instantiated_children.map(|c| c.borrow());
+        let enclosing_child_ids: &[NodeId] = match &enclosing_children_borrow {
+            Some(b) => b.as_slice(),
+            None => &empty_enclosing_children,
+        };
+        let lexical_borrow = ctx.lexical_scope.borrow();
+        let temp_scope_ctx = ScopeContext::from_element(
+            node_id,
+            ctx,
+            &doc.nodes,
+            &lexical_borrow,
+            node_fonts,
+            enclosing_child_ids,
+        );
+        if let Ok(rewritten) = rewrite_expr(env_expr, &temp_scope_ctx) {
+            if let Expr::Ident(id) = &rewritten {
+                if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                    if fid != node_id {
+                        font_node_id = Some(fid);
+                    }
+                    if elem.name.as_str() != "Font" {
+                        ambient_font_port_expr =
+                            Some(Expr::Ident(Ident::new(fid.canonical_name(), elem.span)));
+                    }
+                }
+            } else if elem.name.as_str() != "Font"
+                && (matches!(rewritten, Expr::Literal(Literal::String(_, _)))
+                    || elem.name.as_str() == "Text")
+            {
+                ambient_font_port_expr = Some(rewritten.clone());
+            }
+            pre_rewritten_font_expr = Some(rewritten);
+        }
+    }
+
+    if let Some(fid) = font_node_id {
+        node_fonts.insert(node_id, fid);
+        doc.get_node_mut(node_id).unwrap().font = Some(fid);
+    } else if elem.name.as_str() == "Font" {
+        node_fonts.insert(node_id, node_id);
+        doc.get_node_mut(node_id).unwrap().font = Some(node_id);
+    }
+
+    Ok(PreResolvedFont {
+        font_node_id,
+        pre_expanded_font_expr,
+        pre_rewritten_font_expr,
+        ambient_font_port_expr,
+    })
+}
+
+/// Wires default `x = parent.left` and `y = parent.top` onto a child element of an `\Anchor` or `\AnchorScope`.
+fn wire_wrapper_child_origin(node_id: NodeId, child_elem: &ElementNode) -> ElementNode {
+    let mut child = child_elem.clone();
+    if !child.ports.iter().any(|p| p.name.as_str() == "x") {
+        child.ports.push(PortBinding {
+            name: Ident::new("x", child.span),
+            expr: Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::new(
+                    node_id.canonical_name(),
+                    child.span,
+                ))),
+                member: Ident::new("left", child.span),
+                span: child.span,
+            }),
+            span: child.span,
+        });
+    }
+    if !child.ports.iter().any(|p| p.name.as_str() == "y") {
+        child.ports.push(PortBinding {
+            name: Ident::new("y", child.span),
+            expr: Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::new(
+                    node_id.canonical_name(),
+                    child.span,
+                ))),
+                member: Ident::new("top", child.span),
+                span: child.span,
+            }),
+            span: child.span,
+        });
+    }
+    child
+}
+
+#[allow(clippy::too_many_arguments)]
+fn expand_primitive_content_node(
+    primitive: &dyn BuiltinPrimitive,
+    node_id: NodeId,
+    elem: &ElementNode,
+    child_elem: &ElementNode,
+    ctx: &ElementContext<'_>,
+    content_env_scope: &HashMap<String, EnvEntry>,
+    primitive_scope_ports: &[String],
+    active_scope_for_children: ScopeId,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    doc: &mut ExpandedDocument,
+    node_fonts: &mut HashMap<NodeId, NodeId>,
+    child_ids: &mut Vec<NodeId>,
+    last_child_id: &mut Option<NodeId>,
+    full_text: &mut String,
+    text_spans: &mut Vec<TextSpan>,
+    inline_boxes: &mut Vec<InlineBoxSpan>,
+) -> Result<(), CompileError> {
+    primitive.validate_content_child(child_elem, registry)?;
+    let child_ctx = ElementContext {
+        parent_id: Some(node_id),
+        parent_name: Some(elem.name.as_str()),
+        prev_sibling_id: *last_child_id,
+        has_next_sibling: false,
+        parent_ports: primitive_scope_ports,
+        lexical_scope: ctx.lexical_scope,
+        env_scope: content_env_scope,
+        enclosing_component_id: ctx.enclosing_component_id,
+        enclosing_num_children: ctx.enclosing_num_children,
+        enclosing_instantiated_children: ctx.enclosing_instantiated_children,
+        shadowed_ports: ctx.shadowed_ports,
+        is_let: false,
+        ambient_authored_ports: None,
+        enums: ctx.enums,
+        active_scope_id: active_scope_for_children,
+        consumer_children: ctx.consumer_children,
+    };
+
+    let wired_child_elem;
+    let target_elem = if primitive.wires_child_origin_to_self() {
+        wired_child_elem = wire_wrapper_child_origin(node_id, child_elem);
+        &wired_child_elem
+    } else {
+        child_elem
+    };
+
+    let child_id = expand_element(target_elem, &child_ctx, registry, doc, node_fonts)?;
+    child_ids.push(child_id);
+    *last_child_id = Some(child_id);
+
+    primitive.on_content_child(
+        doc,
+        child_id,
+        child_elem,
+        full_text,
+        text_spans,
+        inline_boxes,
+        true,
+    );
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn expand_primitive_content_let(
+    primitive: &dyn BuiltinPrimitive,
+    node_id: NodeId,
+    elem: &ElementNode,
+    let_binding: &LetBinding,
+    ctx: &ElementContext<'_>,
+    content_env_scope: &HashMap<String, EnvEntry>,
+    primitive_scope_ports: &[String],
+    active_scope_for_children: ScopeId,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    doc: &mut ExpandedDocument,
+    node_fonts: &mut HashMap<NodeId, NodeId>,
+    child_ids: &mut Vec<NodeId>,
+    last_child_id: &mut Option<NodeId>,
+    full_text: &mut String,
+    text_spans: &mut Vec<TextSpan>,
+    inline_boxes: &mut Vec<InlineBoxSpan>,
+) -> Result<(), CompileError> {
+    if let Some(LetValue::Node(child_elem)) = &let_binding.value {
+        validate_node_type_annotation(
+            child_elem.name.as_str(),
+            child_elem.span,
+            let_binding.type_annotation.as_ref(),
+            ctx.enums,
+            registry,
+        )?;
+        primitive.validate_content_child(child_elem, registry)?;
+        let child_ctx = ElementContext {
+            parent_id: Some(node_id),
+            parent_name: Some(elem.name.as_str()),
+            prev_sibling_id: *last_child_id,
+            has_next_sibling: false,
+            parent_ports: primitive_scope_ports,
+            lexical_scope: ctx.lexical_scope,
+            env_scope: content_env_scope,
+            enclosing_component_id: ctx.enclosing_component_id,
+            enclosing_num_children: ctx.enclosing_num_children,
+            enclosing_instantiated_children: ctx.enclosing_instantiated_children,
+            shadowed_ports: ctx.shadowed_ports,
+            is_let: true,
+            ambient_authored_ports: None,
+            enums: ctx.enums,
+            active_scope_id: active_scope_for_children,
+            consumer_children: ctx.consumer_children,
+        };
+
+        let wired_child_elem;
+        let target_elem = if primitive.wires_child_origin_to_self() {
+            wired_child_elem = wire_wrapper_child_origin(node_id, child_elem);
+            &wired_child_elem
+        } else {
+            child_elem
+        };
+
+        let child_id = expand_element(target_elem, &child_ctx, registry, doc, node_fonts)?;
+        doc.get_node_mut(child_id).unwrap().var_name = Some(let_binding.name.as_str().to_string());
+        ctx.lexical_scope.borrow_mut().insert(
+            let_binding.name.as_str().to_string(),
+            LexicalBinding::Node(child_id),
+        );
+        child_ids.push(child_id);
+        *last_child_id = Some(child_id);
+
+        if child_elem.name.as_str() == "Font" {
+            node_fonts.insert(child_id, child_id);
+        }
+
+        primitive.on_content_child(
+            doc,
+            child_id,
+            child_elem,
+            full_text,
+            text_spans,
+            inline_boxes,
+            true,
+        );
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn expand_primitive_content_children(
+    primitive: &dyn BuiltinPrimitive,
+    node_id: NodeId,
+    elem: &ElementNode,
+    dir: &ChildrenDirective,
+    ctx: &ElementContext<'_>,
+    content_env_scope: &HashMap<String, EnvEntry>,
+    primitive_scope_ports: &[String],
+    active_scope_for_children: ScopeId,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    doc: &mut ExpandedDocument,
+    node_fonts: &mut HashMap<NodeId, NodeId>,
+    child_ids: &mut Vec<NodeId>,
+    last_child_id: &mut Option<NodeId>,
+    full_text: &mut String,
+    text_spans: &mut Vec<TextSpan>,
+    inline_boxes: &mut Vec<InlineBoxSpan>,
+) -> Result<(), CompileError> {
+    for port in &dir.ports {
+        if port.name.as_str() == "parent" {
+            return Err(CompileError::ReservedPort {
+                node: "Children".to_string(),
+                port: "parent".to_string(),
+                span: port.name.span,
+            });
+        }
+    }
+    let Some(consumer_items) = ctx.consumer_children else {
+        return Ok(());
+    };
+
+    let num_consumer_children = consumer_items.len();
+    let empty_children: [NodeId; 0] = [];
+    for (child_idx, entry) in consumer_items.iter().enumerate() {
+        if let Some(chunk) = &entry.raw_text {
+            if primitive.forwards_font_to_content_env()
+                && dir.ports.is_empty()
+                && entry.forwarded_directives.is_empty()
+            {
+                primitive.on_content_text(&chunk.text, full_text, text_spans);
+                continue;
+            }
+        }
+
+        let has_next_sibling = child_idx + 1 < num_consumer_children;
+        let child_elem = &entry.elem;
+        if entry.raw_text.is_none() {
+            primitive.validate_content_child(child_elem, registry)?;
+        }
+
+        let mut merged_ports = HashMap::new();
+        let mut authored_ambient_ports = HashMap::new();
+        let child_node_id = NodeId(doc.nodes.len());
+
+        {
+            let lexical_borrow = ctx.lexical_scope.borrow();
+            let inst_borrow = ctx.enclosing_instantiated_children.map(|c| c.borrow());
+            let enc_child_ids: &[NodeId] = match &inst_borrow {
+                Some(b) => b.as_slice(),
+                None => &empty_children,
+            };
+            let mut ambient_scope_ctx = ScopeContext::from_element(
+                child_node_id,
+                ctx,
+                &doc.nodes,
+                &lexical_borrow,
+                node_fonts,
+                enc_child_ids,
+            )
+            .with_parent(
+                Some(node_id),
+                Some(elem.name.as_str()),
+                primitive_scope_ports,
+            )
+            .with_siblings(*last_child_id, has_next_sibling)
+            .with_child_node(Some(child_node_id))
+            .with_env_scope(content_env_scope);
+            for ambient in &dir.ports {
+                ambient_scope_ctx.is_event_port = ambient.name.as_str().starts_with("on_");
+                let rewritten = rewrite_expr(&ambient.expr, &ambient_scope_ctx)?;
+                merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
+                authored_ambient_ports
+                    .insert(ambient.name.as_str().to_string(), ambient.expr.clone());
+            }
+        }
+
+        apply_forwarded_directives(
+            &entry.forwarded_directives,
+            child_node_id,
+            *last_child_id,
+            has_next_sibling,
+            &doc.nodes,
+            node_fonts,
+            ctx.enums,
+            &mut merged_ports,
+            &mut authored_ambient_ports,
+        )?;
+
+        for explicit in &child_elem.ports {
+            merged_ports.insert(explicit.name.as_str().to_string(), explicit.expr.clone());
+            authored_ambient_ports.remove(explicit.name.as_str());
+        }
+
+        if primitive.wires_child_origin_to_self() {
+            if !merged_ports.contains_key("x") {
+                merged_ports.insert(
+                    "x".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(
+                            node_id.canonical_name(),
+                            child_elem.span,
+                        ))),
+                        member: Ident::new("left", child_elem.span),
+                        span: child_elem.span,
+                    }),
+                );
+            }
+            if !merged_ports.contains_key("y") {
+                merged_ports.insert(
+                    "y".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(
+                            node_id.canonical_name(),
+                            child_elem.span,
+                        ))),
+                        member: Ident::new("top", child_elem.span),
+                        span: child_elem.span,
+                    }),
+                );
+            }
+        }
+
+        let mut wired_elem = child_elem.clone();
+        wired_elem.ports = merged_ports
+            .into_iter()
+            .map(|(name, expr)| PortBinding {
+                name: Ident::new(name, child_elem.span),
+                expr,
+                span: child_elem.span,
+            })
+            .collect();
+
+        let text_child_env_storage;
+        let child_env_scope = if primitive.forwards_font_to_content_env() {
+            if let Some(font_entry) = content_env_scope.get("font") {
+                let mut env_clone = entry.caller_env_scope.clone();
+                env_clone.insert("font".to_string(), font_entry.clone());
+                text_child_env_storage = Some(env_clone);
+                text_child_env_storage.as_ref().unwrap()
+            } else {
+                &entry.caller_env_scope
+            }
+        } else {
+            &entry.caller_env_scope
+        };
+
+        let child_ctx = ElementContext {
+            parent_id: Some(node_id),
+            parent_name: Some(elem.name.as_str()),
+            prev_sibling_id: *last_child_id,
+            has_next_sibling,
+            parent_ports: primitive_scope_ports,
+            lexical_scope: entry.caller_lexical_scope,
+            env_scope: child_env_scope,
+            enclosing_component_id: entry.caller_enclosing_component_id,
+            enclosing_num_children: entry.caller_enclosing_num_children,
+            enclosing_instantiated_children: entry.caller_enclosing_instantiated_children,
+            shadowed_ports: entry.caller_shadowed_ports,
+            is_let: entry.var_name.is_some(),
+            ambient_authored_ports: Some(&authored_ambient_ports),
+            enums: ctx.enums,
+            active_scope_id: active_scope_for_children,
+            consumer_children: None,
+        };
+        let child_id = expand_element(&wired_elem, &child_ctx, registry, doc, node_fonts)?;
+        if let Some(prev_id) = *last_child_id {
+            ctx.lexical_scope.borrow_mut().insert(
+                format!("__next_of_{}", prev_id.canonical_name()),
+                LexicalBinding::Node(child_id),
+            );
+        }
+        if let Some(v_name) = &entry.var_name {
+            doc.get_node_mut(child_id).unwrap().var_name = Some(v_name.clone());
+            entry
+                .caller_lexical_scope
+                .borrow_mut()
+                .insert(v_name.clone(), LexicalBinding::Node(child_id));
+        }
+        if child_elem.name.as_str() == "Font" {
+            node_fonts.insert(child_id, child_id);
+        }
+        for inst_list in &entry.instantiated_ids {
+            inst_list.borrow_mut().push(child_id);
+        }
+        child_ids.push(child_id);
+        *last_child_id = Some(child_id);
+        primitive.on_content_child(
+            doc,
+            child_id,
+            child_elem,
+            full_text,
+            text_spans,
+            inline_boxes,
+            false,
+        );
+    }
+
+    Ok(())
+}
+
+/// Validates and coerces a literal or constant expression on a built-in primitive port.
+fn validate_and_coerce_primitive_port_literal(
+    port_name: &str,
+    orig_expr: &Expr,
+    rewritten: &mut Expr,
+    scope_ctx: &ScopeContext<'_>,
+) -> Result<(), CompileError> {
+    if matches!(
+        port_name,
+        "x"
+            | "y"
+            | "x1"
+            | "y1"
+            | "x2"
+            | "y2"
+            | "start_x"
+            | "start_y"
+            | "end_x"
+            | "end_y"
+            | "width"
+            | "height"
+            | "size"
+            | "line_height"
+            | "baseline"
+            | "radius"
+            | "corner_radius"
+            | "radius_left"
+            | "radius_right"
+            | "radius_top"
+            | "radius_bottom"
+            | "left_radius"
+            | "right_radius"
+            | "top_radius"
+            | "bottom_radius"
+            | "radius_top_left"
+            | "radius_top_right"
+            | "radius_bottom_right"
+            | "radius_bottom_left"
+            | "top_left_radius"
+            | "top_right_radius"
+            | "bottom_right_radius"
+            | "bottom_left_radius"
+            | "border_width"
+            | "thickness"
+            | "stroke_width"
+            | "shadow_offset_x"
+            | "shadow_offset_y"
+            | "shadow_blur"
+            | "shadow_spread"
+            | "scroll_x"
+            | "scroll_y"
+    ) {
+        let unlowered_lit = match orig_expr {
+            Expr::Literal(lit) => Some(lit.clone()),
+            _ => None,
+        };
+        if let Some(lit) =
+            unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(rewritten, scope_ctx))
+        {
+            if !lit.matches_type_name("Distance") {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Distance".to_string(),
+                    actual: lit.type_name().to_string(),
+                    span: orig_expr.span(),
+                });
+            }
+        }
+        if let Expr::Literal(Literal::Integer(0, span)) = *rewritten {
+            *rewritten = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+        }
+    } else if matches!(port_name, "z" | "weight") {
+        let unlowered_lit = match orig_expr {
+            Expr::Literal(lit) => Some(lit.clone()),
+            _ => None,
+        };
+        if let Some(lit) =
+            unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(rewritten, scope_ctx))
+        {
+            if !lit.matches_type_name("Integer") {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Integer".to_string(),
+                    actual: lit.type_name().to_string(),
+                    span: orig_expr.span(),
+                });
+            }
+        }
+    } else if matches!(port_name, "italic" | "underline") {
+        let unlowered_lit = match orig_expr {
+            Expr::Literal(lit) => Some(lit.clone()),
+            _ => None,
+        };
+        if let Some(lit) =
+            unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(rewritten, scope_ctx))
+        {
+            if !lit.matches_type_name("Boolean") {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Boolean".to_string(),
+                    actual: lit.type_name().to_string(),
+                    span: orig_expr.span(),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Forwards `size`, `weight`, and `family` ports from a resolved `\Font` node or `font` port onto a spatial primitive.
+fn forward_resolved_font_metrics(state: &mut PrimitiveExpandState<'_, '_>) {
+    let elem = state.elem;
+    if let Some(fid) = state.font_node_id {
+        let font_ident = Expr::Ident(Ident::new(fid.canonical_name(), elem.span));
+        if !state.ports.contains_key("size") {
+            state.ports.insert(
+                "size".to_string(),
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(font_ident.clone()),
+                    member: Ident::new("size", elem.span),
+                    span: elem.span,
+                }),
+            );
+        }
+        if !state.ports.contains_key("weight") {
+            state.ports.insert(
+                "weight".to_string(),
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(font_ident.clone()),
+                    member: Ident::new("weight", elem.span),
+                    span: elem.span,
+                }),
+            );
+        }
+        if !state.ports.contains_key("family") {
+            state.ports.insert(
+                "family".to_string(),
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(font_ident),
+                    member: Ident::new("family", elem.span),
+                    span: elem.span,
+                }),
+            );
+        }
+    } else if let Some(font_target) = state.ports.get("font").cloned() {
+        if matches!(font_target, Expr::Literal(Literal::String(_, _))) {
+            if !state.ports.contains_key("family") {
+                state.ports.insert("family".to_string(), font_target);
+            }
+        } else {
+            if !state.ports.contains_key("size") {
+                state.ports.insert(
+                    "size".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(font_target.clone()),
+                        member: Ident::new("size", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            }
+            if !state.ports.contains_key("weight") {
+                state.ports.insert(
+                    "weight".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(font_target.clone()),
+                        member: Ident::new("weight", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            }
+            if !state.ports.contains_key("family") {
+                state.ports.insert(
+                    "family".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(font_target),
+                        member: Ident::new("family", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            }
+        }
+    }
+}
+
 /// Expands a primitive element (e.g. `\Rect`, `\Text`, `\Font`, `\Line`, `\Clip`, `\Box`, `\Anchor`, `\AnchorScope`).
 pub(in crate::compiler::expand) fn expand_primitive_element(
     node_id: NodeId,
@@ -622,7 +1499,7 @@ pub(in crate::compiler::expand) fn expand_primitive_element(
     let mut last_child_id = None;
     let mut full_text = String::new();
     let mut text_spans = Vec::new();
-    let mut inline_boxes: Vec<crate::compiler::text::InlineBoxSpan> = Vec::new();
+    let mut inline_boxes: Vec<InlineBoxSpan> = Vec::new();
 
     let mut primitive_scope_ports = primitive.scope_ports();
     for p in &elem.ports {
@@ -632,129 +1509,25 @@ pub(in crate::compiler::expand) fn expand_primitive_element(
         }
     }
 
-    // Pre-resolve explicit `font` port or ambient `env font` before expanding content slot
-    // so `\Text(font: ...)` forwards `env font` to its children and derived `\Font(...)` resolves `em` against base font.
-    let mut font_node_id = None;
-    let mut pre_expanded_font_expr: Option<Expr> = None;
-    let mut pre_rewritten_font_expr: Option<Expr> = None;
-    let mut ambient_font_port_expr: Option<Expr> = None;
-
-    if let Some(font_port) = elem.ports.iter().find(|p| p.name.as_str() == "font") {
-        match &font_port.expr {
-            Expr::Node(inline_elem) => {
-                let parent_id = if ctx.is_let {
-                    ctx.parent_id
-                } else {
-                    Some(node_id)
-                };
-                let parent_name = if ctx.is_let {
-                    ctx.parent_name
-                } else {
-                    Some(elem.name.as_str())
-                };
-                let child_ctx = ElementContext {
-                    parent_id,
-                    parent_name,
-                    prev_sibling_id: last_child_id,
-                    has_next_sibling: false,
-                    parent_ports: ctx.parent_ports,
-                    lexical_scope: ctx.lexical_scope,
-                    env_scope: ctx.env_scope,
-                    enclosing_component_id: ctx.enclosing_component_id,
-                    enclosing_num_children: ctx.enclosing_num_children,
-                    enclosing_instantiated_children: ctx.enclosing_instantiated_children,
-                    shadowed_ports: ctx.shadowed_ports,
-                    is_let: ctx.is_let,
-                    ambient_authored_ports: None,
-                    enums: ctx.enums,
-                    active_scope_id: ctx.active_scope_id,
-                    consumer_children: None,
-                };
-                let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
-                if !matches!(inline_elem.name.as_str(), "Font" | "TextBounds" | "Shadow") {
-                    child_ids.push(child_id);
-                    last_child_id = Some(child_id);
-                }
-                let ident_expr =
-                    Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span));
-                font_node_id = Some(child_id);
-                pre_expanded_font_expr = Some(ident_expr.clone());
-                pre_rewritten_font_expr = Some(ident_expr);
-            }
-            other => {
-                let empty_enclosing_children: [NodeId; 0] = [];
-                let enclosing_children_borrow =
-                    ctx.enclosing_instantiated_children.map(|c| c.borrow());
-                let enclosing_child_ids: &[NodeId] = match &enclosing_children_borrow {
-                    Some(b) => b.as_slice(),
-                    None => &empty_enclosing_children,
-                };
-                let lexical_borrow = ctx.lexical_scope.borrow();
-                let temp_scope_ctx = ScopeContext::from_element(
-                    node_id,
-                    ctx,
-                    &doc.nodes,
-                    &*lexical_borrow,
-                    node_fonts,
-                    enclosing_child_ids,
-                );
-                if let Ok(rewritten) = rewrite_expr(other, &temp_scope_ctx) {
-                    if let Expr::Ident(id) = &rewritten {
-                        if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
-                            font_node_id = Some(fid);
-                        }
-                    }
-                    pre_rewritten_font_expr = Some(rewritten);
-                }
-            }
-        }
-    } else if let Some(EnvEntry::Bound(env_expr)) = ctx.env_scope.get("font") {
-        let empty_enclosing_children: [NodeId; 0] = [];
-        let enclosing_children_borrow = ctx.enclosing_instantiated_children.map(|c| c.borrow());
-        let enclosing_child_ids: &[NodeId] = match &enclosing_children_borrow {
-            Some(b) => b.as_slice(),
-            None => &empty_enclosing_children,
-        };
-        let lexical_borrow = ctx.lexical_scope.borrow();
-        let temp_scope_ctx = ScopeContext::from_element(
-            node_id,
-            ctx,
-            &doc.nodes,
-            &*lexical_borrow,
-            node_fonts,
-            enclosing_child_ids,
-        );
-        if let Ok(rewritten) = rewrite_expr(env_expr, &temp_scope_ctx) {
-            if let Expr::Ident(id) = &rewritten {
-                if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
-                    if fid != node_id {
-                        font_node_id = Some(fid);
-                    }
-                    if elem.name.as_str() != "Font" {
-                        ambient_font_port_expr =
-                            Some(Expr::Ident(Ident::new(fid.canonical_name(), elem.span)));
-                    }
-                }
-            } else if elem.name.as_str() != "Font"
-                && (matches!(rewritten, Expr::Literal(Literal::String(_, _)))
-                    || elem.name.as_str() == "Text")
-            {
-                ambient_font_port_expr = Some(rewritten.clone());
-            }
-            pre_rewritten_font_expr = Some(rewritten);
-        }
-    }
-
-    if let Some(fid) = font_node_id {
-        node_fonts.insert(node_id, fid);
-        doc.get_node_mut(node_id).unwrap().font = Some(fid);
-    } else if elem.name.as_str() == "Font" {
-        node_fonts.insert(node_id, node_id);
-        doc.get_node_mut(node_id).unwrap().font = Some(node_id);
-    }
+    let PreResolvedFont {
+        mut font_node_id,
+        pre_expanded_font_expr,
+        pre_rewritten_font_expr,
+        ambient_font_port_expr,
+    } = pre_resolve_primitive_font(
+        node_id,
+        elem,
+        ctx,
+        registry,
+        doc,
+        node_fonts,
+        &mut child_ids,
+        &mut last_child_id,
+    )?;
 
     let text_content_env_scope_storage;
-    let content_env_scope: &HashMap<String, EnvEntry> = if elem.name.as_str() == "Text" {
+    let content_env_scope: &HashMap<String, EnvEntry> = if primitive.forwards_font_to_content_env()
+    {
         if let Some(fid) = font_node_id {
             let mut env_clone = ctx.env_scope.clone();
             env_clone.insert(
@@ -775,438 +1548,84 @@ pub(in crate::compiler::expand) fn expand_primitive_element(
         ctx.env_scope
     };
 
-    let is_wrapper = primitive.wires_child_origin_to_self();
-
     if let Some(slot) = &elem.content {
         for item in &slot.items {
             match item {
                 ContentItem::Text(chunk) => {
-                    if elem.name.as_str() == "Text" {
-                        let start = full_text.len();
-                        full_text.push_str(&chunk.text);
-                        let end = full_text.len();
-                        text_spans.push(TextSpan::new(start..end));
-                    }
+                    primitive.on_content_text(&chunk.text, &mut full_text, &mut text_spans);
                 }
                 ContentItem::Node(child_elem) => {
-                    if elem.name.as_str() == "Text"
-                        && !is_allowed_in_single_text(child_elem, registry)
-                    {
-                        return Err(CompileError::Custom {
-                            message: format!(
-                                "Block component '{}' cannot be placed inside \\Text; only plain text, \\Span, and \\InlineBox are allowed",
-                                child_elem.name.as_str()
-                            ),
-                            span: child_elem.span,
-                        });
-                    }
-                    let child_ctx = ElementContext {
-                        parent_id: Some(node_id),
-                        parent_name: Some(elem.name.as_str()),
-                        prev_sibling_id: last_child_id,
-                        has_next_sibling: false,
-                        parent_ports: &primitive_scope_ports,
-                        lexical_scope: ctx.lexical_scope,
-                        env_scope: content_env_scope,
-                        enclosing_component_id: ctx.enclosing_component_id,
-                        enclosing_num_children: ctx.enclosing_num_children,
-                        enclosing_instantiated_children: ctx.enclosing_instantiated_children,
-                        shadowed_ports: ctx.shadowed_ports,
-                        is_let: false,
-                        ambient_authored_ports: None,
-                        enums: ctx.enums,
-                        active_scope_id: active_scope_for_children,
-                        consumer_children: ctx.consumer_children,
-                    };
-
-                    let wired_child_elem;
-                    let target_elem = if is_wrapper {
-                        let mut child = child_elem.clone();
-                        if !child.ports.iter().any(|p| p.name.as_str() == "x") {
-                            child.ports.push(PortBinding {
-                                name: Ident::new("x", child.span),
-                                expr: Expr::MemberAccess(MemberAccessExpr {
-                                    target: Box::new(Expr::Ident(Ident::new(
-                                        node_id.canonical_name(),
-                                        child.span,
-                                    ))),
-                                    member: Ident::new("left", child.span),
-                                    span: child.span,
-                                }),
-                                span: child.span,
-                            });
-                        }
-                        if !child.ports.iter().any(|p| p.name.as_str() == "y") {
-                            child.ports.push(PortBinding {
-                                name: Ident::new("y", child.span),
-                                expr: Expr::MemberAccess(MemberAccessExpr {
-                                    target: Box::new(Expr::Ident(Ident::new(
-                                        node_id.canonical_name(),
-                                        child.span,
-                                    ))),
-                                    member: Ident::new("top", child.span),
-                                    span: child.span,
-                                }),
-                                span: child.span,
-                            });
-                        }
-                        wired_child_elem = child;
-                        &wired_child_elem
-                    } else {
-                        child_elem
-                    };
-
-                    let child_id =
-                        expand_element(target_elem, &child_ctx, registry, doc, node_fonts)?;
-                    child_ids.push(child_id);
-                    last_child_id = Some(child_id);
-
-                    if elem.name.as_str() == "Text" {
-                        accumulate_text_child(
-                            doc,
-                            child_id,
-                            child_elem,
-                            &mut full_text,
-                            &mut text_spans,
-                            &mut inline_boxes,
-                            true,
-                        );
-                    }
+                    expand_primitive_content_node(
+                        primitive,
+                        node_id,
+                        elem,
+                        child_elem,
+                        ctx,
+                        content_env_scope,
+                        &primitive_scope_ports,
+                        active_scope_for_children,
+                        registry,
+                        doc,
+                        node_fonts,
+                        &mut child_ids,
+                        &mut last_child_id,
+                        &mut full_text,
+                        &mut text_spans,
+                        &mut inline_boxes,
+                    )?;
                 }
                 ContentItem::Let(l) => {
-                    if let Some(LetValue::Node(child_elem)) = &l.value {
-                        validate_node_type_annotation(
-                            child_elem.name.as_str(),
-                            child_elem.span,
-                            l.type_annotation.as_ref(),
-                            ctx.enums,
-                            registry,
-                        )?;
-                        if elem.name.as_str() == "Text"
-                            && !is_allowed_in_single_text(child_elem, registry)
-                        {
-                            return Err(CompileError::Custom {
-                                message: format!(
-                                    "Block component '{}' cannot be placed inside \\Text; only plain text, \\Span, and \\InlineBox are allowed",
-                                    child_elem.name.as_str()
-                                ),
-                                span: child_elem.span,
-                            });
-                        }
-                        let child_ctx = ElementContext {
-                            parent_id: Some(node_id),
-                            parent_name: Some(elem.name.as_str()),
-                            prev_sibling_id: last_child_id,
-                            has_next_sibling: false,
-                            parent_ports: &primitive_scope_ports,
-                            lexical_scope: ctx.lexical_scope,
-                            env_scope: content_env_scope,
-                            enclosing_component_id: ctx.enclosing_component_id,
-                            enclosing_num_children: ctx.enclosing_num_children,
-                            enclosing_instantiated_children: ctx.enclosing_instantiated_children,
-                            shadowed_ports: ctx.shadowed_ports,
-                            is_let: true,
-                            ambient_authored_ports: None,
-                            enums: ctx.enums,
-                            active_scope_id: active_scope_for_children,
-                            consumer_children: ctx.consumer_children,
-                        };
-
-                        let wired_child_elem;
-                        let target_elem = if is_wrapper {
-                            let mut child = child_elem.clone();
-                            if !child.ports.iter().any(|p| p.name.as_str() == "x") {
-                                child.ports.push(PortBinding {
-                                    name: Ident::new("x", child.span),
-                                    expr: Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::new(
-                                            node_id.canonical_name(),
-                                            child.span,
-                                        ))),
-                                        member: Ident::new("left", child.span),
-                                        span: child.span,
-                                    }),
-                                    span: child.span,
-                                });
-                            }
-                            if !child.ports.iter().any(|p| p.name.as_str() == "y") {
-                                child.ports.push(PortBinding {
-                                    name: Ident::new("y", child.span),
-                                    expr: Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::new(
-                                            node_id.canonical_name(),
-                                            child.span,
-                                        ))),
-                                        member: Ident::new("top", child.span),
-                                        span: child.span,
-                                    }),
-                                    span: child.span,
-                                });
-                            }
-                            wired_child_elem = child;
-                            &wired_child_elem
-                        } else {
-                            child_elem
-                        };
-
-                        let child_id =
-                            expand_element(target_elem, &child_ctx, registry, doc, node_fonts)?;
-                        doc.get_node_mut(child_id).unwrap().var_name =
-                            Some(l.name.as_str().to_string());
-                        ctx.lexical_scope
-                            .borrow_mut()
-                            .insert(l.name.as_str().to_string(), LexicalBinding::Node(child_id));
-                        child_ids.push(child_id);
-                        last_child_id = Some(child_id);
-
-                        if child_elem.name.as_str() == "Font" {
-                            node_fonts.insert(child_id, child_id);
-                        }
-
-                        if elem.name.as_str() == "Text" && child_elem.name.as_str() != "Font" {
-                            accumulate_text_child(
-                                doc,
-                                child_id,
-                                child_elem,
-                                &mut full_text,
-                                &mut text_spans,
-                                &mut inline_boxes,
-                                true,
-                            );
-                        }
-                    }
+                    expand_primitive_content_let(
+                        primitive,
+                        node_id,
+                        elem,
+                        l,
+                        ctx,
+                        content_env_scope,
+                        &primitive_scope_ports,
+                        active_scope_for_children,
+                        registry,
+                        doc,
+                        node_fonts,
+                        &mut child_ids,
+                        &mut last_child_id,
+                        &mut full_text,
+                        &mut text_spans,
+                        &mut inline_boxes,
+                    )?;
                 }
                 ContentItem::ParagraphBreak(span) => {
-                    if elem.name.as_str() == "Text" {
-                        return Err(CompileError::Custom {
-                            message: "Paragraph break (blank line) is not permitted inside single \\Text element".to_string(),
-                            span: *span,
-                        });
-                    }
+                    primitive.on_paragraph_break(*span)?;
                 }
                 ContentItem::Alias(_)
                 | ContentItem::State(_)
                 | ContentItem::Env(_)
                 | ContentItem::Assert(_) => {}
                 ContentItem::Children(dir) => {
-                    for port in &dir.ports {
-                        if port.name.as_str() == "parent" {
-                            return Err(CompileError::ReservedPort {
-                                node: "Children".to_string(),
-                                port: "parent".to_string(),
-                                span: port.name.span,
-                            });
-                        }
-                    }
-                    if let Some(consumer_items) = ctx.consumer_children {
-                        let num_consumer_children = consumer_items.len();
-                        let empty_children: [NodeId; 0] = [];
-                        for (child_idx, entry) in consumer_items.iter().enumerate() {
-                            if let Some(chunk) = &entry.raw_text {
-                                if elem.name.as_str() == "Text"
-                                    && dir.ports.is_empty()
-                                    && entry.forwarded_directives.is_empty()
-                                {
-                                    let start = full_text.len();
-                                    full_text.push_str(&chunk.text);
-                                    let end = full_text.len();
-                                    text_spans.push(TextSpan::new(start..end));
-                                    continue;
-                                }
-                            }
-
-                            let has_next_sibling = child_idx + 1 < num_consumer_children;
-                            let child_elem = &entry.elem;
-                            if elem.name.as_str() == "Text"
-                                && entry.raw_text.is_none()
-                                && !is_allowed_in_single_text(child_elem, registry)
-                            {
-                                return Err(CompileError::Custom {
-                                    message: format!(
-                                        "Block component '{}' cannot be placed inside \\Text; only plain text, \\Span, and \\InlineBox are allowed",
-                                        child_elem.name.as_str()
-                                    ),
-                                    span: child_elem.span,
-                                });
-                            }
-                            let mut merged_ports = HashMap::new();
-                            let mut authored_ambient_ports = HashMap::new();
-                            let child_node_id = NodeId(doc.nodes.len());
-
-                            {
-                                let lexical_borrow = ctx.lexical_scope.borrow();
-                                let inst_borrow =
-                                    ctx.enclosing_instantiated_children.map(|c| c.borrow());
-                                let enc_child_ids: &[NodeId] = match &inst_borrow {
-                                    Some(b) => b.as_slice(),
-                                    None => &empty_children,
-                                };
-                                let mut ambient_scope_ctx = ScopeContext::from_element(
-                                    child_node_id,
-                                    ctx,
-                                    &doc.nodes,
-                                    &*lexical_borrow,
-                                    node_fonts,
-                                    enc_child_ids,
-                                )
-                                .with_parent(
-                                    Some(node_id),
-                                    Some(elem.name.as_str()),
-                                    &primitive_scope_ports,
-                                )
-                                .with_siblings(last_child_id, has_next_sibling)
-                                .with_child_node(Some(child_node_id))
-                                .with_env_scope(content_env_scope);
-                                for ambient in &dir.ports {
-                                    ambient_scope_ctx.is_event_port =
-                                        ambient.name.as_str().starts_with("on_");
-                                    let rewritten = rewrite_expr(&ambient.expr, &ambient_scope_ctx)?;
-                                    merged_ports.insert(ambient.name.as_str().to_string(), rewritten);
-                                    authored_ambient_ports.insert(
-                                        ambient.name.as_str().to_string(),
-                                        ambient.expr.clone(),
-                                    );
-                                }
-                            }
-
-                            apply_forwarded_directives(
-                                &entry.forwarded_directives,
-                                child_node_id,
-                                last_child_id,
-                                has_next_sibling,
-                                &doc.nodes,
-                                node_fonts,
-                                ctx.enums,
-                                &mut merged_ports,
-                                &mut authored_ambient_ports,
-                            )?;
-
-                            for explicit in &child_elem.ports {
-                                merged_ports
-                                    .insert(explicit.name.as_str().to_string(), explicit.expr.clone());
-                                authored_ambient_ports.remove(explicit.name.as_str());
-                            }
-
-                            if is_wrapper {
-                                if !merged_ports.contains_key("x") {
-                                    merged_ports.insert(
-                                        "x".to_string(),
-                                        Expr::MemberAccess(MemberAccessExpr {
-                                            target: Box::new(Expr::Ident(Ident::new(
-                                                node_id.canonical_name(),
-                                                child_elem.span,
-                                            ))),
-                                            member: Ident::new("left", child_elem.span),
-                                            span: child_elem.span,
-                                        }),
-                                    );
-                                }
-                                if !merged_ports.contains_key("y") {
-                                    merged_ports.insert(
-                                        "y".to_string(),
-                                        Expr::MemberAccess(MemberAccessExpr {
-                                            target: Box::new(Expr::Ident(Ident::new(
-                                                node_id.canonical_name(),
-                                                child_elem.span,
-                                            ))),
-                                            member: Ident::new("top", child_elem.span),
-                                            span: child_elem.span,
-                                        }),
-                                    );
-                                }
-                            }
-
-                            let mut wired_elem = child_elem.clone();
-                            wired_elem.ports = merged_ports
-                                .into_iter()
-                                .map(|(name, expr)| PortBinding {
-                                    name: Ident::new(name, child_elem.span),
-                                    expr,
-                                    span: child_elem.span,
-                                })
-                                .collect();
-
-                            let text_child_env_storage;
-                            let child_env_scope = if elem.name.as_str() == "Text" {
-                                if let Some(font_entry) = content_env_scope.get("font") {
-                                    let mut env_clone = entry.caller_env_scope.clone();
-                                    env_clone.insert("font".to_string(), font_entry.clone());
-                                    text_child_env_storage = Some(env_clone);
-                                    text_child_env_storage.as_ref().unwrap()
-                                } else {
-                                    &entry.caller_env_scope
-                                }
-                            } else {
-                                &entry.caller_env_scope
-                            };
-
-                            let child_ctx = ElementContext {
-                                parent_id: Some(node_id),
-                                parent_name: Some(elem.name.as_str()),
-                                prev_sibling_id: last_child_id,
-                                has_next_sibling,
-                                parent_ports: &primitive_scope_ports,
-                                lexical_scope: entry.caller_lexical_scope,
-                                env_scope: child_env_scope,
-                                enclosing_component_id: entry.caller_enclosing_component_id,
-                                enclosing_num_children: entry.caller_enclosing_num_children,
-                                enclosing_instantiated_children: entry
-                                    .caller_enclosing_instantiated_children,
-                                shadowed_ports: entry.caller_shadowed_ports,
-                                is_let: entry.var_name.is_some(),
-                                ambient_authored_ports: Some(&authored_ambient_ports),
-                                enums: ctx.enums,
-                                active_scope_id: active_scope_for_children,
-                                consumer_children: None,
-                            };
-                            let child_id =
-                                expand_element(&wired_elem, &child_ctx, registry, doc, node_fonts)?;
-                            if let Some(prev_id) = last_child_id {
-                                ctx.lexical_scope.borrow_mut().insert(
-                                    format!("__next_of_{}", prev_id.canonical_name()),
-                                    LexicalBinding::Node(child_id),
-                                );
-                            }
-                            if let Some(v_name) = &entry.var_name {
-                                doc.get_node_mut(child_id).unwrap().var_name = Some(v_name.clone());
-                                entry
-                                    .caller_lexical_scope
-                                    .borrow_mut()
-                                    .insert(v_name.clone(), LexicalBinding::Node(child_id));
-                            }
-                            if child_elem.name.as_str() == "Font" {
-                                node_fonts.insert(child_id, child_id);
-                            }
-                            for inst_list in &entry.instantiated_ids {
-                                inst_list.borrow_mut().push(child_id);
-                            }
-                            child_ids.push(child_id);
-                            last_child_id = Some(child_id);
-                            if elem.name.as_str() == "Text" && child_elem.name.as_str() != "Font" {
-                                accumulate_text_child(
-                                    doc,
-                                    child_id,
-                                    child_elem,
-                                    &mut full_text,
-                                    &mut text_spans,
-                                    &mut inline_boxes,
-                                    false,
-                                );
-                            }
-                        }
-                    }
+                    expand_primitive_content_children(
+                        primitive,
+                        node_id,
+                        elem,
+                        dir,
+                        ctx,
+                        content_env_scope,
+                        &primitive_scope_ports,
+                        active_scope_for_children,
+                        registry,
+                        doc,
+                        node_fonts,
+                        &mut child_ids,
+                        &mut last_child_id,
+                        &mut full_text,
+                        &mut text_spans,
+                        &mut inline_boxes,
+                    )?;
                 }
             }
         }
     }
 
-    if elem.name.as_str() == "Text" && (!full_text.is_empty() || !inline_boxes.is_empty()) {
-        doc.nodes[node_id.0].text_content = Some(full_text);
-        doc.nodes[node_id.0].text_spans = text_spans;
-        doc.nodes[node_id.0].inline_boxes = inline_boxes;
-    } else if let Some(tc) = &doc.nodes[node_id.0].text_content {
-        doc.nodes[node_id.0].text_spans = vec![TextSpan::new(0..tc.len())];
-    }
+    primitive.finish_content(node_id, doc, full_text, text_spans, inline_boxes);
 
     // 1b. Expand any inline node element expressions in ports
     let mut resolved_port_exprs = Vec::with_capacity(elem.ports.len() + 1);
@@ -1284,7 +1703,7 @@ pub(in crate::compiler::expand) fn expand_primitive_element(
                 node_id,
                 ctx,
                 &doc.nodes,
-                &*lexical_borrow,
+                &lexical_borrow,
                 node_fonts,
                 enclosing_child_ids,
             );
@@ -1314,7 +1733,7 @@ pub(in crate::compiler::expand) fn expand_primitive_element(
             node_id,
             ctx,
             &doc.nodes,
-            &*lexical_borrow,
+            &lexical_borrow,
             node_fonts,
             enclosing_child_ids,
         );
@@ -1322,29 +1741,7 @@ pub(in crate::compiler::expand) fn expand_primitive_element(
         if let Some(content_slot) = &elem.content {
             for item in &content_slot.items {
                 if let ContentItem::Assert(assert_dir) = item {
-                    let rewritten = rewrite_expr(&assert_dir.condition, &scope_ctx)?;
-                    match eval_expr(&rewritten, &HashMap::new()) {
-                        Ok(val) => {
-                            if !val.is_truthy() {
-                                let msg = assert_dir.message.clone().unwrap_or_else(|| {
-                                    format!("Assertion failed: {}", assert_dir.condition)
-                                });
-                                return Err(CompileError::AssertionFailed {
-                                    message: msg,
-                                    span: assert_dir.span,
-                                });
-                            }
-                        }
-                        Err(e) => {
-                            return Err(CompileError::Custom {
-                                message: format!(
-                                    "Could not evaluate assertion condition: {}",
-                                    e
-                                ),
-                                span: assert_dir.span,
-                            });
-                        }
-                    }
+                    eval_assert_directive(assert_dir, &scope_ctx)?;
                 }
             }
         }
@@ -1384,102 +1781,12 @@ pub(in crate::compiler::expand) fn expand_primitive_element(
             }
 
             let mut rewritten = rewrite_expr(&expr, &scope_ctx)?;
-            if matches!(
-                port_name.as_str(),
-                "x"
-                    | "y"
-                    | "x1"
-                    | "y1"
-                    | "x2"
-                    | "y2"
-                    | "start_x"
-                    | "start_y"
-                    | "end_x"
-                    | "end_y"
-                    | "width"
-                    | "height"
-                    | "size"
-                    | "line_height"
-                    | "baseline"
-                    | "radius"
-                    | "corner_radius"
-                    | "radius_left"
-                    | "radius_right"
-                    | "radius_top"
-                    | "radius_bottom"
-                    | "left_radius"
-                    | "right_radius"
-                    | "top_radius"
-                    | "bottom_radius"
-                    | "radius_top_left"
-                    | "radius_top_right"
-                    | "radius_bottom_right"
-                    | "radius_bottom_left"
-                    | "top_left_radius"
-                    | "top_right_radius"
-                    | "bottom_right_radius"
-                    | "bottom_left_radius"
-                    | "border_width"
-                    | "thickness"
-                    | "stroke_width"
-                    | "shadow_offset_x"
-                    | "shadow_offset_y"
-                    | "shadow_blur"
-                    | "shadow_spread"
-                    | "scroll_x"
-                    | "scroll_y"
-            ) {
-                let unlowered_lit = match &expr {
-                    Expr::Literal(lit) => Some(lit.clone()),
-                    _ => None,
-                };
-                if let Some(lit) = unlowered_lit
-                    .or_else(|| infer_expr_literal_for_typecheck(&rewritten, &scope_ctx))
-                {
-                    if !lit.matches_type_name("Distance") {
-                        return Err(CompileError::TypeMismatch {
-                            expected: "Distance".to_string(),
-                            actual: lit.type_name().to_string(),
-                            span: expr.span(),
-                        });
-                    }
-                }
-                if let Expr::Literal(Literal::Integer(0, span)) = rewritten {
-                    rewritten = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
-                }
-            } else if matches!(port_name.as_str(), "z" | "weight") {
-                let unlowered_lit = match &expr {
-                    Expr::Literal(lit) => Some(lit.clone()),
-                    _ => None,
-                };
-                if let Some(lit) = unlowered_lit
-                    .or_else(|| infer_expr_literal_for_typecheck(&rewritten, &scope_ctx))
-                {
-                    if !lit.matches_type_name("Integer") {
-                        return Err(CompileError::TypeMismatch {
-                            expected: "Integer".to_string(),
-                            actual: lit.type_name().to_string(),
-                            span: expr.span(),
-                        });
-                    }
-                }
-            } else if matches!(port_name.as_str(), "italic" | "underline") {
-                let unlowered_lit = match &expr {
-                    Expr::Literal(lit) => Some(lit.clone()),
-                    _ => None,
-                };
-                if let Some(lit) = unlowered_lit
-                    .or_else(|| infer_expr_literal_for_typecheck(&rewritten, &scope_ctx))
-                {
-                    if !lit.matches_type_name("Boolean") {
-                        return Err(CompileError::TypeMismatch {
-                            expected: "Boolean".to_string(),
-                            actual: lit.type_name().to_string(),
-                            span: expr.span(),
-                        });
-                    }
-                }
-            }
+            validate_and_coerce_primitive_port_literal(
+                &port_name,
+                &expr,
+                &mut rewritten,
+                &scope_ctx,
+            )?;
             ports.insert(port_name, rewritten);
         }
     }
@@ -1521,25 +1828,16 @@ pub(in crate::compiler::expand) fn expand_primitive_element(
         let default_clip = if let Some(EnvEntry::Bound(clip_expr)) = ctx.env_scope.get("clip") {
             clip_expr.clone()
         } else if let Some(parent) = ctx.parent_id {
-            if parent.is_window() {
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(
-                        NodeId::WINDOW.canonical_name(),
-                        elem.span,
-                    ))),
-                    member: Ident::new("clip", elem.span),
-                    span: elem.span,
-                })
+            let target_name = if parent.is_window() {
+                NodeId::WINDOW.canonical_name()
             } else {
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(
-                        parent.canonical_name(),
-                        elem.span,
-                    ))),
-                    member: Ident::new("clip", elem.span),
-                    span: elem.span,
-                })
-            }
+                parent.canonical_name()
+            };
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::new(target_name, elem.span))),
+                member: Ident::new("clip", elem.span),
+                span: elem.span,
+            })
         } else {
             Expr::MemberAccess(MemberAccessExpr {
                 target: Box::new(Expr::Ident(Ident::new(
@@ -1553,77 +1851,7 @@ pub(in crate::compiler::expand) fn expand_primitive_element(
         state.ports.insert("clip".to_string(), default_clip);
     }
 
-    // Forward font metrics (`size`, `weight`, `family`) from resolved font node or `font` port
-    if let Some(fid) = state.font_node_id {
-        let font_ident = Expr::Ident(Ident::new(fid.canonical_name(), elem.span));
-        if !state.ports.contains_key("size") {
-            state.ports.insert(
-                "size".to_string(),
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(font_ident.clone()),
-                    member: Ident::new("size", elem.span),
-                    span: elem.span,
-                }),
-            );
-        }
-        if !state.ports.contains_key("weight") {
-            state.ports.insert(
-                "weight".to_string(),
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(font_ident.clone()),
-                    member: Ident::new("weight", elem.span),
-                    span: elem.span,
-                }),
-            );
-        }
-        if !state.ports.contains_key("family") {
-            state.ports.insert(
-                "family".to_string(),
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(font_ident),
-                    member: Ident::new("family", elem.span),
-                    span: elem.span,
-                }),
-            );
-        }
-    } else if let Some(font_target) = state.ports.get("font").cloned() {
-        if matches!(font_target, Expr::Literal(Literal::String(_, _))) {
-            if !state.ports.contains_key("family") {
-                state.ports.insert("family".to_string(), font_target);
-            }
-        } else {
-            if !state.ports.contains_key("size") {
-                state.ports.insert(
-                    "size".to_string(),
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(font_target.clone()),
-                        member: Ident::new("size", elem.span),
-                        span: elem.span,
-                    }),
-                );
-            }
-            if !state.ports.contains_key("weight") {
-                state.ports.insert(
-                    "weight".to_string(),
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(font_target.clone()),
-                        member: Ident::new("weight", elem.span),
-                        span: elem.span,
-                    }),
-                );
-            }
-            if !state.ports.contains_key("family") {
-                state.ports.insert(
-                    "family".to_string(),
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(font_target),
-                        member: Ident::new("family", elem.span),
-                        span: elem.span,
-                    }),
-                );
-            }
-        }
-    }
+    forward_resolved_font_metrics(&mut state);
 
     // Primitive-specific port validation & synthesis
     primitive.finalize_ports(&mut state)?;
