@@ -17,6 +17,9 @@ pub enum Token {
     #[token("Span")]
     Span,
 
+    #[token("InlineBox")]
+    InlineBox,
+
     #[token("Enum")]
     Enum,
 
@@ -205,6 +208,7 @@ impl fmt::Display for Token {
             Token::Backslash => write!(f, "\\"),
             Token::Component => write!(f, "Component"),
             Token::Span => write!(f, "Span"),
+            Token::InlineBox => write!(f, "InlineBox"),
             Token::Enum => write!(f, "Enum"),
             Token::Children => write!(f, "Children"),
             Token::Let => write!(f, "let"),

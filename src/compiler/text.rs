@@ -106,7 +106,34 @@ pub fn measure_rich_text_bounds(
     line_height: Option<f64>,
     spans: &[TextSpan],
 ) -> (f64, f64) {
-    if text.is_empty() {
+    measure_rich_text_bounds_with_boxes(
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        max_width,
+        end_at,
+        start_at,
+        line_height,
+        spans,
+        &[],
+    )
+}
+
+/// Measures the layout boundaries `(width, height)` of rich text with styled inline spans and inline boxes using Parley.
+pub fn measure_rich_text_bounds_with_boxes(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    max_width: Option<f64>,
+    end_at: Option<&str>,
+    start_at: Option<&str>,
+    line_height: Option<f64>,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+) -> (f64, f64) {
+    if text.is_empty() && inline_boxes.is_empty() {
         return (0.0, 0.0);
     }
 
@@ -156,6 +183,15 @@ pub fn measure_rich_text_bounds(
                     }
                 }
             }
+            for ib in inline_boxes {
+                builder.push_inline_box(parley::InlineBox {
+                    id: ib.node_id.0 as u64,
+                    kind: parley::InlineBoxKind::InFlow,
+                    index: ib.index.min(text.len()),
+                    width: ib.width.max(0.0) as f32,
+                    height: ib.baseline_offset.max(0.0) as f32,
+                });
+            }
 
             let mut layout = builder.build(text);
             layout.break_all_lines(max_width.and_then(|w| if w > 0.0 { Some(w as f32) } else { None }));
@@ -173,7 +209,7 @@ pub fn measure_rich_text_bounds(
                 .map(|l| l.metrics().baseline as f64)
                 .unwrap_or(m.baseline);
 
-            let top_coord = match start_at {
+            let mut top_coord = match start_at {
                 Some(s) if s.eq_ignore_ascii_case("ascender") => {
                     first_baseline - m.ascent
                 }
@@ -192,7 +228,7 @@ pub fn measure_rich_text_bounds(
                 }
             };
 
-            let bottom_coord = match end_at {
+            let mut bottom_coord = match end_at {
                 Some(s) if s.eq_ignore_ascii_case("descender") => {
                     if let Some(last_line) = last_line {
                         let lm = last_line.metrics();
@@ -230,6 +266,26 @@ pub fn measure_rich_text_bounds(
                     }
                 }
             };
+
+            if !inline_boxes.is_empty() {
+                for line in layout.lines() {
+                    let lm = line.metrics();
+                    for item in line.items() {
+                        if let parley::layout::PositionedLayoutItem::InlineBox(pib) = item {
+                            if let Some(ib) = inline_boxes.iter().find(|b| b.node_id.0 as u64 == pib.id) {
+                                let box_top = lm.baseline as f64 - ib.baseline_offset;
+                                let box_bottom = lm.baseline as f64 + (ib.height - ib.baseline_offset).max(0.0);
+                                if box_top < top_coord {
+                                    top_coord = box_top;
+                                }
+                                if box_bottom > bottom_coord {
+                                    bottom_coord = box_bottom;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             let height = (bottom_coord - top_coord).max(0.0);
 
@@ -493,8 +549,40 @@ pub fn compute_span_fragments_with_metrics(
     origin_x: f64,
     origin_y: f64,
 ) -> HashMap<NodeId, SpanLayoutMetrics> {
+    compute_span_fragments_with_metrics_and_boxes(
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        max_width,
+        line_height,
+        align,
+        spans,
+        &[],
+        child_shifts,
+        origin_x,
+        origin_y,
+    )
+}
+
+/// Measures a rich text layout (with inline boxes) and returns full `SpanLayoutMetrics`
+/// for every inline `NodeId` referenced in `spans`.
+pub fn compute_span_fragments_with_metrics_and_boxes(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    max_width: Option<f64>,
+    line_height: Option<f64>,
+    align: Option<&str>,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+    child_shifts: &HashMap<NodeId, f64>,
+    origin_x: f64,
+    origin_y: f64,
+) -> HashMap<NodeId, SpanLayoutMetrics> {
     let mut result: HashMap<NodeId, SpanLayoutMetrics> = HashMap::new();
-    if text.is_empty() || spans.is_empty() {
+    if (text.is_empty() && inline_boxes.is_empty()) || spans.is_empty() {
         return result;
     }
 
@@ -520,6 +608,7 @@ pub fn compute_span_fragments_with_metrics(
     let mut frags_by_node: HashMap<NodeId, Vec<Rect>> = HashMap::new();
     let mut baseline_by_node: HashMap<NodeId, f64> = HashMap::new();
     let mut default_first_baseline = m.baseline;
+    let mut origin_y = origin_y;
 
     FONT_CONTEXT.with(|font_cx_cell| {
         let mut font_cx = font_cx_cell.borrow_mut();
@@ -568,6 +657,15 @@ pub fn compute_span_fragments_with_metrics(
                 }
             }
         }
+        for ib in inline_boxes {
+            builder.push_inline_box(parley::InlineBox {
+                id: ib.node_id.0 as u64,
+                kind: parley::InlineBoxKind::InFlow,
+                index: ib.index.min(text.len()),
+                width: ib.width.max(0.0) as f32,
+                height: ib.baseline_offset.max(0.0) as f32,
+            });
+        }
 
         let mut layout = builder.build(text);
         if let Some(w) = max_width {
@@ -587,6 +685,7 @@ pub fn compute_span_fragments_with_metrics(
         if let Some(first_line) = layout.lines().next() {
             default_first_baseline = first_line.metrics().baseline as f64;
         }
+        origin_y += m.baseline - default_first_baseline;
 
         for line in layout.lines() {
             let line_metrics = line.metrics();
@@ -665,7 +764,7 @@ pub fn compute_span_fragments_with_metrics(
             {
                 let char_offset = span.range.start;
                 let prefix_text = &text[0..char_offset.min(text.len())];
-                let (px, py) = measure_rich_text_bounds(
+                let (px, py) = measure_rich_text_bounds_with_boxes(
                     prefix_text,
                     font_size,
                     font_weight,
@@ -675,6 +774,7 @@ pub fn compute_span_fragments_with_metrics(
                     None,
                     line_height,
                     spans,
+                    inline_boxes,
                 );
                 let frag_rect = Rect::new(origin_x + px, origin_y + py + own_shift, 0.0, font_size);
                 frags_by_node.insert(child_id, vec![frag_rect]);
@@ -720,11 +820,47 @@ pub fn compute_span_range_metrics(
     span_range: Range<usize>,
     own_shift: f64,
 ) -> SpanLayoutMetrics {
-    let y_offset = text_y_offset(font_size, font_weight, font_family, start_at);
-    let origin_x = text_x;
-    let origin_y = text_y + y_offset;
+    compute_span_range_metrics_with_boxes(
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        max_width,
+        start_at,
+        line_height,
+        align,
+        spans,
+        &[],
+        text_x,
+        text_y,
+        span_range,
+        own_shift,
+        None,
+    )
+}
 
-    if text.is_empty() {
+/// Computes the post-shaping `SpanLayoutMetrics` for a specific byte range `span_range` (or a specific `InlineBox` node)
+/// inside a rich text block containing styled spans and inline boxes.
+pub fn compute_span_range_metrics_with_boxes(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    max_width: Option<f64>,
+    start_at: Option<&str>,
+    line_height: Option<f64>,
+    align: Option<&str>,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+    text_x: f64,
+    text_y: f64,
+    span_range: Range<usize>,
+    own_shift: f64,
+    target_inline_box: Option<NodeId>,
+) -> SpanLayoutMetrics {
+    let origin_x = text_x;
+
+    if text.is_empty() && inline_boxes.is_empty() {
         return SpanLayoutMetrics {
             fragments: Vec::new(),
             rect: Rect::new(text_x, text_y + own_shift, 0.0, 0.0),
@@ -739,6 +875,7 @@ pub fn compute_span_range_metrics(
     let mut fragments = Vec::new();
     let mut first_line_baseline: Option<f64> = None;
     let mut default_first_baseline = m.baseline;
+    let mut origin_y = text_y + text_y_offset(font_size, font_weight, font_family, start_at);
 
     FONT_CONTEXT.with(|font_cx_cell| {
         let mut font_cx = font_cx_cell.borrow_mut();
@@ -787,6 +924,15 @@ pub fn compute_span_range_metrics(
                 }
             }
         }
+        for ib in inline_boxes {
+            builder.push_inline_box(parley::InlineBox {
+                id: ib.node_id.0 as u64,
+                kind: parley::InlineBoxKind::InFlow,
+                index: ib.index.min(text.len()),
+                width: ib.width.max(0.0) as f32,
+                height: ib.baseline_offset.max(0.0) as f32,
+            });
+        }
 
         let mut layout = builder.build(text);
         if let Some(w) = max_width {
@@ -807,11 +953,40 @@ pub fn compute_span_range_metrics(
             default_first_baseline = first_line.metrics().baseline as f64;
         }
 
+        let y_offset = match start_at {
+            Some(s) if s.eq_ignore_ascii_case("ascender") => -(default_first_baseline - m.ascent),
+            Some(s) if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") => -(default_first_baseline - m.em_top),
+            Some(s) if s.eq_ignore_ascii_case("capital") => -(default_first_baseline - m.cap_height),
+            Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => 0.0,
+            _ => -(default_first_baseline - m.cap_height),
+        };
+        origin_y = text_y + y_offset;
+
         for line in layout.lines() {
             let line_metrics = line.metrics();
             let line_top_base = origin_y + line_metrics.block_min_coord as f64;
             let line_height_val = (line_metrics.block_max_coord - line_metrics.block_min_coord) as f64;
             let line_baseline_base = origin_y + line_metrics.baseline as f64;
+
+            if let Some(box_node_id) = target_inline_box {
+                for item in line.items() {
+                    if let parley::layout::PositionedLayoutItem::InlineBox(pib) = item {
+                        if pib.id == box_node_id.0 as u64 {
+                            let ib_info = inline_boxes.iter().find(|b| b.node_id == box_node_id);
+                            let b_w = ib_info.map(|b| b.width).unwrap_or(pib.width as f64);
+                            let b_h = ib_info.map(|b| b.height).unwrap_or(pib.height as f64);
+                            let b_off = ib_info.map(|b| b.baseline_offset).unwrap_or(b_h);
+                            let box_x = origin_x + pib.x as f64;
+                            let box_y = line_baseline_base - b_off;
+                            fragments.push(Rect::new(box_x, box_y, b_w, b_h));
+                            if first_line_baseline.is_none() {
+                                first_line_baseline = Some(line_baseline_base);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
 
             let mut min_gx = f32::MAX;
             let mut max_gx = f32::MIN;
@@ -857,7 +1032,7 @@ pub fn compute_span_range_metrics(
     if fragments.is_empty() {
         let char_offset = span_range.start.min(text.len());
         let prefix_text = &text[0..char_offset];
-        let (px, py) = measure_rich_text_bounds(
+        let (px, py) = measure_rich_text_bounds_with_boxes(
             prefix_text,
             font_size,
             font_weight,
@@ -867,6 +1042,7 @@ pub fn compute_span_range_metrics(
             None,
             line_height,
             spans,
+            inline_boxes,
         );
         let frag_rect = Rect::new(origin_x + px, origin_y + py + own_shift, 0.0, font_size);
         fragments.push(frag_rect);
@@ -881,6 +1057,21 @@ pub fn compute_span_range_metrics(
         rect,
         baseline,
     }
+}
+
+/// An inline box element embedded at a byte index within a parent text element.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InlineBoxSpan {
+    /// The `NodeId` of the `\InlineBox` component instance.
+    pub node_id: NodeId,
+    /// Byte offset in the parent `Text` node's concatenated `text_content` where this inline box sits.
+    pub index: usize,
+    /// Evaluated width of the inline box (0.0 at AST expansion time; populated during evaluation/resolution).
+    pub width: f64,
+    /// Evaluated height of the inline box (0.0 at AST expansion time; populated during evaluation/resolution).
+    pub height: f64,
+    /// Evaluated baseline offset (`baseline - y`, defaulting to `height`).
+    pub baseline_offset: f64,
 }
 
 /// A styled range of text within a parent text element.
@@ -976,6 +1167,85 @@ mod tests {
             assert!(m.descent > 0.0);
             assert!(m.ascent + m.descent <= m.size);
         }
+    }
+
+    #[test]
+    fn test_parley_inline_box_behavior() {
+        FONT_CONTEXT.with(|font_cx_cell| {
+            LAYOUT_CONTEXT.with(|layout_cx_cell| {
+                let mut font_cx = font_cx_cell.borrow_mut();
+                let mut layout_cx = layout_cx_cell.borrow_mut();
+
+                let text = "Hello world";
+                let mut builder = layout_cx.ranged_builder(&mut font_cx, text, 1.0, true);
+                builder.push_default(StyleProperty::FontSize(16.0));
+                builder.push_inline_box(parley::InlineBox {
+                    id: 42,
+                    kind: parley::InlineBoxKind::InFlow,
+                    index: 6,
+                    width: 50.0,
+                    height: 20.0,
+                });
+                let mut layout = builder.build(text);
+                layout.break_all_lines(None);
+
+                let line = layout.lines().next().unwrap();
+                let mut found_box = None;
+                let mut glyph_count = 0;
+                for item in line.items() {
+                    match item {
+                        parley::layout::PositionedLayoutItem::GlyphRun(gr) => {
+                            glyph_count += gr.positioned_glyphs().count();
+                        }
+                        parley::layout::PositionedLayoutItem::InlineBox(ib) => {
+                            found_box = Some((ib.id, ib.x, ib.y, ib.width, ib.height));
+                        }
+                    }
+                }
+                assert_eq!(glyph_count, 11);
+                assert!(found_box.is_some());
+                let (id, bx, by, bw, bh) = found_box.unwrap();
+                assert_eq!(id, 42);
+                assert!(bx > 0.0);
+                assert_eq!(bw, 50.0);
+                assert_eq!(bh, 20.0);
+                let _ = by;
+
+                // Also test empty text with two adjacent inline boxes at index 0
+                let empty_text = "";
+                let mut builder2 = layout_cx.ranged_builder(&mut font_cx, empty_text, 1.0, true);
+                builder2.push_default(StyleProperty::FontSize(16.0));
+                builder2.push_inline_box(parley::InlineBox {
+                    id: 1,
+                    kind: parley::InlineBoxKind::InFlow,
+                    index: 0,
+                    width: 30.0,
+                    height: 15.0,
+                });
+                builder2.push_inline_box(parley::InlineBox {
+                    id: 2,
+                    kind: parley::InlineBoxKind::InFlow,
+                    index: 0,
+                    width: 40.0,
+                    height: 18.0,
+                });
+                let mut layout2 = builder2.build(empty_text);
+                layout2.break_all_lines(None);
+                assert!((layout2.full_width() - 70.0).abs() < 0.01);
+                let line2 = layout2.lines().next().unwrap();
+                let mut boxes = Vec::new();
+                for item in line2.items() {
+                    if let parley::layout::PositionedLayoutItem::InlineBox(ib) = item {
+                        boxes.push((ib.id, ib.x, ib.y, ib.width, ib.height));
+                    }
+                }
+                assert_eq!(boxes.len(), 2);
+                assert_eq!(boxes[0].0, 1);
+                assert!((boxes[0].1 - 0.0).abs() < 0.01);
+                assert_eq!(boxes[1].0, 2);
+                assert!((boxes[1].1 - 30.0).abs() < 0.01);
+            });
+        });
     }
 }
 

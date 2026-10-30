@@ -2,7 +2,7 @@ use crate::ast::{ComponentKey, Expr, Literal};
 use crate::compiler::eval::eval_expr;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::graph::{VarId, VariableGraph};
-pub use crate::compiler::text::{CursorKind, SpanStyle, TextSpan};
+pub use crate::compiler::text::{CursorKind, InlineBoxSpan, SpanStyle, TextSpan};
 use crate::compiler::scope::{ScopeId, ScopeTree};
 use crate::compiler::value::Value;
 use crate::dom::NodeHandle;
@@ -202,6 +202,8 @@ pub struct ResolvedNode {
     pub clip: Option<NodeId>,
     pub text_content: Option<String>,
     pub text_spans: Vec<TextSpan>,
+    pub inline_boxes: Vec<InlineBoxSpan>,
+    pub is_inline_box: bool,
     pub fragments: Vec<Rect>,
     pub anchor_name: Option<String>,
     pub scope_id: Option<ScopeId>,
@@ -777,6 +779,32 @@ pub fn resolve_layout(
             ComponentKey::new(resolved_parts, k.span)
         });
 
+        let inline_boxes = node
+            .inline_boxes
+            .iter()
+            .map(|ib| {
+                let bw = values
+                    .get(&VarId::new(ib.node_id, "width"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(ib.width);
+                let bh = values
+                    .get(&VarId::new(ib.node_id, "height"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(ib.height);
+                let b_off = values
+                    .get(&VarId::new(ib.node_id, "__baseline_offset"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(bh);
+                InlineBoxSpan {
+                    node_id: ib.node_id,
+                    index: ib.index,
+                    width: bw,
+                    height: bh,
+                    baseline_offset: b_off,
+                }
+            })
+            .collect();
+
         resolved_nodes.push(ResolvedNode {
             id: node.id,
             name: node.name.clone(),
@@ -788,6 +816,8 @@ pub fn resolve_layout(
             clip,
             text_content: node.text_content.clone(),
             text_spans: node.text_spans.clone(),
+            inline_boxes,
+            is_inline_box: node.is_inline_box,
             fragments: Vec::new(),
             anchor_name: node.anchor_name.clone(),
             scope_id: node.scope_id,
@@ -922,7 +952,8 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
         .iter()
         .filter(|n| {
             n.text_content.is_some()
-                && n.text_spans.iter().any(|s| s.node_id.is_some() || !s.node_ids.is_empty())
+                && (n.text_spans.iter().any(|s| s.node_id.is_some() || !s.node_ids.is_empty())
+                    || !n.inline_boxes.is_empty())
                 && !n.parent.map_or(false, |pid| nodes_with_text.contains(&pid))
         })
         .map(|n| n.id)
@@ -933,7 +964,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             continue;
         };
 
-        let (text, font_size, font_weight, font_family, max_width, line_height, align, ox, oy, raw_spans) = {
+        let (text, font_size, font_weight, font_family, max_width, line_height, align, ox, oy, raw_spans, raw_boxes) = {
             let n = &layout.nodes[text_node_idx];
             let text = n.text_content.clone().unwrap_or_default();
             let font_size = n
@@ -992,8 +1023,38 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 n.rect.x,
                 n.rect.y + y_offset,
                 n.text_spans.clone(),
+                n.inline_boxes.clone(),
             )
         };
+
+        let inline_boxes: Vec<InlineBoxSpan> = raw_boxes
+            .into_iter()
+            .map(|ib| {
+                let bw = layout
+                    .values
+                    .get(&VarId::new(ib.node_id, "width"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(ib.width);
+                let bh = layout
+                    .values
+                    .get(&VarId::new(ib.node_id, "height"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(ib.height);
+                let b_off = layout
+                    .values
+                    .get(&VarId::new(ib.node_id, "__baseline_offset"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(bh);
+                InlineBoxSpan {
+                    node_id: ib.node_id,
+                    index: ib.index,
+                    width: bw,
+                    height: bh,
+                    baseline_offset: b_off,
+                }
+            })
+            .collect();
+        layout.nodes[text_node_idx].inline_boxes = inline_boxes.clone();
 
         // Refresh each TextSpan's style from evaluated properties of its `node_ids` (outermost to innermost)
         let mut spans = raw_spans;
@@ -1102,7 +1163,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
 
         layout.nodes[text_node_idx].text_spans = spans.clone();
 
-        let child_metrics = crate::compiler::text::compute_span_fragments_with_metrics(
+        let child_metrics = crate::compiler::text::compute_span_fragments_with_metrics_and_boxes(
             &text,
             font_size,
             font_weight,
@@ -1111,6 +1172,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             line_height,
             align.as_deref(),
             &spans,
+            &inline_boxes,
             &child_shifts,
             ox,
             oy,

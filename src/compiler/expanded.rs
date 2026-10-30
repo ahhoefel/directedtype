@@ -34,7 +34,7 @@ impl NodeId {
     }
 }
 
-use crate::compiler::text::TextSpan;
+use crate::compiler::text::{InlineBoxSpan, TextSpan};
 
 /// An expanded layout element with concrete node identity, hierarchy, and port equations.
 use crate::compiler::scope::{ScopeId, ScopeTree};
@@ -56,6 +56,7 @@ pub struct ExpandedNode {
     pub event_handlers: HashMap<String, crate::component::EventHandlerBinding>,
     pub text_content: Option<String>,
     pub text_spans: Vec<TextSpan>,
+    pub inline_boxes: Vec<InlineBoxSpan>,
     pub anchor_name: Option<String>,
     pub scope_id: Option<ScopeId>,
     pub span: Span,
@@ -67,6 +68,7 @@ pub struct ExpandedNode {
     pub overload_params: Vec<String>,
     pub is_component: bool,
     pub is_span: bool,
+    pub is_inline_box: bool,
     pub component_path: Option<String>,
     pub aggregated_ports: HashSet<String>,
     pub unfiltered_ports: HashMap<String, Expr>,
@@ -91,6 +93,7 @@ impl ExpandedNode {
             event_handlers: HashMap::new(),
             text_content: None,
             text_spans: Vec::new(),
+            inline_boxes: Vec::new(),
             anchor_name: None,
             scope_id: None,
             span,
@@ -102,6 +105,7 @@ impl ExpandedNode {
             overload_params: Vec::new(),
             is_component: false,
             is_span: false,
+            is_inline_box: false,
             component_path: None,
             aggregated_ports: HashSet::new(),
             unfiltered_ports: HashMap::new(),

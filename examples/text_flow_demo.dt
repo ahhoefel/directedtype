@@ -9,6 +9,8 @@
 //    powering baseline-aligned margin sidenotes across the layout DAG!
 
 \use "components/VStackStretch.dt"
+\use "components/HStack.dt"
+\use "components/Align.dt"
 \use "components/Card.dt"
 \use "components/CardStyle.dt"
 \use "components/Divider.dt"
@@ -18,6 +20,8 @@
 \use "components/Italic.dt"
 \use "components/Code.dt"
 \use "components/Sup.dt"
+\use "components/Kbd.dt"
+\use "components/Badge.dt"
 \use "theme/default.dt"
 
 \env font = \Font(family: "Arial", size: 15px, line_height: 23px);
@@ -104,23 +108,30 @@
     \Divider(color: #e2e8f0)
 
     \H2 {
-        Post-Shaping \Code{\\Span} Geometry in the DAG
+        Post-Shaping \Code{\\Span} & \Code{\\InlineBox} Geometry
     }
 
     Every \Code{\\Span} instance exposes read-only post-shaping output ports—including
     \Code{x}, \Code{y}, \Code{width}, \Code{height}, and \Code{baseline}—once Parley
-    finishes line breaking.\let n2 = \Sup { [2] } External elements outside the
-    paragraph can reference those ports directly in their algebraic layout equations!
+    finishes line breaking.\let n2 = \Sup { [2] } Atomic 2D inline components declared
+    with \Code{\\InlineBox}—such as \Badge{NEW} or keyboard shortcuts like \Kbd{Cmd} +
+    \Kbd{Shift} + \Kbd{P}—evaluate their intrinsic \Code{width}, \Code{height}, and
+    \Code{baseline} bottom-up before paragraph shaping and receive their positioned
+    \Code{x} and \Code{y} coordinates back in the same single-pass DAG!
 
     \Card(style: callout_style, gap: 10px) {
-        \Bold{Callout Card with Multi-Paragraph Flow}
+        \Bold{Callout Card with Multi-Paragraph Flow & Standalone InlineBoxes}
 
         Because \Code{\\Card} is also a Block Container Context, plain text inside a
-        card coalesces into paragraphs separated by blank lines. Non-breaking spaces
-        like \Code{100~px} keep quantities together on the same line.
+        card coalesces into paragraphs separated by blank lines. Press \Kbd{Cmd} + \Kbd{K}
+        to open the command palette, or \Kbd{Esc} to dismiss.
 
-        Even inside a nested container, inline \Code{\\Span} styles compose naturally
-        with the ambient \Code{\\env font} and \Code{\\env link_style}.
+        \HStack(gap: 8px, align: Align.Center) {
+            \Badge(bg: #dcfce7, border_color: #86efac, color: #166534){STABLE}
+            \Kbd{Cmd}
+            \Kbd{Option}
+            \Kbd{I}
+        }
     }
 };
 

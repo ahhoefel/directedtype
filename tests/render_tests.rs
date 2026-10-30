@@ -1033,7 +1033,7 @@ fn test_text_flow_demo_compiles_and_renders() {
     let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
         &doc,
         820.0,
-        720.0,
+        760.0,
         std::path::Path::new("."),
         &directedtype::compiler::FsResolver,
         &registry,
@@ -1041,10 +1041,13 @@ fn test_text_flow_demo_compiles_and_renders() {
     .expect("text_flow_demo.dt must compile");
 
     for node in &compiled.layout.nodes {
-        if matches!(node.name.as_str(), "VStackStretch" | "H1" | "H2" | "Card") {
+        if matches!(
+            node.name.as_str(),
+            "VStackStretch" | "HStack" | "H1" | "H2" | "Card" | "Kbd" | "Badge"
+        ) {
             assert!(
                 node.text_content.is_none(),
-                "Container node {} ({:?}) should not have ghost text_content, found {:?}",
+                "Container/InlineBox node {} ({:?}) should not have ghost text_content, found {:?}",
                 node.name,
                 node.id,
                 node.text_content
@@ -1055,10 +1058,74 @@ fn test_text_flow_demo_compiles_and_renders() {
     let mut renderer = HeadlessRenderer::new().expect("init renderer");
     let options = SceneOptions::default();
     let img = renderer
-        .render_layout(&compiled.layout, 820, 720, &options)
+        .render_layout(&compiled.layout, 820, 760, &options)
         .expect("render layout ok");
     assert_eq!(img.width(), 820);
-    assert_eq!(img.height(), 720);
+    assert_eq!(img.height(), 760);
 }
+
+#[test]
+fn test_stage5_inline_box_renders_internal_children_in_paragraph() {
+    let source = r#"
+    \InlineBox RedPill(
+        env font: Font,
+        x: Distance = parent.left,
+        y: Distance = parent.top
+    ) {
+        \Rect(x: x, y: y, width: width, height: height, color: #ff0000)
+        \let label = \Text(x: x + 6px, y: y + 2px, font: font, color: #ffffff) {
+            \Children
+        };
+        \alias width = label.width + 12px;
+        \alias height = label.height + 4px;
+        \alias baseline = label.baseline;
+    }
+
+    \env font = \Font(family: "Arial", size: 16px, line_height: 24px);
+
+    \Text(x: 20px, y: 20px, width: 300px) {
+        Status is \let pill = \RedPill { LIVE } right now.
+    }
+    "#;
+    let doc = directedtype::parse(source).expect("parse ok");
+    let compiled =
+        directedtype::compiler::CompiledDocument::compile_with_window(&doc, 400.0, 120.0)
+            .expect("compile ok");
+
+    let pill = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("pill"))
+        .expect("pill node");
+
+    let mut renderer = HeadlessRenderer::new().expect("init renderer");
+    let options = SceneOptions::default();
+    let img = renderer
+        .render_layout(&compiled.layout, 400, 120, &options)
+        .expect("render layout ok");
+
+    let min_x = (pill.rect.x as u32).max(0);
+    let max_x = ((pill.rect.x + pill.rect.width) as u32).min(399);
+    let min_y = (pill.rect.y as u32).max(0);
+    let max_y = ((pill.rect.y + pill.rect.height) as u32).min(119);
+
+    let mut red_pixels = 0;
+    for py in min_y..=max_y {
+        for px in min_x..=max_x {
+            let p = img.get_pixel(px, py).0;
+            if p[0] > 200 && p[1] < 50 && p[2] < 50 {
+                red_pixels += 1;
+            }
+        }
+    }
+    assert!(
+        red_pixels > 20,
+        "Expected RedPill internal Rect to render red pixels inside {:?}, found {}",
+        pill.rect,
+        red_pixels
+    );
+}
+
 
 

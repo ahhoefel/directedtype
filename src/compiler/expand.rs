@@ -513,6 +513,23 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
                     }
                 }
             }
+            if comp_def.kind == crate::ast::ComponentKind::InlineBox {
+                let all_aliases = collect_all_component_aliases(comp_def);
+                for req_port in ["width", "height"] {
+                    let has_param = comp_def.params.iter().any(|p| p.name.as_str() == req_port);
+                    let has_alias = all_aliases.iter().any(|a| a.name.as_str() == req_port);
+                    if !has_param && !has_alias {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "\\InlineBox '{}' must define '{}' (as a parameter or \\alias)",
+                                comp_def.name.as_str(),
+                                req_port
+                            ),
+                            span: comp_def.span,
+                        });
+                    }
+                }
+            }
         }
     }
     for item in &doc.items {
@@ -2000,15 +2017,19 @@ fn expand_component_instance(
 ) -> Result<(), CompileError> {
     // 1. Gather parameter definitions and map consumer arguments
     let is_span_def = comp_def.kind == crate::ast::ComponentKind::Span;
+    let is_inline_box_def = comp_def.kind == crate::ast::ComponentKind::InlineBox;
     let is_single_text_context =
         !is_span_def && component_children_is_single_text(comp_def, registry);
     if is_span_def {
         doc.get_node_mut(ctx.comp_node_id).unwrap().is_span = true;
     }
+    if is_inline_box_def {
+        doc.get_node_mut(ctx.comp_node_id).unwrap().is_inline_box = true;
+    }
     let mut comp_scope_ports = vec![
         "clip".to_string(),
     ];
-    if is_span_def {
+    if is_span_def || is_inline_box_def {
         for p in ["x", "y", "width", "height", "left", "top", "right", "bottom", "baseline"] {
             comp_scope_ports.push(p.to_string());
         }
@@ -2480,7 +2501,7 @@ fn expand_component_instance(
         .is_some_and(|p| p.name == "Text" || p.is_span);
     for (name, expr) in explicit_ports {
         let is_purely_ambient = ctx.ambient_authored_ports.is_some_and(|a| a.contains_key(&name));
-        let allow_standalone_span_ambient = is_span_def
+        let allow_standalone_span_ambient = (is_span_def || is_inline_box_def)
             && !parent_is_text_or_span
             && matches!(name.as_str(), "x" | "y" | "width");
         if is_purely_ambient && name != "clip" && !allow_standalone_span_ambient {
@@ -2491,6 +2512,73 @@ fn expand_component_instance(
         }
         already_rewritten_ports.insert(name.clone());
         comp_ports.insert(name, expr);
+    }
+
+    if is_inline_box_def {
+        if !comp_ports.contains_key("x") && !declared_aliases.contains_key("x") {
+            let default_x = if !parent_is_text_or_span {
+                if let Some(pid) = ctx.parent_id {
+                    if !pid.is_window()
+                        && (ctx.parent_ports.contains(&"left".to_string())
+                            || ctx.parent_ports.contains(&"x".to_string()))
+                    {
+                        let member = if ctx.parent_ports.contains(&"left".to_string()) {
+                            "left"
+                        } else {
+                            "x"
+                        };
+                        Expr::MemberAccess(MemberAccessExpr {
+                            target: Box::new(Expr::Ident(Ident::new(
+                                pid.canonical_name(),
+                                instance.span,
+                            ))),
+                            member: Ident::new(member, instance.span),
+                            span: instance.span,
+                        })
+                    } else {
+                        Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, instance.span))
+                    }
+                } else {
+                    Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, instance.span))
+                }
+            } else {
+                Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, instance.span))
+            };
+            already_rewritten_ports.insert("x".to_string());
+            comp_ports.insert("x".to_string(), default_x);
+        }
+        if !comp_ports.contains_key("y") && !declared_aliases.contains_key("y") {
+            let default_y = if !parent_is_text_or_span {
+                if let Some(pid) = ctx.parent_id {
+                    if !pid.is_window()
+                        && (ctx.parent_ports.contains(&"top".to_string())
+                            || ctx.parent_ports.contains(&"y".to_string()))
+                    {
+                        let member = if ctx.parent_ports.contains(&"top".to_string()) {
+                            "top"
+                        } else {
+                            "y"
+                        };
+                        Expr::MemberAccess(MemberAccessExpr {
+                            target: Box::new(Expr::Ident(Ident::new(
+                                pid.canonical_name(),
+                                instance.span,
+                            ))),
+                            member: Ident::new(member, instance.span),
+                            span: instance.span,
+                        })
+                    } else {
+                        Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, instance.span))
+                    }
+                } else {
+                    Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, instance.span))
+                }
+            } else {
+                Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, instance.span))
+            };
+            already_rewritten_ports.insert("y".to_string());
+            comp_ports.insert("y".to_string(), default_y);
+        }
     }
 
     let has_port_or_alias = |k: &str| comp_ports.contains_key(k) || declared_aliases.contains_key(k);
@@ -3210,6 +3298,15 @@ fn expand_component_instance(
                 param.name.as_str().to_string(),
                 EnvEntry::Bound(env_bound_expr),
             );
+        }
+    }
+    if is_inline_box_def {
+        for inherited_env in ["font", "text_bounds"] {
+            if !internal_body_env_scope.contains_key(inherited_env) {
+                if let Some(entry) = caller_env_scope.get(inherited_env) {
+                    internal_body_env_scope.insert(inherited_env.to_string(), entry.clone());
+                }
+            }
         }
     }
 
@@ -3947,6 +4044,7 @@ fn expand_component_instance(
 
     let mut span_full_text: Option<String> = None;
     let mut span_text_spans: Vec<TextSpan> = Vec::new();
+    let mut span_inline_boxes: Vec<crate::compiler::text::InlineBoxSpan> = Vec::new();
     if is_span_def {
         let mut full_text = String::new();
         let mut last_consumer_child_id = None;
@@ -3969,10 +4067,13 @@ fn expand_component_instance(
                 .get(child_elem.name.as_str())
                 .is_some_and(|defs| defs.iter().any(|d| d.kind == crate::ast::ComponentKind::Span))
                 || child_elem.name.as_str() == "Link";
-            if !is_child_span && child_elem.name.as_str() != "Font" {
+            let is_child_inline_box = registry
+                .get(child_elem.name.as_str())
+                .is_some_and(|defs| defs.iter().any(|d| d.kind == crate::ast::ComponentKind::InlineBox));
+            if !is_child_span && !is_child_inline_box && child_elem.name.as_str() != "Font" {
                 return Err(CompileError::Custom {
                     message: format!(
-                        "Cannot place non-span component '{}' inside inline \\Span '{}'; only plain text and nested \\Span components are allowed",
+                        "Cannot place non-span component '{}' inside inline \\Span '{}'; only plain text, nested \\Span, and \\InlineBox components are allowed",
                         child_elem.name.as_str(),
                         comp_def.name.as_str()
                     ),
@@ -4027,6 +4128,17 @@ fn expand_component_instance(
             all_children_ids.push(child_id);
             last_consumer_child_id = Some(child_id);
 
+            if doc.nodes[child_id.0].is_inline_box {
+                span_inline_boxes.push(crate::compiler::text::InlineBoxSpan {
+                    node_id: child_id,
+                    index: full_text.len(),
+                    width: 0.0,
+                    height: 0.0,
+                    baseline_offset: 0.0,
+                });
+                continue;
+            }
+
             let child_text = doc.nodes[child_id.0]
                 .text_content
                 .clone()
@@ -4034,6 +4146,11 @@ fn expand_component_instance(
             let start = full_text.len();
             full_text.push_str(&child_text);
             let end = full_text.len();
+
+            for mut sub_ib in doc.nodes[child_id.0].inline_boxes.clone() {
+                sub_ib.index += start;
+                span_inline_boxes.push(sub_ib);
+            }
 
             if !doc.nodes[child_id.0].text_spans.is_empty() {
                 let sub_spans = doc.nodes[child_id.0].text_spans.clone();
@@ -4421,7 +4538,7 @@ fn expand_component_instance(
         && rewritten_ports.contains_key("width")
     {
         let left_base = if rewritten_ports.contains_key("x") {
-            self_x
+            self_x.clone()
         } else {
             Expr::MemberAccess(MemberAccessExpr {
                 target: Box::new(self_ident.clone()),
@@ -4437,7 +4554,7 @@ fn expand_component_instance(
         let right_expr = Expr::Binary(BinaryExpr {
             op: BinaryOp::Add,
             left: Box::new(left_base),
-            right: Box::new(self_width),
+            right: Box::new(self_width.clone()),
             span: instance.span,
         });
         rewritten_ports.insert("right".to_string(), right_expr);
@@ -4456,10 +4573,10 @@ fn expand_component_instance(
         && rewritten_ports.contains_key("height")
     {
         let top_base = if rewritten_ports.contains_key("y") {
-            self_y
+            self_y.clone()
         } else {
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident),
+                target: Box::new(self_ident.clone()),
                 member: Ident::new("top", instance.span),
                 span: instance.span,
             })
@@ -4472,7 +4589,7 @@ fn expand_component_instance(
         let bottom_expr = Expr::Binary(BinaryExpr {
             op: BinaryOp::Add,
             left: Box::new(top_base),
-            right: Box::new(self_height),
+            right: Box::new(self_height.clone()),
             span: instance.span,
         });
         rewritten_ports.insert("bottom".to_string(), bottom_expr);
@@ -4485,6 +4602,30 @@ fn expand_component_instance(
                 span: instance.span,
             }),
         );
+    }
+
+    if is_inline_box_def {
+        if let Some(baseline_expr) = rewritten_ports.get("baseline").cloned() {
+            let offset_expr = extract_inline_box_baseline_offset(
+                &baseline_expr,
+                ctx.comp_node_id,
+                start_node_idx,
+                &doc.nodes,
+                &rewritten_ports,
+                &declared_state_names,
+                0,
+            );
+            rewritten_ports.insert("__baseline_offset".to_string(), offset_expr);
+        } else {
+            let default_baseline = Expr::Binary(BinaryExpr {
+                op: BinaryOp::Add,
+                left: Box::new(self_y),
+                right: Box::new(self_height.clone()),
+                span: instance.span,
+            });
+            rewritten_ports.insert("baseline".to_string(), default_baseline);
+            rewritten_ports.insert("__baseline_offset".to_string(), self_height);
+        }
     }
 
     resolve_and_filter_component_aggregations(
@@ -4653,8 +4794,8 @@ fn expand_component_instance(
 
     let mut node_port_types = HashMap::new();
     node_port_types.insert("clip".to_string(), "Clip".to_string());
-    if is_span_def {
-        for sp in ["x", "y", "width", "height", "baseline", "left", "top", "right", "bottom", "size"] {
+    if is_span_def || is_inline_box_def {
+        for sp in ["x", "y", "width", "height", "baseline", "__baseline_offset", "left", "top", "right", "bottom", "size"] {
             if rewritten_ports.contains_key(sp) {
                 node_port_types.insert(sp.to_string(), "Distance".to_string());
             }
@@ -4737,11 +4878,190 @@ fn expand_component_instance(
     if let Some(t) = span_full_text {
         node.text_content = Some(t);
         node.text_spans = span_text_spans;
+        node.inline_boxes = span_inline_boxes;
     }
     node.port_types = node_port_types;
     node.ports = rewritten_ports;
 
     Ok(())
+}
+
+/// Computes the vertical offset `baseline - y` for an `\InlineBox` component by evaluating its
+/// `baseline` port equation with `self.y = 0px` and recursively inlining internal children's
+/// vertical port equations (`y`, `top`, `bottom`, `baseline`).
+fn extract_inline_box_baseline_offset(
+    expr: &Expr,
+    comp_node_id: NodeId,
+    start_node_idx: usize,
+    nodes: &[ExpandedNode],
+    rewritten_ports: &HashMap<String, Expr>,
+    declared_state_names: &HashSet<String>,
+    depth: usize,
+) -> Expr {
+    if depth > 16 {
+        return expr.clone();
+    }
+    match expr {
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(id) = m.target.as_ref() {
+                if let Some(target_nid) = NodeId::from_canonical_name(id.as_str()) {
+                    let member = m.member.as_str();
+                    if target_nid == comp_node_id {
+                        if member == "y" || member == "top" {
+                            return Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, m.span));
+                        }
+                        if member == "bottom" {
+                            return Expr::MemberAccess(MemberAccessExpr {
+                                target: m.target.clone(),
+                                member: Ident::new("height", m.member.span),
+                                span: m.span,
+                            });
+                        }
+                        if member != "width"
+                            && member != "height"
+                            && !declared_state_names.contains(member)
+                        {
+                            if let Some(port_expr) = rewritten_ports.get(member) {
+                                return extract_inline_box_baseline_offset(
+                                    port_expr,
+                                    comp_node_id,
+                                    start_node_idx,
+                                    nodes,
+                                    rewritten_ports,
+                                    declared_state_names,
+                                    depth + 1,
+                                );
+                            }
+                        }
+                    } else if target_nid.0 >= start_node_idx && target_nid.0 < nodes.len() {
+                        if matches!(member, "y" | "top" | "bottom" | "baseline") {
+                            if let Some(port_expr) = nodes[target_nid.0].ports.get(member) {
+                                return extract_inline_box_baseline_offset(
+                                    port_expr,
+                                    comp_node_id,
+                                    start_node_idx,
+                                    nodes,
+                                    rewritten_ports,
+                                    declared_state_names,
+                                    depth + 1,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(extract_inline_box_baseline_offset(
+                    &m.target,
+                    comp_node_id,
+                    start_node_idx,
+                    nodes,
+                    rewritten_ports,
+                    declared_state_names,
+                    depth + 1,
+                )),
+                member: m.member.clone(),
+                span: m.span,
+            })
+        }
+        Expr::Binary(b) => Expr::Binary(BinaryExpr {
+            op: b.op,
+            left: Box::new(extract_inline_box_baseline_offset(
+                &b.left,
+                comp_node_id,
+                start_node_idx,
+                nodes,
+                rewritten_ports,
+                declared_state_names,
+                depth + 1,
+            )),
+            right: Box::new(extract_inline_box_baseline_offset(
+                &b.right,
+                comp_node_id,
+                start_node_idx,
+                nodes,
+                rewritten_ports,
+                declared_state_names,
+                depth + 1,
+            )),
+            span: b.span,
+        }),
+        Expr::Unary(u) => Expr::Unary(UnaryExpr {
+            op: u.op,
+            operand: Box::new(extract_inline_box_baseline_offset(
+                &u.operand,
+                comp_node_id,
+                start_node_idx,
+                nodes,
+                rewritten_ports,
+                declared_state_names,
+                depth + 1,
+            )),
+            span: u.span,
+        }),
+        Expr::Paren(inner, span) => Expr::Paren(
+            Box::new(extract_inline_box_baseline_offset(
+                inner,
+                comp_node_id,
+                start_node_idx,
+                nodes,
+                rewritten_ports,
+                declared_state_names,
+                depth + 1,
+            )),
+            *span,
+        ),
+        Expr::Call(c) => Expr::Call(CallExpr {
+            callee: c.callee.clone(),
+            args: c
+                .args
+                .iter()
+                .map(|a| {
+                    extract_inline_box_baseline_offset(
+                        a,
+                        comp_node_id,
+                        start_node_idx,
+                        nodes,
+                        rewritten_ports,
+                        declared_state_names,
+                        depth + 1,
+                    )
+                })
+                .collect(),
+            span: c.span,
+        }),
+        Expr::Ternary(cond) => Expr::Ternary(TernaryExpr {
+            condition: Box::new(extract_inline_box_baseline_offset(
+                &cond.condition,
+                comp_node_id,
+                start_node_idx,
+                nodes,
+                rewritten_ports,
+                declared_state_names,
+                depth + 1,
+            )),
+            then_expr: Box::new(extract_inline_box_baseline_offset(
+                &cond.then_expr,
+                comp_node_id,
+                start_node_idx,
+                nodes,
+                rewritten_ports,
+                declared_state_names,
+                depth + 1,
+            )),
+            else_expr: Box::new(extract_inline_box_baseline_offset(
+                &cond.else_expr,
+                comp_node_id,
+                start_node_idx,
+                nodes,
+                rewritten_ports,
+                declared_state_names,
+                depth + 1,
+            )),
+            span: cond.span,
+        }),
+        other => other.clone(),
+    }
 }
 
 fn collect_agg_members_and_parent_refs(
@@ -5612,6 +5932,7 @@ fn expand_primitive_element(
     let mut last_child_id = None;
     let mut full_text = String::new();
     let mut text_spans = Vec::new();
+    let mut inline_boxes: Vec<crate::compiler::text::InlineBoxSpan> = Vec::new();
 
     let mut primitive_scope_ports = if elem.name.as_str() == "Font" {
         vec![
@@ -5934,80 +6255,95 @@ fn expand_primitive_element(
                     last_child_id = Some(child_id);
 
                     if elem.name.as_str() == "Text" {
-                        // Extract text from the expanded child node
-                        let child_text = doc.nodes[child_id.0]
-                            .text_content
-                            .clone()
-                            .or_else(|| {
-                                if let Some(c_slot) = &child_elem.content {
-                                    let mut parts = Vec::new();
-                                    for it in &c_slot.items {
-                                        if let ContentItem::Text(t) = it {
-                                            parts.push(t.text.as_str());
-                                        }
-                                    }
-                                    if !parts.is_empty() {
-                                        return Some(parts.join(" "));
-                                    }
-                                }
-                                None
-                            })
-                            .unwrap_or_default();
-
-                        let start = full_text.len();
-                        full_text.push_str(&child_text);
-                        let end = full_text.len();
-
-                        if doc.nodes[child_id.0].is_span && !doc.nodes[child_id.0].text_spans.is_empty() {
-                            for mut sub_span in doc.nodes[child_id.0].text_spans.clone() {
-                                sub_span.range = (start + sub_span.range.start)..(start + sub_span.range.end);
-                                sub_span.push_parent_node(child_id);
-                                text_spans.push(sub_span);
-                            }
+                        if doc.nodes[child_id.0].is_inline_box {
+                            inline_boxes.push(crate::compiler::text::InlineBoxSpan {
+                                node_id: child_id,
+                                index: full_text.len(),
+                                width: 0.0,
+                                height: 0.0,
+                                baseline_offset: 0.0,
+                            });
                         } else {
-                            let is_link = child_elem.name.as_str() == "Link"
-                                || child_elem.ports.iter().any(|p| p.name.as_str() == "url");
-
-                            let mut style = SpanStyle::default();
-                            if is_link {
-                                let mut url_val = None;
-                                let mut color_val = Some("#1a73e8".to_string());
-                                let mut underline_val = true;
-
-                                for p in &child_elem.ports {
-                                    match p.name.as_str() {
-                                        "url" => {
-                                            if let Expr::Literal(Literal::String(s, _)) = &p.expr {
-                                                url_val = Some(s.clone());
+                            // Extract text from the expanded child node
+                            let child_text = doc.nodes[child_id.0]
+                                .text_content
+                                .clone()
+                                .or_else(|| {
+                                    if let Some(c_slot) = &child_elem.content {
+                                        let mut parts = Vec::new();
+                                        for it in &c_slot.items {
+                                            if let ContentItem::Text(t) = it {
+                                                parts.push(t.text.as_str());
                                             }
                                         }
-                                        "color" => {
-                                            if let Expr::Literal(Literal::Color(c, _))
-                                            | Expr::Literal(Literal::String(c, _)) = &p.expr
-                                            {
-                                                color_val = Some(c.clone());
-                                            }
+                                        if !parts.is_empty() {
+                                            return Some(parts.join(" "));
                                         }
-                                        "underline" => {
-                                            if let Expr::Literal(Literal::Bool(b, _)) = &p.expr {
-                                                underline_val = *b;
-                                            }
-                                        }
-                                        _ => {}
                                     }
-                                }
+                                    None
+                                })
+                                .unwrap_or_default();
 
-                                style.url = url_val;
-                                style.color = color_val;
-                                style.underline = underline_val;
-                                style.cursor = Some(CursorKind::Pointer);
+                            let start = full_text.len();
+                            full_text.push_str(&child_text);
+                            let end = full_text.len();
+
+                            for mut sub_ib in doc.nodes[child_id.0].inline_boxes.clone() {
+                                sub_ib.index += start;
+                                inline_boxes.push(sub_ib);
                             }
 
-                            text_spans.push(
-                                TextSpan::new(start..end)
-                                    .with_node(child_id)
-                                    .with_style(style),
-                            );
+                            if doc.nodes[child_id.0].is_span && !doc.nodes[child_id.0].text_spans.is_empty() {
+                                for mut sub_span in doc.nodes[child_id.0].text_spans.clone() {
+                                    sub_span.range = (start + sub_span.range.start)..(start + sub_span.range.end);
+                                    sub_span.push_parent_node(child_id);
+                                    text_spans.push(sub_span);
+                                }
+                            } else {
+                                let is_link = child_elem.name.as_str() == "Link"
+                                    || child_elem.ports.iter().any(|p| p.name.as_str() == "url");
+
+                                let mut style = SpanStyle::default();
+                                if is_link {
+                                    let mut url_val = None;
+                                    let mut color_val = Some("#1a73e8".to_string());
+                                    let mut underline_val = true;
+
+                                    for p in &child_elem.ports {
+                                        match p.name.as_str() {
+                                            "url" => {
+                                                if let Expr::Literal(Literal::String(s, _)) = &p.expr {
+                                                    url_val = Some(s.clone());
+                                                }
+                                            }
+                                            "color" => {
+                                                if let Expr::Literal(Literal::Color(c, _))
+                                                | Expr::Literal(Literal::String(c, _)) = &p.expr
+                                                {
+                                                    color_val = Some(c.clone());
+                                                }
+                                            }
+                                            "underline" => {
+                                                if let Expr::Literal(Literal::Bool(b, _)) = &p.expr {
+                                                    underline_val = *b;
+                                                }
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+
+                                    style.url = url_val;
+                                    style.color = color_val;
+                                    style.underline = underline_val;
+                                    style.cursor = Some(CursorKind::Pointer);
+                                }
+
+                                text_spans.push(
+                                    TextSpan::new(start..end)
+                                        .with_node(child_id)
+                                        .with_style(style),
+                                );
+                            }
                         }
                     }
                 }
@@ -6102,79 +6438,94 @@ fn expand_primitive_element(
                         }
 
                         if elem.name.as_str() == "Text" && child_elem.name.as_str() != "Font" {
-                            let child_text = doc.nodes[child_id.0]
-                                .text_content
-                                .clone()
-                                .or_else(|| {
-                                    if let Some(c_slot) = &child_elem.content {
-                                        let mut parts = Vec::new();
-                                        for it in &c_slot.items {
-                                            if let ContentItem::Text(t) = it {
-                                                parts.push(t.text.as_str());
-                                            }
-                                        }
-                                        if !parts.is_empty() {
-                                            return Some(parts.join(" "));
-                                        }
-                                    }
-                                    None
-                                })
-                                .unwrap_or_default();
-
-                            let start = full_text.len();
-                            full_text.push_str(&child_text);
-                            let end = full_text.len();
-
-                            if doc.nodes[child_id.0].is_span && !doc.nodes[child_id.0].text_spans.is_empty() {
-                                for mut sub_span in doc.nodes[child_id.0].text_spans.clone() {
-                                    sub_span.range = (start + sub_span.range.start)..(start + sub_span.range.end);
-                                    sub_span.push_parent_node(child_id);
-                                    text_spans.push(sub_span);
-                                }
+                            if doc.nodes[child_id.0].is_inline_box {
+                                inline_boxes.push(crate::compiler::text::InlineBoxSpan {
+                                    node_id: child_id,
+                                    index: full_text.len(),
+                                    width: 0.0,
+                                    height: 0.0,
+                                    baseline_offset: 0.0,
+                                });
                             } else {
-                                let is_link = child_elem.name.as_str() == "Link"
-                                    || child_elem.ports.iter().any(|p| p.name.as_str() == "url");
-
-                                let mut style = SpanStyle::default();
-                                if is_link {
-                                    let mut url_val = None;
-                                    let mut color_val = Some("#1a73e8".to_string());
-                                    let mut underline_val = true;
-
-                                    for p in &child_elem.ports {
-                                        match p.name.as_str() {
-                                            "url" => {
-                                                if let Expr::Literal(Literal::String(s, _)) = &p.expr {
-                                                    url_val = Some(s.clone());
+                                let child_text = doc.nodes[child_id.0]
+                                    .text_content
+                                    .clone()
+                                    .or_else(|| {
+                                        if let Some(c_slot) = &child_elem.content {
+                                            let mut parts = Vec::new();
+                                            for it in &c_slot.items {
+                                                if let ContentItem::Text(t) = it {
+                                                    parts.push(t.text.as_str());
                                                 }
                                             }
-                                            "color" => {
-                                                if let Expr::Literal(Literal::Color(c, _))
-                                                | Expr::Literal(Literal::String(c, _)) = &p.expr
-                                                {
-                                                    color_val = Some(c.clone());
-                                                }
+                                            if !parts.is_empty() {
+                                                return Some(parts.join(" "));
                                             }
-                                            "underline" => {
-                                                if let Expr::Literal(Literal::Bool(b, _)) = &p.expr {
-                                                    underline_val = *b;
-                                                }
-                                            }
-                                            _ => {}
                                         }
-                                    }
+                                        None
+                                    })
+                                    .unwrap_or_default();
 
-                                    style.url = url_val;
-                                    style.color = color_val;
-                                    style.underline = underline_val;
-                                    style.cursor = Some(CursorKind::Pointer);
+                                let start = full_text.len();
+                                full_text.push_str(&child_text);
+                                let end = full_text.len();
+
+                                for mut sub_ib in doc.nodes[child_id.0].inline_boxes.clone() {
+                                    sub_ib.index += start;
+                                    inline_boxes.push(sub_ib);
                                 }
 
-                                text_spans.push(
-                                    TextSpan::new(start..end)
-                                        .with_node(child_id)
-                                        .with_style(style),
-                                );
+                                if doc.nodes[child_id.0].is_span && !doc.nodes[child_id.0].text_spans.is_empty() {
+                                    for mut sub_span in doc.nodes[child_id.0].text_spans.clone() {
+                                        sub_span.range = (start + sub_span.range.start)..(start + sub_span.range.end);
+                                        sub_span.push_parent_node(child_id);
+                                        text_spans.push(sub_span);
+                                    }
+                                } else {
+                                    let is_link = child_elem.name.as_str() == "Link"
+                                        || child_elem.ports.iter().any(|p| p.name.as_str() == "url");
+
+                                    let mut style = SpanStyle::default();
+                                    if is_link {
+                                        let mut url_val = None;
+                                        let mut color_val = Some("#1a73e8".to_string());
+                                        let mut underline_val = true;
+
+                                        for p in &child_elem.ports {
+                                            match p.name.as_str() {
+                                                "url" => {
+                                                    if let Expr::Literal(Literal::String(s, _)) = &p.expr {
+                                                        url_val = Some(s.clone());
+                                                    }
+                                                }
+                                                "color" => {
+                                                    if let Expr::Literal(Literal::Color(c, _))
+                                                    | Expr::Literal(Literal::String(c, _)) = &p.expr
+                                                    {
+                                                        color_val = Some(c.clone());
+                                                    }
+                                                }
+                                                "underline" => {
+                                                    if let Expr::Literal(Literal::Bool(b, _)) = &p.expr {
+                                                        underline_val = *b;
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+
+                                        style.url = url_val;
+                                        style.color = color_val;
+                                        style.underline = underline_val;
+                                        style.cursor = Some(CursorKind::Pointer);
+                                    }
+
+                                    text_spans.push(
+                                        TextSpan::new(start..end)
+                                            .with_node(child_id)
+                                            .with_style(style),
+                                    );
+                                }
                             }
                         }
                     }
@@ -6408,37 +6759,51 @@ fn expand_primitive_element(
                             child_ids.push(child_id);
                             last_child_id = Some(child_id);
                             if elem.name.as_str() == "Text" && child_elem.name.as_str() != "Font" {
-                                let child_text = doc.nodes[child_id.0]
-                                    .text_content
-                                    .clone()
-                                    .unwrap_or_default();
-                                let start = full_text.len();
-                                full_text.push_str(&child_text);
-                                let end = full_text.len();
-                                if doc.nodes[child_id.0].is_span && !doc.nodes[child_id.0].text_spans.is_empty() {
-                                    for mut sub_span in doc.nodes[child_id.0].text_spans.clone() {
-                                        sub_span.range = (start + sub_span.range.start)..(start + sub_span.range.end);
-                                        sub_span.push_parent_node(child_id);
-                                        text_spans.push(sub_span);
-                                    }
+                                if doc.nodes[child_id.0].is_inline_box {
+                                    inline_boxes.push(crate::compiler::text::InlineBoxSpan {
+                                        node_id: child_id,
+                                        index: full_text.len(),
+                                        width: 0.0,
+                                        height: 0.0,
+                                        baseline_offset: 0.0,
+                                    });
                                 } else {
-                                    let is_link = child_elem.name.as_str() == "Link"
-                                        || child_elem.ports.iter().any(|p| p.name.as_str() == "url");
-                                    let mut style = SpanStyle::default();
-                                    if is_link {
-                                        style.url = child_elem.ports.iter().find(|p| p.name.as_str() == "url").and_then(|p| match &p.expr {
-                                            Expr::Literal(Literal::String(s, _)) => Some(s.clone()),
-                                            _ => None,
-                                        });
-                                        style.color = Some("#1a73e8".to_string());
-                                        style.underline = true;
-                                        style.cursor = Some(CursorKind::Pointer);
+                                    let child_text = doc.nodes[child_id.0]
+                                        .text_content
+                                        .clone()
+                                        .unwrap_or_default();
+                                    let start = full_text.len();
+                                    full_text.push_str(&child_text);
+                                    let end = full_text.len();
+                                    for mut sub_ib in doc.nodes[child_id.0].inline_boxes.clone() {
+                                        sub_ib.index += start;
+                                        inline_boxes.push(sub_ib);
                                     }
-                                    text_spans.push(
-                                        TextSpan::new(start..end)
-                                            .with_node(child_id)
-                                            .with_style(style),
-                                    );
+                                    if doc.nodes[child_id.0].is_span && !doc.nodes[child_id.0].text_spans.is_empty() {
+                                        for mut sub_span in doc.nodes[child_id.0].text_spans.clone() {
+                                            sub_span.range = (start + sub_span.range.start)..(start + sub_span.range.end);
+                                            sub_span.push_parent_node(child_id);
+                                            text_spans.push(sub_span);
+                                        }
+                                    } else {
+                                        let is_link = child_elem.name.as_str() == "Link"
+                                            || child_elem.ports.iter().any(|p| p.name.as_str() == "url");
+                                        let mut style = SpanStyle::default();
+                                        if is_link {
+                                            style.url = child_elem.ports.iter().find(|p| p.name.as_str() == "url").and_then(|p| match &p.expr {
+                                                Expr::Literal(Literal::String(s, _)) => Some(s.clone()),
+                                                _ => None,
+                                            });
+                                            style.color = Some("#1a73e8".to_string());
+                                            style.underline = true;
+                                            style.cursor = Some(CursorKind::Pointer);
+                                        }
+                                        text_spans.push(
+                                            TextSpan::new(start..end)
+                                                .with_node(child_id)
+                                                .with_style(style),
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -6448,9 +6813,10 @@ fn expand_primitive_element(
         }
     }
 
-    if elem.name.as_str() == "Text" && !full_text.is_empty() {
+    if elem.name.as_str() == "Text" && (!full_text.is_empty() || !inline_boxes.is_empty()) {
         doc.nodes[node_id.0].text_content = Some(full_text);
         doc.nodes[node_id.0].text_spans = text_spans;
+        doc.nodes[node_id.0].inline_boxes = inline_boxes;
     } else if let Some(tc) = &doc.nodes[node_id.0].text_content {
         doc.nodes[node_id.0].text_spans = vec![TextSpan::new(0..tc.len())];
     }
@@ -7274,7 +7640,12 @@ fn expand_primitive_element(
         .get_node(node_id)
         .and_then(|n| n.text_content.clone());
     let has_dynamic_text = ports.contains_key("text") || ports.contains_key("content");
-    let has_text = text_content.as_ref().is_some_and(|t| !t.is_empty()) || has_dynamic_text;
+    let has_inline_boxes = doc
+        .get_node(node_id)
+        .is_some_and(|n| !n.inline_boxes.is_empty());
+    let has_text = text_content.as_ref().is_some_and(|t| !t.is_empty())
+        || has_dynamic_text
+        || has_inline_boxes;
 
     if let Some(fid) = font_node_id {
         let font_ident = Expr::Ident(Ident::new(fid.canonical_name(), elem.span));
@@ -7700,10 +8071,29 @@ fn expand_primitive_element(
     }
 
     let is_inline_span = ctx.parent_id.is_some_and(|p| doc.get_node(p).is_some_and(|n| n.name == "Text"));
+    let parent_is_inline_box = ctx.parent_id.is_some_and(|p| doc.get_node(p).is_some_and(|n| n.is_inline_box));
 
     if is_inline_span {
         ports.entry("x".to_string()).or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)));
         ports.entry("y".to_string()).or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)));
+    } else if parent_is_inline_box {
+        if let Some(pid) = ctx.parent_id {
+            let p_ident = Expr::Ident(Ident::new(pid.canonical_name(), elem.span));
+            ports.entry("x".to_string()).or_insert_with(|| {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(p_ident.clone()),
+                    member: Ident::new("x", elem.span),
+                    span: elem.span,
+                })
+            });
+            ports.entry("y".to_string()).or_insert_with(|| {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(p_ident),
+                    member: Ident::new("y", elem.span),
+                    span: elem.span,
+                })
+            });
+        }
     }
 
     let mut span_style_args: Vec<Expr> = Vec::new();
@@ -7789,6 +8179,42 @@ fn expand_primitive_element(
                 span_style_args.push(ts_italic);
                 span_style_args.push(bs_expr);
             }
+        }
+
+        let ib_list = doc.nodes[node_id.0].inline_boxes.clone();
+        for ib in &ib_list {
+            let ib_ident = Expr::Ident(Ident::new(ib.node_id.canonical_name(), elem.span));
+            let ib_first = Expr::Literal(Literal::Integer(-(ib.node_id.0 as i64 + 1), elem.span));
+            let ib_index = Expr::Literal(Literal::Integer(ib.index as i64, elem.span));
+            let ib_width = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(ib_ident.clone()),
+                member: Ident::new("width", elem.span),
+                span: elem.span,
+            });
+            let ib_height = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(ib_ident.clone()),
+                member: Ident::new("height", elem.span),
+                span: elem.span,
+            });
+            let ib_baseline_offset = if doc.nodes[ib.node_id.0].ports.contains_key("__baseline_offset") {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(ib_ident),
+                    member: Ident::new("__baseline_offset", elem.span),
+                    span: elem.span,
+                })
+            } else {
+                ib_height.clone()
+            };
+            let ib_false = Expr::Literal(Literal::Bool(false, elem.span));
+            let ib_zero = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span));
+
+            span_style_args.push(ib_first);
+            span_style_args.push(ib_index);
+            span_style_args.push(ib_width);
+            span_style_args.push(ib_height);
+            span_style_args.push(ib_baseline_offset);
+            span_style_args.push(ib_false);
+            span_style_args.push(ib_zero);
         }
     }
 
@@ -7890,7 +8316,7 @@ fn expand_primitive_element(
         }
     }
 
-    if elem.name.as_str() == "Text" && !unique_span_nodes.is_empty() {
+    if elem.name.as_str() == "Text" && (!unique_span_nodes.is_empty() || !doc.nodes[node_id.0].inline_boxes.is_empty()) {
         let text_x_expr = Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident.clone()),
             member: Ident::new("x", elem.span),
@@ -8006,6 +8432,84 @@ fn expand_primitive_element(
             );
             for sp in ["left", "top", "right", "bottom"] {
                 doc.nodes[span_nid.0]
+                    .port_types
+                    .insert(sp.to_string(), "Distance".to_string());
+            }
+        }
+
+        for ib in doc.nodes[node_id.0].inline_boxes.clone() {
+            let ib_nid = ib.node_id;
+            for metric_name in ["x", "y"] {
+                let mut m_args = vec![
+                    Expr::Literal(Literal::String(metric_name.to_string(), elem.span)),
+                    Expr::Literal(Literal::Integer(-(ib_nid.0 as i64 + 1), elem.span)),
+                    Expr::Literal(Literal::Integer(ib.index as i64, elem.span)),
+                    Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)),
+                    text_arg_expr.clone(),
+                    text_x_expr.clone(),
+                    text_y_expr.clone(),
+                    text_width_expr.clone(),
+                    size_expr.clone(),
+                    weight_expr.clone(),
+                    font_expr.clone(),
+                    start_at_expr.clone(),
+                    line_height_arg.clone(),
+                    align_arg.clone(),
+                ];
+                m_args.extend(span_style_args.iter().cloned());
+                let call = Expr::Call(CallExpr {
+                    callee: Ident::new("span_metric", elem.span),
+                    args: m_args,
+                    span: elem.span,
+                });
+                doc.nodes[ib_nid.0].ports.insert(metric_name.to_string(), call);
+                doc.nodes[ib_nid.0]
+                    .port_types
+                    .insert(metric_name.to_string(), "Distance".to_string());
+            }
+            let ib_self = Expr::Ident(Ident::new(ib_nid.canonical_name(), elem.span));
+            let ib_x = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(ib_self.clone()),
+                member: Ident::new("x", elem.span),
+                span: elem.span,
+            });
+            let ib_y = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(ib_self.clone()),
+                member: Ident::new("y", elem.span),
+                span: elem.span,
+            });
+            let ib_w = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(ib_self.clone()),
+                member: Ident::new("width", elem.span),
+                span: elem.span,
+            });
+            let ib_h = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(ib_self),
+                member: Ident::new("height", elem.span),
+                span: elem.span,
+            });
+            doc.nodes[ib_nid.0].ports.insert("left".to_string(), ib_x.clone());
+            doc.nodes[ib_nid.0].ports.insert("top".to_string(), ib_y.clone());
+            doc.nodes[ib_nid.0].ports.insert(
+                "right".to_string(),
+                Expr::Binary(BinaryExpr {
+                    op: BinaryOp::Add,
+                    left: Box::new(ib_x),
+                    right: Box::new(ib_w),
+                    span: elem.span,
+                }),
+            );
+            doc.nodes[ib_nid.0].ports.insert(
+                "bottom".to_string(),
+                Expr::Binary(BinaryExpr {
+                    op: BinaryOp::Add,
+                    left: Box::new(ib_y),
+                    right: Box::new(ib_h),
+                    span: elem.span,
+                }),
+            );
+            for sp in ["left", "top", "right", "bottom"] {
+                doc.nodes[ib_nid.0]
                     .port_types
                     .insert(sp.to_string(), "Distance".to_string());
             }

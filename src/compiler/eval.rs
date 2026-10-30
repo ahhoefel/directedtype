@@ -821,34 +821,51 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     validate_font_family(family, c.span)?;
 
                     let mut spans = Vec::new();
+                    let mut inline_boxes = Vec::new();
                     let mut idx = 8;
                     while idx + 6 < evaluated_args.len() {
-                        let s_start = evaluated_args[idx].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                        let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                        let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
-                        let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
-                        let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
-                        if let Some(ref fam) = s_family {
-                            validate_font_family(Some(fam.as_str()), c.span)?;
+                        let raw_first = evaluated_args[idx].as_f64().unwrap_or(0.0);
+                        if raw_first < 0.0 {
+                            let node_id = NodeId((-raw_first.round() as usize).saturating_sub(1));
+                            let b_idx = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                            let b_w = evaluated_args[idx + 2].as_f64().unwrap_or(0.0).max(0.0);
+                            let b_h = evaluated_args[idx + 3].as_f64().unwrap_or(0.0).max(0.0);
+                            let b_off = evaluated_args[idx + 4].as_f64().unwrap_or(b_h);
+                            inline_boxes.push(crate::compiler::text::InlineBoxSpan {
+                                node_id,
+                                index: b_idx,
+                                width: b_w,
+                                height: b_h,
+                                baseline_offset: b_off,
+                            });
+                        } else {
+                            let s_start = raw_first.max(0.0) as usize;
+                            let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                            let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
+                            let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
+                            let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
+                            if let Some(ref fam) = s_family {
+                                validate_font_family(Some(fam.as_str()), c.span)?;
+                            }
+                            let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
+                            let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
+                            spans.push(
+                                crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
+                                    crate::compiler::text::SpanStyle {
+                                        font_size: s_size,
+                                        font_weight: s_weight,
+                                        font_family: s_family,
+                                        italic: s_italic,
+                                        baseline_shift: s_shift,
+                                        ..Default::default()
+                                    },
+                                ),
+                            );
                         }
-                        let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
-                        let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
-                        spans.push(
-                            crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
-                                crate::compiler::text::SpanStyle {
-                                    font_size: s_size,
-                                    font_weight: s_weight,
-                                    font_family: s_family,
-                                    italic: s_italic,
-                                    baseline_shift: s_shift,
-                                    ..Default::default()
-                                },
-                            ),
-                        );
                         idx += 7;
                     }
 
-                    let (_, h) = crate::compiler::text::measure_rich_text_bounds(
+                    let (_, h) = crate::compiler::text::measure_rich_text_bounds_with_boxes(
                         text,
                         size,
                         weight,
@@ -858,6 +875,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         start_at,
                         line_height,
                         &spans,
+                        &inline_boxes,
                     );
                     Ok(Value::Distance(h))
                 }
@@ -879,34 +897,51 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     validate_font_family(family, c.span)?;
 
                     let mut spans = Vec::new();
+                    let mut inline_boxes = Vec::new();
                     let mut idx = 4;
                     while idx + 6 < evaluated_args.len() {
-                        let s_start = evaluated_args[idx].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                        let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                        let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
-                        let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
-                        let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
-                        if let Some(ref fam) = s_family {
-                            validate_font_family(Some(fam.as_str()), c.span)?;
+                        let raw_first = evaluated_args[idx].as_f64().unwrap_or(0.0);
+                        if raw_first < 0.0 {
+                            let node_id = NodeId((-raw_first.round() as usize).saturating_sub(1));
+                            let b_idx = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                            let b_w = evaluated_args[idx + 2].as_f64().unwrap_or(0.0).max(0.0);
+                            let b_h = evaluated_args[idx + 3].as_f64().unwrap_or(0.0).max(0.0);
+                            let b_off = evaluated_args[idx + 4].as_f64().unwrap_or(b_h);
+                            inline_boxes.push(crate::compiler::text::InlineBoxSpan {
+                                node_id,
+                                index: b_idx,
+                                width: b_w,
+                                height: b_h,
+                                baseline_offset: b_off,
+                            });
+                        } else {
+                            let s_start = raw_first.max(0.0) as usize;
+                            let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                            let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
+                            let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
+                            let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
+                            if let Some(ref fam) = s_family {
+                                validate_font_family(Some(fam.as_str()), c.span)?;
+                            }
+                            let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
+                            let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
+                            spans.push(
+                                crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
+                                    crate::compiler::text::SpanStyle {
+                                        font_size: s_size,
+                                        font_weight: s_weight,
+                                        font_family: s_family,
+                                        italic: s_italic,
+                                        baseline_shift: s_shift,
+                                        ..Default::default()
+                                    },
+                                ),
+                            );
                         }
-                        let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
-                        let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
-                        spans.push(
-                            crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
-                                crate::compiler::text::SpanStyle {
-                                    font_size: s_size,
-                                    font_weight: s_weight,
-                                    font_family: s_family,
-                                    italic: s_italic,
-                                    baseline_shift: s_shift,
-                                    ..Default::default()
-                                },
-                            ),
-                        );
                         idx += 7;
                     }
 
-                    let (w, _) = crate::compiler::text::measure_rich_text_bounds(
+                    let (w, _) = crate::compiler::text::measure_rich_text_bounds_with_boxes(
                         text,
                         size,
                         weight,
@@ -916,12 +951,19 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         None,
                         None,
                         &spans,
+                        &inline_boxes,
                     );
                     Ok(Value::Distance(w))
                 }
                 "span_metric" => {
                     let metric = evaluated_args.first().and_then(|v| v.as_str()).unwrap_or("x");
-                    let span_start = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0).max(0.0) as usize;
+                    let raw_span_start = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let target_inline_box = if raw_span_start < 0.0 {
+                        Some(NodeId((-raw_span_start.round() as usize).saturating_sub(1)))
+                    } else {
+                        None
+                    };
+                    let span_start = raw_span_start.max(0.0) as usize;
                     let span_end = evaluated_args.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0).max(0.0) as usize;
                     let own_shift = evaluated_args.get(3).and_then(|v| v.as_f64()).unwrap_or(0.0);
                     let text = evaluated_args.get(4).and_then(|v| v.as_str()).unwrap_or("");
@@ -937,34 +979,51 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     validate_font_family(family, c.span)?;
 
                     let mut spans = Vec::new();
+                    let mut inline_boxes = Vec::new();
                     let mut idx = 14;
                     while idx + 6 < evaluated_args.len() {
-                        let s_start = evaluated_args[idx].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                        let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                        let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
-                        let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
-                        let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
-                        if let Some(ref fam) = s_family {
-                            validate_font_family(Some(fam.as_str()), c.span)?;
+                        let raw_first = evaluated_args[idx].as_f64().unwrap_or(0.0);
+                        if raw_first < 0.0 {
+                            let node_id = NodeId((-raw_first.round() as usize).saturating_sub(1));
+                            let b_idx = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                            let b_w = evaluated_args[idx + 2].as_f64().unwrap_or(0.0).max(0.0);
+                            let b_h = evaluated_args[idx + 3].as_f64().unwrap_or(0.0).max(0.0);
+                            let b_off = evaluated_args[idx + 4].as_f64().unwrap_or(b_h);
+                            inline_boxes.push(crate::compiler::text::InlineBoxSpan {
+                                node_id,
+                                index: b_idx,
+                                width: b_w,
+                                height: b_h,
+                                baseline_offset: b_off,
+                            });
+                        } else {
+                            let s_start = raw_first.max(0.0) as usize;
+                            let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
+                            let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
+                            let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
+                            let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
+                            if let Some(ref fam) = s_family {
+                                validate_font_family(Some(fam.as_str()), c.span)?;
+                            }
+                            let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
+                            let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
+                            spans.push(
+                                crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
+                                    crate::compiler::text::SpanStyle {
+                                        font_size: s_size,
+                                        font_weight: s_weight,
+                                        font_family: s_family,
+                                        italic: s_italic,
+                                        baseline_shift: s_shift,
+                                        ..Default::default()
+                                    },
+                                ),
+                            );
                         }
-                        let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
-                        let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
-                        spans.push(
-                            crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
-                                crate::compiler::text::SpanStyle {
-                                    font_size: s_size,
-                                    font_weight: s_weight,
-                                    font_family: s_family,
-                                    italic: s_italic,
-                                    baseline_shift: s_shift,
-                                    ..Default::default()
-                                },
-                            ),
-                        );
                         idx += 7;
                     }
 
-                    let sm = crate::compiler::text::compute_span_range_metrics(
+                    let sm = crate::compiler::text::compute_span_range_metrics_with_boxes(
                         text,
                         size,
                         weight,
@@ -974,10 +1033,12 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         line_height,
                         align,
                         &spans,
+                        &inline_boxes,
                         text_x,
                         text_y,
                         span_start..span_end,
                         own_shift,
+                        target_inline_box,
                     );
                     let val = match metric {
                         "x" => sm.rect.x,

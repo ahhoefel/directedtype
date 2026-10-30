@@ -1,0 +1,36 @@
+// DirectedType Standard Component Library: Kbd
+// Inline keyboard shortcut badge that flows inline inside \Text or stands alone in block containers.
+
+\InlineBox Kbd(
+    env font: Font,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    pad_x: Distance = 6px,
+    pad_y: Distance = 3px,
+    bg: Color = #f1f5f9,
+    border_color: Color = #cbd5e1,
+    border_width: Distance = 1px,
+    radius: Distance = 4px,
+    color: Color = #1e293b
+) {
+    \let kbd_font = \Font(font: font, family: "Courier New", size: 0.85em, weight: 600);
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg,
+        border_color: border_color,
+        border_width: border_width,
+        radius: radius
+    )
+
+    \let label = \Text(x: x + pad_x, y: y + pad_y, font: kbd_font, color: color) {
+        \Children
+    };
+
+    \alias width = label.width + 2 * pad_x;
+    \alias height = label.height + 2 * pad_y;
+    \alias baseline = label.baseline;
+}

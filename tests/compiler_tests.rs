@@ -4894,3 +4894,182 @@ fn test_stage4_single_text_context_rejects_block_components_and_paragraph_breaks
         err4
     );
 }
+
+#[test]
+fn test_stage5_inline_box_requires_width_and_height() {
+    let missing_width = r#"
+    \InlineBox BadBox() {
+        \alias height = 20px;
+    }
+    \BadBox()
+    "#;
+    let doc1 = parse(missing_width).expect("parse ok");
+    let err1 = directedtype::evaluate_document(&doc1).expect_err("Expected missing width error");
+    assert!(
+        err1.to_string().contains("InlineBox 'BadBox' must define 'width'"),
+        "Unexpected error: {}",
+        err1
+    );
+
+    let missing_height = r#"
+    \InlineBox BadBox() {
+        \alias width = 40px;
+    }
+    \BadBox()
+    "#;
+    let doc2 = parse(missing_height).expect("parse ok");
+    let err2 = directedtype::evaluate_document(&doc2).expect_err("Expected missing height error");
+    assert!(
+        err2.to_string().contains("InlineBox 'BadBox' must define 'height'"),
+        "Unexpected error: {}",
+        err2
+    );
+}
+
+#[test]
+fn test_stage5_inline_box_in_text_positions_and_advances_glyphs() {
+    let source = r#"
+    \use "components/Kbd.dt"
+    \use "components/Bold.dt"
+
+    \env font = \Font(family: "Arial", size: 16px, line_height: 24px);
+
+    \let para = \Text(x: 20px, y: 40px, width: 400px) {
+        Press \let kbd = \Kbd { Cmd } to \let after = \Bold { search }
+    };
+    "#;
+    let doc = parse(source).expect("parse ok");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let para_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("para"))
+        .expect("para node");
+    let kbd_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("kbd"))
+        .expect("kbd node");
+    let after_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("after"))
+        .expect("after node");
+
+    // 1. InlineBox must have positive intrinsic dimensions and be positioned to the right of "Press "
+    assert!(kbd_node.rect.width > 20.0, "kbd width: {}", kbd_node.rect.width);
+    assert!(kbd_node.rect.height > 10.0, "kbd height: {}", kbd_node.rect.height);
+    assert!(
+        kbd_node.rect.x > para_node.rect.x + 25.0,
+        "kbd.x ({}) should be positioned after 'Press ' ({})",
+        kbd_node.rect.x,
+        para_node.rect.x
+    );
+
+    // 2. Span after InlineBox must be advanced past the right edge of the InlineBox
+    assert!(
+        after_node.rect.x >= kbd_node.rect.x + kbd_node.rect.width,
+        "after.x ({}) must be >= kbd.right ({})",
+        after_node.rect.x,
+        kbd_node.rect.x + kbd_node.rect.width
+    );
+
+    // 3. Internal Rect of Kbd must be positioned at kbd.x, kbd.y with kbd.width, kbd.height
+    let kbd_rect = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.parent == Some(kbd_node.id) && n.name == "Rect")
+        .expect("internal Rect inside Kbd");
+    assert!((kbd_rect.rect.x - kbd_node.rect.x).abs() < 0.01);
+    assert!((kbd_rect.rect.y - kbd_node.rect.y).abs() < 0.01);
+    assert!((kbd_rect.rect.width - kbd_node.rect.width).abs() < 0.01);
+    assert!((kbd_rect.rect.height - kbd_node.rect.height).abs() < 0.01);
+
+    // 4. Internal label Text of Kbd must have its baseline aligned with the single-line paragraph's baseline
+    let kbd_label = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.parent == Some(kbd_node.id) && n.name == "Text")
+        .expect("internal label Text inside Kbd");
+    let kbd_baseline = compiled
+        .layout
+        .get_value(kbd_label.id, "baseline")
+        .and_then(|v| v.as_f64())
+        .expect("kbd_label baseline");
+    let after_baseline = compiled
+        .layout
+        .get_value(after_node.id, "baseline")
+        .and_then(|v| v.as_f64())
+        .expect("after baseline");
+    assert!(
+        (kbd_baseline - after_baseline).abs() < 1.0,
+        "kbd_label.baseline ({}) should align with line baseline ({})",
+        kbd_baseline,
+        after_baseline
+    );
+}
+
+#[test]
+fn test_stage5_inline_box_standalone_in_hstack() {
+    let source = r#"
+    \use "components/HStack.dt"
+    \use "components/Kbd.dt"
+
+    \env font = \Font(family: "Arial", size: 15px);
+
+    \let row = \HStack(x: 30px, y: 50px, gap: 10px) {
+        \let k1 = \Kbd { Cmd }
+        \let k2 = \Kbd { K }
+    };
+    "#;
+    let doc = parse(source).expect("parse ok");
+    let registry = directedtype::component::ComponentRegistry::standard();
+    let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        std::path::Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let k1 = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("k1"))
+        .expect("k1");
+    let k2 = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("k2"))
+        .expect("k2");
+
+    assert!((k1.rect.x - 30.0).abs() < 0.01);
+    assert!((k1.rect.y - 50.0).abs() < 0.01);
+    assert!(
+        (k2.rect.x - (k1.rect.x + k1.rect.width + 10.0)).abs() < 0.01,
+        "k2.x ({}) should be k1.right + 10px ({})",
+        k2.rect.x,
+        k1.rect.x + k1.rect.width + 10.0
+    );
+    assert!((k2.rect.y - 50.0).abs() < 0.01);
+}
+

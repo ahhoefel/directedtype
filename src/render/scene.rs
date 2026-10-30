@@ -39,6 +39,7 @@ pub struct TextRenderKey {
     pub color: [u8; 4],
     pub align: Option<String>,
     pub spans: Vec<SpanRenderKey>,
+    pub inline_boxes: Vec<(usize, usize, u64, u64)>,
     pub start_at: Option<String>,
     pub line_height: Option<u64>,
 }
@@ -349,10 +350,14 @@ pub fn build_scene(
         }
 
         // Inline descendants of a Text node are rendered as styled spans by the parent Text node
+        // (unless enclosed inside an \InlineBox, which renders its own internal children).
         let mut is_inline_descendant = false;
         let mut curr_parent = node.parent;
         while let Some(pid) = curr_parent {
             if let Some(pnode) = layout.get_node(pid) {
+                if pnode.is_inline_box {
+                    break;
+                }
                 if pnode.name == "Text" {
                     is_inline_descendant = true;
                     break;
@@ -874,6 +879,19 @@ pub fn build_scene(
                     .and_then(|v| v.as_f64())
                     .filter(|&h| h > 0.0);
 
+                let inline_box_keys: Vec<(usize, usize, u64, u64)> = node
+                    .inline_boxes
+                    .iter()
+                    .map(|ib| {
+                        (
+                            ib.node_id.0,
+                            ib.index,
+                            ib.width.to_bits(),
+                            ib.baseline_offset.to_bits(),
+                        )
+                    })
+                    .collect();
+
                 let current_key = TextRenderKey {
                     text: text.to_string(),
                     width: node.rect.width,
@@ -883,6 +901,7 @@ pub fn build_scene(
                     color: color_to_rgba8(&text_color),
                     align: align_str.map(|s| s.to_string()),
                     spans: span_keys,
+                    inline_boxes: inline_box_keys,
                     start_at: start_at_prop.map(|s| s.to_string()),
                     line_height: line_height_prop.map(|h| h.to_bits()),
                 };
@@ -1002,6 +1021,16 @@ pub fn build_scene(
                     if underline {
                         builder.push(StyleProperty::Underline(true), span.range.clone());
                     }
+                }
+
+                for ib in &node.inline_boxes {
+                    builder.push_inline_box(parley::InlineBox {
+                        id: ib.node_id.0 as u64,
+                        kind: parley::InlineBoxKind::InFlow,
+                        index: ib.index.min(text.len()),
+                        width: ib.width.max(0.0) as f32,
+                        height: ib.baseline_offset.max(0.0) as f32,
+                    });
                 }
 
                 let mut layout_text = builder.build(text);
@@ -1181,6 +1210,8 @@ mod tests {
             clip: None,
             text_content: Some("Hello World".to_string()),
             text_spans: Vec::new(),
+            inline_boxes: Vec::new(),
+            is_inline_box: false,
             fragments: Vec::new(),
             anchor_name: None,
             scope_id: None,
@@ -1246,6 +1277,8 @@ mod tests {
             clip: None,
             text_content: None,
             text_spans: Vec::new(),
+            inline_boxes: Vec::new(),
+            is_inline_box: false,
             fragments: Vec::new(),
             anchor_name: None,
             scope_id: None,
@@ -1279,6 +1312,8 @@ mod tests {
             clip: None,
             text_content: None,
             text_spans: Vec::new(),
+            inline_boxes: Vec::new(),
+            is_inline_box: false,
             fragments: Vec::new(),
             anchor_name: None,
             scope_id: None,
@@ -1310,6 +1345,8 @@ mod tests {
             clip: Some(NodeId(2)),
             text_content: None,
             text_spans: Vec::new(),
+            inline_boxes: Vec::new(),
+            is_inline_box: false,
             fragments: Vec::new(),
             anchor_name: None,
             scope_id: None,

@@ -53,7 +53,9 @@ fn parse_with_cursor(mut cursor: ParserCursor<'_>) -> Result<Document, ParseErro
                         let state_binding = parse_state_binding(&mut cursor)?;
                         items.push(Item::State(state_binding));
                     }
-                    Some((Token::Component, _)) | Some((Token::Span, _)) => {
+                    Some((Token::Component, _))
+                    | Some((Token::Span, _))
+                    | Some((Token::InlineBox, _)) => {
                         let comp = parse_component_def(&mut cursor)?;
                         items.push(Item::Component(comp));
                     }
@@ -71,14 +73,14 @@ fn parse_with_cursor(mut cursor: ParserCursor<'_>) -> Result<Document, ParseErro
                     }
                     Some((other, other_span)) => {
                         return Err(ParseError::UnexpectedToken {
-                            expected: "Component, Span, Enum, use, let, env, state, or element name after '\\'".to_string(),
+                            expected: "Component, Span, InlineBox, Enum, use, let, env, state, or element name after '\\'".to_string(),
                             found: other.to_string(),
                             span: other_span,
                         });
                     }
                     None => {
                         return Err(ParseError::UnexpectedEof {
-                            expected: "Component, Span, Enum, use, let, env, state, or element name after '\\'".to_string(),
+                            expected: "Component, Span, InlineBox, Enum, use, let, env, state, or element name after '\\'".to_string(),
                             span,
                         });
                     }

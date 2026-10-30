@@ -1,0 +1,36 @@
+// DirectedType Standard Component Library: Badge
+// Inline pill/status badge that flows inline inside \Text or stands alone in block containers.
+
+\InlineBox Badge(
+    env font: Font,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    pad_x: Distance = 7px,
+    pad_y: Distance = 3px,
+    bg: Color = #dbeafe,
+    border_color: Color = #93c5fd,
+    border_width: Distance = 1px,
+    radius: Distance = 8px,
+    color: Color = #1e40af
+) {
+    \let badge_font = \Font(font: font, size: 0.82em, weight: 700);
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg,
+        border_color: border_color,
+        border_width: border_width,
+        radius: radius
+    )
+
+    \let label = \Text(x: x + pad_x, y: y + pad_y, font: badge_font, color: color) {
+        \Children
+    };
+
+    \alias width = label.width + 2 * pad_x;
+    \alias height = label.height + 2 * pad_y;
+    \alias baseline = label.baseline;
+}
