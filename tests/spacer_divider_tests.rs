@@ -131,7 +131,7 @@ fn test_divider_in_vstack() {
 fn test_line_primitive_and_caps() {
     let input = r#"
     \Line(x1: 100px, y1: 50px, x2: 20px, y2: 110px, thickness: 3px, color: #3b82f6, cap: LineCap.Round)
-    \Line(start_x: 10px, start_y: 10px, end_x: 50px, end_y: 10px, thickness: 2px, cap: LineCap.Square)
+    \Line(x1: 10px, y1: 10px, x2: 50px, y2: 10px, thickness: 2px, cap: LineCap.Square)
     "#;
 
     let doc = parse(input).expect("parse ok");

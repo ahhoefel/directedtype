@@ -120,7 +120,6 @@ impl BuiltinPrimitive for TextPrimitive {
                 | "z"
                 | "baseline"
                 | "text"
-                | "content"
                 | "color"
                 | "font"
                 | "family"
@@ -147,7 +146,7 @@ impl BuiltinPrimitive for TextPrimitive {
         match port_name {
             "baseline" | "size" | "line_height" => Some(StaticType::Distance),
             "weight" => Some(StaticType::Integer),
-            "family" | "text" | "content" => Some(StaticType::String),
+            "family" | "text" => Some(StaticType::String),
             "underline" | "italic" => Some(StaticType::Boolean),
             "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
             "start_at" => Some(StaticType::Enum("TextStart".to_string())),
@@ -795,12 +794,6 @@ fn synthesize_span_and_inline_box_metrics(
             member: Ident::new("text", elem.span),
             span: elem.span,
         })
-    } else if state.ports.contains_key("content") {
-        Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
-            member: Ident::new("content", elem.span),
-            span: elem.span,
-        })
     } else {
         let text_str = text_content.unwrap_or_default();
         Expr::Literal(Literal::String(text_str, elem.span))
@@ -993,7 +986,7 @@ pub(super) fn resolve_default_spatial_dimensions(
         .doc
         .get_node(node_id)
         .and_then(|n| n.text_content.clone());
-    let has_dynamic_text = state.ports.contains_key("text") || state.ports.contains_key("content");
+    let has_dynamic_text = state.ports.contains_key("text");
     let has_inline_boxes = state
         .doc
         .get_node(node_id)
@@ -1010,12 +1003,6 @@ pub(super) fn resolve_default_spatial_dimensions(
         Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident.clone()),
             member: Ident::new("text", elem.span),
-            span: elem.span,
-        })
-    } else if state.ports.contains_key("content") {
-        Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
-            member: Ident::new("content", elem.span),
             span: elem.span,
         })
     } else {

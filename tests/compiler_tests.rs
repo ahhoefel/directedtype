@@ -5173,6 +5173,42 @@ fn test_strict_child_port_acceptance() {
         "Expected 'Node Rect does not accept property gap', got: {}",
         err5
     );
+
+    // 6. Removed port synonyms on \Rect, \Line, and \Text are rejected
+    for (src, expected_msg) in [
+        (
+            r#"\Rect(x: 0, y: 0, width: 10px, height: 10px, bg_color: #000)"#,
+            "Node 'Rect' does not accept property 'bg_color'",
+        ),
+        (
+            r#"\Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000, corner_radius: 4px)"#,
+            "Node 'Rect' does not accept property 'corner_radius'",
+        ),
+        (
+            r#"\Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000, top_left_radius: 4px)"#,
+            "Node 'Rect' does not accept property 'top_left_radius'",
+        ),
+        (
+            r#"\Line(start_x: 0, start_y: 0, end_x: 10px, end_y: 10px)"#,
+            "Node 'Line' does not accept property 'start_x'",
+        ),
+        (
+            r#"\Line(x1: 0, y1: 0, x2: 10px, y2: 10px, stroke_width: 2px)"#,
+            "Node 'Line' does not accept property 'stroke_width'",
+        ),
+        (
+            r#"\Text(x: 0, y: 0, content: "hello")"#,
+            "Node 'Text' does not accept property 'content'",
+        ),
+    ] {
+        let err = compile_to_graph(&parse(src).unwrap()).expect_err(expected_msg);
+        assert!(
+            err.to_string().contains(expected_msg),
+            "Expected '{}', got: {}",
+            expected_msg,
+            err
+        );
+    }
 }
 
 

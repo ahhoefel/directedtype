@@ -403,7 +403,6 @@ pub fn build_scene(
                 let h = get_box_val("height");
                 let radius = layout
                     .get_value(box_node_id, "radius")
-                    .or_else(|| layout.get_value(box_node_id, "corner_radius"))
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0);
                 (x, y, w, h, radius)
@@ -519,10 +518,7 @@ pub fn build_scene(
 
         // Render filled rectangle (only for \Rect paint primitives)
         if is_rect && node.rect.width > 0.0 && node.rect.height > 0.0 {
-            let color_val = node
-                .properties
-                .get("color")
-                .or_else(|| node.properties.get("bg_color"));
+            let color_val = node.properties.get("color");
 
             let color = match color_val {
                 Some(Value::Color(c)) | Some(Value::String(c)) => parse_color(c),
@@ -538,7 +534,7 @@ pub fn build_scene(
             let x1 = x0 + node.rect.width;
             let y1 = y0 + node.rect.height;
 
-            // Drop shadow (from \Shadow bundle or direct shadow_* properties)
+            // Drop shadow (synthesized from \Shadow bundle)
             if let Some(Value::Color(sc) | Value::String(sc)) = node.properties.get("shadow_color") {
                 let shadow_color = parse_color(sc);
                 if shadow_color.components[3] > 0.0 {
@@ -618,7 +614,6 @@ pub fn build_scene(
             let stroke_width = node
                 .properties
                 .get("border_width")
-                .or_else(|| node.properties.get("stroke_width"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0);
 
@@ -626,7 +621,6 @@ pub fn build_scene(
                 let stroke_color = node
                     .properties
                     .get("border_color")
-                    .or_else(|| node.properties.get("stroke_color"))
                     .map(|v| match v {
                         Value::Color(c) | Value::String(c) => parse_color(c),
                         _ => Color::BLACK,
@@ -649,52 +643,39 @@ pub fn build_scene(
             let x1 = node
                 .properties
                 .get("x1")
-                .or_else(|| node.properties.get("start_x"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(node.rect.x);
             let y1 = node
                 .properties
                 .get("y1")
-                .or_else(|| node.properties.get("start_y"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(node.rect.y);
             let x2 = node
                 .properties
                 .get("x2")
-                .or_else(|| node.properties.get("end_x"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(node.rect.x + node.rect.width);
             let y2 = node
                 .properties
                 .get("y2")
-                .or_else(|| node.properties.get("end_y"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(node.rect.y + node.rect.height);
 
             let thickness = node
                 .properties
                 .get("thickness")
-                .or_else(|| node.properties.get("stroke_width"))
-                .or_else(|| node.properties.get("border_width"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(1.0);
 
             if thickness > 0.0 {
-                let color_val = node
-                    .properties
-                    .get("color")
-                    .or_else(|| node.properties.get("stroke_color"))
-                    .or_else(|| node.properties.get("border_color"));
+                let color_val = node.properties.get("color");
                 let color = match color_val {
                     Some(Value::Color(c)) | Some(Value::String(c)) => parse_color(c),
                     _ => Color::BLACK,
                 };
 
                 if color.components[3] > 0.0 {
-                    let cap_val = node
-                        .properties
-                        .get("cap")
-                        .or_else(|| node.properties.get("line_cap"));
+                    let cap_val = node.properties.get("cap");
                     let cap = match cap_val {
                         Some(Value::Enum { variant, .. }) => match variant.as_str() {
                             "Round" | "round" => Cap::Round,
@@ -730,8 +711,7 @@ pub fn build_scene(
                 .map_or(false, |p| p.text_content.is_some());
         let is_text_primitive = node.name == "Text"
             || is_standalone_span_text
-            || (node.children.is_empty()
-                && (node.properties.contains_key("text") || node.properties.contains_key("content")));
+            || (node.children.is_empty() && node.properties.contains_key("text"));
         if !is_text_primitive {
             continue;
         }
@@ -739,7 +719,6 @@ pub fn build_scene(
         let dynamic_text = node
             .properties
             .get("text")
-            .or_else(|| node.properties.get("content"))
             .and_then(|v| match v {
                 Value::String(s) => Some(s.clone()),
                 Value::Integer(i) => Some(format!("{i}")),

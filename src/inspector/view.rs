@@ -192,12 +192,10 @@ fn collect_layout_tree_items(
     );
 
     let mut port_summary = String::new();
-    let text_val = node.text_content.as_deref().or_else(|| {
-        node.properties
-            .get("text")
-            .and_then(|v| v.as_str())
-            .or_else(|| node.properties.get("content").and_then(|v| v.as_str()))
-    });
+    let text_val = node
+        .text_content
+        .as_deref()
+        .or_else(|| node.properties.get("text").and_then(|v| v.as_str()));
     if let Some(text) = text_val {
         let snippet: String = text.chars().take(24).collect();
         port_summary = if text.chars().count() > 24 {

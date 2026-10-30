@@ -30,19 +30,10 @@ impl BuiltinPrimitive for LinePrimitive {
             "x1" | "y1"
                 | "x2"
                 | "y2"
-                | "start_x"
-                | "start_y"
-                | "end_x"
-                | "end_y"
                 | "z"
                 | "thickness"
-                | "stroke_width"
-                | "border_width"
                 | "color"
-                | "stroke_color"
-                | "border_color"
                 | "cap"
-                | "line_cap"
                 | "clip"
                 | "cursor"
                 | "opacity"
@@ -69,10 +60,8 @@ impl BuiltinPrimitive for LinePrimitive {
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
-            "x1" | "y1" | "x2" | "y2" | "start_x" | "start_y" | "end_x" | "end_y" | "thickness"
-            | "stroke_width" | "border_width" => Some(StaticType::Distance),
-            "stroke_color" | "border_color" => Some(StaticType::Color),
-            "cap" | "line_cap" => Some(StaticType::Enum("LineCap".to_string())),
+            "x1" | "y1" | "x2" | "y2" | "thickness" => Some(StaticType::Distance),
+            "cap" => Some(StaticType::Enum("LineCap".to_string())),
             _ => default_builtin_port_type(port_name),
         }
     }
@@ -80,22 +69,6 @@ impl BuiltinPrimitive for LinePrimitive {
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         let elem = state.elem;
         let node_id = state.node_id;
-
-        for (alias, canonical) in [
-            ("start_x", "x1"),
-            ("start_y", "y1"),
-            ("end_x", "x2"),
-            ("end_y", "y2"),
-        ] {
-            if !state.ports.contains_key(canonical) {
-                if let Some(val) = state.ports.get(alias).cloned() {
-                    state.ports.insert(canonical.to_string(), val);
-                }
-                if let Some(authored) = state.authored_ports.get(alias).cloned() {
-                    state.authored_ports.insert(canonical.to_string(), authored);
-                }
-            }
-        }
 
         for port in ["x1", "y1", "x2", "y2"] {
             if !state.ports.contains_key(port) {
@@ -107,52 +80,21 @@ impl BuiltinPrimitive for LinePrimitive {
             }
         }
 
-        if !state.ports.contains_key("thickness") {
-            if let Some(sw) = state
-                .ports
-                .get("stroke_width")
-                .or_else(|| state.ports.get("border_width"))
-                .cloned()
-            {
-                state.ports.insert("thickness".to_string(), sw);
-            } else {
-                state.ports.insert(
-                    "thickness".to_string(),
-                    Expr::Literal(Literal::Distance(1.0, DistanceUnit::Px, elem.span)),
-                );
-            }
-        }
+        state.ports.entry("thickness".to_string()).or_insert_with(|| {
+            Expr::Literal(Literal::Distance(1.0, DistanceUnit::Px, elem.span))
+        });
 
-        if !state.ports.contains_key("color") {
-            if let Some(sc) = state
-                .ports
-                .get("stroke_color")
-                .or_else(|| state.ports.get("border_color"))
-                .cloned()
-            {
-                state.ports.insert("color".to_string(), sc);
-            } else {
-                state.ports.insert(
-                    "color".to_string(),
-                    Expr::Literal(Literal::Color("#000000".to_string(), elem.span)),
-                );
-            }
-        }
+        state.ports.entry("color".to_string()).or_insert_with(|| {
+            Expr::Literal(Literal::Color("#000000".to_string(), elem.span))
+        });
 
-        if !state.ports.contains_key("cap") {
-            if let Some(lc) = state.ports.get("line_cap").cloned() {
-                state.ports.insert("cap".to_string(), lc);
-            } else {
-                state.ports.insert(
-                    "cap".to_string(),
-                    Expr::Literal(Literal::Enum(
-                        "LineCap".to_string(),
-                        "Butt".to_string(),
-                        elem.span,
-                    )),
-                );
-            }
-        }
+        state.ports.entry("cap".to_string()).or_insert_with(|| {
+            Expr::Literal(Literal::Enum(
+                "LineCap".to_string(),
+                "Butt".to_string(),
+                elem.span,
+            ))
+        });
 
         let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
         let x1_ref = Expr::MemberAccess(MemberAccessExpr {

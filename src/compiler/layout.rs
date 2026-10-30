@@ -89,45 +89,40 @@ impl Rect {
 
 /// Extracts per-corner radii `(top_left, top_right, bottom_right, bottom_left)` from node properties.
 pub fn extract_corner_radii(properties: &HashMap<String, Value>) -> (f64, f64, f64, f64) {
-    let get_prop = |k1: &str, k2: &str| -> Option<f64> {
-        properties
-            .get(k1)
-            .or_else(|| properties.get(k2))
-            .and_then(|v| v.as_f64())
-    };
-    let base = get_prop("radius", "corner_radius").unwrap_or(0.0);
+    let get_prop = |k: &str| -> Option<f64> { properties.get(k).and_then(|v| v.as_f64()) };
+    let base = get_prop("radius").unwrap_or(0.0);
     let mut tl = base;
     let mut tr = base;
     let mut br = base;
     let mut bl = base;
 
-    if let Some(left) = get_prop("radius_left", "left_radius") {
+    if let Some(left) = get_prop("radius_left") {
         tl = left;
         bl = left;
     }
-    if let Some(right) = get_prop("radius_right", "right_radius") {
+    if let Some(right) = get_prop("radius_right") {
         tr = right;
         br = right;
     }
-    if let Some(top) = get_prop("radius_top", "top_radius") {
+    if let Some(top) = get_prop("radius_top") {
         tl = top;
         tr = top;
     }
-    if let Some(bottom) = get_prop("radius_bottom", "bottom_radius") {
+    if let Some(bottom) = get_prop("radius_bottom") {
         bl = bottom;
         br = bottom;
     }
 
-    if let Some(v) = get_prop("radius_top_left", "top_left_radius") {
+    if let Some(v) = get_prop("radius_top_left") {
         tl = v;
     }
-    if let Some(v) = get_prop("radius_top_right", "top_right_radius") {
+    if let Some(v) = get_prop("radius_top_right") {
         tr = v;
     }
-    if let Some(v) = get_prop("radius_bottom_right", "bottom_right_radius") {
+    if let Some(v) = get_prop("radius_bottom_right") {
         br = v;
     }
-    if let Some(v) = get_prop("radius_bottom_left", "bottom_left_radius") {
+    if let Some(v) = get_prop("radius_bottom_left") {
         bl = v;
     }
 
@@ -235,7 +230,6 @@ impl ResolvedNode {
             || !self.fragments.is_empty()
             || self.text_content.is_some()
             || self.properties.contains_key("text")
-            || self.properties.contains_key("content")
     }
 
     /// Returns the text span associated with a child node, if any.
@@ -614,11 +608,7 @@ impl ResolvedLayout {
             }
         }
 
-        if let Some(Value::Color(c) | Value::String(c)) = node
-            .properties
-            .get("color")
-            .or_else(|| node.properties.get("bg_color"))
-        {
+        if let Some(Value::Color(c) | Value::String(c)) = node.properties.get("color") {
             ports.push(format!("color: {}", c));
         }
 
@@ -647,7 +637,7 @@ impl ResolvedLayout {
 
         let standard_keys = [
             "x", "y", "width", "height", "z", "left", "top", "right", "bottom", "clip", "box", "up",
-            "color", "bg_color", "radius", "border_width", "border_color",
+            "color", "radius", "border_width", "border_color",
             "size", "weight", "text_height", "font", "family", "baseline",
             "cap_height", "x_height", "descent", "ascent", "line_height",
         ];

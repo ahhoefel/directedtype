@@ -119,7 +119,6 @@ impl ExpandedNode {
             || self.name == "Text"
             || self.text_content.is_some()
             || self.ports.contains_key("text")
-            || self.ports.contains_key("content")
     }
 }
 

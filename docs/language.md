@@ -448,10 +448,10 @@ Inline child nodes inherit `size` and `font` from their parent `\Text` node and 
 | `y` | **Required Input** | `Distance` | — | Top coordinate. |
 | `width` | **Required Input** | `Distance` | — | Width of the rectangle. |
 | `height` | **Required Input** | `Distance` | — | Height of the rectangle. |
-| `color` (or `bg_color`) | **Required Input** | `Color` | — | Fill color (use `#00000000` for transparent fill). |
-| `radius` (or `corner_radius`) | Optional Input | `Distance` | `0` | Corner rounding radius in logical pixels. |
-| `border_width` (or `stroke_width`) | Optional Input | `Distance` | `0` | Border stroke thickness in logical pixels. |
-| `border_color` (or `stroke_color`) | Optional Input | `Color` | `#000000` | Border stroke color. |
+| `color` | **Required Input** | `Color` | — | Fill color (use `#00000000` for transparent fill). |
+| `radius` | Optional Input | `Distance` | `0` | Corner rounding radius in logical pixels. |
+| `border_width` | Optional Input | `Distance` | `0` | Border stroke thickness in logical pixels. |
+| `border_color` | Optional Input | `Color` | `#000000` | Border stroke color. |
 | `z` | Optional Input | `Integer` | `0` | Stacking order. |
 | `clip` | Optional Input | `Node` | Inherited `clip` | Clipping node reference. |
 

@@ -25,33 +25,18 @@ impl BuiltinPrimitive for RectPrimitive {
                 | "height"
                 | "z"
                 | "color"
-                | "bg_color"
                 | "border_color"
                 | "border_width"
                 | "radius"
-                | "corner_radius"
                 | "radius_left"
                 | "radius_right"
                 | "radius_top"
                 | "radius_bottom"
-                | "left_radius"
-                | "right_radius"
-                | "top_radius"
-                | "bottom_radius"
                 | "radius_top_left"
                 | "radius_top_right"
                 | "radius_bottom_right"
                 | "radius_bottom_left"
-                | "top_left_radius"
-                | "top_right_radius"
-                | "bottom_right_radius"
-                | "bottom_left_radius"
                 | "shadow"
-                | "shadow_offset_x"
-                | "shadow_offset_y"
-                | "shadow_blur"
-                | "shadow_spread"
-                | "shadow_color"
                 | "scroll_x"
                 | "scroll_y"
                 | "clip"
@@ -153,23 +138,14 @@ impl BuiltinPrimitive for RectPrimitive {
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
             "radius"
-            | "corner_radius"
             | "radius_left"
             | "radius_right"
             | "radius_top"
             | "radius_bottom"
-            | "left_radius"
-            | "right_radius"
-            | "top_radius"
-            | "bottom_radius"
             | "radius_top_left"
             | "radius_top_right"
             | "radius_bottom_right"
             | "radius_bottom_left"
-            | "top_left_radius"
-            | "top_right_radius"
-            | "bottom_right_radius"
-            | "bottom_left_radius"
             | "border_width"
             | "shadow_offset_x"
             | "shadow_offset_y"
@@ -177,7 +153,7 @@ impl BuiltinPrimitive for RectPrimitive {
             | "shadow_spread"
             | "scroll_x"
             | "scroll_y" => Some(StaticType::Distance),
-            "bg_color" | "border_color" | "shadow_color" => Some(StaticType::Color),
+            "border_color" | "shadow_color" => Some(StaticType::Color),
             "shadow" => Some(StaticType::Node("Shadow".to_string())),
             _ => default_builtin_port_type(port_name),
         }
@@ -186,7 +162,7 @@ impl BuiltinPrimitive for RectPrimitive {
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         let elem = state.elem;
 
-        for port in ["x", "y", "width", "height"] {
+        for port in ["x", "y", "width", "height", "color"] {
             if !state.ports.contains_key(port) {
                 return Err(CompileError::MissingPort {
                     node: "Rect".to_string(),
@@ -194,13 +170,6 @@ impl BuiltinPrimitive for RectPrimitive {
                     span: elem.span,
                 });
             }
-        }
-        if !state.ports.contains_key("color") && !state.ports.contains_key("bg_color") {
-            return Err(CompileError::MissingPort {
-                node: "Rect".to_string(),
-                port: "color".to_string(),
-                span: elem.span,
-            });
         }
 
         if let Some(sh_target) = state.ports.get("shadow").cloned() {
@@ -221,19 +190,13 @@ impl BuiltinPrimitive for RectPrimitive {
         Ok(())
     }
 
-    fn overload_params(&self, state: &PrimitiveExpandState<'_, '_>) -> Vec<String> {
-        let color_port =
-            if state.ports.contains_key("bg_color") && !state.ports.contains_key("color") {
-                "bg_color"
-            } else {
-                "color"
-            };
+    fn overload_params(&self, _state: &PrimitiveExpandState<'_, '_>) -> Vec<String> {
         vec![
             "x".to_string(),
             "y".to_string(),
             "width".to_string(),
             "height".to_string(),
-            color_port.to_string(),
+            "color".to_string(),
         ]
     }
 }
