@@ -268,13 +268,18 @@ pub(in crate::compiler::expand) fn default_builtin_port_type(port_name: &str) ->
     }
 }
 
-/// Evaluates an `\assert(...)` directive in the given `scope_ctx`.
+/// Evaluates an `\assert(...)` directive in the given `scope_ctx` and constant environment.
 pub(in crate::compiler::expand) fn eval_assert_directive(
     assert_dir: &AssertDirective,
     scope_ctx: &ScopeContext<'_>,
+    const_env: &HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
+    forward_scope: Option<&HashMap<String, LexicalBinding>>,
 ) -> Result<(), CompileError> {
-    let rewritten = rewrite_expr(&assert_dir.condition, scope_ctx)?;
-    match eval_expr(&rewritten, &HashMap::new()) {
+    let mut rewritten = rewrite_expr(&assert_dir.condition, scope_ctx)?;
+    if let Some(scope) = forward_scope {
+        rewritten = crate::compiler::expand::rewrite::resolve_forward_scope_refs(&rewritten, scope);
+    }
+    match eval_expr(&rewritten, const_env) {
         Ok(val) => {
             if !val.is_truthy() {
                 let msg = assert_dir
@@ -338,7 +343,8 @@ pub fn register_builtin_enums_and_components(
     }
 }
 
-/// Inserts default spatial alias ports (`left`, `top`, `right`, `bottom`) onto `ports` and `authored_ports`.
+/// Inserts default spatial alias ports (`left`, `top`, `right`, `bottom`) onto `ports` and `authored_ports`
+/// when their corresponding `x`/`y`/`width`/`height` inputs exist and no explicit alias was declared.
 /// Shared by both primitive elements and user-defined components.
 pub fn insert_default_spatial_aliases(
     node_id: NodeId,
@@ -347,43 +353,57 @@ pub fn insert_default_spatial_aliases(
     authored_ports: &mut HashMap<String, Expr>,
 ) {
     let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), span));
-    if !ports.contains_key("left") {
-        ports.insert(
-            "left".to_string(),
-            Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
-                member: Ident::new("x", span),
-                span,
-            }),
-        );
+    let self_x = Expr::MemberAccess(MemberAccessExpr {
+        target: Box::new(self_ident.clone()),
+        member: Ident::new("x", span),
+        span,
+    });
+    let self_y = Expr::MemberAccess(MemberAccessExpr {
+        target: Box::new(self_ident.clone()),
+        member: Ident::new("y", span),
+        span,
+    });
+    let self_width = Expr::MemberAccess(MemberAccessExpr {
+        target: Box::new(self_ident.clone()),
+        member: Ident::new("width", span),
+        span,
+    });
+    let self_height = Expr::MemberAccess(MemberAccessExpr {
+        target: Box::new(self_ident.clone()),
+        member: Ident::new("height", span),
+        span,
+    });
+
+    if !ports.contains_key("left") && ports.contains_key("x") {
+        ports.insert("left".to_string(), self_x.clone());
         authored_ports.insert("left".to_string(), Expr::Ident(Ident::new("x", span)));
     }
-    if !ports.contains_key("top") {
-        ports.insert(
-            "top".to_string(),
-            Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
-                member: Ident::new("y", span),
-                span,
-            }),
-        );
+    if !ports.contains_key("top") && ports.contains_key("y") {
+        ports.insert("top".to_string(), self_y.clone());
         authored_ports.insert("top".to_string(), Expr::Ident(Ident::new("y", span)));
     }
-    if !ports.contains_key("right") {
+    if !ports.contains_key("right")
+        && (ports.contains_key("x") || ports.contains_key("left"))
+        && ports.contains_key("width")
+    {
+        let (left_base, left_authored) = if ports.contains_key("x") {
+            (self_x, "x")
+        } else {
+            (
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new("left", span),
+                    span,
+                }),
+                "left",
+            )
+        };
         ports.insert(
             "right".to_string(),
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
-                    member: Ident::new("x", span),
-                    span,
-                })),
-                right: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
-                    member: Ident::new("width", span),
-                    span,
-                })),
+                left: Box::new(left_base),
+                right: Box::new(self_width),
                 span,
             }),
         );
@@ -391,27 +411,34 @@ pub fn insert_default_spatial_aliases(
             "right".to_string(),
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(Expr::Ident(Ident::new("x", span))),
+                left: Box::new(Expr::Ident(Ident::new(left_authored, span))),
                 right: Box::new(Expr::Ident(Ident::new("width", span))),
                 span,
             }),
         );
     }
-    if !ports.contains_key("bottom") {
+    if !ports.contains_key("bottom")
+        && (ports.contains_key("y") || ports.contains_key("top"))
+        && ports.contains_key("height")
+    {
+        let (top_base, top_authored) = if ports.contains_key("y") {
+            (self_y, "y")
+        } else {
+            (
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident),
+                    member: Ident::new("top", span),
+                    span,
+                }),
+                "top",
+            )
+        };
         ports.insert(
             "bottom".to_string(),
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
-                    member: Ident::new("y", span),
-                    span,
-                })),
-                right: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident),
-                    member: Ident::new("height", span),
-                    span,
-                })),
+                left: Box::new(top_base),
+                right: Box::new(self_height),
                 span,
             }),
         );
@@ -419,13 +446,14 @@ pub fn insert_default_spatial_aliases(
             "bottom".to_string(),
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(Expr::Ident(Ident::new("y", span))),
+                left: Box::new(Expr::Ident(Ident::new(top_authored, span))),
                 right: Box::new(Expr::Ident(Ident::new("height", span))),
                 span,
             }),
         );
     }
 }
+
 
 /// Applies default `x` and `y` origin ports when an element is an inline span or direct child of an `\InlineBox`.
 pub(super) fn apply_inline_origin_defaults(state: &mut PrimitiveExpandState<'_, '_>) {
@@ -1109,7 +1137,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             if let Some(content_slot) = &self.elem.content {
                 for item in &content_slot.items {
                     if let ContentItem::Assert(assert_dir) = item {
-                        eval_assert_directive(assert_dir, &scope_ctx)?;
+                        eval_assert_directive(assert_dir, &scope_ctx, &HashMap::new(), None)?;
                     }
                 }
             }

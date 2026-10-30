@@ -349,6 +349,63 @@ pub(super) fn validate_and_coerce_primitive_port_literal(
     Ok(())
 }
 
+/// Validates component parameter types and coerces numeric literals (`0 -> 0px`, `Integer -> Float`).
+pub(super) fn validate_and_coerce_component_param_types(
+    comp_def: &ComponentDef,
+    explicit_unlowered_ports: &HashMap<String, Expr>,
+    scope_ctx: &ScopeContext<'_>,
+    rewritten_ports: &mut HashMap<String, Expr>,
+) -> Result<(), CompileError> {
+    for param in &comp_def.params {
+        if let Some(type_ref) = &param.type_annotation {
+            let expected_type = type_ref.name.as_str();
+            let name = param.name.as_str();
+            let unlowered_lit = explicit_unlowered_ports
+                .get(name)
+                .or(param.default_edge.as_ref())
+                .and_then(|e| match e {
+                    Expr::Literal(lit) => Some(lit.clone()),
+                    _ => None,
+                });
+            if let Some(expr) = rewritten_ports.get_mut(name) {
+                if let Some(lit) =
+                    unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(expr, scope_ctx))
+                {
+                    if !lit.matches_type_name(expected_type) {
+                        return Err(CompileError::TypeMismatch {
+                            expected: expected_type.to_string(),
+                            actual: lit.type_name().to_string(),
+                            span: expr.span(),
+                        });
+                    }
+                }
+                if expected_type == "Distance" {
+                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                        *expr = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, *span));
+                    }
+                } else if expected_type == "Area" {
+                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                        *expr = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, *span));
+                    }
+                } else if expected_type == "Float" {
+                    if let Expr::Literal(Literal::Integer(i, span)) = expr {
+                        *expr = Expr::Literal(Literal::Float(*i as f64, *span));
+                    }
+                } else if expected_type == "Integer" {
+                    if let Expr::Literal(Literal::Integer(0, span)) = expr {
+                        *expr = Expr::Call(CallExpr {
+                            callee: Ident::new("to_integer", *span),
+                            args: vec![Expr::Literal(Literal::Integer(0, *span))],
+                            span: *span,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 
 pub(super) fn infer_expr_literal_for_typecheck<'a>(
     expr: &'a Expr,

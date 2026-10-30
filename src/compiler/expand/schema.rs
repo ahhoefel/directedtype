@@ -390,7 +390,7 @@ pub(super) fn collect_nested_aliases<'a>(items: &'a [ContentItem], out: &mut Vec
     }
 }
 
-pub fn collect_all_component_aliases<'a>(comp_def: &'a ComponentDef) -> Vec<&'a AliasBinding> {
+pub fn collect_all_component_aliases(comp_def: &ComponentDef) -> Vec<&AliasBinding> {
     let mut aliases = Vec::new();
     collect_nested_aliases(&comp_def.body, &mut aliases);
     aliases
@@ -469,13 +469,13 @@ pub(super) fn collect_nested_lets<'a>(items: &'a [ContentItem], out: &mut Vec<&'
     }
 }
 
-pub fn collect_all_component_lets<'a>(comp_def: &'a ComponentDef) -> Vec<&'a LetBinding> {
+pub fn collect_all_component_lets(comp_def: &ComponentDef) -> Vec<&LetBinding> {
     let mut lets = Vec::new();
     collect_nested_lets(&comp_def.body, &mut lets);
     lets
 }
 
-pub fn collect_all_document_lets<'a>(doc: &'a Document) -> Vec<&'a LetBinding> {
+pub fn collect_all_document_lets(doc: &Document) -> Vec<&LetBinding> {
     let mut lets = Vec::new();
     for item in &doc.items {
         match item {

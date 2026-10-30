@@ -245,6 +245,7 @@ fn child_port_depends_on_parent(
     false
 }
 
+#[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
 fn resolve_and_filter_agg_expr(
     expr: &Expr,
     comp_id: NodeId,

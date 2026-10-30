@@ -663,7 +663,7 @@ fn collect_span_and_inline_box_style_args(
                         None
                     }
                 })
-                .unwrap_or_else(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)));
+                .unwrap_or(Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)));
 
             span_style_args.push(ts_start);
             span_style_args.push(ts_end);

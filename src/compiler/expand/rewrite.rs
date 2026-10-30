@@ -92,6 +92,42 @@ pub(super) fn resolve_forward_scope_refs(
     }
 }
 
+/// Resolves forward lexical scope references in node ports and local bindings starting from the given indices.
+pub(super) fn resolve_forward_refs_in_range(
+    doc: &mut crate::compiler::expanded::ExpandedDocument,
+    start_node_idx: usize,
+    start_binding_idx: usize,
+    scope: &HashMap<String, LexicalBinding>,
+) {
+    for node in &mut doc.nodes[start_node_idx..] {
+        for expr in node.ports.values_mut() {
+            *expr = resolve_forward_scope_refs(expr, scope);
+        }
+    }
+    for (expr, _, _) in &mut doc.local_bindings[start_binding_idx..] {
+        *expr = resolve_forward_scope_refs(expr, scope);
+    }
+}
+
+/// Applies optional `type_annotation` coercion to `rewritten_res` and updates `scope[name]`.
+/// Returns `Some(rewritten)` if the binding changed.
+pub(super) fn try_preresolve_expr_binding(
+    scope: &mut HashMap<String, LexicalBinding>,
+    name: &str,
+    rewritten_res: Result<Expr, CompileError>,
+    type_annotation: Option<&TypeRef>,
+) -> Option<Expr> {
+    let rewritten = rewritten_res.ok()?;
+    let rewritten = super::typecheck::coerce_typed_binding_expr(rewritten, type_annotation);
+    if let Some(LexicalBinding::Expr(existing)) = scope.get(name) {
+        if existing == &rewritten {
+            return None;
+        }
+    }
+    scope.insert(name.to_string(), LexicalBinding::Expr(rewritten.clone()));
+    Some(rewritten)
+}
+
 /// Evaluates sibling existence conditions (`prev`, `next`, `!prev`, `!next`, `&&`, `||`) at expansion time.
 fn eval_sibling_condition(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
     match expr {
