@@ -243,6 +243,113 @@ pub(super) fn validate_node_type_annotation(
     Ok(())
 }
 
+/// Validates and coerces a literal or constant expression on a built-in primitive port.
+pub(super) fn validate_and_coerce_primitive_port_literal(
+    port_name: &str,
+    orig_expr: &Expr,
+    rewritten: &mut Expr,
+    scope_ctx: &ScopeContext<'_>,
+) -> Result<(), CompileError> {
+    if matches!(
+        port_name,
+        "x"
+            | "y"
+            | "x1"
+            | "y1"
+            | "x2"
+            | "y2"
+            | "start_x"
+            | "start_y"
+            | "end_x"
+            | "end_y"
+            | "width"
+            | "height"
+            | "size"
+            | "line_height"
+            | "baseline"
+            | "radius"
+            | "corner_radius"
+            | "radius_left"
+            | "radius_right"
+            | "radius_top"
+            | "radius_bottom"
+            | "left_radius"
+            | "right_radius"
+            | "top_radius"
+            | "bottom_radius"
+            | "radius_top_left"
+            | "radius_top_right"
+            | "radius_bottom_right"
+            | "radius_bottom_left"
+            | "top_left_radius"
+            | "top_right_radius"
+            | "bottom_right_radius"
+            | "bottom_left_radius"
+            | "border_width"
+            | "thickness"
+            | "stroke_width"
+            | "shadow_offset_x"
+            | "shadow_offset_y"
+            | "shadow_blur"
+            | "shadow_spread"
+            | "scroll_x"
+            | "scroll_y"
+    ) {
+        let unlowered_lit = match orig_expr {
+            Expr::Literal(lit) => Some(lit.clone()),
+            _ => None,
+        };
+        if let Some(lit) =
+            unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(rewritten, scope_ctx))
+        {
+            if !lit.matches_type_name("Distance") {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Distance".to_string(),
+                    actual: lit.type_name().to_string(),
+                    span: orig_expr.span(),
+                });
+            }
+        }
+        if let Expr::Literal(Literal::Integer(0, span)) = *rewritten {
+            *rewritten = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+        }
+    } else if matches!(port_name, "z" | "weight") {
+        let unlowered_lit = match orig_expr {
+            Expr::Literal(lit) => Some(lit.clone()),
+            _ => None,
+        };
+        if let Some(lit) =
+            unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(rewritten, scope_ctx))
+        {
+            if !lit.matches_type_name("Integer") {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Integer".to_string(),
+                    actual: lit.type_name().to_string(),
+                    span: orig_expr.span(),
+                });
+            }
+        }
+    } else if matches!(port_name, "italic" | "underline") {
+        let unlowered_lit = match orig_expr {
+            Expr::Literal(lit) => Some(lit.clone()),
+            _ => None,
+        };
+        if let Some(lit) =
+            unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(rewritten, scope_ctx))
+        {
+            if !lit.matches_type_name("Boolean") {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Boolean".to_string(),
+                    actual: lit.type_name().to_string(),
+                    span: orig_expr.span(),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+
 pub(super) fn infer_expr_literal_for_typecheck<'a>(
     expr: &'a Expr,
     ctx: &ScopeContext<'a>,

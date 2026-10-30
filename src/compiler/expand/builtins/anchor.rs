@@ -1,4 +1,6 @@
-use crate::ast::{DistanceUnit, ElementNode, Expr, Ident, Literal, MemberAccessExpr};
+use crate::ast::{
+    DistanceUnit, ElementNode, Expr, Ident, Literal, MemberAccessExpr, PortBinding,
+};
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{BuiltinPrimitive, PrimitiveExpandState};
 use crate::compiler::expand::context::ElementContext;
@@ -7,6 +9,40 @@ use crate::compiler::scope::ScopeId;
 
 pub struct AnchorPrimitive;
 pub struct AnchorScopePrimitive;
+
+/// Wires default `x = parent.left` and `y = parent.top` onto a child element of an `\Anchor` or `\AnchorScope`.
+pub(super) fn wire_wrapper_child_origin(node_id: NodeId, child_elem: &ElementNode) -> ElementNode {
+    let mut child = child_elem.clone();
+    if !child.ports.iter().any(|p| p.name.as_str() == "x") {
+        child.ports.push(PortBinding {
+            name: Ident::new("x", child.span),
+            expr: Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::new(
+                    node_id.canonical_name(),
+                    child.span,
+                ))),
+                member: Ident::new("left", child.span),
+                span: child.span,
+            }),
+            span: child.span,
+        });
+    }
+    if !child.ports.iter().any(|p| p.name.as_str() == "y") {
+        child.ports.push(PortBinding {
+            name: Ident::new("y", child.span),
+            expr: Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::new(
+                    node_id.canonical_name(),
+                    child.span,
+                ))),
+                member: Ident::new("top", child.span),
+                span: child.span,
+            }),
+            span: child.span,
+        });
+    }
+    child
+}
 
 fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
     let elem = state.elem;

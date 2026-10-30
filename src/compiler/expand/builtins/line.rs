@@ -1,8 +1,14 @@
 use crate::ast::{
-    BinaryExpr, BinaryOp, CallExpr, DistanceUnit, Expr, Ident, Literal, MemberAccessExpr,
+    BinaryExpr, BinaryOp, CallExpr, ComponentDef, DistanceUnit, EnumDef, Expr, Ident, Literal,
+    MemberAccessExpr,
 };
 use crate::compiler::error::CompileError;
-use crate::compiler::expand::builtins::{BuiltinPrimitive, PrimitiveExpandState};
+use crate::compiler::expand::builtins::{
+    default_builtin_port_type, BuiltinPrimitive, PrimitiveExpandState,
+};
+use crate::compiler::expand::typecheck::StaticType;
+use crate::span::Span;
+use std::collections::HashMap;
 
 pub struct LinePrimitive;
 
@@ -13,6 +19,33 @@ impl BuiltinPrimitive for LinePrimitive {
 
     fn ignores_ambient_box_ports(&self) -> bool {
         true
+    }
+
+    fn register_types(
+        &self,
+        enums: &mut HashMap<String, EnumDef>,
+        _registry: &mut HashMap<String, Vec<ComponentDef>>,
+        span: Span,
+    ) {
+        enums.entry("LineCap".to_string()).or_insert_with(|| EnumDef {
+            name: Ident::new("LineCap", span),
+            variants: vec![
+                Ident::new("Butt", span),
+                Ident::new("Round", span),
+                Ident::new("Square", span),
+            ],
+            span,
+        });
+    }
+
+    fn port_type(&self, port_name: &str) -> Option<StaticType> {
+        match port_name {
+            "x1" | "y1" | "x2" | "y2" | "start_x" | "start_y" | "end_x" | "end_y" | "thickness"
+            | "stroke_width" | "border_width" => Some(StaticType::Distance),
+            "stroke_color" | "border_color" => Some(StaticType::Color),
+            "cap" | "line_cap" => Some(StaticType::Enum("LineCap".to_string())),
+            _ => default_builtin_port_type(port_name),
+        }
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {

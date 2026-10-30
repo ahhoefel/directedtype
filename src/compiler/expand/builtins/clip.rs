@@ -1,14 +1,57 @@
 use crate::ast::{Expr, Ident, MemberAccessExpr};
 use crate::compiler::error::CompileError;
-use crate::compiler::expand::builtins::{BuiltinPrimitive, PrimitiveExpandState};
+use crate::compiler::expand::builtins::{
+    default_builtin_port_type, BuiltinPrimitive, PrimitiveExpandState,
+};
 use crate::compiler::expand::context::EnvEntry;
+use crate::compiler::expand::typecheck::StaticType;
 use crate::compiler::expanded::NodeId;
+use crate::span::Span;
+use std::collections::HashMap;
 
 pub struct ClipPrimitive;
+
+/// Resolves the inherited `clip` expression from `env_scope` (`\env clip`) or `parent_id.clip` (falling back to `window.clip`).
+pub(in crate::compiler::expand) fn default_inherited_clip_expr(
+    parent_id: Option<NodeId>,
+    env_scope: &HashMap<String, EnvEntry>,
+    span: Span,
+) -> Expr {
+    if let Some(EnvEntry::Bound(clip_expr)) = env_scope.get("clip") {
+        clip_expr.clone()
+    } else if let Some(parent) = parent_id {
+        let target_name = if parent.is_window() {
+            NodeId::WINDOW.canonical_name()
+        } else {
+            parent.canonical_name()
+        };
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(Expr::Ident(Ident::new(target_name, span))),
+            member: Ident::new("clip", span),
+            span,
+        })
+    } else {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(Expr::Ident(Ident::new(
+                NodeId::WINDOW.canonical_name(),
+                span,
+            ))),
+            member: Ident::new("clip", span),
+            span,
+        })
+    }
+}
 
 impl BuiltinPrimitive for ClipPrimitive {
     fn name(&self) -> &'static str {
         "Clip"
+    }
+
+    fn port_type(&self, port_name: &str) -> Option<StaticType> {
+        match port_name {
+            "up" | "clip" => Some(StaticType::Node("Clip".to_string())),
+            _ => default_builtin_port_type(port_name),
+        }
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
@@ -24,38 +67,7 @@ impl BuiltinPrimitive for ClipPrimitive {
             });
         }
         if !state.ports.contains_key("up") {
-            let default_up = if let Some(EnvEntry::Bound(clip_expr)) = ctx.env_scope.get("clip") {
-                clip_expr.clone()
-            } else if let Some(parent) = ctx.parent_id {
-                if parent.is_window() {
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::new(
-                            NodeId::WINDOW.canonical_name(),
-                            elem.span,
-                        ))),
-                        member: Ident::new("clip", elem.span),
-                        span: elem.span,
-                    })
-                } else {
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::new(
-                            parent.canonical_name(),
-                            elem.span,
-                        ))),
-                        member: Ident::new("clip", elem.span),
-                        span: elem.span,
-                    })
-                }
-            } else {
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(
-                        NodeId::WINDOW.canonical_name(),
-                        elem.span,
-                    ))),
-                    member: Ident::new("clip", elem.span),
-                    span: elem.span,
-                })
-            };
+            let default_up = default_inherited_clip_expr(ctx.parent_id, ctx.env_scope, elem.span);
             state.ports.insert("up".to_string(), default_up);
         }
         state.ports.insert(

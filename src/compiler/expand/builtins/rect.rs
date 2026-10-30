@@ -1,12 +1,140 @@
-use crate::ast::{Expr, Ident, MemberAccessExpr};
+use crate::ast::{
+    ComponentDef, ComponentKind, DistanceUnit, EnumDef, Expr, Ident, Literal, MemberAccessExpr,
+    ParamDef, TypeRef,
+};
 use crate::compiler::error::CompileError;
-use crate::compiler::expand::builtins::{BuiltinPrimitive, PrimitiveExpandState};
+use crate::compiler::expand::builtins::{
+    default_builtin_port_type, BuiltinPrimitive, PrimitiveExpandState,
+};
+use crate::compiler::expand::typecheck::StaticType;
+use crate::span::Span;
+use std::collections::HashMap;
 
 pub struct RectPrimitive;
 
 impl BuiltinPrimitive for RectPrimitive {
     fn name(&self) -> &'static str {
         "Rect"
+    }
+
+    fn register_types(
+        &self,
+        _enums: &mut HashMap<String, EnumDef>,
+        registry: &mut HashMap<String, Vec<ComponentDef>>,
+        span: Span,
+    ) {
+        registry.entry("Shadow".to_string()).or_insert_with(|| {
+            vec![ComponentDef {
+                kind: ComponentKind::Component,
+                name: Ident::new("Shadow", span),
+                params: vec![
+                    ParamDef {
+                        name: Ident::new("offset_x", span),
+                        type_annotation: Some(TypeRef {
+                            name: Ident::new("Distance", span),
+                            span,
+                        }),
+                        default_edge: Some(Expr::Literal(Literal::Distance(
+                            0.0,
+                            DistanceUnit::Px,
+                            span,
+                        ))),
+                        is_env: false,
+                        span,
+                    },
+                    ParamDef {
+                        name: Ident::new("offset_y", span),
+                        type_annotation: Some(TypeRef {
+                            name: Ident::new("Distance", span),
+                            span,
+                        }),
+                        default_edge: Some(Expr::Literal(Literal::Distance(
+                            0.0,
+                            DistanceUnit::Px,
+                            span,
+                        ))),
+                        is_env: false,
+                        span,
+                    },
+                    ParamDef {
+                        name: Ident::new("blur", span),
+                        type_annotation: Some(TypeRef {
+                            name: Ident::new("Distance", span),
+                            span,
+                        }),
+                        default_edge: Some(Expr::Literal(Literal::Distance(
+                            0.0,
+                            DistanceUnit::Px,
+                            span,
+                        ))),
+                        is_env: false,
+                        span,
+                    },
+                    ParamDef {
+                        name: Ident::new("spread", span),
+                        type_annotation: Some(TypeRef {
+                            name: Ident::new("Distance", span),
+                            span,
+                        }),
+                        default_edge: Some(Expr::Literal(Literal::Distance(
+                            0.0,
+                            DistanceUnit::Px,
+                            span,
+                        ))),
+                        is_env: false,
+                        span,
+                    },
+                    ParamDef {
+                        name: Ident::new("color", span),
+                        type_annotation: Some(TypeRef {
+                            name: Ident::new("Color", span),
+                            span,
+                        }),
+                        default_edge: Some(Expr::Literal(Literal::Color(
+                            "#00000000".to_string(),
+                            span,
+                        ))),
+                        is_env: false,
+                        span,
+                    },
+                ],
+                body: Vec::new(),
+                span,
+            }]
+        });
+    }
+
+    fn port_type(&self, port_name: &str) -> Option<StaticType> {
+        match port_name {
+            "radius"
+            | "corner_radius"
+            | "radius_left"
+            | "radius_right"
+            | "radius_top"
+            | "radius_bottom"
+            | "left_radius"
+            | "right_radius"
+            | "top_radius"
+            | "bottom_radius"
+            | "radius_top_left"
+            | "radius_top_right"
+            | "radius_bottom_right"
+            | "radius_bottom_left"
+            | "top_left_radius"
+            | "top_right_radius"
+            | "bottom_right_radius"
+            | "bottom_left_radius"
+            | "border_width"
+            | "shadow_offset_x"
+            | "shadow_offset_y"
+            | "shadow_blur"
+            | "shadow_spread"
+            | "scroll_x"
+            | "scroll_y" => Some(StaticType::Distance),
+            "bg_color" | "border_color" | "shadow_color" => Some(StaticType::Color),
+            "shadow" => Some(StaticType::Node("Shadow".to_string())),
+            _ => default_builtin_port_type(port_name),
+        }
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
