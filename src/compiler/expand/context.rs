@@ -35,7 +35,6 @@ pub struct ScopeContext<'a> {
     pub shadowed_ports: Option<&'a HashSet<String>>,
     pub is_event_port: bool,
     pub parent_ports: &'a [String],
-    pub current_ports: &'a [String],
     pub lexical_scope: &'a HashMap<String, LexicalBinding>,
     pub env_scope: &'a HashMap<String, EnvEntry>,
     pub node_fonts: &'a HashMap<NodeId, NodeId>,
@@ -67,7 +66,6 @@ impl<'a> ScopeContext<'a> {
             shadowed_ports: None,
             is_event_port: false,
             parent_ports: &[],
-            current_ports: &[],
             lexical_scope,
             env_scope,
             node_fonts,
@@ -100,7 +98,6 @@ impl<'a> ScopeContext<'a> {
             shadowed_ports: ctx.shadowed_ports,
             is_event_port: false,
             parent_ports: ctx.parent_ports,
-            current_ports: &[],
             lexical_scope,
             env_scope: ctx.env_scope,
             node_fonts,
@@ -133,7 +130,6 @@ impl<'a> ScopeContext<'a> {
             shadowed_ports: ctx.shadowed_ports,
             is_event_port: false,
             parent_ports: ctx.parent_ports,
-            current_ports: &[],
             lexical_scope,
             env_scope,
             node_fonts,
@@ -152,11 +148,6 @@ impl<'a> ScopeContext<'a> {
 
     pub fn with_child_node(mut self, child_node: Option<NodeId>) -> Self {
         self.child_node = child_node;
-        self
-    }
-
-    pub fn with_current_ports(mut self, current_ports: &'a [String]) -> Self {
-        self.current_ports = current_ports;
         self
     }
 

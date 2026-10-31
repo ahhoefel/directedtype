@@ -587,7 +587,6 @@ pub(super) fn apply_forwarded_directives(
     authored_ambient_ports: &mut HashMap<String, Expr>,
 ) -> Result<(), CompileError> {
     let empty_children: [NodeId; 0] = [];
-    let empty_ports: [String; 0] = [];
     for fwd in forwarded_directives {
         let fwd_lexical_borrow = fwd.lexical_scope.borrow();
         let fwd_inst_borrow = fwd.enclosing_instantiated_children.map(|c| c.borrow());
@@ -608,7 +607,6 @@ pub(super) fn apply_forwarded_directives(
             shadowed_ports: fwd.shadowed_ports,
             is_event_port: false,
             parent_ports: &fwd.parent_ports,
-            current_ports: &empty_ports,
             lexical_scope: &fwd_lexical_borrow,
             env_scope: &fwd.env_scope,
             node_fonts,

@@ -566,31 +566,7 @@ impl<'a> ComponentExpander<'a> {
                 .as_ref()
                 .is_some_and(|t| t.name.as_str() == "Handler");
             if name.starts_with("on_") || is_handler_param {
-                if let Some(expr) = self.comp_ports.get(&name).cloned() {
-                    if !self.already_rewritten_ports.contains(&name) {
-                        let empty_scope = HashMap::new();
-                        let event_default_ctx = ScopeContext::from_instance(
-                            ctx,
-                            &self.doc.nodes,
-                            &empty_scope,
-                            self.caller_env_scope,
-                            self.node_fonts,
-                            &empty_children,
-                        )
-                        .with_children(&empty_children, self.num_consumer_children)
-                        .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
-                        .with_current_ports(&self.schema.comp_scope_ports)
-                        .with_enclosing_component(Some(ctx.comp_node_id))
-                        .as_event_port(true);
-                        let rewritten = rewrite_expr(&expr, &event_default_ctx)?;
-                        self.already_rewritten_ports.insert(name.clone());
-                        self.comp_ports.insert(name.clone(), rewritten.clone());
-                        local_scope.insert(name, LexicalBinding::Expr(rewritten));
-                    } else {
-                        local_scope.insert(name, LexicalBinding::Expr(expr));
-                    }
-                    continue;
-                }
+                continue;
             }
             if let Some(Expr::Ident(id)) = self.comp_ports.get(&name) {
                 if let Some(node_id) = NodeId::from_canonical_name(id.as_str()) {
@@ -642,6 +618,37 @@ impl<'a> ComponentExpander<'a> {
                     LexicalBinding::Expr(member_expr)
                 };
                 local_scope.insert(port_name.clone(), binding);
+            }
+        }
+        for param in &comp_def.params {
+            let name = param.name.as_str().to_string();
+            let is_handler_param = param
+                .type_annotation
+                .as_ref()
+                .is_some_and(|t| t.name.as_str() == "Handler");
+            if name.starts_with("on_") || is_handler_param {
+                if let Some(expr) = self.comp_ports.get(&name).cloned() {
+                    if !self.already_rewritten_ports.contains(&name) {
+                        let event_default_ctx = ScopeContext::from_instance(
+                            ctx,
+                            &self.doc.nodes,
+                            &local_scope,
+                            self.caller_env_scope,
+                            self.node_fonts,
+                            &empty_children,
+                        )
+                        .with_children(&empty_children, self.num_consumer_children)
+                        .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
+                        .with_enclosing_component(Some(ctx.comp_node_id))
+                        .as_event_port(true);
+                        let rewritten = rewrite_expr(&expr, &event_default_ctx)?;
+                        self.already_rewritten_ports.insert(name.clone());
+                        self.comp_ports.insert(name.clone(), rewritten.clone());
+                        local_scope.insert(name, LexicalBinding::Expr(rewritten));
+                    } else {
+                        local_scope.insert(name, LexicalBinding::Expr(expr));
+                    }
+                }
             }
         }
         Ok(local_scope)
@@ -763,7 +770,6 @@ impl<'a> ComponentExpander<'a> {
                             )
                             .with_children(&empty_children, self.num_consumer_children)
                             .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
-                            .with_current_ports(&self.schema.comp_scope_ports)
                             .with_enclosing_component(Some(ctx.comp_node_id))
                             .with_comp_state(
                                 Some(&self.comp_ports),
@@ -804,7 +810,6 @@ impl<'a> ComponentExpander<'a> {
                                 )
                                 .with_children(&empty_children, self.num_consumer_children)
                                 .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
-                                .with_current_ports(&self.schema.comp_scope_ports)
                                 .with_enclosing_component(Some(ctx.comp_node_id));
                                 rewrite_expr(raw_expr, &scope_ctx)
                             };
@@ -919,7 +924,6 @@ impl<'a> ComponentExpander<'a> {
                     )
                     .with_children(&inst_borrow, self.num_consumer_children)
                     .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
-                    .with_current_ports(&self.schema.comp_scope_ports)
                     .with_enclosing_component(Some(ctx.comp_node_id))
                     .with_comp_state(
                         Some(&self.comp_ports),
@@ -1052,7 +1056,6 @@ impl<'a> ComponentExpander<'a> {
                         )
                         .with_children(&inst_borrow, self.num_consumer_children)
                         .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
-                        .with_current_ports(&self.schema.comp_scope_ports)
                         .with_enclosing_component(Some(ctx.comp_node_id));
                         rewrite_expr(raw_expr, &scope_ctx)?
                     };
@@ -1263,7 +1266,6 @@ impl<'a> ComponentExpander<'a> {
         )
         .with_children(&inst_ids, self.num_consumer_children)
         .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
-        .with_current_ports(&self.schema.comp_scope_ports)
         .with_enclosing_component(Some(ctx.comp_node_id))
         .with_comp_state(
             Some(&self.comp_ports),
@@ -1429,7 +1431,6 @@ impl<'a> ComponentExpander<'a> {
         )
         .with_children(&inst_ids, self.num_consumer_children)
         .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
-        .with_current_ports(&self.schema.comp_scope_ports)
         .with_enclosing_component(Some(ctx.comp_node_id))
         .with_comp_state(
             Some(&self.comp_ports),

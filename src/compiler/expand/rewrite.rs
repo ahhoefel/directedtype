@@ -250,18 +250,6 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }));
             }
 
-            // Check if it's a port on the current node (e.g. component parameter in default expression)
-            if ctx.current_ports.iter().any(|p| p == id.as_str()) {
-                return Ok(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(
-                        ctx.current_node.canonical_name(),
-                        id.span,
-                    ))),
-                    member: id.clone(),
-                    span: id.span,
-                }));
-            }
-
             if id.as_str() == "window" {
                 return Ok(Expr::Ident(Ident::new(
                     NodeId::WINDOW.canonical_name(),
