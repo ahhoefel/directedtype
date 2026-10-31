@@ -252,7 +252,7 @@ impl BuiltinPrimitive for TextPrimitive {
             &font_expr,
         );
 
-        resolve_default_spatial_dimensions(state, &span_style_args)?;
+        resolve_text_dimensions(state, &span_style_args)?;
 
         synthesize_span_and_inline_box_metrics(
             state,
@@ -891,17 +891,13 @@ fn insert_inline_child_spatial_aliases(
     }
 }
 
-/// Resolves default `height` and `width` ports for spatial primitives (including `text_width` / `text_height` measurement calls).
-pub(super) fn resolve_default_spatial_dimensions(
+/// Resolves default `height` (`text_height`) and `width` (`text_width`) ports for `\Text` nodes.
+fn resolve_text_dimensions(
     state: &mut PrimitiveExpandState<'_, '_>,
     span_style_args: &[Expr],
 ) -> Result<(), CompileError> {
     let elem = state.elem;
     let node_id = state.node_id;
-    let is_anchor_like = elem.name.as_str() == "Anchor" || elem.name.as_str() == "AnchorScope";
-    if is_anchor_like {
-        return Ok(());
-    }
 
     let text_content = state
         .doc
@@ -933,9 +929,7 @@ pub(super) fn resolve_default_spatial_dimensions(
 
     // Height defaults / resolution
     if !state.ports.contains_key("height") {
-        if (elem.name.as_str() == "Text" || has_text || state.ports.contains_key("width"))
-            && has_text
-        {
+        if has_text {
             let width_expr = Expr::MemberAccess(MemberAccessExpr {
                 target: Box::new(self_ident.clone()),
                 member: Ident::new("width", elem.span),
@@ -972,16 +966,14 @@ pub(super) fn resolve_default_spatial_dimensions(
                 span: elem.span,
             });
             state.ports.insert("height".to_string(), height_call);
-        } else if elem.name.as_str() == "Text" && !state.is_inline_span {
-            state.ports.insert("height".to_string(), size_expr.clone());
         } else if state.is_inline_span {
             state.ports.insert(
                 "height".to_string(),
                 Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)),
             );
-        } else if elem.name.as_str() != "Font" && elem.name.as_str() != "Clip" {
+        } else {
             return Err(CompileError::MissingPort {
-                node: elem.name.as_str().to_string(),
+                node: "Text".to_string(),
                 port: "height".to_string(),
                 span: elem.span,
             });
@@ -990,7 +982,7 @@ pub(super) fn resolve_default_spatial_dimensions(
 
     // Width defaults / resolution
     if !state.ports.contains_key("width") {
-        if (elem.name.as_str() == "Text" || has_text) && has_text {
+        if has_text {
             let mut width_args = vec![text_arg_expr, size_expr, weight_expr, font_expr];
             width_args.extend(span_style_args.iter().cloned());
             let width_call = Expr::Call(CallExpr {
@@ -1004,9 +996,9 @@ pub(super) fn resolve_default_spatial_dimensions(
                 "width".to_string(),
                 Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)),
             );
-        } else if elem.name.as_str() != "Font" && elem.name.as_str() != "Clip" {
+        } else {
             return Err(CompileError::MissingPort {
-                node: elem.name.as_str().to_string(),
+                node: "Text".to_string(),
                 port: "width".to_string(),
                 span: elem.span,
             });

@@ -31,7 +31,6 @@ use std::collections::HashMap;
 use self::anchor::wire_wrapper_child_origin;
 use self::clip::default_inherited_clip_expr;
 use self::font::{pre_resolve_primitive_font, PreResolvedFont};
-use self::text::resolve_default_spatial_dimensions;
 
 /// Shared mutable state passed to `BuiltinPrimitive::finalize_ports`.
 pub(in crate::compiler::expand) struct PrimitiveExpandState<'a, 'ctx> {
@@ -173,24 +172,13 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError>;
 
     /// Returns the canonical overload parameter names for this primitive node.
-    fn overload_params(&self, state: &PrimitiveExpandState<'_, '_>) -> Vec<String> {
-        if state.ports.contains_key("size")
-            && !state.elem.ports.iter().any(|p| p.name.as_str() == "height")
-        {
-            vec![
-                "x".to_string(),
-                "y".to_string(),
-                "width".to_string(),
-                "size".to_string(),
-            ]
-        } else {
-            vec![
-                "x".to_string(),
-                "y".to_string(),
-                "width".to_string(),
-                "height".to_string(),
-            ]
-        }
+    fn overload_params(&self, _state: &PrimitiveExpandState<'_, '_>) -> Vec<String> {
+        vec![
+            "x".to_string(),
+            "y".to_string(),
+            "width".to_string(),
+            "height".to_string(),
+        ]
     }
 }
 
@@ -1238,7 +1226,6 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
 
         if self.primitive.name() != "Text" {
             apply_inline_origin_defaults(&mut state);
-            resolve_default_spatial_dimensions(&mut state, &[])?;
         }
 
         insert_default_spatial_aliases(
