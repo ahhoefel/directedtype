@@ -10,7 +10,7 @@
     x: Distance = parent.left,
     y: Distance = parent.top,
     env font: Font,
-    env text_bounds: TextBounds
+    env text_bounds: TextBounds = \TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)
 ) {
     \alias right = x + width;
     \alias height = pad.height;

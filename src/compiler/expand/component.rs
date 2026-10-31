@@ -427,17 +427,6 @@ impl<'a> ComponentExpander<'a> {
                 } else if let Some(default_expr) = &param.default_edge {
                     let resolved = self.resolve_param_default_expr(&name, default_expr)?;
                     self.comp_ports.insert(name, resolved);
-                } else if name == "text_bounds" {
-                    let default_tb = Expr::Node(Box::new(ElementNode {
-                        name: Ident::new("TextBounds", param.span),
-                        key: None,
-                        ports: Vec::new(),
-                        content: None,
-                        span: param.span,
-                        handle: None,
-                    }));
-                    let resolved = self.resolve_param_default_expr(&name, &default_tb)?;
-                    self.comp_ports.insert(name, resolved);
                 }
             }
             // Tier 1: Component Signature Default (for non-env parameters)

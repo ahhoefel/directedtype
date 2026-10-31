@@ -530,8 +530,7 @@ pub(super) fn select_component_overload<'a>(
                 if param.default_edge.is_none() {
                     let name = param.name.as_str();
                     let satisfied = explicit_ports.contains(name)
-                        || (param.is_env && matches!(env_scope.get(name), Some(EnvEntry::Bound(_))))
-                        || (param.is_env && name == "text_bounds");
+                        || (param.is_env && matches!(env_scope.get(name), Some(EnvEntry::Bound(_))));
 
                     if !satisfied {
                         return false;
