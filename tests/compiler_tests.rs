@@ -4659,7 +4659,7 @@ fn test_stage3_standard_library_spans_bold_italic_code_sup() {
         .iter()
         .find(|ts| ts.style.font_family.as_deref() == Some("monospace"))
         .expect("Code span with monospace family");
-    assert_eq!(code_span.style.bg_color.as_deref(), Some("#f1f5f9"));
+    assert_eq!(code_span.style.bg_color.as_deref(), Some("#e9e9e9"));
     assert_eq!(code_span.style.font_size, Some(18.0)); // 20px * 0.9
 
     // Verify Sup span has scaled font size (15px) and negative baseline shift (-7px)
@@ -5225,6 +5225,27 @@ fn test_strict_child_port_acceptance() {
             r#"\Text(x: 0, y: 0, font: "Menlo") { "hello" }"#,
             "Type mismatch: expected 'Font', found 'String'",
         ),
+        (
+            r#"
+            \let f = "Menlo";
+            \Text(x: 0, y: 0, font: f) { "hello" }
+            "#,
+            "Type mismatch: expected 'Font', found 'String'",
+        ),
+        (
+            r#"
+            \use "components/Align.dt"
+            \Text(x: 0, y: 0, font: \Font(size: 16px), text_align: Align.Center) { "hello" }
+            "#,
+            "Node 'Text' does not accept property 'text_align'",
+        ),
+        (
+            r#"
+            \use "components/Align.dt"
+            \Text(x: 0, y: 0, font: \Font(size: 16px), align: "center") { "hello" }
+            "#,
+            "Type mismatch: expected 'Align', found 'String'",
+        ),
     ] {
         let err = compile_to_graph(&parse(src).unwrap()).expect_err(expected_msg);
         assert!(
@@ -5234,4 +5255,55 @@ fn test_strict_child_port_acceptance() {
             err
         );
     }
+}
+
+#[test]
+fn test_text_align_port_and_span_metrics() {
+    let src = r#"
+    \use "components/Align.dt"
+    \use "components/Bold.dt"
+    \env font = \Font(size: 16px);
+
+    \let t_left = \Text(x: 0, y: 0, width: 300px, align: Align.Left) {
+        \let s_left = \Bold { Hello }
+    };
+    \let t_center = \Text(x: 0, y: 40px, width: 300px, align: Align.Center) {
+        \let s_center = \Bold { Hello }
+    };
+    \let t_right = \Text(x: 0, y: 80px, width: 300px, align: Align.Right) {
+        \let s_right = \Bold { Hello }
+    };
+    "#;
+
+    let doc = parse(src).unwrap();
+    let layout = directedtype::evaluate_document(&doc).expect("Text with align: Align.* should compile");
+
+    let s_left = layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("s_left"))
+        .unwrap();
+    let s_center = layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("s_center"))
+        .unwrap();
+    let s_right = layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("s_right"))
+        .unwrap();
+
+    assert!(s_left.rect.x.abs() < 1.0, "Left-aligned span should start at x=0, got {}", s_left.rect.x);
+    assert!(
+        s_center.rect.x > 100.0 && s_center.rect.x < 200.0,
+        "Center-aligned span in 300px box should be centered, got x={}",
+        s_center.rect.x
+    );
+    assert!(
+        s_right.rect.x > s_center.rect.x,
+        "Right-aligned span should be further right than center-aligned span, got right={} center={}",
+        s_right.rect.x,
+        s_center.rect.x
+    );
 }

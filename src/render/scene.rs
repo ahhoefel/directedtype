@@ -751,7 +751,6 @@ pub fn build_scene(
                 let text_color = node
                     .properties
                     .get("color")
-                    .or_else(|| node.properties.get("text_color"))
                     .map(|v| match v {
                         Value::Color(c) | Value::String(c) => parse_color(c),
                         _ => Color::BLACK,
@@ -761,7 +760,6 @@ pub fn build_scene(
                 let align_str = node
                     .properties
                     .get("align")
-                    .or_else(|| node.properties.get("text_align"))
                     .and_then(|v| v.as_str());
 
                 // Build span render keys to detect hover/style changes

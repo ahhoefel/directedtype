@@ -992,11 +992,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             let align = n
                 .properties
                 .get("align")
-                .or_else(|| n.properties.get("text_align"))
-                .and_then(|v| match v {
-                    Value::String(s) => Some(s.clone()),
-                    _ => None,
-                });
+                .and_then(|v| v.as_str().map(|s| s.to_string()));
             let start_at = n
                 .properties
                 .get("start_at")

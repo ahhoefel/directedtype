@@ -109,6 +109,7 @@ impl BuiltinPrimitive for TextPrimitive {
                 | "text"
                 | "color"
                 | "font"
+                | "align"
                 | "underline"
                 | "text_bounds"
                 | "clip"
@@ -124,6 +125,7 @@ impl BuiltinPrimitive for TextPrimitive {
         match port_name {
             "baseline" => Some(StaticType::Distance),
             "text" => Some(StaticType::String),
+            "align" => Some(StaticType::Enum("Align".to_string())),
             "underline" => Some(StaticType::Boolean),
             "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
             _ => default_builtin_port_type(port_name),
@@ -217,6 +219,7 @@ impl BuiltinPrimitive for TextPrimitive {
             "name".to_string(),
             "path".to_string(),
             "font".to_string(),
+            "align".to_string(),
             "baseline".to_string(),
             "start_at".to_string(),
             "end_at".to_string(),

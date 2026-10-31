@@ -138,11 +138,7 @@ pub fn invalidate_and_reevaluate(
 fn get_family_from_val<'a>(val: Option<&'a Value>, env: &'a HashMap<VarId, Value>) -> Option<&'a str> {
     match val {
         Some(Value::String(s)) => Some(s.as_str()),
-        Some(Value::Node(id)) => {
-            env.get(&VarId::new(*id, "family"))
-                .or_else(|| env.get(&VarId::new(*id, "font")))
-                .and_then(|v| v.as_str())
-        }
+        Some(Value::Node(id)) => env.get(&VarId::new(*id, "family")).and_then(|v| v.as_str()),
         _ => None,
     }
 }

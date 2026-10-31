@@ -942,9 +942,7 @@ fn infer_port_type(
             };
             if let Some(builtin) = known_builtin_port_type(node_name, port_name) {
                 if !node_id.is_window() && doc.get_node(node_id).is_some_and(|n| !n.is_component) {
-                    if node_name == "Text" && port_name == "font" && actual == StaticType::String {
-                        Ok(StaticType::String)
-                    } else if !actual.matches(&builtin) {
+                    if !actual.matches(&builtin) {
                         visiting.remove(&key);
                         return Err(CompileError::TypeMismatch {
                             expected: builtin.type_name(),

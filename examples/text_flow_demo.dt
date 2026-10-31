@@ -43,10 +43,11 @@
     width: Distance = parent.width,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    color: Color = #0f172a
+    color: Color = #0f172a,
+    align: Align = Align.Left
 ) {
     \let h_font = \Font(size: 28px, weight: 700, line_height: 36px);
-    \let t = \Text(x: x, y: y, width: width, font: h_font, color: color) {
+    \let t = \Text(x: x, y: y, width: width, font: h_font, color: color, align: align) {
         \Children
     };
     \alias height = t.height;
@@ -58,10 +59,11 @@
     width: Distance = parent.width,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    color: Color = #1e293b
+    color: Color = #1e293b,
+    align: Align = Align.Left
 ) {
     \let h_font = \Font(size: 19px, weight: 700, line_height: 26px);
-    \let t = \Text(x: x, y: y, width: width, font: h_font, color: color) {
+    \let t = \Text(x: x, y: y, width: width, font: h_font, color: color, align: align) {
         \Children
     };
     \alias height = t.height;
@@ -131,6 +133,16 @@
             \Kbd{Cmd}
             \Kbd{Option}
             \Kbd{I}
+        }
+
+        \Divider(color: #e2e8f0)
+
+        \Text(align: Align.Center, color: #334155) {
+            \Italic{"Typography is a two-dimensional architecture, based on experience and imagination."}
+        }
+
+        \Text(align: Align.Right, font: sidenote_font, color: #64748b) {
+            — Hermann Zapf (\Code{Align.Center} & \Code{Align.Right})
         }
     }
 };
