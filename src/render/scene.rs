@@ -875,48 +875,11 @@ pub fn build_scene(
                 }
                 if let Some(family) = font_family {
                     if !family.is_empty() {
-                        builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
+                        builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
                     }
                 }
                 if let Some(lh) = line_height_prop {
                     builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
-                }
-
-                // Draw any span background highlights (e.g. focused_bg on links or bg on \Code) in local coordinates
-                for span in &node.text_spans {
-                    if let Some(child_id) = span.node_id {
-                        if let Some(child_node) = layout.get_node(child_id) {
-                            let bg_opt = child_node
-                                .properties
-                                .get("current_bg")
-                                .or_else(|| child_node.properties.get("bg"))
-                                .and_then(|v| v.as_str())
-                                .or(span.style.bg_color.as_deref());
-                            if let Some(bg_str) = bg_opt {
-                                let bg_color = parse_color(bg_str);
-                                if bg_color.components[3] > 0.0 {
-                                    for frag in &child_node.fragments {
-                                        let local_x = frag.x - node.rect.x;
-                                        let local_y = frag.y - node.rect.y;
-                                        let pad_rect = Rect::new(
-                                            local_x - 2.0,
-                                            local_y - 1.0,
-                                            local_x + frag.width + 2.0,
-                                            local_y + frag.height + 1.0,
-                                        );
-                                        let rounded = RoundedRect::from_rect(pad_rect, 4.0);
-                                        local_scene.fill(
-                                            Fill::NonZero,
-                                            Affine::IDENTITY,
-                                            Brush::Solid(bg_color),
-                                            None,
-                                            &rounded,
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
 
                 // Push span styles (fonts, colors, italic, underlines) to range builder
@@ -957,7 +920,7 @@ pub fn build_scene(
                     }
                     if let Some(ref fam) = span.style.font_family {
                         if !fam.is_empty() {
-                            builder.push(StyleProperty::FontFamily(FontFamily::named(fam)), span.range.clone());
+                            builder.push(StyleProperty::FontFamily(FontFamily::from(fam.as_str())), span.range.clone());
                         }
                     }
                     if span.style.italic {
@@ -994,6 +957,57 @@ pub fn build_scene(
                     _ => Alignment::Start,
                 };
                 layout_text.align(alignment, AlignmentOptions::default());
+
+                let m = crate::compiler::text::measure_font_metrics(font_size as f64, font_weight as f64, font_family);
+                let first_baseline = layout_text
+                    .lines()
+                    .next()
+                    .map(|l| l.metrics().baseline as f64)
+                    .unwrap_or(m.baseline);
+                let y_offset = match start_at_prop {
+                    Some(s) if s.eq_ignore_ascii_case("ascender") => -(first_baseline - m.ascent),
+                    Some(s) if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") => -(first_baseline - m.em_top),
+                    Some(s) if s.eq_ignore_ascii_case("capital") => -(first_baseline - m.cap_height),
+                    Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => 0.0,
+                    _ => -(first_baseline - m.cap_height),
+                };
+
+                // Draw any span background highlights (e.g. focused_bg on links or bg on \Code) in local coordinates
+                for span in &node.text_spans {
+                    if let Some(child_id) = span.node_id {
+                        if let Some(child_node) = layout.get_node(child_id) {
+                            let bg_opt = child_node
+                                .properties
+                                .get("current_bg")
+                                .or_else(|| child_node.properties.get("bg"))
+                                .and_then(|v| v.as_str())
+                                .or(span.style.bg_color.as_deref());
+                            if let Some(bg_str) = bg_opt {
+                                let bg_color = parse_color(bg_str);
+                                if bg_color.components[3] > 0.0 {
+                                    for frag in &child_node.fragments {
+                                        let local_x = frag.x - node.rect.x;
+                                        let local_y = frag.y - (node.rect.y + y_offset);
+                                        let pad_rect = Rect::new(
+                                            local_x - 2.0,
+                                            local_y,
+                                            local_x + frag.width + 2.0,
+                                            local_y + frag.height,
+                                        );
+                                        let rounded = RoundedRect::from_rect(pad_rect, 4.0);
+                                        local_scene.fill(
+                                            Fill::NonZero,
+                                            Affine::IDENTITY,
+                                            Brush::Solid(bg_color),
+                                            None,
+                                            &rounded,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // Render lines and glyphs into local_scene
                 for line in layout_text.lines() {
@@ -1060,19 +1074,6 @@ pub fn build_scene(
                 }
 
                 // Append local scene to active scene translated to node's position:
-                let m = crate::compiler::text::measure_font_metrics(font_size as f64, font_weight as f64, font_family);
-                let first_baseline = layout_text
-                    .lines()
-                    .next()
-                    .map(|l| l.metrics().baseline as f64)
-                    .unwrap_or(m.baseline);
-                let y_offset = match start_at_prop {
-                    Some(s) if s.eq_ignore_ascii_case("ascender") => -(first_baseline - m.ascent),
-                    Some(s) if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") => -(first_baseline - m.em_top),
-                    Some(s) if s.eq_ignore_ascii_case("capital") => -(first_baseline - m.cap_height),
-                    Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => 0.0,
-                    _ => -(first_baseline - m.cap_height),
-                };
                 active_scene.append(&local_scene, Some(Affine::translate((node.rect.x, node.rect.y + y_offset))));
 
                 // Save in 1-element cache:

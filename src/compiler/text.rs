@@ -153,7 +153,7 @@ pub fn measure_rich_text_bounds_with_boxes(
             }
             if let Some(family) = font_family {
                 if !family.is_empty() {
-                    builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
+                    builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
                 }
             }
             if let Some(lh) = line_height {
@@ -175,7 +175,7 @@ pub fn measure_rich_text_bounds_with_boxes(
                     }
                     if let Some(fam) = &span.style.font_family {
                         if !fam.is_empty() {
-                            builder.push(StyleProperty::FontFamily(FontFamily::named(fam)), span.range.clone());
+                            builder.push(StyleProperty::FontFamily(FontFamily::from(fam.as_str())), span.range.clone());
                         }
                     }
                     if span.style.italic {
@@ -336,7 +336,7 @@ pub fn measure_font_metrics(
             }
             if let Some(family) = font_family {
                 if !family.is_empty() {
-                    builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
+                    builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
                 }
             }
 
@@ -622,7 +622,7 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
         }
         if let Some(family) = font_family {
             if !family.is_empty() {
-                builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
+                builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
             }
         }
         if let Some(lh) = line_height {
@@ -646,7 +646,7 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
                 }
                 if let Some(fam) = &span.style.font_family {
                     if !fam.is_empty() {
-                        builder.push(StyleProperty::FontFamily(FontFamily::named(fam)), span.range.clone());
+                        builder.push(StyleProperty::FontFamily(FontFamily::from(fam.as_str())), span.range.clone());
                     }
                 }
                 if span.style.italic {
@@ -889,7 +889,7 @@ pub fn compute_span_range_metrics_with_boxes(
         }
         if let Some(family) = font_family {
             if !family.is_empty() {
-                builder.push_default(StyleProperty::FontFamily(FontFamily::named(family)));
+                builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
             }
         }
         if let Some(lh) = line_height {
@@ -913,7 +913,7 @@ pub fn compute_span_range_metrics_with_boxes(
                 }
                 if let Some(fam) = &span.style.font_family {
                     if !fam.is_empty() {
-                        builder.push(StyleProperty::FontFamily(FontFamily::named(fam)), span.range.clone());
+                        builder.push(StyleProperty::FontFamily(FontFamily::from(fam.as_str())), span.range.clone());
                     }
                 }
                 if span.style.italic {
@@ -1246,6 +1246,63 @@ mod tests {
                 assert!((boxes[1].1 - 30.0).abs() < 0.01);
             });
         });
+    }
+
+    #[test]
+    fn test_generic_monospace_font_family() {
+        // In a proportional font like Arial, "WWWWWWWWWW" is much wider than "iiiiiiiiii".
+        let arial_i = measure_text_width("iiiiiiiiii", 16.0, 400.0, Some("Arial"));
+        let arial_w = measure_text_width("WWWWWWWWWW", 16.0, 400.0, Some("Arial"));
+        assert!(
+            arial_w > arial_i * 1.5,
+            "Expected proportional Arial to have W wider than i, got W={} i={}",
+            arial_w,
+            arial_i
+        );
+
+        // With generic "monospace", both 10-character strings must have identical advance width.
+        let mono_i = measure_text_width("iiiiiiiiii", 16.0, 400.0, Some("monospace"));
+        let mono_w = measure_text_width("WWWWWWWWWW", 16.0, 400.0, Some("monospace"));
+        assert!(
+            (mono_w - mono_i).abs() < 0.05,
+            "Expected generic monospace to have equal width for 10 'W's ({}) and 10 'i's ({})",
+            mono_w,
+            mono_i
+        );
+
+        // Also verify span-level font_family: "monospace" inside an "Arial" paragraph.
+        let span_style = SpanStyle {
+            font_family: Some("monospace".to_string()),
+            ..Default::default()
+        };
+        let (span_i, _) = measure_rich_text_bounds(
+            "iiiiiiiiii",
+            16.0,
+            400.0,
+            Some("Arial"),
+            None,
+            None,
+            None,
+            None,
+            &[TextSpan::new(0..10).with_style(span_style.clone())],
+        );
+        let (span_w, _) = measure_rich_text_bounds(
+            "WWWWWWWWWW",
+            16.0,
+            400.0,
+            Some("Arial"),
+            None,
+            None,
+            None,
+            None,
+            &[TextSpan::new(0..10).with_style(span_style)],
+        );
+        assert!(
+            (span_w - span_i).abs() < 0.05,
+            "Expected span-level monospace to have equal width for 10 'W's ({}) and 10 'i's ({})",
+            span_w,
+            span_i
+        );
     }
 }
 

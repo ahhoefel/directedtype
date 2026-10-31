@@ -1062,6 +1062,42 @@ fn test_text_flow_demo_compiles_and_renders() {
         .expect("render layout ok");
     assert_eq!(img.width(), 820);
     assert_eq!(img.height(), 760);
+
+    let highlight_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Highlight")
+        .expect("Highlight node should exist in text_flow_demo");
+    let frag = highlight_node.fragments[0];
+    let baseline = highlight_node
+        .properties
+        .get("baseline")
+        .and_then(|v| v.as_f64())
+        .expect("Highlight baseline");
+    let sample_x = (frag.x + frag.width * 0.5) as u32;
+
+    // Descender region (baseline + 3px) must have the yellow highlight background (#fef08a)
+    let descender_y = (baseline + 3.0) as u32;
+    let desc_px = img.get_pixel(sample_x, descender_y).0;
+    assert!(
+        desc_px[0] > 240 && desc_px[1] > 220 && desc_px[2] < 180,
+        "Expected yellow highlight pixel in descender region at ({}, {}), got {:?}",
+        sample_x,
+        descender_y,
+        desc_px
+    );
+
+    // Above the fragment top (e.g. frag.y - 3px, near previous paragraph's descenders) must NOT be highlighted
+    let above_y = (frag.y - 3.0) as u32;
+    let above_px = img.get_pixel(sample_x, above_y).0;
+    assert!(
+        above_px[2] > 220,
+        "Expected unhighlighted background above fragment top at ({}, {}), got {:?}",
+        sample_x,
+        above_y,
+        above_px
+    );
 }
 
 #[test]
