@@ -5200,6 +5200,26 @@ fn test_strict_child_port_acceptance() {
             r#"\Text(x: 0, y: 0, content: "hello")"#,
             "Node 'Text' does not accept property 'content'",
         ),
+        (
+            r#"\Text(x: 0, y: 0, font: \Font(size: 16px), family: "Menlo") { "hello" }"#,
+            "Property 'family' is not supported directly on Text; use 'font: \\Font(family: ...)' or '\\env font = \\Font(...)' instead",
+        ),
+        (
+            r#"\Text(x: 0, y: 0, font: \Font(size: 16px), weight: 700) { "hello" }"#,
+            "Property 'weight' is not supported directly on Text; use 'font: \\Font(weight: ...)' or '\\env font = \\Font(...)' instead",
+        ),
+        (
+            r#"\Text(x: 0, y: 0, font: \Font(size: 16px), line_height: 24px) { "hello" }"#,
+            "Property 'line_height' is not supported directly on Text; use 'font: \\Font(line_height: ...)' or '\\env font = \\Font(...)' instead",
+        ),
+        (
+            r#"\Text(x: 0, y: 0, font: \Font(size: 16px), italic: true) { "hello" }"#,
+            "Property 'italic' is not supported directly on Text; use 'font: \\Font(italic: ...)' or '\\env font = \\Font(...)' instead",
+        ),
+        (
+            r#"\Text(x: 0, y: 0, font: "Menlo") { "hello" }"#,
+            "Type mismatch: expected 'Font', found 'String'",
+        ),
     ] {
         let err = compile_to_graph(&parse(src).unwrap()).expect_err(expected_msg);
         assert!(
@@ -5210,5 +5230,3 @@ fn test_strict_child_port_acceptance() {
         );
     }
 }
-
-

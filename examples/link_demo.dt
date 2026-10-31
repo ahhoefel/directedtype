@@ -202,7 +202,7 @@
                 }
             }
             \Text(font: \Font(size: 16px), width: parent.width - 48px, color: #1e293b) {
-                You navigated here via an in-page anchor! Clicking on \Text(weight: 600){#deep-section} scrolled the window directly to this element. Notice the subtle overlay scrollbar indicator on the right edge of the window.
+                You navigated here via an in-page anchor! Clicking on \Text(font: \Font(weight: 600)){#deep-section} scrolled the window directly to this element. Notice the subtle overlay scrollbar indicator on the right edge of the window.
             }
             \Text(font: \Font(size: 15px), color: #2563eb) {
                 \Link(url: "#top"){↑ Back to top}

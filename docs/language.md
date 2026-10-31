@@ -319,8 +319,7 @@ Every `.dt` document has an implicit root viewport node named `window`. You can 
     width: 480px,
     font: body_font,
     color: #1e293b,
-    start_at: TextStart.Capital,
-    ends_at: TextEnd.Baseline
+    text_bounds: \TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)
 ) {
     "Typography is the craft of endowing human language with a durable visual form."
 }
@@ -333,14 +332,14 @@ Every `.dt` document has an implicit root viewport node named `window`. You can 
 | `x` | Required Input | `Distance` | `parent.left` (if provided via `\Children`) | Left coordinate of the text box. |
 | `y` | Input / Computed | `Distance` | `baseline - text_baseline_offset(...)` (if `baseline` is set) | Top coordinate of the text box. Either `y` or `baseline` must be provided. |
 | `baseline` | Input / Computed | `Distance` | `y + text_baseline_offset(size, weight, family, start_at)` | Y-coordinate of the **first line's typographic baseline**. Supplying `baseline` instead of `y` positions the text by its baseline! |
-| `font` | Input (or via `\env font`) | `Font` or `String` | Ambient `\env font` (if bound) | Reference to a `\Font` node (or a font family name string). |
-| `size` | Required Input (if no `font`) | `Distance` | `font.size` (or parent `\Text.size` for inline spans) | Font size in logical pixels (`px`, `pt`, or `em`). |
-| `weight` | Optional Input | `Integer` | `font.weight` or `400` | OpenType font weight (`100`–`900`, `400` = normal, `700` = bold). |
-| `family` | Optional Input | `String` | `font.family` or `""` (system default) | Font family name (validated against available system/registered fonts). |
-| `line_height` | Optional Input | `Distance` | `font.line_height` (if authored on `\Font`) | Explicit absolute line height in logical pixels. |
+| `font` | Required Input (or via `\env font`) | `Font` | Ambient `\env font` (or parent `\Text.font` for inline spans) | Reference to a `\Font` node specifying `size`, `weight`, `family`, `line_height`, and `italic`. |
+| `size` | Output (delegated) | `Distance` | `font.size` | Font size in logical pixels (`px`, `pt`, or `em`) delegated from `font`. |
+| `weight` | Output (delegated) | `Integer` | `font.weight` | OpenType font weight (`100`–`900`, `400` = normal, `700` = bold) delegated from `font`. |
+| `family` | Output (delegated) | `String` | `font.family` | Font family name delegated from `font`. |
+| `line_height` | Output (delegated) | `Distance` | `font.line_height` | Line height in logical pixels delegated from `font`. |
 | `width` | Optional Input / Computed | `Distance` | `text_width(text, size, weight, family)` | If omitted, shrink-wraps to single-line advance width. If provided, wraps lines to `width`. |
-| `height` | Optional Input / Computed | `Distance` | `text_height(text, size, weight, family, width, ends_at, start_at, line_height)` | Automatically computed from wrapped line count and vertical trim settings (`start_at` / `ends_at`). |
-| `text` (or `content`) | Optional Input | `String` / `Float` / `Integer` / `Bool` | Body `{ "..." }` text content | Dynamic text expression (overrides static `{ "..." }` body when set). |
+| `height` | Optional Input / Computed | `Distance` | `text_height(text, size, weight, family, width, end_at, start_at, line_height)` | Automatically computed from wrapped line count and vertical trim settings (`start_at` / `end_at`). |
+| `text` | Optional Input | `String` / `Float` / `Integer` / `Bool` | Body `{ "..." }` text content | Dynamic text expression (overrides static `{ "..." }` body when set). |
 | `color` (or `text_color`) | Optional Input | `Color` | `#000000` | Fill color of the rendered glyphs. |
 | `align` (or `text_align`) | Optional Input | `String` / `Align` | `"left"` (`Alignment::Start`) | Horizontal alignment within `width`: `"left"`, `"center"`, `"right"`, or `"justify"`. |
 | `underline` | Optional Input | `Boolean` | `false` | Draws an underline across the text run. |
@@ -373,7 +372,7 @@ You can override vertical metric trimming for an entire subtree using `\env text
 A `\Text` block can mix string literals and inline child `\Text` or `\Link` elements inside its `{ ... }` content block:
 
 ```dt
-\Text(x: 20px, y: 20px, width: 400px, size: 16px) {
+\Text(x: 20px, y: 20px, width: 400px, font: \Font(size: 16px)) {
     "Read the "
     \Link(url: "#/guide/intro") { "Introduction" }
     " or highlight "
@@ -381,7 +380,7 @@ A `\Text` block can mix string literals and inline child `\Text` or `\Link` elem
     " inline."
 }
 ```
-Inline child nodes inherit `size` and `font` from their parent `\Text` node and are shaped as continuous inline glyph runs by Parley.
+Inline child nodes inherit `font` from their parent `\Text` node and are shaped as continuous inline glyph runs by Parley.
 
 ---
 
@@ -496,7 +495,7 @@ Any non-painting element name (conventionally `\Box(x: ..., y: ..., width: ..., 
 \AnchorScope(name: "chapter1") {
     \VStack(width: 600px, gap: 16px) {
         \Anchor(name: "intro") {
-            \Text(size: 24px) { "1.1 Introduction" }
+            \Text(font: \Font(size: 24px)) { "1.1 Introduction" }
         }
         // Navigate via relative ("intro") or absolute ("#/chapter1/intro") URL:
         \Link(url: "#/chapter1/intro") { "Permalink to 1.1" }

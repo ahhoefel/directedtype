@@ -137,10 +137,7 @@ pub(super) fn pre_resolve_primitive_font(
                             Some(Expr::Ident(Ident::new(fid.canonical_name(), elem.span)));
                     }
                 }
-            } else if elem.name.as_str() != "Font"
-                && (matches!(rewritten, Expr::Literal(Literal::String(_, _)))
-                    || elem.name.as_str() == "Text")
-            {
+            } else if elem.name.as_str() == "Text" {
                 ambient_font_port_expr = Some(rewritten.clone());
             }
             pre_rewritten_font_expr = Some(rewritten);
@@ -166,74 +163,21 @@ pub(super) fn pre_resolve_primitive_font(
 /// Forwards `size`, `weight`, and `family` ports from a resolved `\Font` node or `font` port onto a spatial primitive.
 pub(super) fn forward_resolved_font_metrics(state: &mut PrimitiveExpandState<'_, '_>) {
     let elem = state.elem;
-    if let Some(fid) = state.font_node_id {
-        let font_ident = Expr::Ident(Ident::new(fid.canonical_name(), elem.span));
-        if !state.ports.contains_key("size") {
-            state.ports.insert(
-                "size".to_string(),
+    let font_target = if let Some(fid) = state.font_node_id {
+        Some(Expr::Ident(Ident::new(fid.canonical_name(), elem.span)))
+    } else {
+        state.ports.get("font").cloned()
+    };
+
+    if let Some(target) = font_target {
+        for field in ["size", "weight", "family"] {
+            state.ports.entry(field.to_string()).or_insert_with(|| {
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(font_ident.clone()),
-                    member: Ident::new("size", elem.span),
+                    target: Box::new(target.clone()),
+                    member: Ident::new(field, elem.span),
                     span: elem.span,
-                }),
-            );
-        }
-        if !state.ports.contains_key("weight") {
-            state.ports.insert(
-                "weight".to_string(),
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(font_ident.clone()),
-                    member: Ident::new("weight", elem.span),
-                    span: elem.span,
-                }),
-            );
-        }
-        if !state.ports.contains_key("family") {
-            state.ports.insert(
-                "family".to_string(),
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(font_ident),
-                    member: Ident::new("family", elem.span),
-                    span: elem.span,
-                }),
-            );
-        }
-    } else if let Some(font_target) = state.ports.get("font").cloned() {
-        if matches!(font_target, Expr::Literal(Literal::String(_, _))) {
-            if !state.ports.contains_key("family") {
-                state.ports.insert("family".to_string(), font_target);
-            }
-        } else {
-            if !state.ports.contains_key("size") {
-                state.ports.insert(
-                    "size".to_string(),
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(font_target.clone()),
-                        member: Ident::new("size", elem.span),
-                        span: elem.span,
-                    }),
-                );
-            }
-            if !state.ports.contains_key("weight") {
-                state.ports.insert(
-                    "weight".to_string(),
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(font_target.clone()),
-                        member: Ident::new("weight", elem.span),
-                        span: elem.span,
-                    }),
-                );
-            }
-            if !state.ports.contains_key("family") {
-                state.ports.insert(
-                    "family".to_string(),
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(font_target),
-                        member: Ident::new("family", elem.span),
-                        span: elem.span,
-                    }),
-                );
-            }
+                })
+            });
         }
     }
 }

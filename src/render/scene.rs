@@ -766,12 +766,6 @@ pub fn build_scene(
                     .get("family")
                     .and_then(|v| v.as_str())
                     .or_else(|| {
-                        node.properties.get("font").and_then(|v| match v {
-                            Value::String(s) => Some(s.as_str()),
-                            _ => None,
-                        })
-                    })
-                    .or_else(|| {
                         node.font.and_then(|fid| {
                             layout.get_node(fid).and_then(|fn_node| {
                                 fn_node

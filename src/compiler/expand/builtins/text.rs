@@ -332,29 +332,27 @@ fn validate_and_resolve_text_bounds(
                 span: port.name.span,
             });
         }
-        if port.name.as_str() == "size" {
+        if matches!(
+            port.name.as_str(),
+            "size" | "family" | "weight" | "line_height" | "italic"
+        ) {
             return Err(CompileError::Custom {
-                message: "Property 'size' is not supported directly on Text; use 'font: \\Font(size: ...)' or '\\env font = \\Font(...)' instead".to_string(),
+                message: format!(
+                    "Property '{}' is not supported directly on Text; use 'font: \\Font({}: ...)' or '\\env font = \\Font(...)' instead",
+                    port.name.as_str(),
+                    port.name.as_str()
+                ),
                 span: port.name.span,
             });
         }
     }
 
-    if let Some(Expr::Literal(Literal::String(family, span))) = state.ports.get("family") {
-        if !family.is_empty() && !crate::compiler::text::font_family_exists(family) {
-            return Err(CompileError::FontFamilyNotFound {
-                family: family.clone(),
-                span: *span,
-            });
-        }
-    }
-    if let Some(Expr::Literal(Literal::String(family, span))) = state.ports.get("font") {
-        if !family.is_empty() && !crate::compiler::text::font_family_exists(family) {
-            return Err(CompileError::FontFamilyNotFound {
-                family: family.clone(),
-                span: *span,
-            });
-        }
+    if let Some(Expr::Literal(lit)) = state.ports.get("font") {
+        return Err(CompileError::TypeMismatch {
+            expected: "Font".to_string(),
+            actual: lit.type_name().to_string(),
+            span: lit.span(),
+        });
     }
 
     if !state.ports.contains_key("text_bounds") {
@@ -525,12 +523,6 @@ fn build_text_font_metric_refs(
         Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident.clone()),
             member: Ident::new("family", span),
-            span,
-        })
-    } else if state.ports.contains_key("font") {
-        Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
-            member: Ident::new("font", span),
             span,
         })
     } else {
