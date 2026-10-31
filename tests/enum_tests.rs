@@ -429,7 +429,11 @@ fn test_direct_start_at_or_end_at_on_text_rejected() {
     "#;
     let doc = parse(input).expect("Failed to parse");
     let err = compile_to_graph(&doc).expect_err("Direct start_at on Text must be rejected");
-    assert!(err.to_string().contains("text_bounds"));
+    assert!(
+        err.to_string().contains("Node 'Text' does not accept property 'start_at'"),
+        "Unexpected error: {}",
+        err
+    );
 }
 
 

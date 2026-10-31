@@ -2182,7 +2182,7 @@ fn test_font_primitive_metrics_and_sharing() {
     \let t1 = \Text(font: f) { First };
     \let t2 = \Text(font: f) { Second };
     \let r1 = \Rect(x: 0, y: 0, width: 100px, height: t1.font.cap_height + 10px, color: #000000);
-    \let r2 = \Rect(x: 0, y: 50px, width: 100px, height: t2.cap_height + 10px, color: #000000);
+    \let r2 = \Rect(x: 0, y: 50px, width: 100px, height: t2.font.cap_height + 10px, color: #000000);
     "#;
     let doc = parse(input).expect("Failed to parse");
     let (expanded, _graph) = compile_to_graph(&doc).expect("Failed to compile to graph");
@@ -2190,6 +2190,9 @@ fn test_font_primitive_metrics_and_sharing() {
     // Verify DAG minimization: t1 and t2 do NOT have metric ports in expanded node.ports!
     let t1_node = expanded.get_node(expanded.roots[1]).unwrap();
     assert_eq!(t1_node.name, "Text");
+    assert!(!t1_node.ports.contains_key("size"), "Text node should NOT duplicate size port in DAG");
+    assert!(!t1_node.ports.contains_key("weight"), "Text node should NOT duplicate weight port in DAG");
+    assert!(!t1_node.ports.contains_key("family"), "Text node should NOT duplicate family port in DAG");
     assert!(!t1_node.ports.contains_key("cap_height"), "Text node should NOT duplicate cap_height port in DAG");
     assert!(!t1_node.ports.contains_key("x_height"), "Text node should NOT duplicate x_height port in DAG");
     assert!(!t1_node.ports.contains_key("descent"), "Text node should NOT duplicate descent port in DAG");
@@ -2212,7 +2215,7 @@ fn test_font_primitive_metrics_and_sharing() {
     let r2_h = layout.get_value(expanded.roots[4], "height").and_then(|v| v.as_f64()).unwrap();
 
     assert!((r1_h - expected_rect_h).abs() < 1e-4, "r1.height should match t1.font.cap_height + 10");
-    assert!((r2_h - expected_rect_h).abs() < 1e-4, "r2.height should match t2.cap_height + 10 (forwarded to font node)");
+    assert!((r2_h - expected_rect_h).abs() < 1e-4, "r2.height should match t2.font.cap_height + 10");
 }
 
 #[test]
@@ -2240,8 +2243,8 @@ fn test_text_ambient_font_inheritance() {
     let box_h = layout.get_value(box_id, "height").and_then(|v| v.as_f64()).unwrap();
     assert!((box_h - expected_box_h).abs() < 1e-4, "box.height should match label.font.cap_height + 16");
 
-    let label_size = layout.get_value(label_id, "size").and_then(|v| v.as_f64()).unwrap();
-    assert_eq!(label_size, 24.0, "Label should inherit font size 24 from ambient font node");
+    let font_size = layout.get_value(font_id, "size").and_then(|v| v.as_f64()).unwrap();
+    assert_eq!(font_size, 24.0, "Ambient font node should have size 24");
 }
 
 #[test]
@@ -2252,7 +2255,7 @@ fn test_font_backward_compatible_string_family() {
     let doc = parse(input).expect("Failed to parse");
     let err = compile_to_graph(&doc).expect_err("Direct size on Text must be rejected");
     assert!(
-        err.to_string().contains("Property 'size' is not supported directly on Text"),
+        err.to_string().contains("Node 'Text' does not accept property 'size'"),
         "Unexpected error: {}",
         err
     );
@@ -3244,14 +3247,12 @@ fn test_font_line_height_forwarded_from_text() {
     \env font = \Font(family: "Arial", size: 32px, line_height: 52px);
     \let t = \Text { Hello };
     \let r = \Rect(x: 0, y: 0, width: 100px, height: t.font.line_height, color: #ffffff);
-    \let r2 = \Rect(x: 0, y: 0, width: 100px, height: t.line_height, color: #ffffff);
     "#;
     let doc = parse(input).expect("parse ok");
     let layout = directedtype::evaluate_document(&doc).expect("layout ok");
     let rects: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Rect").collect();
-    assert_eq!(rects.len(), 2);
+    assert_eq!(rects.len(), 1);
     assert_eq!(rects[0].rect.height, 52.0);
-    assert_eq!(rects[1].rect.height, 52.0);
 }
 
 
@@ -3801,10 +3802,10 @@ fn test_font_em_top_line_gap_and_gap_bottom_with_text_start_end() {
         Typography
     };
     \let r = \Rect(
-        x: t_em.em_top,
-        y: t_em.line_gap,
-        width: t_em.gap_bottom,
-        height: t_em.em_top + t_em.descent,
+        x: t_em.font.em_top,
+        y: t_em.font.line_gap,
+        width: t_em.font.gap_bottom,
+        height: t_em.font.em_top + t_em.font.descent,
         color: #000
     );
     "#;
@@ -4428,8 +4429,8 @@ fn test_stage2_text_explicit_font_forwards_env_font_to_children() {
         Heading \let p2 = \FontProbe { probe2 }
     }
 
-    \Rect(x: p1.size, y: 0, width: p1.weight * 1px, height: 10px, color: #000000)
-    \Rect(x: p2.size, y: 0, width: p2.weight * 1px, height: 10px, color: #000000)
+    \Rect(x: p1.font.size, y: 0, width: p1.font.weight * 1px, height: 10px, color: #000000)
+    \Rect(x: p2.font.size, y: 0, width: p2.font.weight * 1px, height: 10px, color: #000000)
     "#;
 
     let doc = parse(input).expect("parse ok");
@@ -5201,20 +5202,24 @@ fn test_strict_child_port_acceptance() {
             "Node 'Text' does not accept property 'content'",
         ),
         (
+            r#"\Text(x: 0, y: 0, font: \Font(size: 16px), size: 16px) { "hello" }"#,
+            "Node 'Text' does not accept property 'size'",
+        ),
+        (
             r#"\Text(x: 0, y: 0, font: \Font(size: 16px), family: "Menlo") { "hello" }"#,
-            "Property 'family' is not supported directly on Text; use 'font: \\Font(family: ...)' or '\\env font = \\Font(...)' instead",
+            "Node 'Text' does not accept property 'family'",
         ),
         (
             r#"\Text(x: 0, y: 0, font: \Font(size: 16px), weight: 700) { "hello" }"#,
-            "Property 'weight' is not supported directly on Text; use 'font: \\Font(weight: ...)' or '\\env font = \\Font(...)' instead",
+            "Node 'Text' does not accept property 'weight'",
         ),
         (
             r#"\Text(x: 0, y: 0, font: \Font(size: 16px), line_height: 24px) { "hello" }"#,
-            "Property 'line_height' is not supported directly on Text; use 'font: \\Font(line_height: ...)' or '\\env font = \\Font(...)' instead",
+            "Node 'Text' does not accept property 'line_height'",
         ),
         (
             r#"\Text(x: 0, y: 0, font: \Font(size: 16px), italic: true) { "hello" }"#,
-            "Property 'italic' is not supported directly on Text; use 'font: \\Font(italic: ...)' or '\\env font = \\Font(...)' instead",
+            "Node 'Text' does not accept property 'italic'",
         ),
         (
             r#"\Text(x: 0, y: 0, font: "Menlo") { "hello" }"#,

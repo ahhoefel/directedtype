@@ -95,20 +95,7 @@ impl BuiltinPrimitive for TextPrimitive {
     }
 
     fn is_immutable_alias_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "left"
-                | "top"
-                | "right"
-                | "bottom"
-                | "cap_height"
-                | "x_height"
-                | "ascent"
-                | "descent"
-                | "em_top"
-                | "line_gap"
-                | "gap_bottom"
-        )
+        matches!(port_name, "left" | "top" | "right" | "bottom")
     }
 
     fn accepts_port(&self, port_name: &str) -> bool {
@@ -122,17 +109,8 @@ impl BuiltinPrimitive for TextPrimitive {
                 | "text"
                 | "color"
                 | "font"
-                | "family"
-                | "size"
-                | "weight"
-                | "line_height"
-                | "italic"
                 | "underline"
                 | "text_bounds"
-                | "start_at"
-                | "starts_at"
-                | "end_at"
-                | "ends_at"
                 | "clip"
                 | "cursor"
                 | "opacity"
@@ -144,13 +122,10 @@ impl BuiltinPrimitive for TextPrimitive {
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
-            "baseline" | "size" | "line_height" => Some(StaticType::Distance),
-            "weight" => Some(StaticType::Integer),
-            "family" | "text" => Some(StaticType::String),
-            "underline" | "italic" => Some(StaticType::Boolean),
+            "baseline" => Some(StaticType::Distance),
+            "text" => Some(StaticType::String),
+            "underline" => Some(StaticType::Boolean),
             "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
-            "start_at" => Some(StaticType::Enum("TextStart".to_string())),
-            "end_at" => Some(StaticType::Enum("TextEnd".to_string())),
             _ => default_builtin_port_type(port_name),
         }
     }
@@ -242,10 +217,6 @@ impl BuiltinPrimitive for TextPrimitive {
             "name".to_string(),
             "path".to_string(),
             "font".to_string(),
-            "size".to_string(),
-            "weight".to_string(),
-            "family".to_string(),
-            "line_height".to_string(),
             "baseline".to_string(),
             "start_at".to_string(),
             "end_at".to_string(),
@@ -256,7 +227,7 @@ impl BuiltinPrimitive for TextPrimitive {
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         validate_and_resolve_text_bounds(state)?;
-        resolve_text_font_size_and_line_height(state)?;
+        resolve_text_font(state)?;
 
         let elem = state.elem;
         let node_id = state.node_id;
@@ -311,41 +282,13 @@ impl BuiltinPrimitive for TextPrimitive {
     }
 }
 
-/// Validates direct port restrictions on `\Text`, verifies literal font families, and resolves `text_bounds` -> `start_at`/`end_at`.
+/// Validates `font` port type on `\Text` and resolves `text_bounds` -> `start_at`/`end_at`.
 fn validate_and_resolve_text_bounds(
     state: &mut PrimitiveExpandState<'_, '_>,
 ) -> Result<(), CompileError> {
     let elem = state.elem;
     let node_id = state.node_id;
     let ctx = state.ctx;
-
-    for port in &elem.ports {
-        if matches!(
-            port.name.as_str(),
-            "start_at" | "starts_at" | "end_at" | "ends_at"
-        ) {
-            return Err(CompileError::Custom {
-                message: format!(
-                    "Property '{}' is not supported directly on Text; use 'text_bounds: \\TextBounds(start_at: ..., end_at: ...)' or '\\env text_bounds = \\TextBounds(...)' instead",
-                    port.name.as_str()
-                ),
-                span: port.name.span,
-            });
-        }
-        if matches!(
-            port.name.as_str(),
-            "size" | "family" | "weight" | "line_height" | "italic"
-        ) {
-            return Err(CompileError::Custom {
-                message: format!(
-                    "Property '{}' is not supported directly on Text; use 'font: \\Font({}: ...)' or '\\env font = \\Font(...)' instead",
-                    port.name.as_str(),
-                    port.name.as_str()
-                ),
-                span: port.name.span,
-            });
-        }
-    }
 
     if let Some(Expr::Literal(lit)) = state.ports.get("font") {
         return Err(CompileError::TypeMismatch {
@@ -435,60 +378,30 @@ fn validate_and_resolve_text_bounds(
     Ok(())
 }
 
-/// Ensures `size` is resolved (inheriting from parent `\Text` when inline) and forwards authored `line_height` from `font`.
-fn resolve_text_font_size_and_line_height(
-    state: &mut PrimitiveExpandState<'_, '_>,
-) -> Result<(), CompileError> {
-    let elem = state.elem;
-    let node_id = state.node_id;
-    let ctx = state.ctx;
-
-    if !state.ports.contains_key("size") {
-        if let Some(parent) = ctx.parent_id {
+/// Ensures `font` is resolved on `\Text` (inheriting from parent `\Text` when inline).
+fn resolve_text_font(state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
+    if state.font_node_id.is_none() {
+        if let Some(parent) = state.ctx.parent_id {
             if state
                 .doc
                 .get_node(parent)
                 .is_some_and(|n| n.name == "Text")
             {
-                let parent_ident = Expr::Ident(Ident::new(parent.canonical_name(), elem.span));
-                state.ports.insert(
-                    "size".to_string(),
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(parent_ident),
-                        member: Ident::new("size", elem.span),
-                        span: elem.span,
-                    }),
-                );
+                if let Some(&pfid) = state.node_fonts.get(&parent) {
+                    state.font_node_id = Some(pfid);
+                    state.node_fonts.insert(state.node_id, pfid);
+                    state.doc.get_node_mut(state.node_id).unwrap().font = Some(pfid);
+                }
             }
         }
     }
 
-    if !state.ports.contains_key("size") {
+    if state.font_node_id.is_none() && !state.ports.contains_key("font") {
         return Err(CompileError::MissingPort {
             node: "Text".to_string(),
             port: "font".to_string(),
-            span: elem.span,
+            span: state.elem.span,
         });
-    }
-
-    if !state.ports.contains_key("line_height") {
-        if let Some(&fid) = state.node_fonts.get(&node_id) {
-            if state
-                .doc
-                .get_node(fid)
-                .is_some_and(|fn_node| fn_node.authored_ports.contains_key("line_height"))
-            {
-                let font_ident = Expr::Ident(Ident::new(fid.canonical_name(), elem.span));
-                state.ports.insert(
-                    "line_height".to_string(),
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(font_ident),
-                        member: Ident::new("line_height", elem.span),
-                        span: elem.span,
-                    }),
-                );
-            }
-        }
     }
 
     Ok(())
@@ -499,34 +412,36 @@ fn build_text_font_metric_refs(
     self_ident: &Expr,
 ) -> (Expr, Expr, Expr, Expr) {
     let span = state.elem.span;
-    let size_expr = if state.ports.contains_key("size") {
-        Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
-            member: Ident::new("size", span),
-            span,
-        })
-    } else {
-        Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span))
-    };
+    let font_target = state
+        .font_node_id
+        .or_else(|| state.node_fonts.get(&state.node_id).copied())
+        .map(|fid| Expr::Ident(Ident::new(fid.canonical_name(), span)))
+        .or_else(|| state.ports.get("font").cloned());
 
-    let weight_expr = if state.ports.contains_key("weight") {
-        Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
-            member: Ident::new("weight", span),
-            span,
-        })
+    let (size_expr, weight_expr, font_expr) = if let Some(target) = font_target {
+        (
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(target.clone()),
+                member: Ident::new("size", span),
+                span,
+            }),
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(target.clone()),
+                member: Ident::new("weight", span),
+                span,
+            }),
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(target),
+                member: Ident::new("family", span),
+                span,
+            }),
+        )
     } else {
-        Expr::Literal(Literal::Integer(400, span))
-    };
-
-    let font_expr = if state.ports.contains_key("family") {
-        Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
-            member: Ident::new("family", span),
-            span,
-        })
-    } else {
-        Expr::Literal(Literal::String(String::new(), span))
+        (
+            Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span)),
+            Expr::Literal(Literal::Integer(400, span)),
+            Expr::Literal(Literal::String(String::new(), span)),
+        )
     };
 
     let start_at_expr = if state.ports.contains_key("start_at") {
@@ -544,6 +459,28 @@ fn build_text_font_metric_refs(
     };
 
     (size_expr, weight_expr, font_expr, start_at_expr)
+}
+
+fn build_text_line_height_arg(state: &PrimitiveExpandState<'_, '_>) -> Expr {
+    let span = state.elem.span;
+    if let Some(fid) = state
+        .font_node_id
+        .or_else(|| state.node_fonts.get(&state.node_id).copied())
+    {
+        if state
+            .doc
+            .get_node(fid)
+            .is_some_and(|fn_node| fn_node.authored_ports.contains_key("line_height"))
+        {
+            let font_ident = Expr::Ident(Ident::new(fid.canonical_name(), span));
+            return Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(font_ident),
+                member: Ident::new("line_height", span),
+                span,
+            });
+        }
+    }
+    Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span))
 }
 
 /// Resolves bidirectional `baseline` <-> `y` equations using `text_baseline_offset(...)`.
@@ -806,15 +743,7 @@ fn synthesize_span_and_inline_box_metrics(
         member: Ident::new("width", elem.span),
         span: elem.span,
     });
-    let line_height_arg = if state.ports.contains_key("line_height") {
-        Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
-            member: Ident::new("line_height", elem.span),
-            span: elem.span,
-        })
-    } else {
-        Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span))
-    };
+    let line_height_arg = build_text_line_height_arg(state);
     let align_arg = if state.ports.contains_key("align") {
         Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident.clone()),
@@ -1025,15 +954,7 @@ pub(super) fn resolve_default_spatial_dimensions(
                     elem.span,
                 ))
             };
-            let line_height_arg = if state.ports.contains_key("line_height") {
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
-                    member: Ident::new("line_height", elem.span),
-                    span: elem.span,
-                })
-            } else {
-                Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span))
-            };
+            let line_height_arg = build_text_line_height_arg(state);
             let mut height_args = vec![
                 text_arg_expr.clone(),
                 size_expr.clone(),
@@ -1051,15 +972,8 @@ pub(super) fn resolve_default_spatial_dimensions(
                 span: elem.span,
             });
             state.ports.insert("height".to_string(), height_call);
-        } else if state.ports.contains_key("size") {
-            state.ports.insert(
-                "height".to_string(),
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident),
-                    member: Ident::new("size", elem.span),
-                    span: elem.span,
-                }),
-            );
+        } else if elem.name.as_str() == "Text" && !state.is_inline_span {
+            state.ports.insert("height".to_string(), size_expr.clone());
         } else if state.is_inline_span {
             state.ports.insert(
                 "height".to_string(),

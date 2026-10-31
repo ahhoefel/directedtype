@@ -396,15 +396,6 @@ pub(super) fn finalize_span_component_ports(
         )
     };
     rewritten_ports
-        .entry("size".to_string())
-        .or_insert_with(|| size_expr.clone());
-    rewritten_ports
-        .entry("weight".to_string())
-        .or_insert_with(|| weight_expr.clone());
-    rewritten_ports
-        .entry("family".to_string())
-        .or_insert_with(|| family_expr.clone());
-    rewritten_ports
         .entry("x".to_string())
         .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span)));
     rewritten_ports

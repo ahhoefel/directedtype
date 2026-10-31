@@ -729,52 +729,24 @@ pub fn build_scene(
         let active_text = dynamic_text.as_ref().or(node.text_content.as_ref());
         if let Some(text) = active_text {
             if !text.is_empty() {
-                let font_size = node
-                    .properties
-                    .get("size")
+                let fnode = node
+                    .font
+                    .or_else(|| node.properties.get("font").and_then(|v| v.as_node()))
+                    .and_then(|fid| layout.get_node(fid));
+
+                let font_size = fnode
+                    .and_then(|f| f.properties.get("size"))
                     .and_then(|v| v.as_f64())
-                    .or_else(|| {
-                        node.font.and_then(|fid| {
-                            layout.get_node(fid).and_then(|fn_node| {
-                                fn_node
-                                    .properties
-                                    .get("size")
-                                    .and_then(|v| v.as_f64())
-                            })
-                        })
-                    })
                     .unwrap_or(16.0) as f32;
 
-                let font_weight = node
-                    .properties
-                    .get("weight")
+                let font_weight = fnode
+                    .and_then(|f| f.properties.get("weight"))
                     .and_then(|v| v.as_f64())
-                    .or_else(|| {
-                        node.font.and_then(|fid| {
-                            layout.get_node(fid).and_then(|fn_node| {
-                                fn_node
-                                    .properties
-                                    .get("weight")
-                                    .and_then(|v| v.as_f64())
-                            })
-                        })
-                    })
                     .unwrap_or(400.0) as f32;
 
-                let font_family = node
-                    .properties
-                    .get("family")
-                    .and_then(|v| v.as_str())
-                    .or_else(|| {
-                        node.font.and_then(|fid| {
-                            layout.get_node(fid).and_then(|fn_node| {
-                                fn_node
-                                    .properties
-                                    .get("family")
-                                    .and_then(|v| v.as_str())
-                            })
-                        })
-                    });
+                let font_family = fnode
+                    .and_then(|f| f.properties.get("family"))
+                    .and_then(|v| v.as_str());
 
                 let text_color = node
                     .properties
@@ -846,9 +818,13 @@ pub fn build_scene(
                     .get("start_at")
                     .and_then(|v| v.as_str());
 
-                let line_height_prop = node
-                    .properties
-                    .get("line_height")
+                let line_height_prop = fnode
+                    .filter(|f| {
+                        f.formulas
+                            .get("line_height")
+                            .is_some_and(|eq| !eq.starts_with("font_line_height("))
+                    })
+                    .and_then(|f| f.properties.get("line_height"))
                     .and_then(|v| v.as_f64())
                     .filter(|&h| h > 0.0);
 

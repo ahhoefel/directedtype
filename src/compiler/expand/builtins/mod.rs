@@ -30,7 +30,7 @@ use std::collections::HashMap;
 
 use self::anchor::wire_wrapper_child_origin;
 use self::clip::default_inherited_clip_expr;
-use self::font::{forward_resolved_font_metrics, pre_resolve_primitive_font, PreResolvedFont};
+use self::font::{pre_resolve_primitive_font, PreResolvedFont};
 use self::text::resolve_default_spatial_dimensions;
 
 /// Shared mutable state passed to `BuiltinPrimitive::finalize_ports`.
@@ -1233,8 +1233,6 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             );
             state.ports.insert("clip".to_string(), default_clip);
         }
-
-        forward_resolved_font_metrics(&mut state);
 
         self.primitive.finalize_ports(&mut state)?;
 

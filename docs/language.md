@@ -331,25 +331,14 @@ Every `.dt` document has an implicit root viewport node named `window`. You can 
 | :--- | :--- | :--- | :--- | :--- |
 | `x` | Required Input | `Distance` | `parent.left` (if provided via `\Children`) | Left coordinate of the text box. |
 | `y` | Input / Computed | `Distance` | `baseline - text_baseline_offset(...)` (if `baseline` is set) | Top coordinate of the text box. Either `y` or `baseline` must be provided. |
-| `baseline` | Input / Computed | `Distance` | `y + text_baseline_offset(size, weight, family, start_at)` | Y-coordinate of the **first line's typographic baseline**. Supplying `baseline` instead of `y` positions the text by its baseline! |
+| `baseline` | Input / Computed | `Distance` | `y + text_baseline_offset(font.size, font.weight, font.family, ...)` | Y-coordinate of the **first line's typographic baseline**. Supplying `baseline` instead of `y` positions the text by its baseline! |
 | `font` | Required Input (or via `\env font`) | `Font` | Ambient `\env font` (or parent `\Text.font` for inline spans) | Reference to a `\Font` node specifying `size`, `weight`, `family`, `line_height`, and `italic`. |
-| `size` | Output (delegated) | `Distance` | `font.size` | Font size in logical pixels (`px`, `pt`, or `em`) delegated from `font`. |
-| `weight` | Output (delegated) | `Integer` | `font.weight` | OpenType font weight (`100`–`900`, `400` = normal, `700` = bold) delegated from `font`. |
-| `family` | Output (delegated) | `String` | `font.family` | Font family name delegated from `font`. |
-| `line_height` | Output (delegated) | `Distance` | `font.line_height` | Line height in logical pixels delegated from `font`. |
-| `width` | Optional Input / Computed | `Distance` | `text_width(text, size, weight, family)` | If omitted, shrink-wraps to single-line advance width. If provided, wraps lines to `width`. |
-| `height` | Optional Input / Computed | `Distance` | `text_height(text, size, weight, family, width, end_at, start_at, line_height)` | Automatically computed from wrapped line count and vertical trim settings (`start_at` / `end_at`). |
+| `width` | Optional Input / Computed | `Distance` | `text_width(text, font.size, font.weight, font.family)` | If omitted, shrink-wraps to single-line advance width. If provided, wraps lines to `width`. |
+| `height` | Optional Input / Computed | `Distance` | `text_height(text, font.size, font.weight, font.family, width, ...)` | Automatically computed from wrapped line count and vertical trim settings (`text_bounds`). |
 | `text` | Optional Input | `String` / `Float` / `Integer` / `Bool` | Body `{ "..." }` text content | Dynamic text expression (overrides static `{ "..." }` body when set). |
-| `color` (or `text_color`) | Optional Input | `Color` | `#000000` | Fill color of the rendered glyphs. |
-| `align` (or `text_align`) | Optional Input | `String` / `Align` | `"left"` (`Alignment::Start`) | Horizontal alignment within `width`: `"left"`, `"center"`, `"right"`, or `"justify"`. |
+| `color` | Optional Input | `Color` | `#000000` | Fill color of the rendered glyphs. |
 | `underline` | Optional Input | `Boolean` | `false` | Draws an underline across the text run. |
 | `text_bounds` | `env` Input | `TextBounds` | `\TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)` | Controls vertical metric trimming (`start_at` and `end_at`) of the text bounding box; resolved via lexical `\env text_bounds` or explicit port. |
-| `start_at` | Output (delegated) | `TextStart` | `text_bounds.start_at` | Top edge (`y`) metric anchor of the text bounding box. |
-| `end_at` | Output (delegated) | `TextEnd` | `text_bounds.end_at` | Bottom edge (`bottom`) metric anchor of the text bounding box. |
-| `font.cap_height`, `cap_height` | Output (delegated) | `Distance` | `font_cap_height(...)` | Cap height of the text node's active font. |
-| `font.x_height`, `x_height` | Output (delegated) | `Distance` | `font_x_height(...)` | Lowercase x-height of the text node's active font. |
-| `font.ascent`, `ascent` | Output (delegated) | `Distance` | `font_ascent(...)` | Ascender height of the text node's active font. |
-| `font.descent`, `descent` | Output (delegated) | `Distance` | `font_descent(...)` | Descender depth of the text node's active font. |
 
 #### Vertical Metric Trimming (`\TextBounds`, `TextStart`, and `TextEnd`)
 

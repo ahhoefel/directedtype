@@ -956,20 +956,21 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
 
         let (text, font_size, font_weight, font_family, max_width, line_height, align, ox, oy, raw_spans, raw_boxes) = {
             let n = &layout.nodes[text_node_idx];
+            let fnode = n
+                .font
+                .or_else(|| n.properties.get("font").and_then(|v| v.as_node()))
+                .and_then(|fid| layout.nodes.iter().find(|fn_node| fn_node.id == fid));
             let text = n.text_content.clone().unwrap_or_default();
-            let font_size = n
-                .properties
-                .get("size")
+            let font_size = fnode
+                .and_then(|f| f.properties.get("size"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(16.0);
-            let font_weight = n
-                .properties
-                .get("weight")
+            let font_weight = fnode
+                .and_then(|f| f.properties.get("weight"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(400.0);
-            let font_family = n
-                .properties
-                .get("family")
+            let font_family = fnode
+                .and_then(|f| f.properties.get("family"))
                 .and_then(|v| match v {
                     Value::String(s) => Some(s.clone()),
                     _ => None,
@@ -979,9 +980,13 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             } else {
                 None
             };
-            let line_height = n
-                .properties
-                .get("line_height")
+            let line_height = fnode
+                .filter(|f| {
+                    f.formulas
+                        .get("line_height")
+                        .is_some_and(|eq| !eq.starts_with("font_line_height("))
+                })
+                .and_then(|f| f.properties.get("line_height"))
                 .and_then(|v| v.as_f64())
                 .filter(|&h| h > 0.0);
             let align = n

@@ -160,28 +160,6 @@ pub(super) fn pre_resolve_primitive_font(
     })
 }
 
-/// Forwards `size`, `weight`, and `family` ports from a resolved `\Font` node or `font` port onto a spatial primitive.
-pub(super) fn forward_resolved_font_metrics(state: &mut PrimitiveExpandState<'_, '_>) {
-    let elem = state.elem;
-    let font_target = if let Some(fid) = state.font_node_id {
-        Some(Expr::Ident(Ident::new(fid.canonical_name(), elem.span)))
-    } else {
-        state.ports.get("font").cloned()
-    };
-
-    if let Some(target) = font_target {
-        for field in ["size", "weight", "family"] {
-            state.ports.entry(field.to_string()).or_insert_with(|| {
-                Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(target.clone()),
-                    member: Ident::new(field, elem.span),
-                    span: elem.span,
-                })
-            });
-        }
-    }
-}
-
 impl BuiltinPrimitive for FontPrimitive {
     fn name(&self) -> &'static str {
         "Font"

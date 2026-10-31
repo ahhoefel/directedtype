@@ -626,30 +626,6 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
             }
 
-            // Typographic metric access: e.g. label.cap_height -> fid.cap_height
-            if [
-                "cap_height",
-                "x_height",
-                "descent",
-                "ascent",
-                "em_top",
-                "line_gap",
-                "gap_bottom",
-                "line_height",
-            ]
-            .contains(&m.member.as_str())
-            {
-                if let Some(tid) = target_node_id {
-                    if let Some(&fid) = ctx.node_fonts.get(&tid) {
-                        return Ok(Expr::MemberAccess(MemberAccessExpr {
-                            target: Box::new(Expr::Ident(Ident::new(fid.canonical_name(), m.span))),
-                            member: m.member.clone(),
-                            span: m.span,
-                        }));
-                    }
-                }
-            }
-
             if let Some(tid) = target_node_id {
                 if let Some(target_node) = ctx.nodes.get(tid.0) {
                     if target_node.private_ports.contains(m.member.as_str())
