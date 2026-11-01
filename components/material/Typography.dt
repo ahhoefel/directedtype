@@ -44,6 +44,7 @@
     variant: TypographyVariant = TypographyVariant.Body1,
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -130,8 +131,10 @@
         \Children
     };
 
+    \let gutter = gutter_bottom ? (v_size * 0.35) : 0px;
+
     \alias right = x + width;
-    \alias height = t.height;
+    \alias height = t.height + gutter;
     \alias bottom = y + height;
     \alias baseline = t.baseline;
 }
@@ -142,6 +145,7 @@
     variant: TypographyVariant = TypographyVariant.Body1,
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -227,9 +231,11 @@
         \Children
     };
 
+    \let gutter = gutter_bottom ? (v_size * 0.35) : 0px;
+
     \alias width = t.width;
     \alias right = x + width;
-    \alias height = t.height;
+    \alias height = t.height + gutter;
     \alias bottom = y + height;
     \alias baseline = t.baseline;
 }
@@ -244,6 +250,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -254,7 +261,8 @@
         width: width,
         variant: TypographyVariant.H1,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -268,6 +276,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -277,7 +286,8 @@
         y: y,
         variant: TypographyVariant.H1,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -294,6 +304,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -304,7 +315,8 @@
         width: width,
         variant: TypographyVariant.H2,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -318,6 +330,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -327,7 +340,8 @@
         y: y,
         variant: TypographyVariant.H2,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -344,6 +358,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -354,7 +369,8 @@
         width: width,
         variant: TypographyVariant.H3,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -368,6 +384,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -377,7 +394,8 @@
         y: y,
         variant: TypographyVariant.H3,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -394,6 +412,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -404,7 +423,8 @@
         width: width,
         variant: TypographyVariant.H4,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -418,6 +438,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -427,7 +448,8 @@
         y: y,
         variant: TypographyVariant.H4,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -444,6 +466,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -454,7 +477,8 @@
         width: width,
         variant: TypographyVariant.H5,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -468,6 +492,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -477,7 +502,8 @@
         y: y,
         variant: TypographyVariant.H5,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -494,6 +520,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -504,7 +531,8 @@
         width: width,
         variant: TypographyVariant.H6,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -518,6 +546,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -527,7 +556,8 @@
         y: y,
         variant: TypographyVariant.H6,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -544,6 +574,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -554,7 +585,8 @@
         width: width,
         variant: TypographyVariant.Subtitle1,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -568,6 +600,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -577,7 +610,8 @@
         y: y,
         variant: TypographyVariant.Subtitle1,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -594,6 +628,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -604,7 +639,8 @@
         width: width,
         variant: TypographyVariant.Subtitle2,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -618,6 +654,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -627,7 +664,8 @@
         y: y,
         variant: TypographyVariant.Subtitle2,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -644,6 +682,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -654,7 +693,8 @@
         width: width,
         variant: TypographyVariant.Body1,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -668,6 +708,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -677,7 +718,8 @@
         y: y,
         variant: TypographyVariant.Body1,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -694,6 +736,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -704,7 +747,8 @@
         width: width,
         variant: TypographyVariant.Body2,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -718,6 +762,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -727,7 +772,8 @@
         y: y,
         variant: TypographyVariant.Body2,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -744,6 +790,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -754,7 +801,8 @@
         width: width,
         variant: TypographyVariant.Caption,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -768,6 +816,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -777,7 +826,8 @@
         y: y,
         variant: TypographyVariant.Caption,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -794,6 +844,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -804,7 +855,8 @@
         width: width,
         variant: TypographyVariant.Overline,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -818,6 +870,7 @@
     env font: Font = \Font(size: 16px),
     color: Color = #000000de,
     align: Align = Align.Left,
+    gutter_bottom: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
@@ -827,7 +880,8 @@
         y: y,
         variant: TypographyVariant.Overline,
         color: color,
-        align: align
+        align: align,
+        gutter_bottom: gutter_bottom
     ) {
         \Children
     };
@@ -837,4 +891,3 @@
     \alias bottom = y + height;
     \alias baseline = t.baseline;
 }
-

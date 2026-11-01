@@ -365,3 +365,58 @@ fn test_material_button_inherits_env_font_and_button_metrics() {
     }
 }
 
+#[test]
+fn test_material_typography_gutter_bottom() {
+    let input = r#"
+    \use "components/VStack.dt"
+    \use "components/material/Typography.dt"
+
+    \VStack(x: 0px, y: 0px, gap: 0px) {
+        \H4("h4_no_gutter"; gutter_bottom: false) { Section Heading }
+        \H4("h4_with_gutter"; gutter_bottom: true) { Section Heading }
+        \Body1("following_body";) { Following paragraph }
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let no_gutter = compiled
+        .find_by_key(None, &ComponentKey::string("h4_no_gutter"))
+        .unwrap();
+    let with_gutter = compiled
+        .find_by_key(None, &ComponentKey::string("h4_with_gutter"))
+        .unwrap();
+    let following_body = compiled
+        .find_by_key(None, &ComponentKey::string("following_body"))
+        .unwrap();
+
+    // H4 has size 34px, so gutter_bottom adds 34.0 * 0.35 = 11.9px to height/bottom
+    let expected_gutter = 34.0 * 0.35;
+    assert!(
+        (with_gutter.rect.height - (no_gutter.rect.height + expected_gutter)).abs() < 1e-6,
+        "Expected with_gutter.height ({}) == no_gutter.height ({}) + {}",
+        with_gutter.rect.height,
+        no_gutter.rect.height,
+        expected_gutter
+    );
+    // Inner \Text height is unchanged
+    let inner_text = find_descendant_text(&compiled, with_gutter.id);
+    assert!((inner_text.rect.height - no_gutter.rect.height).abs() < 1e-6);
+
+    // Following sibling starts at with_gutter.bottom
+    assert!(
+        (following_body.rect.y - (with_gutter.rect.y + with_gutter.rect.height)).abs() < 1e-6
+    );
+}
+
+
