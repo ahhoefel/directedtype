@@ -4,4 +4,6 @@
     Baseline,
     Descender,
     GapBottom,
+    LineHeight,
 }
+

@@ -115,6 +115,12 @@ fn test_material_typography_all_13_variants() {
             Some(&Value::Distance(line_height)),
             "line_height mismatch for {key}"
         );
+        assert!(
+            (comp.rect.height - line_height).abs() < 1e-4,
+            "single-line height for {key} ({}) should equal line_height ({})",
+            comp.rect.height,
+            line_height
+        );
     }
 }
 

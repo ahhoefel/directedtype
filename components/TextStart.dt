@@ -3,5 +3,7 @@
 \Enum TextStart {
     Capital,
     Ascender,
-    EmTop
+    EmTop,
+    LineHeight,
 }
+

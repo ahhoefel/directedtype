@@ -38,6 +38,7 @@ impl BuiltinPrimitive for TextPrimitive {
                 Ident::new("Baseline", span),
                 Ident::new("Descender", span),
                 Ident::new("GapBottom", span),
+                Ident::new("LineHeight", span),
             ],
             span,
         });
@@ -49,6 +50,7 @@ impl BuiltinPrimitive for TextPrimitive {
                     Ident::new("Capital", span),
                     Ident::new("Ascender", span),
                     Ident::new("EmTop", span),
+                    Ident::new("LineHeight", span),
                 ],
                 span,
             });
@@ -496,6 +498,7 @@ fn resolve_baseline_and_y(
     start_at_expr: &Expr,
 ) {
     let span = state.elem.span;
+    let line_height_expr = build_text_line_height_arg(state);
     if state.ports.contains_key("baseline")
         && !state.ports.contains_key("y")
         && !state.ports.contains_key("top")
@@ -514,6 +517,7 @@ fn resolve_baseline_and_y(
                     weight_expr.clone(),
                     font_expr.clone(),
                     start_at_expr.clone(),
+                    line_height_expr,
                 ],
                 span,
             })),
@@ -540,6 +544,7 @@ fn resolve_baseline_and_y(
                     weight_expr.clone(),
                     font_expr.clone(),
                     start_at_expr.clone(),
+                    line_height_expr,
                 ],
                 span,
             })),

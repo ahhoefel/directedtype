@@ -966,7 +966,7 @@ pub fn build_scene(
                     Some(s) if s.eq_ignore_ascii_case("ascender") => -(first_baseline - m.ascent),
                     Some(s) if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") => -(first_baseline - m.em_top),
                     Some(s) if s.eq_ignore_ascii_case("capital") => -(first_baseline - m.cap_height),
-                    Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => 0.0,
+                    Some(s) if s.eq_ignore_ascii_case("lineheight") || s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => 0.0,
                     _ => -(first_baseline - m.cap_height),
                 };
 

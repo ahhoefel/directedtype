@@ -880,9 +880,10 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let weight = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(400.0);
                     let family = get_family_from_val(evaluated_args.get(2), env);
                     let start_at = evaluated_args.get(3).and_then(|v| v.as_str());
+                    let line_height = evaluated_args.get(4).and_then(|v| v.as_f64()).filter(|&h| h > 0.0);
                     validate_font_family(family, c.span)?;
 
-                    let offset = crate::compiler::text::text_baseline_offset(size, weight, family, start_at);
+                    let offset = crate::compiler::text::text_baseline_offset(size, weight, family, start_at, line_height);
                     Ok(Value::Distance(offset))
                 }
                 "text_width" => {

@@ -48,6 +48,12 @@ pub fn text_y_offset(
         if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") {
             return -(m.baseline - m.em_top);
         }
+        if s.eq_ignore_ascii_case("lineheight")
+            || s.eq_ignore_ascii_case("line_height")
+            || s.eq_ignore_ascii_case("full")
+        {
+            return 0.0;
+        }
     }
     // Default to Capital
     -(m.baseline - m.cap_height)
@@ -59,11 +65,52 @@ pub fn text_baseline_offset(
     font_weight: f64,
     font_family: Option<&str>,
     start_at: Option<&str>,
+    line_height: Option<f64>,
 ) -> f64 {
     let m = measure_font_metrics(font_size, font_weight, font_family);
     match start_at {
         Some(s) if s.eq_ignore_ascii_case("ascender") => m.ascent,
         Some(s) if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") => m.em_top,
+        Some(s)
+            if s.eq_ignore_ascii_case("lineheight")
+                || s.eq_ignore_ascii_case("line_height")
+                || s.eq_ignore_ascii_case("full") =>
+        {
+            if let Some(lh) = line_height.filter(|&h| h > 0.0) {
+                let size = if font_size > 0.0 { font_size as f32 } else { 16.0 };
+                let weight = if font_weight > 0.0 { font_weight as f32 } else { 400.0 };
+                FONT_CONTEXT.with(|font_cx_cell| {
+                    LAYOUT_CONTEXT.with(|layout_cx_cell| {
+                        let mut font_cx = font_cx_cell.borrow_mut();
+                        let mut layout_cx = layout_cx_cell.borrow_mut();
+                        let sample = "Hx";
+                        let mut builder = layout_cx.ranged_builder(&mut font_cx, sample, 1.0, true);
+                        builder.push_default(StyleProperty::FontSize(size));
+                        if (weight - 400.0).abs() > 1.0 {
+                            builder.push_default(StyleProperty::FontWeight(FontWeight::new(weight)));
+                        }
+                        if let Some(family) = font_family {
+                            if !family.is_empty() {
+                                builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
+                            }
+                        }
+                        builder.push_default(StyleProperty::LineHeight(
+                            parley::style::LineHeight::Absolute(lh as f32),
+                        ));
+                        let mut layout = builder.build(sample);
+                        layout.break_all_lines(None);
+                        let b = layout
+                            .lines()
+                            .next()
+                            .map(|l| l.metrics().baseline as f64)
+                            .unwrap_or(m.baseline);
+                        b
+                    })
+                })
+            } else {
+                m.baseline
+            }
+        }
         Some(s) if s.eq_ignore_ascii_case("capital") => m.cap_height,
         _ => m.cap_height,
     }
@@ -219,7 +266,7 @@ pub fn measure_rich_text_bounds_with_boxes(
                 Some(s) if s.eq_ignore_ascii_case("capital") => {
                     first_baseline - m.cap_height
                 }
-                Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => {
+                Some(s) if s.eq_ignore_ascii_case("lineheight") || s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => {
                     0.0
                 }
                 _ => {
@@ -245,7 +292,7 @@ pub fn measure_rich_text_bounds_with_boxes(
                         layout.height() as f64
                     }
                 }
-                Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => {
+                Some(s) if s.eq_ignore_ascii_case("lineheight") || s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => {
                     layout.height() as f64
                 }
                 Some(s) if s.eq_ignore_ascii_case("baseline") => {
@@ -864,7 +911,7 @@ pub fn compute_span_range_metrics_with_boxes(
         return SpanLayoutMetrics {
             fragments: Vec::new(),
             rect: Rect::new(text_x, text_y + own_shift, 0.0, 0.0),
-            baseline: text_y + text_baseline_offset(font_size, font_weight, font_family, start_at) + own_shift,
+            baseline: text_y + text_baseline_offset(font_size, font_weight, font_family, start_at, line_height) + own_shift,
         };
     }
 
@@ -957,7 +1004,7 @@ pub fn compute_span_range_metrics_with_boxes(
             Some(s) if s.eq_ignore_ascii_case("ascender") => -(default_first_baseline - m.ascent),
             Some(s) if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") => -(default_first_baseline - m.em_top),
             Some(s) if s.eq_ignore_ascii_case("capital") => -(default_first_baseline - m.cap_height),
-            Some(s) if s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => 0.0,
+            Some(s) if s.eq_ignore_ascii_case("lineheight") || s.eq_ignore_ascii_case("line_height") || s.eq_ignore_ascii_case("full") => 0.0,
             _ => -(default_first_baseline - m.cap_height),
         };
         origin_y = text_y + y_offset;

@@ -11,6 +11,7 @@
 \use "../components/material/Paper.dt"
 \use "../components/material/Divider.dt"
 \use "../components/material/Typography.dt"
+\use "../components/material/Card.dt"
 
 \Window(title: "Material UI Component Gallery")
 
@@ -330,6 +331,80 @@
             \Overline(color: material_text_disabled) { OVERLINE TEXT }
         }
     }
+
+    // Section 10: Cards (Card, CardHeader, CardContent & CardActions)
+    \Paper("card_mui_cards"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
+        \VStack(min_width: target_inner_width, gap: 16px) {
+            \Subtitle2(color: material_text_secondary) {
+                10. CARDS (CARD, CARDHEADER, CARDCONTENT & CARDACTIONS)
+            }
+            \HStack(gap: 20px, align: Align.Top) {
+                // 10a. Complex Card with Avatar Header, Divider, Content & Actions
+                \Card("demo_card_recipe"; width: 266px) {
+                    \CardHeader(
+                        avatar: "R",
+                        avatar_bg: material_error.main,
+                        title: "Shrimp and Chorizo Paella",
+                        subheader: "September 14, 2016"
+                    )
+                    \Divider
+                    \CardContent {
+                        \Body2(color: material_text_secondary) {
+                            This impressive paella is a perfect party dish and a fun meal to cook together with your guests.
+                        }
+                    }
+                    \CardActions {
+                        \Button(size: ButtonSize.Small) { Share }
+                        \Button(size: ButtonSize.Small) { Learn More }
+                    }
+                }
+
+                // 10b. Outlined Word-of-the-Day Card
+                \Card("demo_card_outlined"; width: 266px, variant: CardVariant.Outlined) {
+                    \CardContent {
+                        \Caption(color: material_text_secondary, gutter_bottom: true) {
+                            Word of the Day
+                        }
+                        \H5 {
+                            be•nev•o•lent
+                        }
+                        \Body2(color: material_text_secondary, gutter_bottom: true) {
+                            adjective
+                        }
+                        \Body2 {
+                            well meaning and kindly. "a benevolent smile"
+                        }
+                    }
+                    \CardActions {
+                        \Button(size: ButtonSize.Small) { Learn More }
+                    }
+                }
+
+                // 10c. Raised Card with Action Slot & Right-Aligned Actions
+                \Card("demo_card_raised"; width: 266px, raised: true) {
+                    \CardHeader(
+                        avatar: "M",
+                        avatar_bg: material_primary.main,
+                        title: "System Update",
+                        subheader: "v2.4 Available"
+                    ) {
+                        \Button(size: ButtonSize.Small, variant: ButtonVariant.Outlined) { Info }
+                    }
+                    \Divider
+                    \CardContent {
+                        \Body2(color: material_text_secondary) {
+                            Includes Material Design typography, elevated surfaces, and card layout primitives.
+                        }
+                    }
+                    \CardActions(align: Align.Right) {
+                        \Button(size: ButtonSize.Small, color: MaterialColor.Inherit) { Later }
+                        \Button(size: ButtonSize.Small, variant: ButtonVariant.Contained) { Install }
+                    }
+                }
+            }
+        }
+    }
 };
+
 
 

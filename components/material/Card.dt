@@ -1,0 +1,662 @@
+// DirectedType Material UI Component Library: Card
+// Surface container family (\Card, \CardHeader, \CardContent, \CardActions) for grouping
+// related content and actions on a single topic.
+// Reference: https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Card
+
+\use "components/Align.dt"
+\use "components/Shadow.dt"
+\use "components/TextBounds.dt"
+\use "components/material/Palette.dt"
+
+\let card_header_text_bounds = \TextBounds(
+    start_at: TextStart.LineHeight,
+    end_at: TextEnd.LineHeight
+);
+
+\Enum CardVariant {
+    Elevation,
+    Outlined,
+}
+
+// ============================================================================
+// Card
+// ============================================================================
+
+// 1. Explicit Width Card: pushes inner_width down to child sections (CardHeader, CardContent, CardActions, Divider)
+\Component Card(
+    width: Distance,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    variant: CardVariant = CardVariant.Elevation,
+    elevation: Integer = 1,
+    raised: Boolean = false,
+    square: Boolean = false,
+    radius: Distance = 4px,
+    bg: Color = #ffffff,
+    border_color: Color = #0000001f,
+    padding_x: Distance = 0px,
+    padding_y: Distance = 0px,
+    gap: Distance = 0px
+) {
+    \let is_outlined = variant == CardVariant.Outlined;
+    \let base_elev = (raised && (elevation == 1)) ? 8 : elevation;
+    \let eff_elev = is_outlined ? 0 : min(24, max(0, base_elev));
+    \let has_shadow = eff_elev > 0;
+    \let resolved_radius = square ? 0px : radius;
+    \let resolved_border_width = is_outlined ? 1px : 0px;
+
+    \let children_h = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+
+    \alias right = x + width;
+    \alias height = children_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \let card_shadow = \Shadow(
+        offset_x: 0px,
+        offset_y: has_shadow ? (1px + (eff_elev * 0.75px)) : 0px,
+        blur: has_shadow ? (3px + (eff_elev * 1.8px)) : 0px,
+        spread: 0px,
+        color: has_shadow ? #0000002e : #00000000
+    );
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg,
+        radius: resolved_radius,
+        border_color: border_color,
+        border_width: resolved_border_width,
+        shadow: card_shadow
+    )
+
+    \let inner_width = max(0px, width - (2 * padding_x));
+
+    \Children(
+        x: x + padding_x,
+        y: prev ? prev.bottom + gap : y + padding_y,
+        width: inner_width
+    )
+}
+
+// 2. Intrinsic Width Card: derives width bottom-up from widest child section
+\Component Card(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    min_width: Distance = 0px,
+    variant: CardVariant = CardVariant.Elevation,
+    elevation: Integer = 1,
+    raised: Boolean = false,
+    square: Boolean = false,
+    radius: Distance = 4px,
+    bg: Color = #ffffff,
+    border_color: Color = #0000001f,
+    padding_x: Distance = 0px,
+    padding_y: Distance = 0px,
+    gap: Distance = 0px
+) {
+    \let is_outlined = variant == CardVariant.Outlined;
+    \let base_elev = (raised && (elevation == 1)) ? 8 : elevation;
+    \let eff_elev = is_outlined ? 0 : min(24, max(0, base_elev));
+    \let has_shadow = eff_elev > 0;
+    \let resolved_radius = square ? 0px : radius;
+    \let resolved_border_width = is_outlined ? 1px : 0px;
+
+    \let content_w = max(min_width, children.len > 0 ? max(children.width) : 0px);
+    \let children_h = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+
+    \alias width = content_w + (2 * padding_x);
+    \alias right = x + width;
+    \alias height = children_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \let card_shadow = \Shadow(
+        offset_x: 0px,
+        offset_y: has_shadow ? (1px + (eff_elev * 0.75px)) : 0px,
+        blur: has_shadow ? (3px + (eff_elev * 1.8px)) : 0px,
+        spread: 0px,
+        color: has_shadow ? #0000002e : #00000000
+    );
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg,
+        radius: resolved_radius,
+        border_color: border_color,
+        border_width: resolved_border_width,
+        shadow: card_shadow
+    )
+
+    \Children(
+        x: x + padding_x,
+        y: prev ? prev.bottom + gap : y + padding_y
+    )
+}
+
+// ============================================================================
+// CardHeader
+// ============================================================================
+
+// 1. Explicit Width CardHeader with `title` prop (and optional `subheader`, `avatar`, and trailing action child)
+\Component CardHeader(
+    width: Distance,
+    title: String,
+    env font: Font = \Font(size: 16px),
+    subheader: String = "",
+    avatar: String = "",
+    avatar_bg: Color = #bdbdbd,
+    avatar_color: Color = #ffffff,
+    avatar_size: Distance = 40px,
+    title_color: Color = #000000de,
+    subheader_color: Color = #00000099,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 16px,
+    subheader_gap: Distance = 0px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \assert children.len <= 1 as "CardHeader with title accepts at most one action child.";
+
+    \let has_avatar = avatar != "";
+    \let has_subheader = subheader != "";
+    \let has_action = children.len > 0;
+
+    \let resolved_avatar_size: Distance = has_avatar ? avatar_size : 0px;
+    \let avatar_gap: Distance = has_avatar ? 16px : 0px;
+    \let action_w: Distance = has_action ? max(children.width) : 0px;
+    \let action_h: Distance = has_action ? max(children.height) : 0px;
+    \let action_gap: Distance = has_action ? 16px : 0px;
+
+    \let text_x: Distance = x + padding_x + resolved_avatar_size + avatar_gap;
+    \let text_avail_width: Distance = max(0px, width - (2 * padding_x) - resolved_avatar_size - avatar_gap - action_w - action_gap);
+
+    \let title_font = \Font(
+        font: font,
+        size: has_avatar ? 14px : 20px,
+        weight: 500,
+        line_height: has_avatar ? 20px : 28px
+    );
+    \let subheader_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+    \let avatar_font = \Font(
+        font: font,
+        size: 18px,
+        weight: 500,
+        line_height: 24px
+    );
+
+    \let text_block_h: Distance = has_subheader ? (title_node.height + subheader_gap + sub_node.height) : title_node.height;
+    \let inner_h: Distance = max(resolved_avatar_size, max(text_block_h, action_h));
+
+    \alias right = x + width;
+    \alias height = inner_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \let text_y: Distance = y + (height - text_block_h) / 2;
+    \let avatar_x: Distance = x + padding_x;
+    \let avatar_y: Distance = y + (height - resolved_avatar_size) / 2;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? avatar_bg : #00000000
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? avatar_color : #00000000,
+        text: avatar
+    );
+
+    \let title_node = \Text(
+        x: text_x,
+        y: text_y,
+        width: text_avail_width,
+        font: title_font,
+        color: title_color,
+        text_bounds: card_header_text_bounds,
+        text: title
+    );
+
+    \let sub_node = \Text(
+        x: text_x,
+        y: text_y + title_node.height + subheader_gap,
+        width: text_avail_width,
+        font: subheader_font,
+        color: has_subheader ? subheader_color : #00000000,
+        text_bounds: card_header_text_bounds,
+        text: subheader
+    );
+
+    \Children(
+        x: x + width - padding_x - child.width,
+        y: y + (height - child.height) / 2
+    )
+}
+
+// 2. Intrinsic Width CardHeader with `title` prop (and optional `subheader`, `avatar`, and trailing action child)
+\Component CardHeader(
+    title: String,
+    env font: Font = \Font(size: 16px),
+    subheader: String = "",
+    avatar: String = "",
+    avatar_bg: Color = #bdbdbd,
+    avatar_color: Color = #ffffff,
+    avatar_size: Distance = 40px,
+    title_color: Color = #000000de,
+    subheader_color: Color = #00000099,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 16px,
+    subheader_gap: Distance = 0px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \assert children.len <= 1 as "CardHeader with title accepts at most one action child.";
+
+    \let has_avatar = avatar != "";
+    \let has_subheader = subheader != "";
+    \let has_action = children.len > 0;
+
+    \let resolved_avatar_size: Distance = has_avatar ? avatar_size : 0px;
+    \let avatar_gap: Distance = has_avatar ? 16px : 0px;
+    \let action_w: Distance = has_action ? max(children.width) : 0px;
+    \let action_h: Distance = has_action ? max(children.height) : 0px;
+    \let action_gap: Distance = has_action ? 16px : 0px;
+
+    \let text_x: Distance = x + padding_x + resolved_avatar_size + avatar_gap;
+
+    \let title_font = \Font(
+        font: font,
+        size: has_avatar ? 14px : 20px,
+        weight: 500,
+        line_height: has_avatar ? 20px : 28px
+    );
+    \let subheader_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+    \let avatar_font = \Font(
+        font: font,
+        size: 18px,
+        weight: 500,
+        line_height: 24px
+    );
+
+    \let text_content_w: Distance = has_subheader ? max(title_node.width, sub_node.width) : title_node.width;
+    \let resolved_width: Distance = (2 * padding_x) + resolved_avatar_size + avatar_gap + text_content_w + action_gap + action_w;
+    \let text_block_h: Distance = has_subheader ? (title_node.height + subheader_gap + sub_node.height) : title_node.height;
+    \let inner_h: Distance = max(resolved_avatar_size, max(text_block_h, action_h));
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = inner_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \let text_y: Distance = y + (height - text_block_h) / 2;
+    \let avatar_x: Distance = x + padding_x;
+    \let avatar_y: Distance = y + (height - resolved_avatar_size) / 2;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: height,
+        color: bg
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? avatar_bg : #00000000
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? avatar_color : #00000000,
+        text: avatar
+    );
+
+    \let title_node = \Text(
+        x: text_x,
+        y: text_y,
+        font: title_font,
+        color: title_color,
+        text_bounds: card_header_text_bounds,
+        text: title
+    );
+
+    \let sub_node = \Text(
+        x: text_x,
+        y: text_y + title_node.height + subheader_gap,
+        font: subheader_font,
+        color: has_subheader ? subheader_color : #00000000,
+        text_bounds: card_header_text_bounds,
+        text: subheader
+    );
+
+    \Children(
+        x: x + resolved_width - padding_x - child.width,
+        y: y + (height - child.height) / 2
+    )
+}
+
+// 3. Explicit Width CardHeader with custom child content block (and optional `avatar`)
+\Component CardHeader(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    avatar: String = "",
+    avatar_bg: Color = #bdbdbd,
+    avatar_color: Color = #ffffff,
+    avatar_size: Distance = 40px,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 16px,
+    gap: Distance = 2px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let has_avatar = avatar != "";
+    \let resolved_avatar_size: Distance = has_avatar ? avatar_size : 0px;
+    \let avatar_gap: Distance = has_avatar ? 16px : 0px;
+
+    \let text_x: Distance = x + padding_x + resolved_avatar_size + avatar_gap;
+    \let text_avail_width: Distance = max(0px, width - (2 * padding_x) - resolved_avatar_size - avatar_gap);
+
+    \let avatar_font = \Font(
+        font: font,
+        size: 18px,
+        weight: 500,
+        line_height: 24px
+    );
+
+    \let children_h: Distance = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+    \let inner_h: Distance = max(resolved_avatar_size, children_h);
+
+    \alias right = x + width;
+    \alias height = inner_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \let text_y: Distance = y + (height - children_h) / 2;
+    \let avatar_x: Distance = x + padding_x;
+    \let avatar_y: Distance = y + (height - resolved_avatar_size) / 2;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? avatar_bg : #00000000
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? avatar_color : #00000000,
+        text: avatar
+    );
+
+    \Children(
+        x: text_x,
+        y: prev ? prev.bottom + gap : text_y,
+        width: text_avail_width
+    )
+}
+
+// 4. Intrinsic Width CardHeader with custom child content block (and optional `avatar`)
+\Component CardHeader(
+    env font: Font = \Font(size: 16px),
+    avatar: String = "",
+    avatar_bg: Color = #bdbdbd,
+    avatar_color: Color = #ffffff,
+    avatar_size: Distance = 40px,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 16px,
+    gap: Distance = 2px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let has_avatar = avatar != "";
+    \let resolved_avatar_size: Distance = has_avatar ? avatar_size : 0px;
+    \let avatar_gap: Distance = has_avatar ? 16px : 0px;
+
+    \let text_x: Distance = x + padding_x + resolved_avatar_size + avatar_gap;
+
+    \let avatar_font = \Font(
+        font: font,
+        size: 18px,
+        weight: 500,
+        line_height: 24px
+    );
+
+    \let children_w: Distance = children.len > 0 ? max(children.width) : 0px;
+    \let children_h: Distance = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+    \let resolved_width: Distance = (2 * padding_x) + resolved_avatar_size + avatar_gap + children_w;
+    \let inner_h: Distance = max(resolved_avatar_size, children_h);
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = inner_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \let text_y: Distance = y + (height - children_h) / 2;
+    \let avatar_x: Distance = x + padding_x;
+    \let avatar_y: Distance = y + (height - resolved_avatar_size) / 2;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: height,
+        color: bg
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? avatar_bg : #00000000
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? avatar_color : #00000000,
+        text: avatar
+    );
+
+    \Children(
+        x: text_x,
+        y: prev ? prev.bottom + gap : text_y
+    )
+}
+
+// ============================================================================
+// CardContent
+// ============================================================================
+
+// 1. Explicit Width CardContent: pushes inner_width (width - 2*padding_x) down to children
+\Component CardContent(
+    width: Distance,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 16px,
+    gap: Distance = 0px,
+    bg: Color = #00000000
+) {
+    \let inner_width = max(0px, width - (2 * padding_x));
+    \let children_h = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+
+    \alias right = x + width;
+    \alias height = children_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg
+    )
+
+    \Children(
+        x: x + padding_x,
+        y: prev ? prev.bottom + gap : y + padding_y,
+        width: inner_width
+    )
+}
+
+// 2. Intrinsic Width CardContent: derives width bottom-up from children
+\Component CardContent(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 16px,
+    gap: Distance = 0px,
+    bg: Color = #00000000
+) {
+    \let content_w = children.len > 0 ? max(children.width) : 0px;
+    \let children_h = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+
+    \alias width = content_w + (2 * padding_x);
+    \alias right = x + width;
+    \alias height = children_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg
+    )
+
+    \Children(
+        x: x + padding_x,
+        y: prev ? prev.bottom + gap : y + padding_y
+    )
+}
+
+// ============================================================================
+// CardActions
+// ============================================================================
+
+// 1. Explicit Width CardActions: horizontal action bar supporting Left, Center, or Right alignment
+\Component CardActions(
+    width: Distance,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    padding_x: Distance = 8px,
+    padding_y: Distance = 8px,
+    gap: Distance = 8px,
+    disable_spacing: Boolean = false,
+    align: Align = Align.Left,
+    bg: Color = #00000000
+) {
+    \let resolved_gap = disable_spacing ? 0px : gap;
+    \let children_span = children.len > 0 ? (sum(children.width) + max(0, children.len - 1) * resolved_gap) : 0px;
+    \let content_h = children.len > 0 ? max(children.height) : 0px;
+    \let inner_width = max(0px, width - (2 * padding_x));
+
+    \let is_right = align == Align.Right;
+    \let is_center = align == Align.Center;
+    \let start_x = is_right
+        ? (x + width - padding_x - children_span)
+        : (is_center ? (x + padding_x + (inner_width - children_span) / 2) : (x + padding_x));
+
+    \alias right = x + width;
+    \alias height = content_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg
+    )
+
+    \Children(
+        x: prev ? prev.right + resolved_gap : start_x,
+        y: y + (height - child.height) / 2
+    )
+}
+
+// 2. Intrinsic Width CardActions: horizontal action bar sized to its button children
+\Component CardActions(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    padding_x: Distance = 8px,
+    padding_y: Distance = 8px,
+    gap: Distance = 8px,
+    disable_spacing: Boolean = false,
+    align: Align = Align.Left,
+    bg: Color = #00000000
+) {
+    \let resolved_gap = disable_spacing ? 0px : gap;
+    \let children_span = children.len > 0 ? (sum(children.width) + max(0, children.len - 1) * resolved_gap) : 0px;
+    \let content_h = children.len > 0 ? max(children.height) : 0px;
+    \let resolved_width = children_span + (2 * padding_x);
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = content_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: height,
+        color: bg
+    )
+
+    \Children(
+        x: prev ? prev.right + resolved_gap : (x + padding_x),
+        y: y + (height - child.height) / 2
+    )
+}

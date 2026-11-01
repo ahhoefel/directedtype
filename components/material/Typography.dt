@@ -4,7 +4,13 @@
 // \Subtitle1, \Subtitle2, \Body1, \Body2, \Caption, \Overline).
 
 \use "components/Align.dt"
+\use "components/TextBounds.dt"
 \use "components/material/Palette.dt"
+
+\let material_text_bounds = \TextBounds(
+    start_at: TextStart.LineHeight,
+    end_at: TextEnd.LineHeight
+);
 
 \Enum TypographyVariant {
     H1,
@@ -126,7 +132,8 @@
         width: width,
         font: env.font,
         color: color,
-        align: align
+        align: align,
+        text_bounds: material_text_bounds
     ) {
         \Children
     };
@@ -226,7 +233,8 @@
         y: y,
         font: env.font,
         color: color,
-        align: align
+        align: align,
+        text_bounds: material_text_bounds
     ) {
         \Children
     };
