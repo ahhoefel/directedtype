@@ -1,0 +1,115 @@
+// DirectedType Material UI Component Library: Avatar
+// Graphical user/entity representation supporting Circular, Rounded, and Square shapes,
+// configurable sizes and colors, and both `label: String` and child text overloads.
+// Reference: https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Avatar
+
+\use "components/material/Palette.dt"
+
+\Enum AvatarVariant {
+    Circular,
+    Rounded,
+    Square,
+}
+
+// 1. Avatar with `label` prop (`\Avatar(label: "H", bg: material_primary.main)`)
+\Component Avatar(
+    label: String,
+    env font: Font = \Font(size: 16px),
+    size: Distance = 40px,
+    variant: AvatarVariant = AvatarVariant.Circular,
+    radius: Distance = 4px,
+    bg: Color = #bdbdbd,
+    color: Color = #ffffff,
+    border_color: Color = #00000000,
+    border_width: Distance = 0px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_circular = variant == AvatarVariant.Circular;
+    \let is_square = variant == AvatarVariant.Square;
+    \let resolved_radius = is_circular ? (size / 2) : (is_square ? 0px : radius);
+
+    \let font_size = size * 0.5;
+    \env font = \Font(
+        font: self.font,
+        size: font_size,
+        weight: 400,
+        line_height: font_size
+    );
+
+    \alias width = size;
+    \alias height = size;
+    \alias right = x + size;
+    \alias bottom = y + size;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: size,
+        height: size,
+        color: bg,
+        radius: resolved_radius,
+        border_color: border_color,
+        border_width: border_width
+    )
+
+    \let avatar_text = \Text(
+        x: x + max(0px, (size - avatar_text.width) / 2),
+        y: y + max(0px, (size - avatar_text.height) / 2),
+        font: env.font,
+        color: color,
+        text: label
+    );
+}
+
+// 2. Avatar with child text content (`\Avatar(bg: material_secondary.main) { OP }`)
+\Component Avatar(
+    env font: Font = \Font(size: 16px),
+    size: Distance = 40px,
+    variant: AvatarVariant = AvatarVariant.Circular,
+    radius: Distance = 4px,
+    bg: Color = #bdbdbd,
+    color: Color = #ffffff,
+    border_color: Color = #00000000,
+    border_width: Distance = 0px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_circular = variant == AvatarVariant.Circular;
+    \let is_square = variant == AvatarVariant.Square;
+    \let resolved_radius = is_circular ? (size / 2) : (is_square ? 0px : radius);
+
+    \let font_size = size * 0.5;
+    \env font = \Font(
+        font: self.font,
+        size: font_size,
+        weight: 400,
+        line_height: font_size
+    );
+
+    \alias width = size;
+    \alias height = size;
+    \alias right = x + size;
+    \alias bottom = y + size;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: size,
+        height: size,
+        color: bg,
+        radius: resolved_radius,
+        border_color: border_color,
+        border_width: border_width
+    )
+
+    \let avatar_text = \Text(
+        x: x + max(0px, (size - avatar_text.width) / 2),
+        y: y + max(0px, (size - avatar_text.height) / 2),
+        font: env.font,
+        color: color
+    ) {
+        \Children
+    };
+}
+

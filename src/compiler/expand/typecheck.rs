@@ -625,6 +625,12 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
         }
         Expr::Paren(inner, _) => resolve_ident_or_member_to_literal(inner, ctx),
         Expr::Ident(id) => {
+            if ctx
+                .declared_state_names
+                .is_some_and(|s| s.contains(id.as_str()))
+            {
+                return None;
+            }
             if let Some(comp_ports) = ctx.comp_ports {
                 if let Some(port_expr) = comp_ports.get(id.as_str()) {
                     match port_expr {
@@ -651,7 +657,7 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                     }
                 }
             }
-            if let Some(LexicalBinding::Expr(e) | LexicalBinding::State(e)) = ctx.lexical_scope.get(id.as_str()) {
+            if let Some(LexicalBinding::Expr(e)) = ctx.lexical_scope.get(id.as_str()) {
                 return resolve_ident_or_member_to_literal(e, ctx);
             }
             None
@@ -675,6 +681,12 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                     || ctx.parent_node.is_some_and(|p| target_id.as_str() == p.canonical_name())
                     || target_id.as_str() == ctx.current_node.canonical_name();
                 if is_target {
+                    if ctx
+                        .declared_state_names
+                        .is_some_and(|s| s.contains(m.member.as_str()))
+                    {
+                        return None;
+                    }
                     if let Some(comp_ports) = ctx.comp_ports {
                         if let Some(port_expr) = comp_ports.get(m.member.as_str()) {
                             match port_expr {

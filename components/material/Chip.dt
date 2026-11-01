@@ -1,0 +1,915 @@
+// DirectedType Material UI Component Library: Chip
+// Compact pill elements (\Chip) representing an input, attribute, or action.
+// Supports Filled and Outlined variants, Small (24px) and Medium (32px) sizes,
+// semantic MaterialColor channels, optional leading circular avatar, clickable
+// hover/focus/pressed states, and both `label: String` and child text overloads.
+// Reference: https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Chip
+
+\use "components/material/Palette.dt"
+
+\Enum ChipVariant {
+    Filled,
+    Outlined,
+}
+
+\Enum ChipSize {
+    Small,
+    Medium,
+}
+
+// 1. Explicit Width Chip with `label` prop
+\Component Chip(
+    width: Distance,
+    label: String,
+    env font: Font = \Font(size: 16px),
+    variant: ChipVariant = ChipVariant.Filled,
+    color: MaterialColor = MaterialColor.Inherit,
+    size: ChipSize = ChipSize.Medium,
+    avatar: String = "",
+    avatar_bg: Color = #00000000,
+    avatar_color: Color = #ffffff,
+    clickable: Boolean = false,
+    disabled: Boolean = false,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = unset
+) {
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let is_outlined = variant == ChipVariant.Outlined;
+    \let is_small = size == ChipSize.Small;
+
+    \let chip_height: Distance = is_small ? 24px : 32px;
+    \let chip_radius: Distance = chip_height / 2;
+
+    \env font = \Font(
+        font: self.font,
+        size: 13px,
+        weight: 400,
+        line_height: 18px
+    );
+
+    \let has_avatar = avatar != "";
+    \let resolved_avatar_size: Distance = has_avatar ? (is_small ? 18px : 24px) : 0px;
+    \let avatar_left_inset: Distance = has_avatar ? (is_small ? 4px : 5px) : 0px;
+    \let label_pad_left: Distance = is_small ? (has_avatar ? 6px : 8px) : (has_avatar ? 8px : 12px);
+    \let label_pad_right: Distance = is_small ? 8px : 12px;
+
+    \let avatar_font = \Font(
+        font: self.font,
+        size: is_small ? 10px : 12px,
+        weight: 400,
+        line_height: is_small ? 10px : 12px
+    );
+
+    \let is_inherit = color == MaterialColor.Inherit;
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_dark = is_primary ? #1565c0 : (
+        is_secondary ? #7b1fa2 : (
+            is_success ? #1b5e20 : (
+                is_error ? #c62828 : (
+                    is_info ? #01579b : (
+                        is_warning ? #e65100 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_outlined_border = is_primary ? #1976d280 : (
+        is_secondary ? #9c27b080 : (
+            is_success ? #2e7d3280 : (
+                is_error ? #d32f2f80 : (
+                    is_info ? #0288d180 : (
+                        is_warning ? #ed6c0280 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let is_active_state = pressed || hovered || focused;
+    \let filled_inherit_bg = pressed ? #00000029 : ((hovered || focused) ? #0000001f : #00000014);
+    \let filled_semantic_bg = is_active_state ? ch_dark : ch_main;
+    \let filled_bg = is_inherit ? filled_inherit_bg : filled_semantic_bg;
+
+    \let outlined_interactive_bg = pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : #00000000));
+    \let enabled_bg = is_outlined ? outlined_interactive_bg : filled_bg;
+    \let enabled_text = is_outlined ? (is_inherit ? #000000de : ch_main) : (is_inherit ? #000000de : #ffffff);
+    \let enabled_border = is_outlined
+        ? (is_active_state ? (is_inherit ? #9e9e9e : ch_main) : ch_outlined_border)
+        : #00000000;
+
+    \let bg_color = disabled ? (is_outlined ? #00000000 : #0000001f) : enabled_bg;
+    \let text_color = disabled ? #00000042 : enabled_text;
+    \let border_color = disabled ? (is_outlined ? #0000001f : #00000000) : enabled_border;
+    \let border_w: Distance = is_outlined ? 1px : 0px;
+
+    \let default_avatar_bg = is_inherit ? #bdbdbd : (is_outlined ? ch_main : ch_dark);
+    \let eff_avatar_bg = disabled ? #bdbdbd : ((avatar_bg == #00000000) ? default_avatar_bg : avatar_bg);
+    \let eff_avatar_color = disabled ? #ffffffb3 : avatar_color;
+
+    \let avatar_x: Distance = x + avatar_left_inset;
+    \let avatar_y: Distance = y + (chip_height - resolved_avatar_size) / 2;
+
+    \let content_start_x: Distance = x + avatar_left_inset + resolved_avatar_size + label_pad_left;
+    \let avail_label_w: Distance = max(0px, width - avatar_left_inset - resolved_avatar_size - label_pad_left - label_pad_right);
+    \let text_x: Distance = has_avatar
+        ? (content_start_x + max(0px, (avail_label_w - chip_text.width) / 2))
+        : (x + max(0px, (width - chip_text.width) / 2));
+
+    \alias right = x + width;
+    \alias height = chip_height;
+    \alias bottom = y + chip_height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: chip_height,
+        color: bg_color,
+        radius: chip_radius,
+        border_color: border_color,
+        border_width: border_w,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? eff_avatar_bg : #00000000,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? eff_avatar_color : #00000000,
+        text: avatar,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    );
+
+    \let chip_text = \Text(
+        x: text_x,
+        y: y + max(0px, (chip_height - chip_text.height) / 2),
+        font: env.font,
+        color: text_color,
+        text: label,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    );
+}
+
+// 2. Intrinsic Width Chip with `label` prop
+\Component Chip(
+    label: String,
+    env font: Font = \Font(size: 16px),
+    variant: ChipVariant = ChipVariant.Filled,
+    color: MaterialColor = MaterialColor.Inherit,
+    size: ChipSize = ChipSize.Medium,
+    avatar: String = "",
+    avatar_bg: Color = #00000000,
+    avatar_color: Color = #ffffff,
+    clickable: Boolean = false,
+    disabled: Boolean = false,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = unset
+) {
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let is_outlined = variant == ChipVariant.Outlined;
+    \let is_small = size == ChipSize.Small;
+
+    \let chip_height: Distance = is_small ? 24px : 32px;
+    \let chip_radius: Distance = chip_height / 2;
+
+    \env font = \Font(
+        font: self.font,
+        size: 13px,
+        weight: 400,
+        line_height: 18px
+    );
+
+    \let has_avatar = avatar != "";
+    \let resolved_avatar_size: Distance = has_avatar ? (is_small ? 18px : 24px) : 0px;
+    \let avatar_left_inset: Distance = has_avatar ? (is_small ? 4px : 5px) : 0px;
+    \let label_pad_left: Distance = is_small ? (has_avatar ? 6px : 8px) : (has_avatar ? 8px : 12px);
+    \let label_pad_right: Distance = is_small ? 8px : 12px;
+
+    \let avatar_font = \Font(
+        font: self.font,
+        size: is_small ? 10px : 12px,
+        weight: 400,
+        line_height: is_small ? 10px : 12px
+    );
+
+    \let is_inherit = color == MaterialColor.Inherit;
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_dark = is_primary ? #1565c0 : (
+        is_secondary ? #7b1fa2 : (
+            is_success ? #1b5e20 : (
+                is_error ? #c62828 : (
+                    is_info ? #01579b : (
+                        is_warning ? #e65100 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_outlined_border = is_primary ? #1976d280 : (
+        is_secondary ? #9c27b080 : (
+            is_success ? #2e7d3280 : (
+                is_error ? #d32f2f80 : (
+                    is_info ? #0288d180 : (
+                        is_warning ? #ed6c0280 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let is_active_state = pressed || hovered || focused;
+    \let filled_inherit_bg = pressed ? #00000029 : ((hovered || focused) ? #0000001f : #00000014);
+    \let filled_semantic_bg = is_active_state ? ch_dark : ch_main;
+    \let filled_bg = is_inherit ? filled_inherit_bg : filled_semantic_bg;
+
+    \let outlined_interactive_bg = pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : #00000000));
+    \let enabled_bg = is_outlined ? outlined_interactive_bg : filled_bg;
+    \let enabled_text = is_outlined ? (is_inherit ? #000000de : ch_main) : (is_inherit ? #000000de : #ffffff);
+    \let enabled_border = is_outlined
+        ? (is_active_state ? (is_inherit ? #9e9e9e : ch_main) : ch_outlined_border)
+        : #00000000;
+
+    \let bg_color = disabled ? (is_outlined ? #00000000 : #0000001f) : enabled_bg;
+    \let text_color = disabled ? #00000042 : enabled_text;
+    \let border_color = disabled ? (is_outlined ? #0000001f : #00000000) : enabled_border;
+    \let border_w: Distance = is_outlined ? 1px : 0px;
+
+    \let default_avatar_bg = is_inherit ? #bdbdbd : (is_outlined ? ch_main : ch_dark);
+    \let eff_avatar_bg = disabled ? #bdbdbd : ((avatar_bg == #00000000) ? default_avatar_bg : avatar_bg);
+    \let eff_avatar_color = disabled ? #ffffffb3 : avatar_color;
+
+    \let resolved_width: Distance = avatar_left_inset + resolved_avatar_size + label_pad_left + chip_text.width + label_pad_right;
+    \let avatar_x: Distance = x + avatar_left_inset;
+    \let avatar_y: Distance = y + (chip_height - resolved_avatar_size) / 2;
+    \let text_x: Distance = x + avatar_left_inset + resolved_avatar_size + label_pad_left;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = chip_height;
+    \alias bottom = y + chip_height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: chip_height,
+        color: bg_color,
+        radius: chip_radius,
+        border_color: border_color,
+        border_width: border_w,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? eff_avatar_bg : #00000000,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? eff_avatar_color : #00000000,
+        text: avatar,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    );
+
+    \let chip_text = \Text(
+        x: text_x,
+        y: y + max(0px, (chip_height - chip_text.height) / 2),
+        font: env.font,
+        color: text_color,
+        text: label,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    );
+}
+
+// 3. Explicit Width Chip with child text content (`\Chip(width: 120px) { Label }`)
+\Component Chip(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    variant: ChipVariant = ChipVariant.Filled,
+    color: MaterialColor = MaterialColor.Inherit,
+    size: ChipSize = ChipSize.Medium,
+    avatar: String = "",
+    avatar_bg: Color = #00000000,
+    avatar_color: Color = #ffffff,
+    clickable: Boolean = false,
+    disabled: Boolean = false,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = unset
+) {
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let is_outlined = variant == ChipVariant.Outlined;
+    \let is_small = size == ChipSize.Small;
+
+    \let chip_height: Distance = is_small ? 24px : 32px;
+    \let chip_radius: Distance = chip_height / 2;
+
+    \env font = \Font(
+        font: self.font,
+        size: 13px,
+        weight: 400,
+        line_height: 18px
+    );
+
+    \let has_avatar = avatar != "";
+    \let resolved_avatar_size: Distance = has_avatar ? (is_small ? 18px : 24px) : 0px;
+    \let avatar_left_inset: Distance = has_avatar ? (is_small ? 4px : 5px) : 0px;
+    \let label_pad_left: Distance = is_small ? (has_avatar ? 6px : 8px) : (has_avatar ? 8px : 12px);
+    \let label_pad_right: Distance = is_small ? 8px : 12px;
+
+    \let avatar_font = \Font(
+        font: self.font,
+        size: is_small ? 10px : 12px,
+        weight: 400,
+        line_height: is_small ? 10px : 12px
+    );
+
+    \let is_inherit = color == MaterialColor.Inherit;
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_dark = is_primary ? #1565c0 : (
+        is_secondary ? #7b1fa2 : (
+            is_success ? #1b5e20 : (
+                is_error ? #c62828 : (
+                    is_info ? #01579b : (
+                        is_warning ? #e65100 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_outlined_border = is_primary ? #1976d280 : (
+        is_secondary ? #9c27b080 : (
+            is_success ? #2e7d3280 : (
+                is_error ? #d32f2f80 : (
+                    is_info ? #0288d180 : (
+                        is_warning ? #ed6c0280 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let is_active_state = pressed || hovered || focused;
+    \let filled_inherit_bg = pressed ? #00000029 : ((hovered || focused) ? #0000001f : #00000014);
+    \let filled_semantic_bg = is_active_state ? ch_dark : ch_main;
+    \let filled_bg = is_inherit ? filled_inherit_bg : filled_semantic_bg;
+
+    \let outlined_interactive_bg = pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : #00000000));
+    \let enabled_bg = is_outlined ? outlined_interactive_bg : filled_bg;
+    \let enabled_text = is_outlined ? (is_inherit ? #000000de : ch_main) : (is_inherit ? #000000de : #ffffff);
+    \let enabled_border = is_outlined
+        ? (is_active_state ? (is_inherit ? #9e9e9e : ch_main) : ch_outlined_border)
+        : #00000000;
+
+    \let bg_color = disabled ? (is_outlined ? #00000000 : #0000001f) : enabled_bg;
+    \let text_color = disabled ? #00000042 : enabled_text;
+    \let border_color = disabled ? (is_outlined ? #0000001f : #00000000) : enabled_border;
+    \let border_w: Distance = is_outlined ? 1px : 0px;
+
+    \let default_avatar_bg = is_inherit ? #bdbdbd : (is_outlined ? ch_main : ch_dark);
+    \let eff_avatar_bg = disabled ? #bdbdbd : ((avatar_bg == #00000000) ? default_avatar_bg : avatar_bg);
+    \let eff_avatar_color = disabled ? #ffffffb3 : avatar_color;
+
+    \let avatar_x: Distance = x + avatar_left_inset;
+    \let avatar_y: Distance = y + (chip_height - resolved_avatar_size) / 2;
+
+    \let content_start_x: Distance = x + avatar_left_inset + resolved_avatar_size + label_pad_left;
+    \let avail_label_w: Distance = max(0px, width - avatar_left_inset - resolved_avatar_size - label_pad_left - label_pad_right);
+    \let text_x: Distance = has_avatar
+        ? (content_start_x + max(0px, (avail_label_w - chip_text.width) / 2))
+        : (x + max(0px, (width - chip_text.width) / 2));
+
+    \alias right = x + width;
+    \alias height = chip_height;
+    \alias bottom = y + chip_height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: chip_height,
+        color: bg_color,
+        radius: chip_radius,
+        border_color: border_color,
+        border_width: border_w,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? eff_avatar_bg : #00000000,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? eff_avatar_color : #00000000,
+        text: avatar,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    );
+
+    \let chip_text = \Text(
+        x: text_x,
+        y: y + max(0px, (chip_height - chip_text.height) / 2),
+        font: env.font,
+        color: text_color,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    ) {
+        \Children
+    };
+}
+
+// 4. Intrinsic Width Chip with child text content (`\Chip { Label }`)
+\Component Chip(
+    env font: Font = \Font(size: 16px),
+    variant: ChipVariant = ChipVariant.Filled,
+    color: MaterialColor = MaterialColor.Inherit,
+    size: ChipSize = ChipSize.Medium,
+    avatar: String = "",
+    avatar_bg: Color = #00000000,
+    avatar_color: Color = #ffffff,
+    clickable: Boolean = false,
+    disabled: Boolean = false,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = unset
+) {
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let is_outlined = variant == ChipVariant.Outlined;
+    \let is_small = size == ChipSize.Small;
+
+    \let chip_height: Distance = is_small ? 24px : 32px;
+    \let chip_radius: Distance = chip_height / 2;
+
+    \env font = \Font(
+        font: self.font,
+        size: 13px,
+        weight: 400,
+        line_height: 18px
+    );
+
+    \let has_avatar = avatar != "";
+    \let resolved_avatar_size: Distance = has_avatar ? (is_small ? 18px : 24px) : 0px;
+    \let avatar_left_inset: Distance = has_avatar ? (is_small ? 4px : 5px) : 0px;
+    \let label_pad_left: Distance = is_small ? (has_avatar ? 6px : 8px) : (has_avatar ? 8px : 12px);
+    \let label_pad_right: Distance = is_small ? 8px : 12px;
+
+    \let avatar_font = \Font(
+        font: self.font,
+        size: is_small ? 10px : 12px,
+        weight: 400,
+        line_height: is_small ? 10px : 12px
+    );
+
+    \let is_inherit = color == MaterialColor.Inherit;
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_dark = is_primary ? #1565c0 : (
+        is_secondary ? #7b1fa2 : (
+            is_success ? #1b5e20 : (
+                is_error ? #c62828 : (
+                    is_info ? #01579b : (
+                        is_warning ? #e65100 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_outlined_border = is_primary ? #1976d280 : (
+        is_secondary ? #9c27b080 : (
+            is_success ? #2e7d3280 : (
+                is_error ? #d32f2f80 : (
+                    is_info ? #0288d180 : (
+                        is_warning ? #ed6c0280 : #bdbdbd
+                    )
+                )
+            )
+        )
+    );
+
+    \let is_active_state = pressed || hovered || focused;
+    \let filled_inherit_bg = pressed ? #00000029 : ((hovered || focused) ? #0000001f : #00000014);
+    \let filled_semantic_bg = is_active_state ? ch_dark : ch_main;
+    \let filled_bg = is_inherit ? filled_inherit_bg : filled_semantic_bg;
+
+    \let outlined_interactive_bg = pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : #00000000));
+    \let enabled_bg = is_outlined ? outlined_interactive_bg : filled_bg;
+    \let enabled_text = is_outlined ? (is_inherit ? #000000de : ch_main) : (is_inherit ? #000000de : #ffffff);
+    \let enabled_border = is_outlined
+        ? (is_active_state ? (is_inherit ? #9e9e9e : ch_main) : ch_outlined_border)
+        : #00000000;
+
+    \let bg_color = disabled ? (is_outlined ? #00000000 : #0000001f) : enabled_bg;
+    \let text_color = disabled ? #00000042 : enabled_text;
+    \let border_color = disabled ? (is_outlined ? #0000001f : #00000000) : enabled_border;
+    \let border_w: Distance = is_outlined ? 1px : 0px;
+
+    \let default_avatar_bg = is_inherit ? #bdbdbd : (is_outlined ? ch_main : ch_dark);
+    \let eff_avatar_bg = disabled ? #bdbdbd : ((avatar_bg == #00000000) ? default_avatar_bg : avatar_bg);
+    \let eff_avatar_color = disabled ? #ffffffb3 : avatar_color;
+
+    \let resolved_width: Distance = avatar_left_inset + resolved_avatar_size + label_pad_left + chip_text.width + label_pad_right;
+    \let avatar_x: Distance = x + avatar_left_inset;
+    \let avatar_y: Distance = y + (chip_height - resolved_avatar_size) / 2;
+    \let text_x: Distance = x + avatar_left_inset + resolved_avatar_size + label_pad_left;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = chip_height;
+    \alias bottom = y + chip_height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: chip_height,
+        color: bg_color,
+        radius: chip_radius,
+        border_color: border_color,
+        border_width: border_w,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? eff_avatar_bg : #00000000,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? eff_avatar_color : #00000000,
+        text: avatar,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    );
+
+    \let chip_text = \Text(
+        x: text_x,
+        y: y + max(0px, (chip_height - chip_text.height) / 2),
+        font: env.font,
+        color: text_color,
+        on_click: click,
+        on_focus: focus,
+        on_blur: blur,
+        on_pointer_enter: pointer_enter,
+        on_pointer_leave: pointer_leave,
+        on_pointer_down: pointer_down,
+        on_pointer_up: pointer_up
+    ) {
+        \Children
+    };
+}
+

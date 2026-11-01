@@ -12,6 +12,8 @@
 \use "../components/material/Divider.dt"
 \use "../components/material/Typography.dt"
 \use "../components/material/Card.dt"
+\use "../components/material/Avatar.dt"
+\use "../components/material/Chip.dt"
 
 \Window(title: "Material UI Component Gallery")
 
@@ -401,6 +403,61 @@
                         \Button(size: ButtonSize.Small, variant: ButtonVariant.Contained) { Install }
                     }
                 }
+            }
+        }
+    }
+
+    // Section 11: Avatars & Chips (Variants, Semantic Colors, Avatars, Sizes & Clickable States)
+    \Paper("card_avatars_and_chips"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
+        \VStack(min_width: target_inner_width, gap: 16px) {
+            \Subtitle2(color: material_text_secondary) {
+                11. AVATARS (CIRCULAR, ROUNDED, SQUARE & SIZES) & CHIPS (FILLED, OUTLINED, AVATAR & CLICKABLE)
+            }
+
+            // 11a. Avatars: Circular, Rounded, Square & Custom Sizes
+            \HStack(gap: 16px, align: Align.Center) {
+                \Avatar("av_default";) { H }
+                \Avatar("av_primary"; bg: material_primary.main, label: "N")
+                \Avatar("av_secondary"; bg: material_secondary.main) { OP }
+                \Avatar("av_rounded"; variant: AvatarVariant.Rounded, bg: material_success.main) { R }
+                \Avatar("av_square"; variant: AvatarVariant.Square, bg: material_warning.main) { SQ }
+                \Spacer(width: 8px)
+                \Avatar("av_sm"; size: 24px, bg: material_info.main) { S }
+                \Avatar("av_md"; size: 40px, bg: material_primary.main) { M }
+                \Avatar("av_lg"; size: 56px, bg: material_error.main) { L }
+            }
+
+            \Divider
+
+            // 11b. Chips: Basic, Clickable, Disabled & Leading Avatar
+            \HStack(gap: 12px, align: Align.Center) {
+                \Chip("chip_filled";) { Chip Filled }
+                \Chip("chip_outlined"; variant: ChipVariant.Outlined) { Chip Outlined }
+                \Chip("chip_clickable_filled"; clickable: true) { Clickable }
+                \Chip("chip_clickable_outlined"; variant: ChipVariant.Outlined, clickable: true) { Clickable Outlined }
+                \Chip("chip_avatar_filled"; avatar: "M", clickable: true) { Avatar Chip }
+                \Chip("chip_avatar_outlined"; variant: ChipVariant.Outlined, avatar: "F", avatar_bg: material_primary.main, clickable: true) { Custom Avatar }
+                \Chip("chip_disabled"; disabled: true) { Disabled }
+            }
+
+            // 11c. Chips: Semantic Palette Colors (Filled & Outlined) + Small Size
+            \HStack(gap: 10px, align: Align.Center) {
+                \Chip("chip_c_primary"; color: MaterialColor.Primary, clickable: true) { Primary }
+                \Chip("chip_c_secondary"; color: MaterialColor.Secondary, clickable: true) { Secondary }
+                \Chip("chip_c_success"; color: MaterialColor.Success, clickable: true) { Success }
+                \Chip("chip_c_error"; color: MaterialColor.Error, clickable: true) { Error }
+                \Chip("chip_c_info"; color: MaterialColor.Info, clickable: true) { Info }
+                \Chip("chip_c_warning"; color: MaterialColor.Warning, clickable: true) { Warning }
+            }
+
+            \HStack(gap: 10px, align: Align.Center) {
+                \Chip("chip_o_primary"; variant: ChipVariant.Outlined, color: MaterialColor.Primary, avatar: "P", clickable: true) { Primary }
+                \Chip("chip_o_secondary"; variant: ChipVariant.Outlined, color: MaterialColor.Secondary, clickable: true) { Secondary }
+                \Chip("chip_o_success"; variant: ChipVariant.Outlined, color: MaterialColor.Success, clickable: true) { Success }
+                \Chip("chip_o_error"; variant: ChipVariant.Outlined, color: MaterialColor.Error, clickable: true) { Error }
+                \Spacer(width: 8px)
+                \Chip("chip_sm_filled"; size: ChipSize.Small, color: MaterialColor.Primary) { Small Filled }
+                \Chip("chip_sm_outlined"; size: ChipSize.Small, variant: ChipVariant.Outlined, color: MaterialColor.Secondary, avatar: "S") { Small Avatar }
             }
         }
     }
