@@ -10,6 +10,7 @@
 \use "../components/material/Button.dt"
 \use "../components/material/Paper.dt"
 \use "../components/material/Divider.dt"
+\use "../components/material/Typography.dt"
 
 \Window(title: "Material UI Component Gallery")
 
@@ -31,17 +32,11 @@
     gap: 16px
 ) {
     // Header
-    \Text(
-        font: \Font(size: 26px, weight: 700),
-        color: #1976d2
-    ) {
+    \H5(color: material_primary.main) {
         Material UI Component Gallery
     }
 
-    \Text(
-        font: \Font(size: 14px, weight: 400),
-        color: #616161
-    ) {
+    \Body2(color: material_text_secondary) {
         Interactive showcase of @mui/material components — hover, focus, and click components to see state transitions.
     }
 
@@ -51,7 +46,7 @@
     // Section 1: Basic Button Variants
     \Paper("card_basic_variants"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
         \VStack(min_width: target_inner_width, gap: 12px) {
-            \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            \Subtitle2(color: material_text_secondary) {
                 1. BUTTON VARIANTS (TEXT, CONTAINED, OUTLINED & DISABLED)
             }
             \HStack(gap: 12px, align: Align.Center) {
@@ -68,7 +63,7 @@
     // Section 2: Semantic Palette Colors (Contained)
     \Paper("card_contained_colors"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
         \VStack(min_width: target_inner_width, gap: 12px) {
-            \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            \Subtitle2(color: material_text_secondary) {
                 2. CONTAINED PALETTE COLORS
             }
             \HStack(gap: 12px, align: Align.Center) {
@@ -86,7 +81,7 @@
     // Section 3: Semantic Palette Colors (Outlined & Text)
     \Paper("card_outlined_text_colors"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
         \VStack(min_width: target_inner_width, gap: 12px) {
-            \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            \Subtitle2(color: material_text_secondary) {
                 3. OUTLINED & TEXT PALETTE COLORS
             }
             \HStack(gap: 12px, align: Align.Center) {
@@ -113,7 +108,7 @@
     // Section 4: Button Sizes (Small 30px, Medium 36px, Large 42px)
     \Paper("card_sizes"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
         \VStack(min_width: target_inner_width, gap: 12px) {
-            \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            \Subtitle2(color: material_text_secondary) {
                 4. BUTTON SIZES (SMALL, MEDIUM, LARGE)
             }
             \HStack(gap: 12px, align: Align.Center) {
@@ -135,7 +130,7 @@
     // Section 5: Intrinsic Min-Width vs Fixed Width Override
     \Paper("card_widths"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
         \VStack(min_width: target_inner_width, gap: 12px) {
-            \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            \Subtitle2(color: material_text_secondary) {
                 5. INTRINSIC SIZING (64PX MIN-WIDTH) VS EXPLICIT WIDTH
             }
             \HStack(gap: 12px, align: Align.Center) {
@@ -149,58 +144,58 @@
     // Section 6: Paper Elevations
     \Paper("card_paper_elevations"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
         \VStack(min_width: target_inner_width, gap: 16px) {
-            \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            \Subtitle2(color: material_text_secondary) {
                 6. PAPER ELEVATIONS (0, 1, 2, 3, 4, 6, 8, 12, 16, 24)
             }
             \HStack(gap: 20px, align: Align.Center) {
                 \Paper("elev_0"; elevation: 0) {
                     \Center(width: 64px, height: 64px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #616161) { elev=0 }
+                        \Caption(color: material_text_secondary) { elev=0 }
                     }
                 }
                 \Paper("elev_1"; elevation: 1) {
                     \Center(width: 64px, height: 64px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #616161) { elev=1 }
+                        \Caption(color: material_text_secondary) { elev=1 }
                     }
                 }
                 \Paper("elev_2"; elevation: 2) {
                     \Center(width: 64px, height: 64px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #616161) { elev=2 }
+                        \Caption(color: material_text_secondary) { elev=2 }
                     }
                 }
                 \Paper("elev_3"; elevation: 3) {
                     \Center(width: 64px, height: 64px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #616161) { elev=3 }
+                        \Caption(color: material_text_secondary) { elev=3 }
                     }
                 }
                 \Paper("elev_4"; elevation: 4) {
                     \Center(width: 64px, height: 64px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #616161) { elev=4 }
+                        \Caption(color: material_text_secondary) { elev=4 }
                     }
                 }
                 \Paper("elev_6"; elevation: 6) {
                     \Center(width: 64px, height: 64px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #616161) { elev=6 }
+                        \Caption(color: material_text_secondary) { elev=6 }
                     }
                 }
                 \Paper("elev_8"; elevation: 8) {
                     \Center(width: 64px, height: 64px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #616161) { elev=8 }
+                        \Caption(color: material_text_secondary) { elev=8 }
                     }
                 }
                 \Paper("elev_12"; elevation: 12) {
                     \Center(width: 64px, height: 64px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #616161) { elev=12 }
+                        \Caption(color: material_text_secondary) { elev=12 }
                     }
                 }
                 \Paper("elev_16"; elevation: 16) {
                     \Center(width: 64px, height: 64px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #616161) { elev=16 }
+                        \Caption(color: material_text_secondary) { elev=16 }
                     }
                 }
                 \Paper("elev_24"; elevation: 24) {
                     \Center(width: 64px, height: 64px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #616161) { elev=24 }
+                        \Caption(color: material_text_secondary) { elev=24 }
                     }
                 }
             }
@@ -210,28 +205,28 @@
     // Section 7: Paper Variants & Corners
     \Paper("card_paper_variants"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
         \VStack(min_width: target_inner_width, gap: 16px) {
-            \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            \Subtitle2(color: material_text_secondary) {
                 7. PAPER VARIANTS (ELEVATION VS OUTLINED) & CORNERS (ROUNDED VS SQUARE)
             }
             \HStack(gap: 24px, align: Align.Center) {
                 \Paper("p_elev_rounded"; variant: PaperVariant.Elevation, elevation: 3) {
                     \Center(width: 140px, height: 56px) {
-                        \Text(font: \Font(size: 13px, weight: 500), color: #212121) { Elevation (Rounded) }
+                        \Body2 { Elevation (Rounded) }
                     }
                 }
                 \Paper("p_elev_square"; variant: PaperVariant.Elevation, elevation: 3, square: true) {
                     \Center(width: 140px, height: 56px) {
-                        \Text(font: \Font(size: 13px, weight: 500), color: #212121) { Elevation (Square) }
+                        \Body2 { Elevation (Square) }
                     }
                 }
                 \Paper("p_outlined_rounded"; variant: PaperVariant.Outlined) {
                     \Center(width: 140px, height: 56px) {
-                        \Text(font: \Font(size: 13px, weight: 500), color: #212121) { Outlined (Rounded) }
+                        \Body2 { Outlined (Rounded) }
                     }
                 }
                 \Paper("p_outlined_square"; variant: PaperVariant.Outlined, square: true) {
                     \Center(width: 140px, height: 56px) {
-                        \Text(font: \Font(size: 13px, weight: 500), color: #212121) { Outlined (Square) }
+                        \Body2 { Outlined (Square) }
                     }
                 }
             }
@@ -241,7 +236,7 @@
     // Section 8: Dividers (Variants, With Children & Vertical Orientation)
     \Paper("card_dividers"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
         \VStack(min_width: target_inner_width, gap: 16px) {
-            \Text(font: \Font(size: 13px, weight: 700), color: #757575) {
+            \Subtitle2(color: material_text_secondary) {
                 8. DIVIDERS (VARIANTS, WITH CHILDREN & VERTICAL ORIENTATION)
             }
             \HStack(gap: 24px, align: Align.Top) {
@@ -250,25 +245,25 @@
                     \VStack(gap: 10px) {
                         \HStack(gap: 16px) {
                             \Spacer(width: 16px)
-                            \Text(font: \Font(size: 13px, weight: 500), color: #212121) { FullWidth Divider below }
+                            \Body2 { FullWidth Divider below }
                             \Spacer(width: 48px)
                         }
                         \Divider("div_full"; variant: DividerVariant.FullWidth)
                         \HStack(gap: 16px) {
                             \Spacer(width: 16px)
-                            \Text(font: \Font(size: 13px, weight: 500), color: #212121) { Inset Divider below (72px left) }
+                            \Body2 { Inset Divider below (72px left) }
                             \Spacer(width: 24px)
                         }
                         \Divider("div_inset"; variant: DividerVariant.Inset)
                         \HStack(gap: 16px) {
                             \Spacer(width: 16px)
-                            \Text(font: \Font(size: 13px, weight: 500), color: #212121) { Middle Divider below (16px sides) }
+                            \Body2 { Middle Divider below (16px sides) }
                             \Spacer(width: 16px)
                         }
                         \Divider("div_middle"; variant: DividerVariant.Middle)
                         \HStack(gap: 16px) {
                             \Spacer(width: 16px)
-                            \Text(font: \Font(size: 13px, weight: 400), color: #757575) { Bottom item in intrinsic VStack }
+                            \Body2(color: material_text_secondary) { Bottom item in intrinsic VStack }
                             \Spacer(width: 16px)
                         }
                     }
@@ -277,17 +272,17 @@
                 // 8b. Dividers with Child Content (Center, Left, Right)
                 \Paper("div_children_box"; variant: PaperVariant.Outlined, padding_x: 16px, padding_y: 12px) {
                     \VStack(min_width: 260px, gap: 12px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #757575) {
+                        \Caption(color: material_text_secondary) {
                             Dividers with Children (Center, Left, Right)
                         }
                         \Divider("div_text_center";) {
-                            \Text(font: \Font(size: 12px, weight: 600), color: #757575) { CENTER }
+                            \Caption(color: material_text_secondary) { CENTER }
                         }
                         \Divider("div_text_left"; text_align: Align.Left) {
-                            \Text(font: \Font(size: 12px, weight: 600), color: #757575) { LEFT }
+                            \Caption(color: material_text_secondary) { LEFT }
                         }
                         \Divider("div_text_right"; text_align: Align.Right) {
-                            \Text(font: \Font(size: 12px, weight: 600), color: #757575) { RIGHT }
+                            \Caption(color: material_text_secondary) { RIGHT }
                         }
                         \Divider("div_with_button";) {
                             \Button(size: ButtonSize.Small, variant: ButtonVariant.Outlined) { Action }
@@ -298,7 +293,7 @@
                 // 8c. Vertical Dividers in an HStack
                 \Paper("div_vertical_box"; variant: PaperVariant.Outlined, padding_x: 16px, padding_y: 12px) {
                     \VStack(gap: 12px) {
-                        \Text(font: \Font(size: 12px, weight: 600), color: #757575) {
+                        \Caption(color: material_text_secondary) {
                             Vertical (FullWidth & Middle)
                         }
                         \HStack(gap: 12px, align: Align.Center) {
@@ -313,4 +308,28 @@
             }
         }
     }
+
+    // Section 9: Typography Type Scale & Shorthand Components
+    \Paper("card_typography"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
+        \VStack(min_width: target_inner_width, gap: 8px) {
+            \Subtitle2(color: material_text_secondary) {
+                9. TYPOGRAPHY TYPE SCALE (H1-H6, SUBTITLE1/2, BODY1/2, BUTTON, CAPTION, OVERLINE)
+            }
+            \H1 { h1. Heading }
+            \H2 { h2. Heading }
+            \H3 { h3. Heading }
+            \H4 { h4. Heading }
+            \H5 { h5. Heading }
+            \H6 { h6. Heading }
+            \Subtitle1 { subtitle1. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Quos blanditiis tenetur }
+            \Subtitle2(color: material_text_secondary) { subtitle2. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Quos blanditiis tenetur }
+            \Body1 { body1. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Quos blanditiis tenetur unde suscipit, quam beatae rerum inventore consectetur. }
+            \Body2(color: material_text_secondary) { body2. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Quos blanditiis tenetur unde suscipit, quam beatae rerum inventore consectetur. }
+            \Typography(variant: TypographyVariant.Button) { BUTTON TEXT }
+            \Caption(color: material_text_secondary) { caption text }
+            \Overline(color: material_text_disabled) { OVERLINE TEXT }
+        }
+    }
 };
+
+

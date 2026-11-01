@@ -105,3 +105,8 @@
 \let material_disabled_bg = #0000001f;
 \let material_disabled_border = #0000001f;
 
+// Standard @mui/material Text Palette Tokens
+\let material_text_primary = #000000de;
+\let material_text_secondary = #00000099;
+\let material_text_disabled = #00000061;
+

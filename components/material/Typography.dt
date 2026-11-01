@@ -1,0 +1,840 @@
+// DirectedType Material UI Component Library: Typography
+// Reimplementation of @mui/material Typography with the 13-role Material Design type scale,
+// reusable \Font tokens, \Typography component, and semantic shorthand components (\H1-\H6,
+// \Subtitle1, \Subtitle2, \Body1, \Body2, \Caption, \Overline).
+
+\use "components/Align.dt"
+\use "components/material/Palette.dt"
+
+\Enum TypographyVariant {
+    H1,
+    H2,
+    H3,
+    H4,
+    H5,
+    H6,
+    Subtitle1,
+    Subtitle2,
+    Body1,
+    Body2,
+    Button,
+    Caption,
+    Overline,
+}
+
+// Standard @mui/material Type Scale Font Tokens
+\let material_font_h1 = \Font(size: 96px, weight: 300, line_height: 112px);
+\let material_font_h2 = \Font(size: 60px, weight: 300, line_height: 72px);
+\let material_font_h3 = \Font(size: 48px, weight: 400, line_height: 56px);
+\let material_font_h4 = \Font(size: 34px, weight: 400, line_height: 42px);
+\let material_font_h5 = \Font(size: 24px, weight: 400, line_height: 32px);
+\let material_font_h6 = \Font(size: 20px, weight: 500, line_height: 32px);
+\let material_font_subtitle1 = \Font(size: 16px, weight: 400, line_height: 28px);
+\let material_font_subtitle2 = \Font(size: 14px, weight: 500, line_height: 22px);
+\let material_font_body1 = \Font(size: 16px, weight: 400, line_height: 24px);
+\let material_font_body2 = \Font(size: 14px, weight: 400, line_height: 20px);
+\let material_font_button = \Font(size: 14px, weight: 500, line_height: 24px);
+\let material_font_caption = \Font(size: 12px, weight: 400, line_height: 20px);
+\let material_font_overline = \Font(size: 12px, weight: 400, line_height: 32px);
+
+// 1. Explicit Width Typography (Wrapping or Aligned within Container)
+\Component Typography(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    variant: TypographyVariant = TypographyVariant.Body1,
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_h1 = variant == TypographyVariant.H1;
+    \let is_h2 = variant == TypographyVariant.H2;
+    \let is_h3 = variant == TypographyVariant.H3;
+    \let is_h4 = variant == TypographyVariant.H4;
+    \let is_h5 = variant == TypographyVariant.H5;
+    \let is_h6 = variant == TypographyVariant.H6;
+    \let is_sub1 = variant == TypographyVariant.Subtitle1;
+    \let is_sub2 = variant == TypographyVariant.Subtitle2;
+    \let is_body2 = variant == TypographyVariant.Body2;
+    \let is_button = variant == TypographyVariant.Button;
+    \let is_caption = variant == TypographyVariant.Caption;
+    \let is_overline = variant == TypographyVariant.Overline;
+
+    \let v_size = is_h1 ? 96px : (
+        is_h2 ? 60px : (
+            is_h3 ? 48px : (
+                is_h4 ? 34px : (
+                    is_h5 ? 24px : (
+                        is_h6 ? 20px : (
+                            is_sub1 ? 16px : (
+                                is_sub2 ? 14px : (
+                                    is_body2 ? 14px : (
+                                        is_button ? 14px : (
+                                            is_caption ? 12px : (
+                                                is_overline ? 12px : 16px
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    );
+
+    \let v_weight = (is_h1 || is_h2) ? 300 : (
+        (is_h6 || is_sub2 || is_button) ? 500 : 400
+    );
+
+    \let v_line_height = is_h1 ? 112px : (
+        is_h2 ? 72px : (
+            is_h3 ? 56px : (
+                is_h4 ? 42px : (
+                    is_h5 ? 32px : (
+                        is_h6 ? 32px : (
+                            is_sub1 ? 28px : (
+                                is_sub2 ? 22px : (
+                                    is_body2 ? 20px : (
+                                        is_button ? 24px : (
+                                            is_caption ? 20px : (
+                                                is_overline ? 32px : 24px
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    );
+
+    \env font = \Font(
+        font: self.font,
+        size: v_size,
+        weight: v_weight,
+        line_height: v_line_height
+    );
+
+    \let t = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: env.font,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// 2. Intrinsic Width Typography (Single-Line Auto-Sized to Content)
+\Component Typography(
+    env font: Font = \Font(size: 16px),
+    variant: TypographyVariant = TypographyVariant.Body1,
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_h1 = variant == TypographyVariant.H1;
+    \let is_h2 = variant == TypographyVariant.H2;
+    \let is_h3 = variant == TypographyVariant.H3;
+    \let is_h4 = variant == TypographyVariant.H4;
+    \let is_h5 = variant == TypographyVariant.H5;
+    \let is_h6 = variant == TypographyVariant.H6;
+    \let is_sub1 = variant == TypographyVariant.Subtitle1;
+    \let is_sub2 = variant == TypographyVariant.Subtitle2;
+    \let is_body2 = variant == TypographyVariant.Body2;
+    \let is_button = variant == TypographyVariant.Button;
+    \let is_caption = variant == TypographyVariant.Caption;
+    \let is_overline = variant == TypographyVariant.Overline;
+
+    \let v_size = is_h1 ? 96px : (
+        is_h2 ? 60px : (
+            is_h3 ? 48px : (
+                is_h4 ? 34px : (
+                    is_h5 ? 24px : (
+                        is_h6 ? 20px : (
+                            is_sub1 ? 16px : (
+                                is_sub2 ? 14px : (
+                                    is_body2 ? 14px : (
+                                        is_button ? 14px : (
+                                            is_caption ? 12px : (
+                                                is_overline ? 12px : 16px
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    );
+
+    \let v_weight = (is_h1 || is_h2) ? 300 : (
+        (is_h6 || is_sub2 || is_button) ? 500 : 400
+    );
+
+    \let v_line_height = is_h1 ? 112px : (
+        is_h2 ? 72px : (
+            is_h3 ? 56px : (
+                is_h4 ? 42px : (
+                    is_h5 ? 32px : (
+                        is_h6 ? 32px : (
+                            is_sub1 ? 28px : (
+                                is_sub2 ? 22px : (
+                                    is_body2 ? 20px : (
+                                        is_button ? 24px : (
+                                            is_caption ? 20px : (
+                                                is_overline ? 32px : 24px
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    );
+
+    \env font = \Font(
+        font: self.font,
+        size: v_size,
+        weight: v_weight,
+        line_height: v_line_height
+    );
+
+    \let t = \Text(
+        x: x,
+        y: y,
+        font: env.font,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// ============================================================================
+// Shorthand Components
+// ============================================================================
+
+// H1 (96px / 300 / 112px)
+\Component H1(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.H1,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component H1(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.H1,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// H2 (60px / 300 / 72px)
+\Component H2(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.H2,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component H2(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.H2,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// H3 (48px / 400 / 56px)
+\Component H3(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.H3,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component H3(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.H3,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// H4 (34px / 400 / 42px)
+\Component H4(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.H4,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component H4(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.H4,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// H5 (24px / 400 / 32px)
+\Component H5(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.H5,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component H5(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.H5,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// H6 (20px / 500 / 32px)
+\Component H6(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.H6,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component H6(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.H6,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// Subtitle1 (16px / 400 / 28px)
+\Component Subtitle1(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.Subtitle1,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component Subtitle1(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.Subtitle1,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// Subtitle2 (14px / 500 / 22px)
+\Component Subtitle2(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.Subtitle2,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component Subtitle2(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.Subtitle2,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// Body1 (16px / 400 / 24px)
+\Component Body1(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.Body1,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component Body1(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.Body1,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// Body2 (14px / 400 / 20px)
+\Component Body2(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.Body2,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component Body2(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.Body2,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// Caption (12px / 400 / 20px)
+\Component Caption(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.Caption,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component Caption(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.Caption,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+// Overline (12px / 400 / 32px)
+\Component Overline(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        width: width,
+        variant: TypographyVariant.Overline,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
+\Component Overline(
+    env font: Font = \Font(size: 16px),
+    color: Color = #000000de,
+    align: Align = Align.Left,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \env font = self.font;
+    \let t = \Typography(
+        x: x,
+        y: y,
+        variant: TypographyVariant.Overline,
+        color: color,
+        align: align
+    ) {
+        \Children
+    };
+    \alias width = t.width;
+    \alias right = x + width;
+    \alias height = t.height;
+    \alias bottom = y + height;
+    \alias baseline = t.baseline;
+}
+
