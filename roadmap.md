@@ -42,6 +42,7 @@
 * **Standard Component Library**: Expand standard components beyond `Button`, `Card`, `Link`, `HCenter`, `VCenter`, `PadIn`, `PadOut`, `VStack`, `VStackStretch`, `HStack`, `HStackStretch`, `ScrollView`, `Slider`, and `NavBar` to include `TextInput`, `Checkbox`, `Toggle`, `Tabs`, `Dialog/Modal`, and menus.
 * **Graphical Primitives**: Add vector paths, strokes, complex borders, gradients, and custom canvas-like layout compositions.
 * **Showcase Applications**: Build multi-pane documentation readers, split editors, and rich interactive applications demonstrating single-pass reactive DAG layout and event flows.
+* Animation. For example, Material Design switches should gradually move from one side to the other. Animation could be done declaratively, or by companion animation frames.
 
 ---
 

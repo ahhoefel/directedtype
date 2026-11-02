@@ -14,6 +14,9 @@
 \use "../components/material/Card.dt"
 \use "../components/material/Avatar.dt"
 \use "../components/material/Chip.dt"
+\use "../components/material/Switch.dt"
+\use "../components/material/Checkbox.dt"
+\use "../components/material/Radio.dt"
 
 \Window(title: "Material UI Component Gallery")
 
@@ -458,6 +461,56 @@
                 \Spacer(width: 8px)
                 \Chip("chip_sm_filled"; size: ChipSize.Small, color: MaterialColor.Primary) { Small Filled }
                 \Chip("chip_sm_outlined"; size: ChipSize.Small, variant: ChipVariant.Outlined, color: MaterialColor.Secondary, avatar: "S") { Small Avatar }
+            }
+        }
+    }
+
+    // Section 12: Selection Controls (Switch, Checkbox & Radio)
+    \Paper("card_selection_controls"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
+        \VStack(min_width: target_inner_width, gap: 16px) {
+            \Subtitle2(color: material_text_secondary) {
+                12. SELECTION CONTROLS (SWITCH, CHECKBOX & RADIO — STATES, PALETTE COLORS, SIZES & LABELS)
+            }
+
+            // 12a. Switches: States, Semantic Colors, Sizes & Labeled
+            \HStack(gap: 16px, align: Align.Center) {
+                \Switch("sw_unchecked";)
+                \Switch("sw_checked"; checked: true) { Primary }
+                \Switch("sw_secondary"; checked: true, color: MaterialColor.Secondary) { Secondary }
+                \Switch("sw_success"; checked: true, color: MaterialColor.Success) { Success }
+                \Switch("sw_warning"; checked: true, color: MaterialColor.Warning) { Warning }
+                \Switch("sw_error"; checked: true, color: MaterialColor.Error) { Error }
+                \Switch("sw_small"; checked: true, size: SwitchSize.Small, label: "Small")
+                \Switch("sw_disabled_off"; disabled: true) { Disabled Off }
+                \Switch("sw_disabled_on"; checked: true, disabled: true) { Disabled On }
+            }
+
+            \Divider
+
+            // 12b. Checkboxes: Unchecked, Checked, Indeterminate, Semantic Colors, Sizes & Disabled
+            \HStack(gap: 16px, align: Align.Center) {
+                \Checkbox("cb_unchecked";) { Unchecked }
+                \Checkbox("cb_checked"; checked: true) { Checked }
+                \Checkbox("cb_indeterminate"; indeterminate: true) { Indeterminate }
+                \Checkbox("cb_secondary"; checked: true, color: MaterialColor.Secondary) { Secondary }
+                \Checkbox("cb_success"; checked: true, color: MaterialColor.Success) { Success }
+                \Checkbox("cb_error"; checked: true, color: MaterialColor.Error) { Error }
+                \Checkbox("cb_small"; checked: true, size: CheckboxSize.Small, label: "Small")
+                \Checkbox("cb_disabled"; checked: true, disabled: true) { Disabled }
+            }
+
+            \Divider
+
+            // 12c. Radio Buttons: Unchecked, Checked, Semantic Colors, Sizes & Disabled
+            \HStack(gap: 16px, align: Align.Center) {
+                \Radio("rad_unchecked";) { Option A }
+                \Radio("rad_checked"; checked: true) { Option B }
+                \Radio("rad_secondary"; checked: true, color: MaterialColor.Secondary) { Secondary }
+                \Radio("rad_success"; checked: true, color: MaterialColor.Success) { Success }
+                \Radio("rad_warning"; checked: true, color: MaterialColor.Warning) { Warning }
+                \Radio("rad_error"; checked: true, color: MaterialColor.Error) { Error }
+                \Radio("rad_small"; checked: true, size: RadioSize.Small, label: "Small")
+                \Radio("rad_disabled"; checked: true, disabled: true) { Disabled }
             }
         }
     }

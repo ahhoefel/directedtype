@@ -1,0 +1,375 @@
+// DirectedType Material UI Component Library: Radio
+// Radio button control (\Radio) supporting Small (34x34 halo / 16x16 ring / 8x8 dot)
+// and Medium (42x42 halo / 20x20 ring / 10x10 dot) sizes, semantic MaterialColor channels,
+// reactive hover/focus/pressed circular halos, disabled state, controlled/uncontrolled selection,
+// on_change(bool) callback emission, and standalone, `label: String`, or child text overloads.
+// Reference: https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Radio
+
+\use "components/material/Palette.dt"
+
+\Enum RadioSize {
+    Small,
+    Medium,
+}
+
+// 1. Radio with `label` prop (`\Radio(label: "Option A", checked: true)`)
+\Component Radio(
+    label: String,
+    env font: Font = \Font(size: 16px),
+    checked: Boolean = false,
+    disabled: Boolean = false,
+    controlled: Boolean = false,
+    color: MaterialColor = MaterialColor.Primary,
+    size: RadioSize = RadioSize.Medium,
+    label_gap: Distance = 2px,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_change: Handler = unset,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \state is_checked: Boolean = checked;
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let is_small = size == RadioSize.Small;
+
+    \let control_size: Distance = is_small ? 34px : 42px;
+    \let ring_size: Distance = is_small ? 16px : 20px;
+    \let dot_size: Distance = is_small ? 8px : 10px;
+    \let ring_inset: Distance = (control_size - ring_size) / 2;
+    \let dot_inset: Distance = (control_size - dot_size) / 2;
+
+    \env font = \Font(
+        font: self.font,
+        size: is_small ? 14px : 16px,
+        weight: 400,
+        line_height: is_small ? 20px : 24px
+    );
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let halo_color = disabled
+        ? #00000000
+        : (pressed
+            ? (is_checked ? ch_active_bg : #00000029)
+            : (focused
+                ? (is_checked ? ch_focus_bg : #0000001f)
+                : (hovered
+                    ? (is_checked ? ch_hover_bg : #0000000a)
+                    : #00000000)));
+
+    \let ring_border_color = disabled
+        ? #00000042
+        : (is_checked ? ch_main : #00000099);
+
+    \let dot_color = is_checked
+        ? (disabled ? #00000042 : ch_main)
+        : #00000000;
+
+    \let has_label = label != "";
+    \let eff_gap: Distance = has_label ? label_gap : 0px;
+    \let label_w: Distance = has_label ? radio_label.width : 0px;
+    \let resolved_w: Distance = control_size + eff_gap + label_w;
+    \let resolved_h: Distance = has_label ? max(control_size, radio_label.height) : control_size;
+    \let control_y: Distance = y + (resolved_h - control_size) / 2;
+
+    \let ring_x: Distance = x + ring_inset;
+    \let ring_y: Distance = control_y + ring_inset;
+    \let dot_x: Distance = x + dot_inset;
+    \let dot_y: Distance = control_y + dot_inset;
+
+    \let label_color = disabled ? #00000061 : #000000de;
+
+    \alias width = resolved_w;
+    \alias height = resolved_h;
+    \alias right = x + resolved_w;
+    \alias bottom = y + resolved_h;
+
+    \let hit_area = \Rect(
+        x: x,
+        y: y,
+        width: resolved_w,
+        height: resolved_h,
+        color: #00000000
+    );
+
+    \let halo = \Rect(
+        x: x,
+        y: control_y,
+        width: control_size,
+        height: control_size,
+        radius: control_size / 2,
+        color: halo_color
+    );
+
+    \let outer_ring = \Rect(
+        x: ring_x,
+        y: ring_y,
+        width: ring_size,
+        height: ring_size,
+        radius: ring_size / 2,
+        color: #00000000,
+        border_color: ring_border_color,
+        border_width: 2px
+    );
+
+    \let inner_dot = \Rect(
+        x: dot_x,
+        y: dot_y,
+        width: dot_size,
+        height: dot_size,
+        radius: dot_size / 2,
+        color: dot_color
+    );
+
+    \let radio_label = \Text(
+        x: x + control_size + eff_gap,
+        y: y + max(0px, (resolved_h - radio_label.height) / 2),
+        font: env.font,
+        color: has_label ? label_color : #00000000,
+        text: label
+    );
+}
+
+// 2. Standalone Radio or Radio with child text content (`\Radio(checked: true)` or `\Radio(checked: true) { Option A }`)
+\Component Radio(
+    env font: Font = \Font(size: 16px),
+    checked: Boolean = false,
+    disabled: Boolean = false,
+    controlled: Boolean = false,
+    color: MaterialColor = MaterialColor.Primary,
+    size: RadioSize = RadioSize.Medium,
+    label_gap: Distance = 2px,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_change: Handler = unset,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \state is_checked: Boolean = checked;
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let is_small = size == RadioSize.Small;
+
+    \let control_size: Distance = is_small ? 34px : 42px;
+    \let ring_size: Distance = is_small ? 16px : 20px;
+    \let dot_size: Distance = is_small ? 8px : 10px;
+    \let ring_inset: Distance = (control_size - ring_size) / 2;
+    \let dot_inset: Distance = (control_size - dot_size) / 2;
+
+    \env font = \Font(
+        font: self.font,
+        size: is_small ? 14px : 16px,
+        weight: 400,
+        line_height: is_small ? 20px : 24px
+    );
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let halo_color = disabled
+        ? #00000000
+        : (pressed
+            ? (is_checked ? ch_active_bg : #00000029)
+            : (focused
+                ? (is_checked ? ch_focus_bg : #0000001f)
+                : (hovered
+                    ? (is_checked ? ch_hover_bg : #0000000a)
+                    : #00000000)));
+
+    \let ring_border_color = disabled
+        ? #00000042
+        : (is_checked ? ch_main : #00000099);
+
+    \let dot_color = is_checked
+        ? (disabled ? #00000042 : ch_main)
+        : #00000000;
+
+    \assert children.len <= 1 as "Radio accepts at most one label child.";
+
+    \let has_label = children.len > 0;
+    \let eff_gap: Distance = has_label ? label_gap : 0px;
+    \let label_w: Distance = has_label ? max(children.width) : 0px;
+    \let label_h: Distance = has_label ? max(children.height) : 0px;
+    \let resolved_w: Distance = control_size + eff_gap + label_w;
+    \let resolved_h: Distance = has_label ? max(control_size, label_h) : control_size;
+    \let control_y: Distance = y + (resolved_h - control_size) / 2;
+
+    \let ring_x: Distance = x + ring_inset;
+    \let ring_y: Distance = control_y + ring_inset;
+    \let dot_x: Distance = x + dot_inset;
+    \let dot_y: Distance = control_y + dot_inset;
+
+    \let label_color = disabled ? #00000061 : #000000de;
+
+    \alias width = resolved_w;
+    \alias height = resolved_h;
+    \alias right = x + resolved_w;
+    \alias bottom = y + resolved_h;
+
+    \let hit_area = \Rect(
+        x: x,
+        y: y,
+        width: resolved_w,
+        height: resolved_h,
+        color: #00000000
+    );
+
+    \let halo = \Rect(
+        x: x,
+        y: control_y,
+        width: control_size,
+        height: control_size,
+        radius: control_size / 2,
+        color: halo_color
+    );
+
+    \let outer_ring = \Rect(
+        x: ring_x,
+        y: ring_y,
+        width: ring_size,
+        height: ring_size,
+        radius: ring_size / 2,
+        color: #00000000,
+        border_color: ring_border_color,
+        border_width: 2px
+    );
+
+    \let inner_dot = \Rect(
+        x: dot_x,
+        y: dot_y,
+        width: dot_size,
+        height: dot_size,
+        radius: dot_size / 2,
+        color: dot_color
+    );
+
+    \Children(
+        x: x + control_size + eff_gap,
+        y: y + max(0px, (resolved_h - child.height) / 2),
+        color: label_color
+    )
+}

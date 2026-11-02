@@ -1,0 +1,432 @@
+// DirectedType Material UI Component Library: Switch
+// Toggle switch control (\Switch) supporting Small (40x24) and Medium (58x38) sizes,
+// semantic MaterialColor channels, reactive hover/focus/pressed circular thumb halos,
+// elevation shadow on the thumb, disabled state, on_change callback emission,
+// and standalone, `label: String`, or child text overloads.
+// Reference: https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Switch
+
+\use "components/Shadow.dt"
+\use "components/material/Palette.dt"
+
+\Enum SwitchSize {
+    Small,
+    Medium,
+}
+
+// 1. Switch with `label` prop (`\Switch(label: "Wi-Fi", checked: true)`)
+\Component Switch(
+    label: String,
+    env font: Font = \Font(size: 16px),
+    checked: Boolean = false,
+    disabled: Boolean = false,
+    controlled: Boolean = false,
+    color: MaterialColor = MaterialColor.Primary,
+    size: SwitchSize = SwitchSize.Medium,
+    label_gap: Distance = 4px,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_change: Handler = unset,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \state is_checked: Boolean = checked;
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let is_small = size == SwitchSize.Small;
+
+    \let control_w: Distance = is_small ? 40px : 58px;
+    \let control_h: Distance = is_small ? 24px : 38px;
+    \let track_w: Distance = is_small ? 24px : 34px;
+    \let track_h: Distance = is_small ? 10px : 14px;
+    \let track_x_offset: Distance = is_small ? 8px : 12px;
+    \let track_y_offset: Distance = is_small ? 7px : 12px;
+    \let thumb_size: Distance = is_small ? 16px : 20px;
+    \let thumb_unchecked_x: Distance = is_small ? 4px : 9px;
+    \let thumb_checked_x: Distance = is_small ? 20px : 29px;
+    \let thumb_y_offset: Distance = is_small ? 4px : 9px;
+    \let halo_size: Distance = control_h;
+    \let halo_checked_x: Distance = is_small ? 16px : 20px;
+
+    \env font = \Font(
+        font: self.font,
+        size: is_small ? 14px : 16px,
+        weight: 400,
+        line_height: is_small ? 20px : 24px
+    );
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_track_checked = is_primary ? #1976d280 : (
+        is_secondary ? #9c27b080 : (
+            is_success ? #2e7d3280 : (
+                is_error ? #d32f2f80 : (
+                    is_info ? #0288d180 : (
+                        is_warning ? #ed6c0280 : #21212180
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let track_color = disabled
+        ? #0000001f
+        : (is_checked ? ch_track_checked : #00000061);
+
+    \let thumb_color = disabled
+        ? (is_checked ? #bdbdbd : #f5f5f5)
+        : (is_checked ? ch_main : #ffffff);
+
+    \let halo_color = disabled
+        ? #00000000
+        : (pressed
+            ? (is_checked ? ch_active_bg : #00000029)
+            : (focused
+                ? (is_checked ? ch_focus_bg : #0000001f)
+                : (hovered
+                    ? (is_checked ? ch_hover_bg : #0000000a)
+                    : #00000000)));
+
+    \let has_label = label != "";
+    \let eff_gap: Distance = has_label ? label_gap : 0px;
+    \let label_w: Distance = has_label ? switch_label.width : 0px;
+    \let resolved_w: Distance = control_w + eff_gap + label_w;
+    \let resolved_h: Distance = has_label ? max(control_h, switch_label.height) : control_h;
+    \let control_y: Distance = y + (resolved_h - control_h) / 2;
+
+    \let track_x: Distance = x + track_x_offset;
+    \let track_y: Distance = control_y + track_y_offset;
+    \let halo_x: Distance = x + (is_checked ? halo_checked_x : 0px);
+    \let halo_y: Distance = control_y;
+    \let thumb_x: Distance = x + (is_checked ? thumb_checked_x : thumb_unchecked_x);
+    \let thumb_y: Distance = control_y + thumb_y_offset;
+
+    \let label_color = disabled ? #00000061 : #000000de;
+
+    \alias width = resolved_w;
+    \alias height = resolved_h;
+    \alias right = x + resolved_w;
+    \alias bottom = y + resolved_h;
+
+    \let thumb_shadow = \Shadow(
+        offset_x: 0px,
+        offset_y: 1px,
+        blur: 3px,
+        spread: 0px,
+        color: #00000033
+    );
+
+    \let hit_area = \Rect(
+        x: x,
+        y: y,
+        width: resolved_w,
+        height: resolved_h,
+        color: #00000000
+    );
+
+    \let track = \Rect(
+        x: track_x,
+        y: track_y,
+        width: track_w,
+        height: track_h,
+        radius: track_h / 2,
+        color: track_color
+    );
+
+    \let halo = \Rect(
+        x: halo_x,
+        y: halo_y,
+        width: halo_size,
+        height: halo_size,
+        radius: halo_size / 2,
+        color: halo_color
+    );
+
+    \let thumb = \Rect(
+        x: thumb_x,
+        y: thumb_y,
+        width: thumb_size,
+        height: thumb_size,
+        radius: thumb_size / 2,
+        color: thumb_color,
+        shadow: thumb_shadow
+    );
+
+    \let switch_label = \Text(
+        x: x + control_w + eff_gap,
+        y: y + max(0px, (resolved_h - switch_label.height) / 2),
+        font: env.font,
+        color: has_label ? label_color : #00000000,
+        text: label
+    );
+}
+
+// 2. Standalone Switch or Switch with child text content (`\Switch(checked: true)` or `\Switch(checked: true) { Wi-Fi }`)
+\Component Switch(
+    env font: Font = \Font(size: 16px),
+    checked: Boolean = false,
+    disabled: Boolean = false,
+    controlled: Boolean = false,
+    color: MaterialColor = MaterialColor.Primary,
+    size: SwitchSize = SwitchSize.Medium,
+    label_gap: Distance = 4px,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_change: Handler = unset,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \state is_checked: Boolean = checked;
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let is_small = size == SwitchSize.Small;
+
+    \let control_w: Distance = is_small ? 40px : 58px;
+    \let control_h: Distance = is_small ? 24px : 38px;
+    \let track_w: Distance = is_small ? 24px : 34px;
+    \let track_h: Distance = is_small ? 10px : 14px;
+    \let track_x_offset: Distance = is_small ? 8px : 12px;
+    \let track_y_offset: Distance = is_small ? 7px : 12px;
+    \let thumb_size: Distance = is_small ? 16px : 20px;
+    \let thumb_unchecked_x: Distance = is_small ? 4px : 9px;
+    \let thumb_checked_x: Distance = is_small ? 20px : 29px;
+    \let thumb_y_offset: Distance = is_small ? 4px : 9px;
+    \let halo_size: Distance = control_h;
+    \let halo_checked_x: Distance = is_small ? 16px : 20px;
+
+    \env font = \Font(
+        font: self.font,
+        size: is_small ? 14px : 16px,
+        weight: 400,
+        line_height: is_small ? 20px : 24px
+    );
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #212121
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_track_checked = is_primary ? #1976d280 : (
+        is_secondary ? #9c27b080 : (
+            is_success ? #2e7d3280 : (
+                is_error ? #d32f2f80 : (
+                    is_info ? #0288d180 : (
+                        is_warning ? #ed6c0280 : #21212180
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : #0000000a
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let track_color = disabled
+        ? #0000001f
+        : (is_checked ? ch_track_checked : #00000061);
+
+    \let thumb_color = disabled
+        ? (is_checked ? #bdbdbd : #f5f5f5)
+        : (is_checked ? ch_main : #ffffff);
+
+    \let halo_color = disabled
+        ? #00000000
+        : (pressed
+            ? (is_checked ? ch_active_bg : #00000029)
+            : (focused
+                ? (is_checked ? ch_focus_bg : #0000001f)
+                : (hovered
+                    ? (is_checked ? ch_hover_bg : #0000000a)
+                    : #00000000)));
+
+    \assert children.len <= 1 as "Switch accepts at most one label child.";
+
+    \let has_label = children.len > 0;
+    \let eff_gap: Distance = has_label ? label_gap : 0px;
+    \let label_w: Distance = has_label ? max(children.width) : 0px;
+    \let label_h: Distance = has_label ? max(children.height) : 0px;
+    \let resolved_w: Distance = control_w + eff_gap + label_w;
+    \let resolved_h: Distance = has_label ? max(control_h, label_h) : control_h;
+    \let control_y: Distance = y + (resolved_h - control_h) / 2;
+
+    \let track_x: Distance = x + track_x_offset;
+    \let track_y: Distance = control_y + track_y_offset;
+    \let halo_x: Distance = x + (is_checked ? halo_checked_x : 0px);
+    \let halo_y: Distance = control_y;
+    \let thumb_x: Distance = x + (is_checked ? thumb_checked_x : thumb_unchecked_x);
+    \let thumb_y: Distance = control_y + thumb_y_offset;
+
+    \let label_color = disabled ? #00000061 : #000000de;
+
+    \alias width = resolved_w;
+    \alias height = resolved_h;
+    \alias right = x + resolved_w;
+    \alias bottom = y + resolved_h;
+
+    \let thumb_shadow = \Shadow(
+        offset_x: 0px,
+        offset_y: 1px,
+        blur: 3px,
+        spread: 0px,
+        color: #00000033
+    );
+
+    \let hit_area = \Rect(
+        x: x,
+        y: y,
+        width: resolved_w,
+        height: resolved_h,
+        color: #00000000
+    );
+
+    \let track = \Rect(
+        x: track_x,
+        y: track_y,
+        width: track_w,
+        height: track_h,
+        radius: track_h / 2,
+        color: track_color
+    );
+
+    \let halo = \Rect(
+        x: halo_x,
+        y: halo_y,
+        width: halo_size,
+        height: halo_size,
+        radius: halo_size / 2,
+        color: halo_color
+    );
+
+    \let thumb = \Rect(
+        x: thumb_x,
+        y: thumb_y,
+        width: thumb_size,
+        height: thumb_size,
+        radius: thumb_size / 2,
+        color: thumb_color,
+        shadow: thumb_shadow
+    );
+
+    \Children(
+        x: x + control_w + eff_gap,
+        y: y + max(0px, (resolved_h - child.height) / 2),
+        color: label_color
+    )
+}
