@@ -509,8 +509,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                                 }
                             }
                         }
+                        let target_node_id = ctx.enclosing_component.unwrap_or(ctx.current_node);
                         Expr::Ident(Ident::new(
-                            ctx.current_node.canonical_name(),
+                            target_node_id.canonical_name(),
                             m.target.span(),
                         ))
                     } else if let (Some(comp_id), Some(shadowed)) =

@@ -916,9 +916,15 @@ fn resolve_text_dimensions(
         .doc
         .get_node(node_id)
         .is_some_and(|n| !n.inline_boxes.is_empty());
+    let has_children_placeholder = elem.content.as_ref().is_some_and(|slot| {
+        slot.items
+            .iter()
+            .any(|item| matches!(item, crate::ast::ContentItem::Children(_)))
+    });
     let has_text = text_content.as_ref().is_some_and(|t| !t.is_empty())
         || has_dynamic_text
-        || has_inline_boxes;
+        || has_inline_boxes
+        || has_children_placeholder;
 
     let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
     let (size_expr, weight_expr, font_expr, start_at_expr) =

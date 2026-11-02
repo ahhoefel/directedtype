@@ -1,0 +1,656 @@
+// DirectedType Material UI Component Library: AppBar & Toolbar
+// Top application bar surface container (\AppBar) and horizontal content/action bar (\Toolbar)
+// supporting Elevation and Outlined variants, Regular (64px) and Dense (48px) toolbar heights,
+// semantic MaterialColor channels with automatic contrast text propagation (`env app_bar_color`
+// and `env inherit_color`), square and rounded corners, gutter control, title/nav_icon/avatar
+// shorthand overloads, and child composition with right-aligned trailing actions.
+// Reference:
+// - https://github.com/mui/material-ui/tree/master/packages/mui-material/src/AppBar
+// - https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Toolbar
+
+\use "components/Align.dt"
+\use "components/Shadow.dt"
+\use "components/TextBounds.dt"
+\use "components/material/Palette.dt"
+
+\let app_bar_text_bounds = \TextBounds(
+    start_at: TextStart.LineHeight,
+    end_at: TextEnd.LineHeight
+);
+
+\Enum AppBarVariant {
+    Elevation,
+    Outlined,
+}
+
+\Enum ToolbarVariant {
+    Regular,
+    Dense,
+}
+
+// ============================================================================
+// AppBar
+// ============================================================================
+
+// 1. Explicit Width AppBar: pushes inner_width and contrast text color down to children (\Toolbar, \Tabs, etc.)
+\Component AppBar(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    color: MaterialColor = MaterialColor.Primary,
+    variant: AppBarVariant = AppBarVariant.Elevation,
+    elevation: Integer = 4,
+    square: Boolean = true,
+    radius: Distance = 4px,
+    bg: Color = #00000000,
+    text_color: Color = #00000000,
+    border_color: Color = #0000001f,
+    padding_x: Distance = 0px,
+    padding_y: Distance = 0px,
+    gap: Distance = 0px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_outlined = variant == AppBarVariant.Outlined;
+    \let eff_elev = is_outlined ? 0 : min(24, max(0, elevation));
+    \let has_shadow = eff_elev > 0;
+    \let resolved_radius: Distance = square ? 0px : radius;
+    \let resolved_border_width: Distance = is_outlined ? 1px : 0px;
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+    \let is_inherit = color == MaterialColor.Inherit;
+
+    \let ch_bg = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #f5f5f5
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_contrast = is_inherit ? #000000de : #ffffff;
+    \let resolved_bg: Color = (bg != #00000000) ? bg : ch_bg;
+    \alias resolved_text_color: Color = (text_color != #00000000) ? text_color : ch_contrast;
+
+    \alias inner_width: Distance = max(0px, width - (2 * padding_x));
+    \let children_h: Distance = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+
+    \env app_bar_color = resolved_text_color;
+    \env inherit_color = resolved_text_color;
+    \env app_bar_inner_width = inner_width;
+
+    \alias right = x + width;
+    \alias height = children_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \let app_bar_shadow = \Shadow(
+        offset_x: 0px,
+        offset_y: has_shadow ? (1px + (eff_elev * 0.75px)) : 0px,
+        blur: has_shadow ? (3px + (eff_elev * 1.8px)) : 0px,
+        spread: 0px,
+        color: has_shadow ? #0000002e : #00000000
+    );
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: resolved_bg,
+        radius: resolved_radius,
+        border_color: border_color,
+        border_width: resolved_border_width,
+        shadow: app_bar_shadow
+    )
+
+    \Children(
+        x: x + padding_x,
+        y: prev ? prev.bottom + gap : (y + padding_y),
+        width: inner_width
+    )
+}
+
+// 2. Intrinsic Width AppBar: derives width bottom-up from widest child (\Toolbar, \Tabs, etc.)
+\Component AppBar(
+    env font: Font = \Font(size: 16px),
+    min_width: Distance = 0px,
+    color: MaterialColor = MaterialColor.Primary,
+    variant: AppBarVariant = AppBarVariant.Elevation,
+    elevation: Integer = 4,
+    square: Boolean = true,
+    radius: Distance = 4px,
+    bg: Color = #00000000,
+    text_color: Color = #00000000,
+    border_color: Color = #0000001f,
+    padding_x: Distance = 0px,
+    padding_y: Distance = 0px,
+    gap: Distance = 0px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_outlined = variant == AppBarVariant.Outlined;
+    \let eff_elev = is_outlined ? 0 : min(24, max(0, elevation));
+    \let has_shadow = eff_elev > 0;
+    \let resolved_radius: Distance = square ? 0px : radius;
+    \let resolved_border_width: Distance = is_outlined ? 1px : 0px;
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+    \let is_inherit = color == MaterialColor.Inherit;
+
+    \let ch_bg = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : #f5f5f5
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_contrast = is_inherit ? #000000de : #ffffff;
+    \let resolved_bg: Color = (bg != #00000000) ? bg : ch_bg;
+    \alias resolved_text_color: Color = (text_color != #00000000) ? text_color : ch_contrast;
+
+    \let content_w: Distance = max(min_width, children.len > 0 ? max(children.width) : 0px);
+    \let children_h: Distance = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+    \let resolved_width: Distance = content_w + (2 * padding_x);
+
+    \env app_bar_color = resolved_text_color;
+    \env inherit_color = resolved_text_color;
+    \env app_bar_inner_width = 0px;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = children_h + (2 * padding_y);
+    \alias bottom = y + height;
+
+    \let app_bar_shadow = \Shadow(
+        offset_x: 0px,
+        offset_y: has_shadow ? (1px + (eff_elev * 0.75px)) : 0px,
+        blur: has_shadow ? (3px + (eff_elev * 1.8px)) : 0px,
+        spread: 0px,
+        color: has_shadow ? #0000002e : #00000000
+    );
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: height,
+        color: resolved_bg,
+        radius: resolved_radius,
+        border_color: border_color,
+        border_width: resolved_border_width,
+        shadow: app_bar_shadow
+    )
+
+    \Children(
+        x: x + padding_x,
+        y: prev ? prev.bottom + gap : (y + padding_y)
+    )
+}
+
+// ============================================================================
+// Toolbar
+// ============================================================================
+
+// 1. Explicit Width Toolbar with `title` prop (and optional `subtitle`, `nav_icon`, `avatar`, and right-aligned action children)
+\Component Toolbar(
+    width: Distance,
+    title: String,
+    env font: Font = \Font(size: 16px),
+    env app_bar_color: Color = #000000de,
+    variant: ToolbarVariant = ToolbarVariant.Regular,
+    dense: Boolean = false,
+    disable_gutters: Boolean = false,
+    min_height: Distance = 0px,
+    subtitle: String = "",
+    nav_icon: String = "",
+    nav_icon_size: Distance = 36px,
+    nav_icon_bg: Color = #00000000,
+    avatar: String = "",
+    avatar_size: Distance = 32px,
+    avatar_bg: Color = #ffffff26,
+    avatar_color: Color = #ffffff,
+    title_color: Color = #00000000,
+    subtitle_color: Color = #00000000,
+    padding_x: Distance = 24px,
+    padding_y: Distance = 0px,
+    gap: Distance = 12px,
+    title_gap: Distance = 16px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_dense = dense || (variant == ToolbarVariant.Dense);
+    \let default_min_h: Distance = is_dense ? 48px : 64px;
+    \let resolved_min_h: Distance = (min_height > 0px) ? min_height : default_min_h;
+    \let resolved_pad_x: Distance = disable_gutters ? 0px : padding_x;
+
+    \let has_nav_icon = nav_icon != "";
+    \let has_avatar = avatar != "";
+    \let has_subtitle = subtitle != "";
+    \let has_actions = children.len > 0;
+
+    \let resolved_title_color: Color = (title_color != #00000000) ? title_color : app_bar_color;
+    \let default_sub_color: Color = (app_bar_color == #ffffff) ? #ffffffb3 : #00000099;
+    \let resolved_subtitle_color: Color = (subtitle_color != #00000000) ? subtitle_color : default_sub_color;
+
+    \let nav_slot_w: Distance = has_nav_icon ? nav_icon_size : 0px;
+    \let nav_slot_gap: Distance = has_nav_icon ? title_gap : 0px;
+    \let avatar_slot_w: Distance = has_avatar ? avatar_size : 0px;
+    \let avatar_slot_gap: Distance = has_avatar ? 12px : 0px;
+
+    \let actions_span: Distance = has_actions ? (sum(children.width) + max(0, children.len - 1) * gap) : 0px;
+    \let actions_h: Distance = has_actions ? max(children.height) : 0px;
+    \let actions_gap: Distance = has_actions ? title_gap : 0px;
+
+    \let title_font = \Font(
+        font: font,
+        size: 20px,
+        weight: 500,
+        line_height: 28px
+    );
+    \let subtitle_font = \Font(
+        font: font,
+        size: 12px,
+        weight: 400,
+        line_height: 16px
+    );
+    \let nav_font = \Font(
+        font: font,
+        size: 18px,
+        weight: 500,
+        line_height: 18px
+    );
+    \let avatar_font = \Font(
+        font: font,
+        size: avatar_size * 0.5,
+        weight: 500,
+        line_height: avatar_size * 0.5
+    );
+
+    \let leading_w: Distance = nav_slot_w + nav_slot_gap + avatar_slot_w + avatar_slot_gap;
+    \let text_x: Distance = x + resolved_pad_x + leading_w;
+    \let text_avail_width: Distance = max(0px, width - (2 * resolved_pad_x) - leading_w - actions_gap - actions_span);
+
+    \let text_block_h: Distance = has_subtitle ? (title_node.height + sub_node.height) : title_node.height;
+    \let inner_h: Distance = max(nav_slot_w, max(avatar_slot_w, max(text_block_h, actions_h)));
+    \let resolved_height: Distance = max(resolved_min_h, inner_h + (2 * padding_y));
+
+    \alias right = x + width;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
+
+    \let nav_x: Distance = x + resolved_pad_x;
+    \let nav_y: Distance = y + (resolved_height - nav_slot_w) / 2;
+    \let avatar_x: Distance = x + resolved_pad_x + nav_slot_w + nav_slot_gap;
+    \let avatar_y: Distance = y + (resolved_height - avatar_slot_w) / 2;
+    \let text_y: Distance = y + (resolved_height - text_block_h) / 2;
+    \let actions_start_x: Distance = x + width - resolved_pad_x - actions_span;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: resolved_height,
+        color: bg
+    )
+
+    \Rect(
+        x: nav_x,
+        y: nav_y,
+        width: nav_slot_w,
+        height: nav_slot_w,
+        radius: nav_slot_w / 2,
+        color: has_nav_icon ? nav_icon_bg : #00000000
+    )
+
+    \let nav_text_node = \Text(
+        x: nav_x + max(0px, (nav_slot_w - nav_text_node.width) / 2),
+        y: nav_y + max(0px, (nav_slot_w - nav_text_node.height) / 2),
+        font: nav_font,
+        color: has_nav_icon ? resolved_title_color : #00000000,
+        text: nav_icon
+    );
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: avatar_slot_w,
+        height: avatar_slot_w,
+        radius: avatar_slot_w / 2,
+        color: has_avatar ? avatar_bg : #00000000
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (avatar_slot_w - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (avatar_slot_w - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? avatar_color : #00000000,
+        text: avatar
+    );
+
+    \let title_node = \Text(
+        x: text_x,
+        y: text_y,
+        width: text_avail_width,
+        font: title_font,
+        color: resolved_title_color,
+        text_bounds: app_bar_text_bounds,
+        text: title
+    );
+
+    \let sub_node = \Text(
+        x: text_x,
+        y: text_y + title_node.height,
+        width: text_avail_width,
+        font: subtitle_font,
+        color: has_subtitle ? resolved_subtitle_color : #00000000,
+        text_bounds: app_bar_text_bounds,
+        text: subtitle
+    );
+
+    \Children(
+        x: prev ? (prev.right + gap) : actions_start_x,
+        y: y + (resolved_height - child.height) / 2
+    )
+}
+
+// 2. Intrinsic Width Toolbar with `title` prop (and optional `subtitle`, `nav_icon`, `avatar`, and right-aligned action children)
+\Component Toolbar(
+    title: String,
+    env font: Font = \Font(size: 16px),
+    env app_bar_color: Color = #000000de,
+    env app_bar_inner_width: Distance = 0px,
+    min_width: Distance = 0px,
+    variant: ToolbarVariant = ToolbarVariant.Regular,
+    dense: Boolean = false,
+    disable_gutters: Boolean = false,
+    min_height: Distance = 0px,
+    subtitle: String = "",
+    nav_icon: String = "",
+    nav_icon_size: Distance = 36px,
+    nav_icon_bg: Color = #00000000,
+    avatar: String = "",
+    avatar_size: Distance = 32px,
+    avatar_bg: Color = #ffffff26,
+    avatar_color: Color = #ffffff,
+    title_color: Color = #00000000,
+    subtitle_color: Color = #00000000,
+    padding_x: Distance = 24px,
+    padding_y: Distance = 0px,
+    gap: Distance = 12px,
+    title_gap: Distance = 16px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_dense = dense || (variant == ToolbarVariant.Dense);
+    \let default_min_h: Distance = is_dense ? 48px : 64px;
+    \let resolved_min_h: Distance = (min_height > 0px) ? min_height : default_min_h;
+    \let resolved_pad_x: Distance = disable_gutters ? 0px : padding_x;
+
+    \let has_nav_icon = nav_icon != "";
+    \let has_avatar = avatar != "";
+    \let has_subtitle = subtitle != "";
+    \let has_actions = children.len > 0;
+
+    \let resolved_title_color: Color = (title_color != #00000000) ? title_color : app_bar_color;
+    \let default_sub_color: Color = (app_bar_color == #ffffff) ? #ffffffb3 : #00000099;
+    \let resolved_subtitle_color: Color = (subtitle_color != #00000000) ? subtitle_color : default_sub_color;
+
+    \let nav_slot_w: Distance = has_nav_icon ? nav_icon_size : 0px;
+    \let nav_slot_gap: Distance = has_nav_icon ? title_gap : 0px;
+    \let avatar_slot_w: Distance = has_avatar ? avatar_size : 0px;
+    \let avatar_slot_gap: Distance = has_avatar ? 12px : 0px;
+
+    \let actions_span: Distance = has_actions ? (sum(children.width) + max(0, children.len - 1) * gap) : 0px;
+    \let actions_h: Distance = has_actions ? max(children.height) : 0px;
+    \let actions_gap: Distance = has_actions ? title_gap : 0px;
+
+    \let title_font = \Font(
+        font: font,
+        size: 20px,
+        weight: 500,
+        line_height: 28px
+    );
+    \let subtitle_font = \Font(
+        font: font,
+        size: 12px,
+        weight: 400,
+        line_height: 16px
+    );
+    \let nav_font = \Font(
+        font: font,
+        size: 18px,
+        weight: 500,
+        line_height: 18px
+    );
+    \let avatar_font = \Font(
+        font: font,
+        size: avatar_size * 0.5,
+        weight: 500,
+        line_height: avatar_size * 0.5
+    );
+
+    \let leading_w: Distance = nav_slot_w + nav_slot_gap + avatar_slot_w + avatar_slot_gap;
+    \let text_x: Distance = x + resolved_pad_x + leading_w;
+    \let text_content_w: Distance = has_subtitle ? max(title_node.width, sub_node.width) : title_node.width;
+    \let intrinsic_w: Distance = (2 * resolved_pad_x) + leading_w + text_content_w + actions_gap + actions_span;
+    \let resolved_width: Distance = max(self.app_bar_inner_width, max(min_width, intrinsic_w));
+
+    \let text_block_h: Distance = has_subtitle ? (title_node.height + sub_node.height) : title_node.height;
+    \let inner_h: Distance = max(nav_slot_w, max(avatar_slot_w, max(text_block_h, actions_h)));
+    \let resolved_height: Distance = max(resolved_min_h, inner_h + (2 * padding_y));
+
+    \env app_bar_inner_width = 0px;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
+
+    \let nav_x: Distance = x + resolved_pad_x;
+    \let nav_y: Distance = y + (resolved_height - nav_slot_w) / 2;
+    \let avatar_x: Distance = x + resolved_pad_x + nav_slot_w + nav_slot_gap;
+    \let avatar_y: Distance = y + (resolved_height - avatar_slot_w) / 2;
+    \let text_y: Distance = y + (resolved_height - text_block_h) / 2;
+    \let actions_start_x: Distance = x + resolved_width - resolved_pad_x - actions_span;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: resolved_height,
+        color: bg
+    )
+
+    \Rect(
+        x: nav_x,
+        y: nav_y,
+        width: nav_slot_w,
+        height: nav_slot_w,
+        radius: nav_slot_w / 2,
+        color: has_nav_icon ? nav_icon_bg : #00000000
+    )
+
+    \let nav_text_node = \Text(
+        x: nav_x + max(0px, (nav_slot_w - nav_text_node.width) / 2),
+        y: nav_y + max(0px, (nav_slot_w - nav_text_node.height) / 2),
+        font: nav_font,
+        color: has_nav_icon ? resolved_title_color : #00000000,
+        text: nav_icon
+    );
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: avatar_slot_w,
+        height: avatar_slot_w,
+        radius: avatar_slot_w / 2,
+        color: has_avatar ? avatar_bg : #00000000
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (avatar_slot_w - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (avatar_slot_w - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? avatar_color : #00000000,
+        text: avatar
+    );
+
+    \let title_node = \Text(
+        x: text_x,
+        y: text_y,
+        font: title_font,
+        color: resolved_title_color,
+        text_bounds: app_bar_text_bounds,
+        text: title
+    );
+
+    \let sub_node = \Text(
+        x: text_x,
+        y: text_y + title_node.height,
+        font: subtitle_font,
+        color: has_subtitle ? resolved_subtitle_color : #00000000,
+        text_bounds: app_bar_text_bounds,
+        text: subtitle
+    );
+
+    \Children(
+        x: prev ? (prev.right + gap) : actions_start_x,
+        y: y + (resolved_height - child.height) / 2
+    )
+}
+
+// 3. Explicit Width Toolbar with Child Composition (\H6, \Button, \Avatar, \Chip, \Tabs, etc.)
+\Component Toolbar(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    env app_bar_color: Color = #000000de,
+    variant: ToolbarVariant = ToolbarVariant.Regular,
+    dense: Boolean = false,
+    disable_gutters: Boolean = false,
+    min_height: Distance = 0px,
+    secondary_action: Boolean = false,
+    align: Align = Align.Left,
+    padding_x: Distance = 24px,
+    padding_y: Distance = 0px,
+    gap: Distance = 16px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_dense = dense || (variant == ToolbarVariant.Dense);
+    \let default_min_h: Distance = is_dense ? 48px : 64px;
+    \let resolved_min_h: Distance = (min_height > 0px) ? min_height : default_min_h;
+    \let resolved_pad_x: Distance = disable_gutters ? 0px : padding_x;
+
+    \let inner_width: Distance = max(0px, width - (2 * resolved_pad_x));
+    \let children_span: Distance = children.len > 0 ? (sum(children.width) + max(0, children.len - 1) * gap) : 0px;
+    \let content_h: Distance = children.len > 0 ? max(children.height) : 0px;
+    \let resolved_height: Distance = max(resolved_min_h, content_h + (2 * padding_y));
+
+    \let is_right = align == Align.Right;
+    \let is_center = align == Align.Center;
+    \let start_x: Distance = is_right
+        ? (x + width - resolved_pad_x - children_span)
+        : (is_center ? (x + resolved_pad_x + max(0px, (inner_width - children_span) / 2)) : (x + resolved_pad_x));
+
+    \env app_bar_inner_width = 0px;
+
+    \alias right = x + width;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: resolved_height,
+        color: bg
+    )
+
+    \Children(
+        x: !prev
+            ? start_x
+            : (next
+                ? (prev.right + gap)
+                : (secondary_action
+                    ? max(prev.right + gap, x + width - resolved_pad_x - child.width)
+                    : (prev.right + gap))),
+        y: y + (resolved_height - child.height) / 2
+    )
+}
+
+// 4. Intrinsic Width Toolbar with Child Composition
+\Component Toolbar(
+    env font: Font = \Font(size: 16px),
+    env app_bar_color: Color = #000000de,
+    env app_bar_inner_width: Distance = 0px,
+    min_width: Distance = 0px,
+    variant: ToolbarVariant = ToolbarVariant.Regular,
+    dense: Boolean = false,
+    disable_gutters: Boolean = false,
+    min_height: Distance = 0px,
+    secondary_action: Boolean = false,
+    align: Align = Align.Left,
+    padding_x: Distance = 24px,
+    padding_y: Distance = 0px,
+    gap: Distance = 16px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_dense = dense || (variant == ToolbarVariant.Dense);
+    \let default_min_h: Distance = is_dense ? 48px : 64px;
+    \let resolved_min_h: Distance = (min_height > 0px) ? min_height : default_min_h;
+    \let resolved_pad_x: Distance = disable_gutters ? 0px : padding_x;
+
+    \let children_span: Distance = children.len > 0 ? (sum(children.width) + max(0, children.len - 1) * gap) : 0px;
+    \let content_h: Distance = children.len > 0 ? max(children.height) : 0px;
+    \let resolved_width: Distance = max(self.app_bar_inner_width, max(min_width, children_span + (2 * resolved_pad_x)));
+    \let resolved_height: Distance = max(resolved_min_h, content_h + (2 * padding_y));
+
+    \env app_bar_inner_width = 0px;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: resolved_height,
+        color: bg
+    )
+
+    \Children(
+        x: !prev
+            ? (x + resolved_pad_x)
+            : (next
+                ? (prev.right + gap)
+                : (secondary_action
+                    ? max(prev.right + gap, x + resolved_width - resolved_pad_x - child.width)
+                    : (prev.right + gap))),
+        y: y + (resolved_height - child.height) / 2
+    )
+}

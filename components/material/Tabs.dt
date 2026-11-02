@@ -1,0 +1,1090 @@
+// DirectedType Material UI Component Library: Tabs & Tab
+// Navigation tab bar container (\Tabs) and interactive tab item (\Tab) supporting
+// Standard, FullWidth, and Scrollable variants, Horizontal and Vertical orientations,
+// centered tab alignment, semantic MaterialColor text and indicator channels (including
+// Inherit for dark AppBars), reactive sliding active indicator bar, Top/Bottom/Start/End
+// icon positions (48px single-line and 72px stacked icon+label heights), wrapped labels,
+// disabled tab gating, hover/focus/pressed states, controlled/uncontrolled selection,
+// and on_change(index) callback dispatch.
+// Reference:
+// - https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Tabs
+// - https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Tab
+
+\use "components/TextBounds.dt"
+\use "components/material/Palette.dt"
+
+\let tab_text_bounds = \TextBounds(
+    start_at: TextStart.LineHeight,
+    end_at: TextEnd.LineHeight
+);
+
+\Enum TabsVariant {
+    Standard,
+    FullWidth,
+    Scrollable,
+}
+
+\Enum TabsOrientation {
+    Horizontal,
+    Vertical,
+}
+
+\Enum TabIconPosition {
+    Top,
+    Bottom,
+    Start,
+    End,
+}
+
+// ============================================================================
+// Tabs
+// ============================================================================
+
+// 1. Explicit Width Tabs
+\Component Tabs(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    env inherit_color: Color = #000000de,
+    value: Integer = 0,
+    controlled: Boolean = false,
+    variant: TabsVariant = TabsVariant.Standard,
+    orientation: TabsOrientation = TabsOrientation.Horizontal,
+    text_color: MaterialColor = MaterialColor.Primary,
+    indicator_color: MaterialColor = MaterialColor.Primary,
+    indicator_custom_color: Color = #00000000,
+    indicator_height: Distance = 2px,
+    hide_indicator: Boolean = false,
+    centered: Boolean = false,
+    divider: Boolean = false,
+    divider_color: Color = #0000001f,
+    min_height: Distance = 48px,
+    padding_x: Distance = 0px,
+    padding_y: Distance = 0px,
+    gap: Distance = 0px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_change: Handler = unset,
+    on_click: Handler = self.click
+) {
+    \state selected_index: Integer = value;
+
+    \alias active_index: Integer = controlled ? value : selected_index;
+    \let is_vertical = orientation == TabsOrientation.Vertical;
+    \let is_full_width = variant == TabsVariant.FullWidth;
+
+    \let ind_is_primary = indicator_color == MaterialColor.Primary;
+    \let ind_is_secondary = indicator_color == MaterialColor.Secondary;
+    \let ind_is_success = indicator_color == MaterialColor.Success;
+    \let ind_is_error = indicator_color == MaterialColor.Error;
+    \let ind_is_info = indicator_color == MaterialColor.Info;
+    \let ind_is_warning = indicator_color == MaterialColor.Warning;
+
+    \let ch_ind_color = ind_is_primary ? #1976d2 : (
+        ind_is_secondary ? #9c27b0 : (
+            ind_is_success ? #2e7d32 : (
+                ind_is_error ? #d32f2f : (
+                    ind_is_info ? #0288d1 : (
+                        ind_is_warning ? #ed6c02 : inherit_color
+                    )
+                )
+            )
+        )
+    );
+    \let resolved_indicator_color: Color = (indicator_custom_color != #00000000) ? indicator_custom_color : ch_ind_color;
+
+    \alias inner_width: Distance = max(0px, width - (2 * padding_x));
+    \let children_span_w: Distance = children.len > 0 ? (sum(children.width) + max(0, children.len - 1) * gap) : 0px;
+    \let children_span_h: Distance = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+    \let children_max_h: Distance = children.len > 0 ? max(children.height) : min_height;
+
+    \let inner_h: Distance = is_vertical ? children_span_h : max(min_height, children_max_h);
+    \let resolved_height: Distance = max(min_height, inner_h + (2 * padding_y));
+
+    \let start_x: Distance = (!is_vertical && centered && !is_full_width)
+        ? (x + padding_x + max(0px, (inner_width - children_span_w) / 2))
+        : (x + padding_x);
+
+    \alias fixed_tab_width: Distance = is_vertical
+        ? inner_width
+        : (is_full_width ? (inner_width / max(1, children.len)) : 0px);
+
+    \env tabs_has_context = true;
+    \env tabs_selected_index = active_index;
+    \env tabs_text_color = text_color;
+    \env tabs_fixed_tab_width = fixed_tab_width;
+
+    \alias right = x + width;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
+
+    \let active_tab_x: Distance = children.len > 0 ? sum(children.ind_x) : x;
+    \let active_tab_y: Distance = children.len > 0 ? sum(children.ind_y) : y;
+    \let active_tab_w: Distance = children.len > 0 ? sum(children.ind_w) : 0px;
+    \let active_tab_h: Distance = children.len > 0 ? sum(children.ind_h) : 0px;
+
+    \let div_w: Distance = divider ? (is_vertical ? 1px : width) : 0px;
+    \let div_h: Distance = divider ? (is_vertical ? resolved_height : 1px) : 0px;
+    \let div_x: Distance = is_vertical ? (x + width - div_w) : x;
+    \let div_y: Distance = is_vertical ? y : (y + resolved_height - div_h);
+
+    \let ind_x: Distance = is_vertical ? (x + width - indicator_height) : active_tab_x;
+    \let ind_y: Distance = is_vertical ? active_tab_y : (y + resolved_height - indicator_height);
+    \let ind_w: Distance = hide_indicator
+        ? 0px
+        : (is_vertical ? ((active_tab_h > 0px) ? indicator_height : 0px) : active_tab_w);
+    \let ind_h: Distance = hide_indicator
+        ? 0px
+        : (is_vertical ? active_tab_h : ((active_tab_w > 0px) ? indicator_height : 0px));
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: resolved_height,
+        color: bg
+    )
+
+    \Rect(
+        x: div_x,
+        y: div_y,
+        width: div_w,
+        height: div_h,
+        color: divider ? divider_color : #00000000
+    )
+
+    \Children(
+        tab_index: prev ? (prev.tab_index + 1) : 0,
+        x: is_vertical ? (x + padding_x) : (prev ? (prev.right + gap) : start_x),
+        y: is_vertical ? (prev ? (prev.bottom + gap) : (y + padding_y)) : (y + padding_y + max(0px, (inner_h - child.height) / 2))
+    )
+
+    \Rect(
+        x: ind_x,
+        y: ind_y,
+        width: ind_w,
+        height: ind_h,
+        color: (ind_w > 0px && ind_h > 0px) ? resolved_indicator_color : #00000000
+    )
+}
+
+// 2. Intrinsic Width Tabs
+\Component Tabs(
+    env font: Font = \Font(size: 16px),
+    env inherit_color: Color = #000000de,
+    env app_bar_inner_width: Distance = 0px,
+    min_width: Distance = 0px,
+    value: Integer = 0,
+    controlled: Boolean = false,
+    variant: TabsVariant = TabsVariant.Standard,
+    orientation: TabsOrientation = TabsOrientation.Horizontal,
+    text_color: MaterialColor = MaterialColor.Primary,
+    indicator_color: MaterialColor = MaterialColor.Primary,
+    indicator_custom_color: Color = #00000000,
+    indicator_height: Distance = 2px,
+    hide_indicator: Boolean = false,
+    centered: Boolean = false,
+    divider: Boolean = false,
+    divider_color: Color = #0000001f,
+    min_height: Distance = 48px,
+    padding_x: Distance = 0px,
+    padding_y: Distance = 0px,
+    gap: Distance = 0px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_change: Handler = unset,
+    on_click: Handler = self.click
+) {
+    \state selected_index: Integer = value;
+
+    \alias active_index: Integer = controlled ? value : selected_index;
+    \let is_vertical = orientation == TabsOrientation.Vertical;
+    \let is_full_width = variant == TabsVariant.FullWidth;
+
+    \let ind_is_primary = indicator_color == MaterialColor.Primary;
+    \let ind_is_secondary = indicator_color == MaterialColor.Secondary;
+    \let ind_is_success = indicator_color == MaterialColor.Success;
+    \let ind_is_error = indicator_color == MaterialColor.Error;
+    \let ind_is_info = indicator_color == MaterialColor.Info;
+    \let ind_is_warning = indicator_color == MaterialColor.Warning;
+
+    \let ch_ind_color = ind_is_primary ? #1976d2 : (
+        ind_is_secondary ? #9c27b0 : (
+            ind_is_success ? #2e7d32 : (
+                ind_is_error ? #d32f2f : (
+                    ind_is_info ? #0288d1 : (
+                        ind_is_warning ? #ed6c02 : inherit_color
+                    )
+                )
+            )
+        )
+    );
+    \let resolved_indicator_color: Color = (indicator_custom_color != #00000000) ? indicator_custom_color : ch_ind_color;
+
+    \let children_span_w: Distance = children.len > 0 ? (sum(children.width) + max(0, children.len - 1) * gap) : 0px;
+    \let children_max_w: Distance = children.len > 0 ? max(children.width) : 0px;
+    \let children_span_h: Distance = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+    \let children_max_h: Distance = children.len > 0 ? max(children.height) : min_height;
+
+    \let content_w: Distance = is_vertical ? children_max_w : children_span_w;
+    \let resolved_width: Distance = max(self.app_bar_inner_width, max(min_width, content_w + (2 * padding_x)));
+    \let inner_width: Distance = max(0px, resolved_width - (2 * padding_x));
+
+    \let inner_h: Distance = is_vertical ? children_span_h : max(min_height, children_max_h);
+    \let resolved_height: Distance = max(min_height, inner_h + (2 * padding_y));
+
+    \let start_x: Distance = (!is_vertical && centered && !is_full_width)
+        ? (x + padding_x + max(0px, (inner_width - children_span_w) / 2))
+        : (x + padding_x);
+
+    \env app_bar_inner_width = 0px;
+    \env tabs_has_context = true;
+    \env tabs_selected_index = active_index;
+    \env tabs_text_color = text_color;
+    \env tabs_fixed_tab_width = 0px;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
+
+    \let active_tab_x: Distance = children.len > 0 ? sum(children.ind_x) : x;
+    \let active_tab_y: Distance = children.len > 0 ? sum(children.ind_y) : y;
+    \let active_tab_w: Distance = children.len > 0 ? sum(children.ind_w) : 0px;
+    \let active_tab_h: Distance = children.len > 0 ? sum(children.ind_h) : 0px;
+
+    \let div_w: Distance = divider ? (is_vertical ? 1px : resolved_width) : 0px;
+    \let div_h: Distance = divider ? (is_vertical ? resolved_height : 1px) : 0px;
+    \let div_x: Distance = is_vertical ? (x + resolved_width - div_w) : x;
+    \let div_y: Distance = is_vertical ? y : (y + resolved_height - div_h);
+
+    \let ind_x: Distance = is_vertical ? (x + resolved_width - indicator_height) : active_tab_x;
+    \let ind_y: Distance = is_vertical ? active_tab_y : (y + resolved_height - indicator_height);
+    \let ind_w: Distance = hide_indicator
+        ? 0px
+        : (is_vertical ? ((active_tab_h > 0px) ? indicator_height : 0px) : active_tab_w);
+    \let ind_h: Distance = hide_indicator
+        ? 0px
+        : (is_vertical ? active_tab_h : ((active_tab_w > 0px) ? indicator_height : 0px));
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: resolved_height,
+        color: bg
+    )
+
+    \Rect(
+        x: div_x,
+        y: div_y,
+        width: div_w,
+        height: div_h,
+        color: divider ? divider_color : #00000000
+    )
+
+    \Children(
+        tab_index: prev ? (prev.tab_index + 1) : 0,
+        x: is_vertical ? (x + padding_x) : (prev ? (prev.right + gap) : start_x),
+        y: is_vertical ? (prev ? (prev.bottom + gap) : (y + padding_y)) : (y + padding_y + max(0px, (inner_h - child.height) / 2))
+    )
+
+    \Rect(
+        x: ind_x,
+        y: ind_y,
+        width: ind_w,
+        height: ind_h,
+        color: (ind_w > 0px && ind_h > 0px) ? resolved_indicator_color : #00000000
+    )
+}
+
+// ============================================================================
+// Tab
+// ============================================================================
+
+// 1. Explicit Width Tab with `label` prop (and optional `icon`)
+\Component Tab(
+    width: Distance,
+    label: String,
+    env font: Font = \Font(size: 16px),
+    env inherit_color: Color = #000000de,
+    env tabs_has_context: Boolean = false,
+    env tabs_selected_index: Integer = -1,
+    env tabs_text_color: MaterialColor = MaterialColor.Primary,
+    tab_index: Integer = 0,
+    icon: String = "",
+    icon_position: TabIconPosition = TabIconPosition.Top,
+    icon_size: Distance = 20px,
+    icon_gap: Distance = 6px,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    controlled: Boolean = false,
+    wrapped: Boolean = false,
+    color: MaterialColor = MaterialColor.Primary,
+    min_height: Distance = 0px,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 12px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_change: Handler = unset,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \state self_selected: Boolean = selected;
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let is_selected = tabs_has_context
+        ? ((tabs_selected_index >= 0) ? (tab_index == tabs_selected_index) : selected)
+        : (controlled ? selected : self_selected);
+
+    \let eff_color: MaterialColor = tabs_has_context ? tabs_text_color : color;
+    \let is_primary = eff_color == MaterialColor.Primary;
+    \let is_secondary = eff_color == MaterialColor.Secondary;
+    \let is_success = eff_color == MaterialColor.Success;
+    \let is_error = eff_color == MaterialColor.Error;
+    \let is_info = eff_color == MaterialColor.Info;
+    \let is_warning = eff_color == MaterialColor.Warning;
+    \let is_inherit = eff_color == MaterialColor.Inherit;
+    \let is_light_inherit = is_inherit && (inherit_color == #ffffff);
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : inherit_color
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : (is_light_inherit ? #ffffff14 : #0000000a)
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : (is_light_inherit ? #ffffff26 : #0000001f)
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : (is_light_inherit ? #ffffff33 : #00000029)
+                    )
+                )
+            )
+        )
+    );
+
+    \let inactive_text_color: Color = is_light_inherit ? #ffffffb3 : #00000099;
+    \let disabled_text_color: Color = is_light_inherit ? #ffffff61 : #00000061;
+    \let resolved_text_color: Color = disabled ? disabled_text_color : (is_selected ? ch_main : inactive_text_color);
+    \let resolved_bg: Color = disabled ? bg : (pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : bg)));
+
+    \let has_icon = icon != "";
+    \let has_label = label != "";
+    \let is_icon_top = icon_position == TabIconPosition.Top;
+    \let is_icon_bottom = icon_position == TabIconPosition.Bottom;
+    \let is_icon_start = icon_position == TabIconPosition.Start;
+    \let is_icon_end = icon_position == TabIconPosition.End;
+    \let is_stacked_icon = has_icon && has_label && (is_icon_top || is_icon_bottom);
+    \let is_inline_icon = has_icon && has_label && (is_icon_start || is_icon_end);
+
+    \let label_font = \Font(
+        font: font,
+        size: wrapped ? 12px : 14px,
+        weight: 500,
+        line_height: wrapped ? 16px : 20px
+    );
+    \let icon_font = \Font(
+        font: font,
+        size: icon_size,
+        weight: 500,
+        line_height: icon_size
+    );
+
+    \let eff_icon_gap: Distance = is_stacked_icon ? icon_gap : (is_inline_icon ? 8px : 0px);
+    \let icon_w: Distance = has_icon ? icon_node.width : 0px;
+    \let icon_h: Distance = has_icon ? icon_node.height : 0px;
+    \let label_w: Distance = has_label ? label_node.width : 0px;
+    \let label_h: Distance = has_label ? label_node.height : 0px;
+
+    \let content_w: Distance = is_inline_icon ? (icon_w + eff_icon_gap + label_w) : max(icon_w, label_w);
+    \let content_h: Distance = is_stacked_icon ? (icon_h + eff_icon_gap + label_h) : max(icon_h, label_h);
+
+    \let default_min_h: Distance = is_stacked_icon ? 72px : 48px;
+    \let resolved_min_h: Distance = (min_height > 0px) ? min_height : default_min_h;
+    \let resolved_height: Distance = max(resolved_min_h, content_h + (2 * padding_y));
+
+    \alias right = x + width;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
+    \alias ind_x = is_selected ? x : 0px;
+    \alias ind_y = is_selected ? y : 0px;
+    \alias ind_w = is_selected ? width : 0px;
+    \alias ind_h = is_selected ? resolved_height : 0px;
+
+    \let group_x: Distance = x + max(0px, (width - content_w) / 2);
+    \let group_y: Distance = y + max(0px, (resolved_height - content_h) / 2);
+
+    \let icon_x: Distance = is_inline_icon
+        ? (is_icon_end ? (group_x + label_w + eff_icon_gap) : group_x)
+        : (x + max(0px, (width - icon_w) / 2));
+    \let icon_y: Distance = is_stacked_icon
+        ? (is_icon_bottom ? (group_y + label_h + eff_icon_gap) : group_y)
+        : (y + max(0px, (resolved_height - icon_h) / 2));
+
+    \let label_x: Distance = is_inline_icon
+        ? (is_icon_start ? (group_x + icon_w + eff_icon_gap) : group_x)
+        : (x + max(0px, (width - label_w) / 2));
+    \let label_y: Distance = is_stacked_icon
+        ? (is_icon_top ? (group_y + icon_h + eff_icon_gap) : group_y)
+        : (y + max(0px, (resolved_height - label_h) / 2));
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: resolved_height,
+        color: resolved_bg
+    )
+
+    \let icon_node = \Text(
+        x: icon_x,
+        y: icon_y,
+        font: icon_font,
+        color: has_icon ? resolved_text_color : #00000000,
+        text: icon
+    );
+
+    \let label_node = \Text(
+        x: label_x,
+        y: label_y,
+        font: label_font,
+        color: has_label ? resolved_text_color : #00000000,
+        text_bounds: tab_text_bounds,
+        text: label
+    );
+}
+
+// 2. Intrinsic Width Tab with `label` prop (and optional `icon`)
+\Component Tab(
+    label: String,
+    env font: Font = \Font(size: 16px),
+    env inherit_color: Color = #000000de,
+    env tabs_has_context: Boolean = false,
+    env tabs_selected_index: Integer = -1,
+    env tabs_text_color: MaterialColor = MaterialColor.Primary,
+    env tabs_fixed_tab_width: Distance = 0px,
+    tab_index: Integer = 0,
+    icon: String = "",
+    icon_position: TabIconPosition = TabIconPosition.Top,
+    icon_size: Distance = 20px,
+    icon_gap: Distance = 6px,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    controlled: Boolean = false,
+    wrapped: Boolean = false,
+    color: MaterialColor = MaterialColor.Primary,
+    min_width: Distance = 90px,
+    min_height: Distance = 0px,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 12px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_change: Handler = unset,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \state self_selected: Boolean = selected;
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let is_selected = tabs_has_context
+        ? ((tabs_selected_index >= 0) ? (tab_index == tabs_selected_index) : selected)
+        : (controlled ? selected : self_selected);
+
+    \let eff_color: MaterialColor = tabs_has_context ? tabs_text_color : color;
+    \let is_primary = eff_color == MaterialColor.Primary;
+    \let is_secondary = eff_color == MaterialColor.Secondary;
+    \let is_success = eff_color == MaterialColor.Success;
+    \let is_error = eff_color == MaterialColor.Error;
+    \let is_info = eff_color == MaterialColor.Info;
+    \let is_warning = eff_color == MaterialColor.Warning;
+    \let is_inherit = eff_color == MaterialColor.Inherit;
+    \let is_light_inherit = is_inherit && (inherit_color == #ffffff);
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : inherit_color
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : (is_light_inherit ? #ffffff14 : #0000000a)
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : (is_light_inherit ? #ffffff26 : #0000001f)
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : (is_light_inherit ? #ffffff33 : #00000029)
+                    )
+                )
+            )
+        )
+    );
+
+    \let inactive_text_color: Color = is_light_inherit ? #ffffffb3 : #00000099;
+    \let disabled_text_color: Color = is_light_inherit ? #ffffff61 : #00000061;
+    \let resolved_text_color: Color = disabled ? disabled_text_color : (is_selected ? ch_main : inactive_text_color);
+    \let resolved_bg: Color = disabled ? bg : (pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : bg)));
+
+    \let has_icon = icon != "";
+    \let has_label = label != "";
+    \let is_icon_top = icon_position == TabIconPosition.Top;
+    \let is_icon_bottom = icon_position == TabIconPosition.Bottom;
+    \let is_icon_start = icon_position == TabIconPosition.Start;
+    \let is_icon_end = icon_position == TabIconPosition.End;
+    \let is_stacked_icon = has_icon && has_label && (is_icon_top || is_icon_bottom);
+    \let is_inline_icon = has_icon && has_label && (is_icon_start || is_icon_end);
+
+    \let label_font = \Font(
+        font: font,
+        size: wrapped ? 12px : 14px,
+        weight: 500,
+        line_height: wrapped ? 16px : 20px
+    );
+    \let icon_font = \Font(
+        font: font,
+        size: icon_size,
+        weight: 500,
+        line_height: icon_size
+    );
+
+    \let eff_icon_gap: Distance = is_stacked_icon ? icon_gap : (is_inline_icon ? 8px : 0px);
+    \let icon_w: Distance = has_icon ? icon_node.width : 0px;
+    \let icon_h: Distance = has_icon ? icon_node.height : 0px;
+    \let label_w: Distance = has_label ? label_node.width : 0px;
+    \let label_h: Distance = has_label ? label_node.height : 0px;
+
+    \let content_w: Distance = is_inline_icon ? (icon_w + eff_icon_gap + label_w) : max(icon_w, label_w);
+    \let content_h: Distance = is_stacked_icon ? (icon_h + eff_icon_gap + label_h) : max(icon_h, label_h);
+
+    \let intrinsic_w: Distance = max(min_width, content_w + (2 * padding_x));
+    \let resolved_width: Distance = (tabs_fixed_tab_width > 0px) ? tabs_fixed_tab_width : intrinsic_w;
+
+    \let default_min_h: Distance = is_stacked_icon ? 72px : 48px;
+    \let resolved_min_h: Distance = (min_height > 0px) ? min_height : default_min_h;
+    \let resolved_height: Distance = max(resolved_min_h, content_h + (2 * padding_y));
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
+    \alias ind_x = is_selected ? x : 0px;
+    \alias ind_y = is_selected ? y : 0px;
+    \alias ind_w = is_selected ? resolved_width : 0px;
+    \alias ind_h = is_selected ? resolved_height : 0px;
+
+    \let group_x: Distance = x + max(0px, (resolved_width - content_w) / 2);
+    \let group_y: Distance = y + max(0px, (resolved_height - content_h) / 2);
+
+    \let icon_x: Distance = is_inline_icon
+        ? (is_icon_end ? (group_x + label_w + eff_icon_gap) : group_x)
+        : (x + max(0px, (resolved_width - icon_w) / 2));
+    \let icon_y: Distance = is_stacked_icon
+        ? (is_icon_bottom ? (group_y + label_h + eff_icon_gap) : group_y)
+        : (y + max(0px, (resolved_height - icon_h) / 2));
+
+    \let label_x: Distance = is_inline_icon
+        ? (is_icon_start ? (group_x + icon_w + eff_icon_gap) : group_x)
+        : (x + max(0px, (resolved_width - label_w) / 2));
+    \let label_y: Distance = is_stacked_icon
+        ? (is_icon_top ? (group_y + icon_h + eff_icon_gap) : group_y)
+        : (y + max(0px, (resolved_height - label_h) / 2));
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: resolved_height,
+        color: resolved_bg
+    )
+
+    \let icon_node = \Text(
+        x: icon_x,
+        y: icon_y,
+        font: icon_font,
+        color: has_icon ? resolved_text_color : #00000000,
+        text: icon
+    );
+
+    \let label_node = \Text(
+        x: label_x,
+        y: label_y,
+        font: label_font,
+        color: has_label ? resolved_text_color : #00000000,
+        text_bounds: tab_text_bounds,
+        text: label
+    );
+}
+
+// 3. Explicit Width Tab with Child Label Text (or Icon-Only)
+\Component Tab(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    env inherit_color: Color = #000000de,
+    env tabs_has_context: Boolean = false,
+    env tabs_selected_index: Integer = -1,
+    env tabs_text_color: MaterialColor = MaterialColor.Primary,
+    tab_index: Integer = 0,
+    icon: String = "",
+    icon_position: TabIconPosition = TabIconPosition.Top,
+    icon_size: Distance = 20px,
+    icon_gap: Distance = 6px,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    controlled: Boolean = false,
+    wrapped: Boolean = false,
+    color: MaterialColor = MaterialColor.Primary,
+    min_height: Distance = 0px,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 12px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_change: Handler = unset,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \state self_selected: Boolean = selected;
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let is_selected = tabs_has_context
+        ? ((tabs_selected_index >= 0) ? (tab_index == tabs_selected_index) : selected)
+        : (controlled ? selected : self_selected);
+
+    \let eff_color: MaterialColor = tabs_has_context ? tabs_text_color : color;
+    \let is_primary = eff_color == MaterialColor.Primary;
+    \let is_secondary = eff_color == MaterialColor.Secondary;
+    \let is_success = eff_color == MaterialColor.Success;
+    \let is_error = eff_color == MaterialColor.Error;
+    \let is_info = eff_color == MaterialColor.Info;
+    \let is_warning = eff_color == MaterialColor.Warning;
+    \let is_inherit = eff_color == MaterialColor.Inherit;
+    \let is_light_inherit = is_inherit && (inherit_color == #ffffff);
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : inherit_color
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : (is_light_inherit ? #ffffff14 : #0000000a)
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : (is_light_inherit ? #ffffff26 : #0000001f)
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : (is_light_inherit ? #ffffff33 : #00000029)
+                    )
+                )
+            )
+        )
+    );
+
+    \let inactive_text_color: Color = is_light_inherit ? #ffffffb3 : #00000099;
+    \let disabled_text_color: Color = is_light_inherit ? #ffffff61 : #00000061;
+    \let resolved_text_color: Color = disabled ? disabled_text_color : (is_selected ? ch_main : inactive_text_color);
+    \let resolved_bg: Color = disabled ? bg : (pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : bg)));
+
+    \let has_icon = icon != "";
+    \let has_label = children.len > 0;
+    \let is_icon_top = icon_position == TabIconPosition.Top;
+    \let is_icon_bottom = icon_position == TabIconPosition.Bottom;
+    \let is_icon_start = icon_position == TabIconPosition.Start;
+    \let is_icon_end = icon_position == TabIconPosition.End;
+    \let is_stacked_icon = has_icon && has_label && (is_icon_top || is_icon_bottom);
+    \let is_inline_icon = has_icon && has_label && (is_icon_start || is_icon_end);
+
+    \env font = \Font(
+        font: self.font,
+        size: wrapped ? 12px : 14px,
+        weight: 500,
+        line_height: wrapped ? 16px : 20px
+    );
+    \let icon_font = \Font(
+        font: self.font,
+        size: icon_size,
+        weight: 500,
+        line_height: icon_size
+    );
+
+    \let eff_icon_gap: Distance = is_stacked_icon ? icon_gap : (is_inline_icon ? 8px : 0px);
+    \let icon_w: Distance = has_icon ? icon_node.width : 0px;
+    \let icon_h: Distance = has_icon ? icon_node.height : 0px;
+    \let label_w: Distance = has_label ? label_node.width : 0px;
+    \let label_h: Distance = has_label ? label_node.height : 0px;
+
+    \let content_w: Distance = is_inline_icon ? (icon_w + eff_icon_gap + label_w) : max(icon_w, label_w);
+    \let content_h: Distance = is_stacked_icon ? (icon_h + eff_icon_gap + label_h) : max(icon_h, label_h);
+
+    \let default_min_h: Distance = is_stacked_icon ? 72px : 48px;
+    \let resolved_min_h: Distance = (min_height > 0px) ? min_height : default_min_h;
+    \let resolved_height: Distance = max(resolved_min_h, content_h + (2 * padding_y));
+
+    \alias right = x + width;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
+    \alias ind_x = is_selected ? x : 0px;
+    \alias ind_y = is_selected ? y : 0px;
+    \alias ind_w = is_selected ? width : 0px;
+    \alias ind_h = is_selected ? resolved_height : 0px;
+
+    \let group_x: Distance = x + max(0px, (width - content_w) / 2);
+    \let group_y: Distance = y + max(0px, (resolved_height - content_h) / 2);
+
+    \let icon_x: Distance = is_inline_icon
+        ? (is_icon_end ? (group_x + label_w + eff_icon_gap) : group_x)
+        : (x + max(0px, (width - icon_w) / 2));
+    \let icon_y: Distance = is_stacked_icon
+        ? (is_icon_bottom ? (group_y + label_h + eff_icon_gap) : group_y)
+        : (y + max(0px, (resolved_height - icon_h) / 2));
+
+    \let label_x: Distance = is_inline_icon
+        ? (is_icon_start ? (group_x + icon_w + eff_icon_gap) : group_x)
+        : (x + max(0px, (width - label_w) / 2));
+    \let label_y: Distance = is_stacked_icon
+        ? (is_icon_top ? (group_y + icon_h + eff_icon_gap) : group_y)
+        : (y + max(0px, (resolved_height - label_h) / 2));
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: resolved_height,
+        color: resolved_bg
+    )
+
+    \let icon_node = \Text(
+        x: icon_x,
+        y: icon_y,
+        font: icon_font,
+        color: has_icon ? resolved_text_color : #00000000,
+        text: icon
+    );
+
+    \let label_node = \Text(
+        x: label_x,
+        y: label_y,
+        font: env.font,
+        color: has_label ? resolved_text_color : #00000000,
+        text_bounds: tab_text_bounds
+    ) {
+        \Children
+    };
+}
+
+// 4. Intrinsic Width Tab with Child Label Text (or Icon-Only)
+\Component Tab(
+    env font: Font = \Font(size: 16px),
+    env inherit_color: Color = #000000de,
+    env tabs_has_context: Boolean = false,
+    env tabs_selected_index: Integer = -1,
+    env tabs_text_color: MaterialColor = MaterialColor.Primary,
+    env tabs_fixed_tab_width: Distance = 0px,
+    tab_index: Integer = 0,
+    icon: String = "",
+    icon_position: TabIconPosition = TabIconPosition.Top,
+    icon_size: Distance = 20px,
+    icon_gap: Distance = 6px,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    controlled: Boolean = false,
+    wrapped: Boolean = false,
+    color: MaterialColor = MaterialColor.Primary,
+    min_width: Distance = 90px,
+    min_height: Distance = 0px,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 12px,
+    bg: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_change: Handler = unset,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \state self_selected: Boolean = selected;
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let is_selected = tabs_has_context
+        ? ((tabs_selected_index >= 0) ? (tab_index == tabs_selected_index) : selected)
+        : (controlled ? selected : self_selected);
+
+    \let eff_color: MaterialColor = tabs_has_context ? tabs_text_color : color;
+    \let is_primary = eff_color == MaterialColor.Primary;
+    \let is_secondary = eff_color == MaterialColor.Secondary;
+    \let is_success = eff_color == MaterialColor.Success;
+    \let is_error = eff_color == MaterialColor.Error;
+    \let is_info = eff_color == MaterialColor.Info;
+    \let is_warning = eff_color == MaterialColor.Warning;
+    \let is_inherit = eff_color == MaterialColor.Inherit;
+    \let is_light_inherit = is_inherit && (inherit_color == #ffffff);
+
+    \let ch_main = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : inherit_color
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : (is_light_inherit ? #ffffff14 : #0000000a)
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : (is_light_inherit ? #ffffff26 : #0000001f)
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : (is_light_inherit ? #ffffff33 : #00000029)
+                    )
+                )
+            )
+        )
+    );
+
+    \let inactive_text_color: Color = is_light_inherit ? #ffffffb3 : #00000099;
+    \let disabled_text_color: Color = is_light_inherit ? #ffffff61 : #00000061;
+    \let resolved_text_color: Color = disabled ? disabled_text_color : (is_selected ? ch_main : inactive_text_color);
+    \let resolved_bg: Color = disabled ? bg : (pressed ? ch_active_bg : (focused ? ch_focus_bg : (hovered ? ch_hover_bg : bg)));
+
+    \let has_icon = icon != "";
+    \let has_label = children.len > 0;
+    \let is_icon_top = icon_position == TabIconPosition.Top;
+    \let is_icon_bottom = icon_position == TabIconPosition.Bottom;
+    \let is_icon_start = icon_position == TabIconPosition.Start;
+    \let is_icon_end = icon_position == TabIconPosition.End;
+    \let is_stacked_icon = has_icon && has_label && (is_icon_top || is_icon_bottom);
+    \let is_inline_icon = has_icon && has_label && (is_icon_start || is_icon_end);
+
+    \env font = \Font(
+        font: self.font,
+        size: wrapped ? 12px : 14px,
+        weight: 500,
+        line_height: wrapped ? 16px : 20px
+    );
+    \let icon_font = \Font(
+        font: self.font,
+        size: icon_size,
+        weight: 500,
+        line_height: icon_size
+    );
+
+    \let eff_icon_gap: Distance = is_stacked_icon ? icon_gap : (is_inline_icon ? 8px : 0px);
+    \let icon_w: Distance = has_icon ? icon_node.width : 0px;
+    \let icon_h: Distance = has_icon ? icon_node.height : 0px;
+    \let label_w: Distance = has_label ? label_node.width : 0px;
+    \let label_h: Distance = has_label ? label_node.height : 0px;
+
+    \let content_w: Distance = is_inline_icon ? (icon_w + eff_icon_gap + label_w) : max(icon_w, label_w);
+    \let content_h: Distance = is_stacked_icon ? (icon_h + eff_icon_gap + label_h) : max(icon_h, label_h);
+
+    \let intrinsic_w: Distance = max(min_width, content_w + (2 * padding_x));
+    \let resolved_width: Distance = (tabs_fixed_tab_width > 0px) ? tabs_fixed_tab_width : intrinsic_w;
+
+    \let default_min_h: Distance = is_stacked_icon ? 72px : 48px;
+    \let resolved_min_h: Distance = (min_height > 0px) ? min_height : default_min_h;
+    \let resolved_height: Distance = max(resolved_min_h, content_h + (2 * padding_y));
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = resolved_height;
+    \alias bottom = y + resolved_height;
+    \alias ind_x = is_selected ? x : 0px;
+    \alias ind_y = is_selected ? y : 0px;
+    \alias ind_w = is_selected ? resolved_width : 0px;
+    \alias ind_h = is_selected ? resolved_height : 0px;
+
+    \let group_x: Distance = x + max(0px, (resolved_width - content_w) / 2);
+    \let group_y: Distance = y + max(0px, (resolved_height - content_h) / 2);
+
+    \let icon_x: Distance = is_inline_icon
+        ? (is_icon_end ? (group_x + label_w + eff_icon_gap) : group_x)
+        : (x + max(0px, (resolved_width - icon_w) / 2));
+    \let icon_y: Distance = is_stacked_icon
+        ? (is_icon_bottom ? (group_y + label_h + eff_icon_gap) : group_y)
+        : (y + max(0px, (resolved_height - icon_h) / 2));
+
+    \let label_x: Distance = is_inline_icon
+        ? (is_icon_start ? (group_x + icon_w + eff_icon_gap) : group_x)
+        : (x + max(0px, (resolved_width - label_w) / 2));
+    \let label_y: Distance = is_stacked_icon
+        ? (is_icon_top ? (group_y + icon_h + eff_icon_gap) : group_y)
+        : (y + max(0px, (resolved_height - label_h) / 2));
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: resolved_height,
+        color: resolved_bg
+    )
+
+    \let icon_node = \Text(
+        x: icon_x,
+        y: icon_y,
+        font: icon_font,
+        color: has_icon ? resolved_text_color : #00000000,
+        text: icon
+    );
+
+    \let label_node = \Text(
+        x: label_x,
+        y: label_y,
+        font: env.font,
+        color: has_label ? resolved_text_color : #00000000,
+        text_bounds: tab_text_bounds
+    ) {
+        \Children
+    };
+}

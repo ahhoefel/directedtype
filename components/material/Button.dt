@@ -22,6 +22,7 @@
     width: Distance,
     label: String,
     env font: Font = \Font(size: 16px),
+    env inherit_color: Color = #212121,
     variant: ButtonVariant = ButtonVariant.Text,
     color: MaterialColor = MaterialColor.Primary,
     size: ButtonSize = ButtonSize.Medium,
@@ -65,13 +66,14 @@
     \let is_error = color == MaterialColor.Error;
     \let is_info = color == MaterialColor.Info;
     \let is_warning = color == MaterialColor.Warning;
+    \let is_light_inherit = (color == MaterialColor.Inherit) && (inherit_color == #ffffff);
 
     \let ch_main = is_primary ? #1976d2 : (
         is_secondary ? #9c27b0 : (
             is_success ? #2e7d32 : (
                 is_error ? #d32f2f : (
                     is_info ? #0288d1 : (
-                        is_warning ? #ed6c02 : #212121
+                        is_warning ? #ed6c02 : (is_contained ? #212121 : inherit_color)
                     )
                 )
             )
@@ -97,7 +99,7 @@
             is_success ? #2e7d320a : (
                 is_error ? #d32f2f0a : (
                     is_info ? #0288d10a : (
-                        is_warning ? #ed6c020a : #0000000a
+                        is_warning ? #ed6c020a : (is_light_inherit ? #ffffff14 : #0000000a)
                     )
                 )
             )
@@ -109,7 +111,7 @@
             is_success ? #2e7d321f : (
                 is_error ? #d32f2f1f : (
                     is_info ? #0288d11f : (
-                        is_warning ? #ed6c021f : #0000001f
+                        is_warning ? #ed6c021f : (is_light_inherit ? #ffffff26 : #0000001f)
                     )
                 )
             )
@@ -121,7 +123,7 @@
             is_success ? #2e7d3229 : (
                 is_error ? #d32f2f29 : (
                     is_info ? #0288d129 : (
-                        is_warning ? #ed6c0229 : #00000029
+                        is_warning ? #ed6c0229 : (is_light_inherit ? #ffffff33 : #00000029)
                     )
                 )
             )
@@ -133,7 +135,7 @@
             is_success ? #2e7d3280 : (
                 is_error ? #d32f2f80 : (
                     is_info ? #0288d180 : (
-                        is_warning ? #ed6c0280 : #0000003b
+                        is_warning ? #ed6c0280 : (is_light_inherit ? #ffffff80 : #0000003b)
                     )
                 )
             )
@@ -186,6 +188,7 @@
 \Component Button(
     label: String,
     env font: Font = \Font(size: 16px),
+    env inherit_color: Color = #212121,
     variant: ButtonVariant = ButtonVariant.Text,
     color: MaterialColor = MaterialColor.Primary,
     size: ButtonSize = ButtonSize.Medium,
@@ -233,13 +236,14 @@
     \let is_error = color == MaterialColor.Error;
     \let is_info = color == MaterialColor.Info;
     \let is_warning = color == MaterialColor.Warning;
+    \let is_light_inherit = (color == MaterialColor.Inherit) && (inherit_color == #ffffff);
 
     \let ch_main = is_primary ? #1976d2 : (
         is_secondary ? #9c27b0 : (
             is_success ? #2e7d32 : (
                 is_error ? #d32f2f : (
                     is_info ? #0288d1 : (
-                        is_warning ? #ed6c02 : #212121
+                        is_warning ? #ed6c02 : (is_contained ? #212121 : inherit_color)
                     )
                 )
             )
@@ -265,7 +269,7 @@
             is_success ? #2e7d320a : (
                 is_error ? #d32f2f0a : (
                     is_info ? #0288d10a : (
-                        is_warning ? #ed6c020a : #0000000a
+                        is_warning ? #ed6c020a : (is_light_inherit ? #ffffff14 : #0000000a)
                     )
                 )
             )
@@ -277,7 +281,7 @@
             is_success ? #2e7d321f : (
                 is_error ? #d32f2f1f : (
                     is_info ? #0288d11f : (
-                        is_warning ? #ed6c021f : #0000001f
+                        is_warning ? #ed6c021f : (is_light_inherit ? #ffffff26 : #0000001f)
                     )
                 )
             )
@@ -289,7 +293,7 @@
             is_success ? #2e7d3229 : (
                 is_error ? #d32f2f29 : (
                     is_info ? #0288d129 : (
-                        is_warning ? #ed6c0229 : #00000029
+                        is_warning ? #ed6c0229 : (is_light_inherit ? #ffffff33 : #00000029)
                     )
                 )
             )
@@ -301,7 +305,7 @@
             is_success ? #2e7d3280 : (
                 is_error ? #d32f2f80 : (
                     is_info ? #0288d180 : (
-                        is_warning ? #ed6c0280 : #0000003b
+                        is_warning ? #ed6c0280 : (is_light_inherit ? #ffffff80 : #0000003b)
                     )
                 )
             )
@@ -357,6 +361,7 @@
 \Component Button(
     width: Distance,
     env font: Font = \Font(size: 16px),
+    env inherit_color: Color = #212121,
     variant: ButtonVariant = ButtonVariant.Text,
     color: MaterialColor = MaterialColor.Primary,
     size: ButtonSize = ButtonSize.Medium,
@@ -400,13 +405,14 @@
     \let is_error = color == MaterialColor.Error;
     \let is_info = color == MaterialColor.Info;
     \let is_warning = color == MaterialColor.Warning;
+    \let is_light_inherit = (color == MaterialColor.Inherit) && (inherit_color == #ffffff);
 
     \let ch_main = is_primary ? #1976d2 : (
         is_secondary ? #9c27b0 : (
             is_success ? #2e7d32 : (
                 is_error ? #d32f2f : (
                     is_info ? #0288d1 : (
-                        is_warning ? #ed6c02 : #212121
+                        is_warning ? #ed6c02 : (is_contained ? #212121 : inherit_color)
                     )
                 )
             )
@@ -432,7 +438,7 @@
             is_success ? #2e7d320a : (
                 is_error ? #d32f2f0a : (
                     is_info ? #0288d10a : (
-                        is_warning ? #ed6c020a : #0000000a
+                        is_warning ? #ed6c020a : (is_light_inherit ? #ffffff14 : #0000000a)
                     )
                 )
             )
@@ -444,7 +450,7 @@
             is_success ? #2e7d321f : (
                 is_error ? #d32f2f1f : (
                     is_info ? #0288d11f : (
-                        is_warning ? #ed6c021f : #0000001f
+                        is_warning ? #ed6c021f : (is_light_inherit ? #ffffff26 : #0000001f)
                     )
                 )
             )
@@ -456,7 +462,7 @@
             is_success ? #2e7d3229 : (
                 is_error ? #d32f2f29 : (
                     is_info ? #0288d129 : (
-                        is_warning ? #ed6c0229 : #00000029
+                        is_warning ? #ed6c0229 : (is_light_inherit ? #ffffff33 : #00000029)
                     )
                 )
             )
@@ -468,7 +474,7 @@
             is_success ? #2e7d3280 : (
                 is_error ? #d32f2f80 : (
                     is_info ? #0288d180 : (
-                        is_warning ? #ed6c0280 : #0000003b
+                        is_warning ? #ed6c0280 : (is_light_inherit ? #ffffff80 : #0000003b)
                     )
                 )
             )
@@ -521,6 +527,7 @@
 // 4. Intrinsic Width Button with child text content (`\Button { Click Me }`)
 \Component Button(
     env font: Font = \Font(size: 16px),
+    env inherit_color: Color = #212121,
     variant: ButtonVariant = ButtonVariant.Text,
     color: MaterialColor = MaterialColor.Primary,
     size: ButtonSize = ButtonSize.Medium,
@@ -568,13 +575,14 @@
     \let is_error = color == MaterialColor.Error;
     \let is_info = color == MaterialColor.Info;
     \let is_warning = color == MaterialColor.Warning;
+    \let is_light_inherit = (color == MaterialColor.Inherit) && (inherit_color == #ffffff);
 
     \let ch_main = is_primary ? #1976d2 : (
         is_secondary ? #9c27b0 : (
             is_success ? #2e7d32 : (
                 is_error ? #d32f2f : (
                     is_info ? #0288d1 : (
-                        is_warning ? #ed6c02 : #212121
+                        is_warning ? #ed6c02 : (is_contained ? #212121 : inherit_color)
                     )
                 )
             )
@@ -600,7 +608,7 @@
             is_success ? #2e7d320a : (
                 is_error ? #d32f2f0a : (
                     is_info ? #0288d10a : (
-                        is_warning ? #ed6c020a : #0000000a
+                        is_warning ? #ed6c020a : (is_light_inherit ? #ffffff14 : #0000000a)
                     )
                 )
             )
@@ -612,7 +620,7 @@
             is_success ? #2e7d321f : (
                 is_error ? #d32f2f1f : (
                     is_info ? #0288d11f : (
-                        is_warning ? #ed6c021f : #0000001f
+                        is_warning ? #ed6c021f : (is_light_inherit ? #ffffff26 : #0000001f)
                     )
                 )
             )
@@ -624,7 +632,7 @@
             is_success ? #2e7d3229 : (
                 is_error ? #d32f2f29 : (
                     is_info ? #0288d129 : (
-                        is_warning ? #ed6c0229 : #00000029
+                        is_warning ? #ed6c0229 : (is_light_inherit ? #ffffff33 : #00000029)
                     )
                 )
             )
@@ -636,7 +644,7 @@
             is_success ? #2e7d3280 : (
                 is_error ? #d32f2f80 : (
                     is_info ? #0288d180 : (
-                        is_warning ? #ed6c0280 : #0000003b
+                        is_warning ? #ed6c0280 : (is_light_inherit ? #ffffff80 : #0000003b)
                     )
                 )
             )

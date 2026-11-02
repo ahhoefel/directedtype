@@ -18,6 +18,8 @@
 \use "../components/material/Checkbox.dt"
 \use "../components/material/Radio.dt"
 \use "../components/material/List.dt"
+\use "../components/material/AppBar.dt"
+\use "../components/material/Tabs.dt"
 
 \Window(title: "Material UI Component Gallery")
 
@@ -590,6 +592,145 @@
                             \ListItemText(primary: "Auto-Sync Backup", secondary: "Daily at 2:00 AM")
                             \Checkbox("list_cb_sync"; checked: true, size: CheckboxSize.Small)
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // Section 14: AppBar & Toolbar (Colors, Regular/Dense Variants, Actions & Embedded Tabs)
+    \Paper("card_appbar_toolbar"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
+        \VStack(min_width: target_inner_width, gap: 16px) {
+            \Subtitle2(color: material_text_secondary) {
+                14. APPBAR & TOOLBAR (COLORS, REGULAR 64PX, DENSE 48PX, ACTIONS & EMBEDDED TABS)
+            }
+
+            // 14a. Primary Regular AppBar with Nav Icon, Title & Inherit Action Button
+            \AppBar("appbar_primary"; width: target_inner_width, color: MaterialColor.Primary) {
+                \Toolbar("toolbar_primary"; nav_icon: "☰", title: "News & Updates") {
+                    \Button("appbar_btn_login"; color: MaterialColor.Inherit) { Login }
+                }
+            }
+
+            // 14b. Secondary Dense AppBar with Avatar, Subtitle & Trailing Actions
+            \AppBar("appbar_secondary"; width: target_inner_width, color: MaterialColor.Secondary) {
+                \Toolbar("toolbar_dense"; variant: ToolbarVariant.Dense, avatar: "M", title: "Material Workspace", subtitle: "Dense 48px Toolbar") {
+                    \Button("appbar_btn_share"; color: MaterialColor.Inherit, size: ButtonSize.Small) { Share }
+                    \Button("appbar_btn_export"; variant: ButtonVariant.Outlined, color: MaterialColor.Inherit, size: ButtonSize.Small) { Export }
+                }
+            }
+
+            // 14c. Light Inherit Outlined AppBar with Child Composition
+            \AppBar("appbar_inherit"; width: target_inner_width, color: MaterialColor.Inherit, variant: AppBarVariant.Outlined) {
+                \Toolbar("toolbar_inherit"; secondary_action: true, gap: 12px) {
+                    \Avatar(size: 32px, bg: material_primary.main) { D }
+                    \H6 { DirectedType Docs }
+                    \Chip(size: ChipSize.Small, color: MaterialColor.Info, variant: ChipVariant.Outlined) { v2.4 }
+                    \Button("appbar_btn_github"; variant: ButtonVariant.Outlined, size: ButtonSize.Small) { Star }
+                }
+            }
+
+            // 14d. Primary AppBar with Embedded Inherit Tabs
+            \AppBar("appbar_with_tabs"; width: target_inner_width, color: MaterialColor.Primary) {
+                \Toolbar("toolbar_with_tabs"; variant: ToolbarVariant.Dense, nav_icon: "☰", title: "Analytics Dashboard") {
+                    \Button("appbar_btn_profile"; color: MaterialColor.Inherit, size: ButtonSize.Small) { Profile }
+                }
+                \Tabs("appbar_tabs"; value: 0, text_color: MaterialColor.Inherit, indicator_color: MaterialColor.Inherit) {
+                    \Tab("appbar_tab_0"; label: "OVERVIEW")
+                    \Tab("appbar_tab_1"; label: "METRICS")
+                    \Tab("appbar_tab_2"; label: "ALERTS")
+                }
+            }
+        }
+    }
+
+    // Section 15: Tabs & Tab (Standard, Centered, FullWidth, Icons, Disabled & Vertical)
+    \Paper("card_tabs"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
+        \VStack(min_width: target_inner_width, gap: 16px) {
+            \Subtitle2(color: material_text_secondary) {
+                15. TABS & TAB (STANDARD, CENTERED, FULLWIDTH, ICON POSITIONS, DISABLED & VERTICAL)
+            }
+
+            // 15a. Standard Horizontal Tabs with Bottom Divider & Disabled Item
+            \Paper("tabs_standard_paper"; variant: PaperVariant.Outlined, padding_x: 0px, padding_y: 0px) {
+                \Tabs("tabs_standard"; width: target_inner_width, value: 0, divider: true) {
+                    \Tab("tab_std_0"; label: "ITEM ONE")
+                    \Tab("tab_std_1"; label: "ITEM TWO")
+                    \Tab("tab_std_2"; label: "ITEM THREE")
+                    \Tab("tab_std_disabled"; label: "DISABLED", disabled: true)
+                }
+            }
+
+            // 15b. Centered Secondary Tabs & FullWidth Tabs
+            \HStack(gap: 20px, align: Align.Top) {
+                \Paper("tabs_centered_paper"; variant: PaperVariant.Outlined, padding_x: 0px, padding_y: 0px) {
+                    \Tabs(
+                        "tabs_centered";
+                        width: 410px,
+                        value: 1,
+                        centered: true,
+                        divider: true,
+                        text_color: MaterialColor.Secondary,
+                        indicator_color: MaterialColor.Secondary
+                    ) {
+                        \Tab("tab_cnt_0"; label: "RECENTS")
+                        \Tab("tab_cnt_1"; label: "FAVORITES")
+                        \Tab("tab_cnt_2"; label: "NEARBY")
+                    }
+                }
+
+                \Paper("tabs_fullwidth_paper"; variant: PaperVariant.Outlined, padding_x: 0px, padding_y: 0px) {
+                    \Tabs(
+                        "tabs_fullwidth";
+                        width: 410px,
+                        value: 0,
+                        variant: TabsVariant.FullWidth,
+                        divider: true,
+                        text_color: MaterialColor.Success,
+                        indicator_color: MaterialColor.Success
+                    ) {
+                        \Tab("tab_fw_0"; label: "ACTIVE")
+                        \Tab("tab_fw_1"; label: "COMPLETED")
+                        \Tab("tab_fw_2"; label: "ARCHIVED")
+                    }
+                }
+            }
+
+            // 15c. Icon Tabs (Stacked Top 72px & Inline Start 48px) and Vertical Tabs
+            \HStack(gap: 20px, align: Align.Top) {
+                \Paper("tabs_icons_paper"; variant: PaperVariant.Outlined, padding_x: 0px, padding_y: 0px) {
+                    \VStack(gap: 0px) {
+                        \Tabs("tabs_icon_top"; width: 520px, value: 0, variant: TabsVariant.FullWidth, divider: true) {
+                            \Tab("tab_ic_top_0"; icon: "☎", label: "CALLS")
+                            \Tab("tab_ic_top_1"; icon: "♥", label: "FAVORITES")
+                            \Tab("tab_ic_top_2"; icon: "⌂", label: "NEARBY")
+                        }
+                        \Tabs(
+                            "tabs_icon_start";
+                            width: 520px,
+                            value: 1,
+                            variant: TabsVariant.FullWidth,
+                            text_color: MaterialColor.Info,
+                            indicator_color: MaterialColor.Info
+                        ) {
+                            \Tab("tab_ic_start_0"; icon: "✉", icon_position: TabIconPosition.Start, label: "INBOX")
+                            \Tab("tab_ic_start_1"; icon: "★", icon_position: TabIconPosition.Start, label: "STARRED")
+                            \Tab("tab_ic_start_2"; icon: "⚙", icon_position: TabIconPosition.Start, label: "SETTINGS")
+                        }
+                    }
+                }
+
+                \Paper("tabs_vertical_paper"; variant: PaperVariant.Outlined, padding_x: 0px, padding_y: 0px) {
+                    \Tabs(
+                        "tabs_vertical";
+                        width: 300px,
+                        value: 0,
+                        orientation: TabsOrientation.Vertical,
+                        divider: true
+                    ) {
+                        \Tab("tab_vert_0"; label: "GENERAL PROFILE")
+                        \Tab("tab_vert_1"; label: "SECURITY & KEYS")
+                        \Tab("tab_vert_2"; label: "NOTIFICATIONS")
                     }
                 }
             }
