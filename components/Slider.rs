@@ -1,9 +1,7 @@
 // DirectedType Standard Component Library: Slider Companion
 // Native companion struct providing drag tracking, pointer capture, and strongly-typed callbacks.
 
-use directedtype::component::{Callback, Context, DispatchError, EmitCallback};
-use directedtype::interaction::Event;
-use directedtype_macros::component;
+use directedtype::prelude::*;
 
 #[derive(Default, Debug, Clone)]
 pub struct Slider {

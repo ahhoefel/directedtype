@@ -1,8 +1,7 @@
 // DirectedType Standard Component Library: Button Companion
 // Native companion struct providing click tracking, disabled state, and event propagation control.
 
-use directedtype::component::{Context, DispatchError};
-use directedtype_macros::component;
+use directedtype::prelude::*;
 
 #[derive(Default, Debug, Clone)]
 pub struct Button {

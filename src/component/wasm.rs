@@ -1,4 +1,4 @@
-use crate::component::{Component, Context, ContextAction, DispatchError};
+use crate::component::{Component, Context, ContextAction, DispatchError, EventHandlerTarget};
 use crate::compiler::expanded::NodeId;
 use crate::compiler::value::Value;
 use crate::interaction::{Event, EventKind, MouseButton};
@@ -127,7 +127,28 @@ impl WasmComponent {
         Ok(resp)
     }
 
+    fn extract_guest_callbacks(ctx: &Context<'_>) -> HashMap<String, (u64, String)> {
+        let mut callbacks = HashMap::new();
+        if let Some(node) = ctx.layout().get_node(ctx.node_id()) {
+            for (port_name, binding) in &node.event_handlers {
+                if let EventHandlerTarget::Component(target_id) = binding.target {
+                    if target_id != ctx.node_id() {
+                        callbacks.insert(
+                            port_name.clone(),
+                            (target_id.0 as u64, binding.method.clone()),
+                        );
+                    }
+                }
+            }
+        }
+        callbacks
+    }
+
     fn apply_response(&self, resp: ComponentResponse, ctx: &mut Context<'_>) {
+        if resp.call_default {
+            ctx.call_default();
+        }
+
         for mutation in resp.mutations {
             ctx.set_state(mutation.name, guest_to_host_value(mutation.value));
         }
@@ -181,6 +202,7 @@ impl Component for WasmComponent {
             node_id: ctx.node_id().0 as u64,
             parent_id: ctx.parent_id().map(|p| p.0 as u64),
             ports: guest_ports,
+            callbacks: Self::extract_guest_callbacks(ctx),
         };
 
         if let Ok(json_bytes) = serde_json::to_vec(&req) {
@@ -208,6 +230,7 @@ impl Component for WasmComponent {
             method: method.to_string(),
             event: Some(guest_event),
             ports: guest_ports,
+            callbacks: Self::extract_guest_callbacks(ctx),
         };
 
         let json_bytes = serde_json::to_vec(&req).map_err(|e| {
@@ -215,6 +238,9 @@ impl Component for WasmComponent {
         })?;
 
         let resp = self.call_wasm(false, &json_bytes)?;
+        if resp.propagation_continued {
+            event.continue_propagation();
+        }
         self.apply_response(resp, ctx);
         Ok(())
     }

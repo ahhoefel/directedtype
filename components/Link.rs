@@ -2,9 +2,7 @@
 // Native companion struct providing click navigation, internal anchor scrolling, external URL routing,
 // and reactive hover/focus visual styling.
 
-use directedtype::component::{Context, DispatchError};
-use directedtype::interaction::Event;
-use directedtype_macros::component;
+use directedtype::prelude::*;
 
 #[derive(Default, Debug, Clone)]
 pub struct Link {

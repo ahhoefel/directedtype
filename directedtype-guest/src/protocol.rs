@@ -9,6 +9,8 @@ pub struct MountRequest {
     pub node_id: u64,
     pub parent_id: Option<u64>,
     pub ports: HashMap<String, Value>,
+    #[serde(default)]
+    pub callbacks: HashMap<String, (u64, String)>,
 }
 
 /// Host-to-guest request for dispatching an event method on a component instance.
@@ -18,6 +20,8 @@ pub struct DispatchRequest {
     pub method: String,
     pub event: Option<Event>,
     pub ports: HashMap<String, Value>,
+    #[serde(default)]
+    pub callbacks: HashMap<String, (u64, String)>,
 }
 
 /// A reactive state mutation emitted by a guest component.
@@ -54,6 +58,10 @@ pub enum Action {
 pub struct ComponentResponse {
     pub mutations: Vec<StateMutation>,
     pub actions: Vec<Action>,
+    #[serde(default)]
+    pub call_default: bool,
+    #[serde(default)]
+    pub propagation_continued: bool,
     pub error: Option<String>,
 }
 

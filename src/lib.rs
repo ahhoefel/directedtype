@@ -32,3 +32,12 @@ pub use inspector::{
 };
 pub use interaction::{Event, EventKind, HitTestResult, Modifiers, MouseButton, Point};
 pub use parser::parse_document as parse;
+
+pub mod prelude {
+    pub use crate::compiler::Value;
+    pub use crate::component::{
+        Callback, Component, Context, DispatchError, EmitCallback, FromPayload,
+    };
+    pub use crate::interaction::{Event, EventKind, Modifiers, MouseButton, Point};
+    pub use directedtype_macros::component;
+}

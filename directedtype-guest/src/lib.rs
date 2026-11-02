@@ -3,7 +3,7 @@ pub mod event;
 pub mod protocol;
 pub mod value;
 
-pub use context::Context;
+pub use context::{Callback, Context, EmitCallback};
 pub use event::{Event, EventKind, Modifiers, MouseButton, Point};
 pub use protocol::{Action, ComponentResponse, DispatchRequest, MountRequest, StateMutation};
 pub use value::Value;
@@ -145,6 +145,8 @@ pub fn serialize_response_raw(resp: &ComponentResponse) -> u64 {
             let err_resp = ComponentResponse {
                 mutations: Vec::new(),
                 actions: Vec::new(),
+                call_default: false,
+                propagation_continued: false,
                 error: Some(format!("Guest serialization error: {}", e)),
             };
             serde_json::to_vec(&err_resp).unwrap_or_default()
@@ -168,18 +170,22 @@ pub fn mount_handler<T: Component>(
             return serialize_response_raw(&ComponentResponse {
                 mutations: Vec::new(),
                 actions: Vec::new(),
+                call_default: false,
+                propagation_continued: false,
                 error: Some(format!("Invalid MountRequest JSON: {}", e)),
             });
         }
     };
 
     let mut component = T::default();
-    let mut ctx = Context::new(req.node_id, req.parent_id, &req.ports);
+    let mut ctx = Context::with_callbacks(req.node_id, req.parent_id, &req.ports, &req.callbacks);
     component.on_mount(&mut ctx);
 
     let resp = ComponentResponse {
         mutations: ctx.take_mutations(),
         actions: ctx.take_actions(),
+        call_default: ctx.take_call_default(),
+        propagation_continued: false,
         error: None,
     };
 
@@ -202,6 +208,8 @@ pub fn dispatch_handler<T: Component>(
             return serialize_response_raw(&ComponentResponse {
                 mutations: Vec::new(),
                 actions: Vec::new(),
+                call_default: false,
+                propagation_continued: false,
                 error: Some(format!("Invalid DispatchRequest JSON: {}", e)),
             });
         }
@@ -213,6 +221,8 @@ pub fn dispatch_handler<T: Component>(
             return serialize_response_raw(&ComponentResponse {
                 mutations: Vec::new(),
                 actions: Vec::new(),
+                call_default: false,
+                propagation_continued: false,
                 error: Some(format!("Failed to lock instances: {}", e)),
             });
         }
@@ -224,6 +234,8 @@ pub fn dispatch_handler<T: Component>(
             return serialize_response_raw(&ComponentResponse {
                 mutations: Vec::new(),
                 actions: Vec::new(),
+                call_default: false,
+                propagation_continued: false,
                 error: Some(format!("Instance not found for node {}", req.node_id)),
             });
         }
@@ -242,17 +254,24 @@ pub fn dispatch_handler<T: Component>(
         propagation_continued: false,
     });
 
-    let mut ctx = Context::new(req.node_id, None, &req.ports);
+    let mut ctx = Context::with_callbacks(req.node_id, None, &req.ports, &req.callbacks);
     let result = component.dispatch(&req.method, &mut event, &mut ctx);
 
-    let (mutations, actions, error) = match result {
-        Ok(()) => (ctx.take_mutations(), ctx.take_actions(), None),
-        Err(e) => (Vec::new(), Vec::new(), Some(e.to_string())),
+    let (mutations, actions, call_default, error) = match result {
+        Ok(()) => (
+            ctx.take_mutations(),
+            ctx.take_actions(),
+            ctx.take_call_default(),
+            None,
+        ),
+        Err(e) => (Vec::new(), Vec::new(), false, Some(e.to_string())),
     };
 
     serialize_response_raw(&ComponentResponse {
         mutations,
         actions,
+        call_default,
+        propagation_continued: event.propagation_continued,
         error,
     })
 }
@@ -287,7 +306,7 @@ macro_rules! export_component {
 }
 
 pub mod prelude {
-    pub use crate::context::Context;
+    pub use crate::context::{Callback, Context, EmitCallback};
     pub use crate::event::{Event, EventKind, Modifiers, MouseButton, Point};
     pub use crate::value::Value;
     pub use crate::{export_component, Component, DispatchError, FromPayload};

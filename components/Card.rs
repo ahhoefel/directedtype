@@ -1,8 +1,7 @@
 // DirectedType Standard Component Library: Card Companion
 // Native companion struct providing focus/blur handling and reactive surface highlighting.
 
-use directedtype::component::{Context, DispatchError};
-use directedtype_macros::component;
+use directedtype::prelude::*;
 
 #[derive(Default, Debug, Clone)]
 pub struct Card {

@@ -1,24 +1,89 @@
 use crate::protocol::{Action, StateMutation};
 use crate::value::Value;
 use std::collections::HashMap;
+use std::marker::PhantomData;
+
+/// Strongly-typed handle to a parent or peer component callback method.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Callback<T = ()> {
+    pub target: u64,
+    pub method: String,
+    _phantom: PhantomData<T>,
+}
+
+impl<T> Callback<T> {
+    pub fn new(target: u64, method: impl Into<String>) -> Self {
+        Self {
+            target,
+            method: method.into(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: Into<Value>> Callback<T> {
+    pub fn emit(&self, ctx: &mut Context<'_>, payload: T) {
+        ctx.actions.push(Action::InvokeCallback {
+            target: self.target,
+            method: self.method.clone(),
+            payload: payload.into(),
+        });
+    }
+}
+
+/// Extension trait allowing `Option<Callback<T>>` to emit directly without unwrapping.
+pub trait EmitCallback<T> {
+    fn emit(&self, ctx: &mut Context<'_>, payload: T);
+}
+
+impl<T: Into<Value>> EmitCallback<T> for Option<Callback<T>> {
+    fn emit(&self, ctx: &mut Context<'_>, payload: T) {
+        if let Some(cb) = self {
+            cb.emit(ctx, payload);
+        }
+    }
+}
 
 /// Execution context passed to guest component lifecycle and event methods.
 pub struct Context<'a> {
     node_id: u64,
     parent_id: Option<u64>,
     ports: &'a HashMap<String, Value>,
+    callbacks: &'a HashMap<String, (u64, String)>,
     mutations: Vec<StateMutation>,
     actions: Vec<Action>,
+    call_default_requested: bool,
 }
 
 impl<'a> Context<'a> {
     pub fn new(node_id: u64, parent_id: Option<u64>, ports: &'a HashMap<String, Value>) -> Self {
+        static EMPTY_CALLBACKS: std::sync::LazyLock<HashMap<String, (u64, String)>> =
+            std::sync::LazyLock::new(HashMap::new);
         Self {
             node_id,
             parent_id,
             ports,
+            callbacks: &EMPTY_CALLBACKS,
             mutations: Vec::new(),
             actions: Vec::new(),
+            call_default_requested: false,
+        }
+    }
+
+    pub fn with_callbacks(
+        node_id: u64,
+        parent_id: Option<u64>,
+        ports: &'a HashMap<String, Value>,
+        callbacks: &'a HashMap<String, (u64, String)>,
+    ) -> Self {
+        Self {
+            node_id,
+            parent_id,
+            ports,
+            callbacks,
+            mutations: Vec::new(),
+            actions: Vec::new(),
+            call_default_requested: false,
         }
     }
 
@@ -118,6 +183,30 @@ impl<'a> Context<'a> {
     /// Drains and returns all recorded actions.
     pub fn take_actions(&mut self) -> Vec<Action> {
         std::mem::take(&mut self.actions)
+    }
+
+    /// Requests that the component's default event handler for the current event be executed.
+    pub fn call_default(&mut self) {
+        self.call_default_requested = true;
+    }
+
+    /// Returns whether `call_default()` was requested during this dispatch.
+    pub fn take_call_default(&mut self) -> bool {
+        std::mem::take(&mut self.call_default_requested)
+    }
+
+    /// Looks up a callback binding configured on this component's node and returns a strongly-typed `Callback<T>`.
+    pub fn get_callback<T>(&self, port_name: &str) -> Option<Callback<T>> {
+        let alt_name = if !port_name.starts_with("on_") {
+            format!("on_{}", port_name)
+        } else {
+            port_name.strip_prefix("on_").unwrap_or(port_name).to_string()
+        };
+        let (target, method) = self
+            .callbacks
+            .get(port_name)
+            .or_else(|| self.callbacks.get(&alt_name))?;
+        Some(Callback::new(*target, method.clone()))
     }
 
     /// Requests opening an external URL.

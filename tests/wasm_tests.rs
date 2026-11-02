@@ -167,3 +167,25 @@ fn test_wasm_audio_mixer_lifecycle_and_callback() {
 
     assert!(registry.has_component("AudioMixer"));
 }
+
+#[test]
+fn test_all_components_dir_rs_files_auto_registered_by_build_rs() {
+    let registry = directedtype::component::ComponentRegistry::standard();
+
+    fn check_dir(dir: &std::path::Path, registry: &directedtype::component::ComponentRegistry) {
+        for entry in std::fs::read_dir(dir).expect("read components dir") {
+            let path = entry.expect("entry").path();
+            if path.is_dir() {
+                check_dir(&path, registry);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                assert!(
+                    registry.has_companion_path(&path),
+                    "Expected build.rs to auto-register companion {}",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    check_dir(std::path::Path::new("components"), &registry);
+}
