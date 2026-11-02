@@ -646,8 +646,11 @@ impl ComponentRegistry {
         self.path_companion_files.insert(stem.clone(), path_str.clone());
         self.path_companion_files.insert(qualified.clone(), path_str);
 
+        let stem_matches_name = stem == name_str || stem.ends_with(&format!("/{}", name_str));
         self.factories.entry(name_str).or_insert(f_name);
-        self.path_factories.insert(stem, f_stem);
+        if stem_matches_name {
+            self.path_factories.insert(stem, f_stem);
+        }
         self.path_factories.insert(qualified, f_qual);
     }
 
@@ -731,12 +734,17 @@ impl ComponentRegistry {
     /// Checks if a companion is registered for the given `.dt` / `.rs` / `.wasm` path.
     pub fn has_companion_path(&self, path: &std::path::Path) -> bool {
         let stem = canonical_companion_stem(&path.to_string_lossy());
-        if self.path_factories.contains_key(&stem) {
+        if self.path_companion_files.contains_key(&stem) || self.path_factories.contains_key(&stem)
+        {
             return true;
         }
-        self.path_factories
+        self.path_companion_files
             .keys()
             .any(|k| !k.contains("::") && stems_match(k, &stem))
+            || self
+                .path_factories
+                .keys()
+                .any(|k| !k.contains("::") && stems_match(k, &stem))
     }
 
     /// Checks if a component constructor is registered for the given name or path.

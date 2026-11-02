@@ -1,0 +1,1582 @@
+// DirectedType Material UI Component Library: List
+// Continuous vertical list family (\List, \ListItem, \ListItemButton, \ListItemText, \ListItemAvatar)
+// supporting single-line and two-line items, dense mode propagation via `env dense`, inset text alignment,
+// leading avatars, trailing secondary action controls, selected/disabled states, dividers, and interactive
+// hover/focus/pressed states on \ListItemButton.
+// Reference: https://github.com/mui/material-ui/tree/master/packages/mui-material/src/List
+
+\use "components/TextBounds.dt"
+\use "components/material/Palette.dt"
+\use "components/material/Avatar.dt"
+
+\let list_text_bounds = \TextBounds(
+    start_at: TextStart.LineHeight,
+    end_at: TextEnd.LineHeight
+);
+
+\Enum ListItemAlign {
+    Center,
+    FlexStart,
+}
+
+// ============================================================================
+// List
+// ============================================================================
+
+// 1. Explicit Width List: pushes inner_width down to child items (ListItem, ListItemButton, Divider)
+\Component List(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    disable_padding: Boolean = false,
+    subheader: String = "",
+    subheader_color: Color = #00000099,
+    padding_x: Distance = 0px,
+    padding_y: Distance = 8px,
+    gap: Distance = 0px,
+    bg: Color = #00000000,
+    radius: Distance = 0px,
+    border_color: Color = #00000000,
+    border_width: Distance = 0px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let resolved_pad_y: Distance = disable_padding ? 0px : padding_y;
+    \let has_subheader = subheader != "";
+    \let subheader_h: Distance = has_subheader ? (dense ? 36px : 48px) : 0px;
+    \let inner_width: Distance = max(0px, width - (2 * padding_x));
+
+    \let subheader_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 500,
+        line_height: dense ? 36px : 48px
+    );
+
+    \let children_h: Distance = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+
+    \alias right = x + width;
+    \alias height = subheader_h + children_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg,
+        radius: radius,
+        border_color: border_color,
+        border_width: border_width
+    )
+
+    \Text(
+        x: x + padding_x + 16px,
+        y: y + resolved_pad_y,
+        width: max(0px, inner_width - 32px),
+        font: subheader_font,
+        color: has_subheader ? subheader_color : #00000000,
+        text_bounds: list_text_bounds,
+        text: subheader
+    )
+
+    \Children(
+        x: x + padding_x,
+        y: prev ? prev.bottom + gap : (y + resolved_pad_y + subheader_h),
+        width: inner_width
+    )
+}
+
+// 2. Intrinsic Width List: derives width bottom-up from widest child item
+\Component List(
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    min_width: Distance = 0px,
+    disable_padding: Boolean = false,
+    subheader: String = "",
+    subheader_color: Color = #00000099,
+    padding_x: Distance = 0px,
+    padding_y: Distance = 8px,
+    gap: Distance = 0px,
+    bg: Color = #00000000,
+    radius: Distance = 0px,
+    border_color: Color = #00000000,
+    border_width: Distance = 0px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let resolved_pad_y: Distance = disable_padding ? 0px : padding_y;
+    \let has_subheader = subheader != "";
+    \let subheader_h: Distance = has_subheader ? (dense ? 36px : 48px) : 0px;
+
+    \let subheader_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 500,
+        line_height: dense ? 36px : 48px
+    );
+
+    \let subheader_w: Distance = has_subheader ? (sub_node.width + 32px) : 0px;
+    \let children_w: Distance = children.len > 0 ? max(children.width) : 0px;
+    \let content_w: Distance = max(min_width, max(subheader_w, children_w));
+    \let children_h: Distance = children.len > 0 ? (sum(children.height) + max(0, children.len - 1) * gap) : 0px;
+
+    \alias width = content_w + (2 * padding_x);
+    \alias right = x + width;
+    \alias height = subheader_h + children_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: bg,
+        radius: radius,
+        border_color: border_color,
+        border_width: border_width
+    )
+
+    \let sub_node = \Text(
+        x: x + padding_x + 16px,
+        y: y + resolved_pad_y,
+        font: subheader_font,
+        color: has_subheader ? subheader_color : #00000000,
+        text_bounds: list_text_bounds,
+        text: subheader
+    );
+
+    \Children(
+        x: x + padding_x,
+        y: prev ? prev.bottom + gap : (y + resolved_pad_y + subheader_h)
+    )
+}
+
+// ============================================================================
+// ListItem
+// ============================================================================
+
+// 1. Explicit Width ListItem with `primary` prop (and optional `secondary`, `avatar`, `inset`, and trailing action child)
+\Component ListItem(
+    width: Distance,
+    primary: String,
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    secondary: String = "",
+    avatar: String = "",
+    avatar_bg: Color = #bdbdbd,
+    avatar_color: Color = #ffffff,
+    avatar_size: Distance = 40px,
+    inset: Boolean = false,
+    inset_offset: Distance = 56px,
+    disable_padding: Boolean = false,
+    disable_gutters: Boolean = false,
+    divider: Boolean = false,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    align_items: ListItemAlign = ListItemAlign.Center,
+    primary_color: Color = #000000de,
+    secondary_color: Color = #00000099,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 8px,
+    gap: Distance = 0px,
+    bg: Color = #00000000,
+    divider_color: Color = #0000001f,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \assert children.len <= 1 as "ListItem with primary prop accepts at most one trailing action child.";
+
+    \let has_avatar = avatar != "";
+    \let has_secondary = secondary != "";
+    \let has_action = children.len > 0;
+    \let is_top = align_items == ListItemAlign.FlexStart;
+
+    \let resolved_pad_x: Distance = (disable_padding || disable_gutters) ? 0px : padding_x;
+    \let default_pad_y: Distance = (dense && (padding_y == 8px)) ? 4px : padding_y;
+    \let resolved_pad_y: Distance = disable_padding ? 0px : default_pad_y;
+
+    \let resolved_avatar_size: Distance = has_avatar ? avatar_size : 0px;
+    \let avatar_col_w: Distance = has_avatar ? max(56px, avatar_size + 16px) : (inset ? inset_offset : 0px);
+    \let action_w: Distance = has_action ? max(children.width) : 0px;
+    \let action_h: Distance = has_action ? max(children.height) : 0px;
+    \let action_gap: Distance = has_action ? 16px : 0px;
+
+    \let text_x: Distance = x + resolved_pad_x + avatar_col_w;
+    \let text_avail_width: Distance = max(0px, width - (2 * resolved_pad_x) - avatar_col_w - action_w - action_gap);
+
+    \let primary_font = \Font(
+        font: font,
+        size: dense ? 14px : 16px,
+        weight: 400,
+        line_height: dense ? 20px : 24px
+    );
+    \let secondary_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+    \let avatar_font = \Font(
+        font: font,
+        size: avatar_size * 0.5,
+        weight: 400,
+        line_height: avatar_size * 0.5
+    );
+
+    \let text_block_h: Distance = has_secondary ? (primary_node.height + gap + sec_node.height) : primary_node.height;
+    \let text_pad_y: Distance = has_secondary ? 6px : 4px;
+    \let text_padded_h: Distance = text_block_h + (2 * text_pad_y);
+    \let inner_h: Distance = max(resolved_avatar_size, max(text_padded_h, action_h));
+    \let div_h: Distance = divider ? 1px : 0px;
+
+    \alias right = x + width;
+    \alias height = inner_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \let resolved_bg: Color = selected ? #1976d214 : bg;
+    \let resolved_primary_color: Color = disabled ? #00000061 : primary_color;
+    \let resolved_secondary_color: Color = disabled ? #00000061 : secondary_color;
+
+    \let text_y: Distance = is_top ? (y + resolved_pad_y + text_pad_y) : (y + (height - text_block_h) / 2);
+    \let avatar_x: Distance = x + resolved_pad_x;
+    \let avatar_y: Distance = is_top ? (y + resolved_pad_y + 4px) : (y + (height - resolved_avatar_size) / 2);
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: resolved_bg
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? avatar_bg : #00000000
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? avatar_color : #00000000,
+        text: avatar
+    );
+
+    \let primary_node = \Text(
+        x: text_x,
+        y: text_y,
+        width: text_avail_width,
+        font: primary_font,
+        color: resolved_primary_color,
+        text_bounds: list_text_bounds,
+        text: primary
+    );
+
+    \let sec_node = \Text(
+        x: text_x,
+        y: text_y + primary_node.height + gap,
+        width: text_avail_width,
+        font: secondary_font,
+        color: has_secondary ? resolved_secondary_color : #00000000,
+        text_bounds: list_text_bounds,
+        text: secondary
+    );
+
+    \Rect(
+        x: x,
+        y: y + height - div_h,
+        width: width,
+        height: div_h,
+        color: divider ? divider_color : #00000000
+    )
+
+    \Children(
+        x: x + width - resolved_pad_x - child.width,
+        y: is_top ? (y + resolved_pad_y) : (y + (height - child.height) / 2)
+    )
+}
+
+// 2. Intrinsic Width ListItem with `primary` prop (and optional `secondary`, `avatar`, `inset`, and trailing action child)
+\Component ListItem(
+    primary: String,
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    min_width: Distance = 0px,
+    secondary: String = "",
+    avatar: String = "",
+    avatar_bg: Color = #bdbdbd,
+    avatar_color: Color = #ffffff,
+    avatar_size: Distance = 40px,
+    inset: Boolean = false,
+    inset_offset: Distance = 56px,
+    disable_padding: Boolean = false,
+    disable_gutters: Boolean = false,
+    divider: Boolean = false,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    align_items: ListItemAlign = ListItemAlign.Center,
+    primary_color: Color = #000000de,
+    secondary_color: Color = #00000099,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 8px,
+    gap: Distance = 0px,
+    bg: Color = #00000000,
+    divider_color: Color = #0000001f,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \assert children.len <= 1 as "ListItem with primary prop accepts at most one trailing action child.";
+
+    \let has_avatar = avatar != "";
+    \let has_secondary = secondary != "";
+    \let has_action = children.len > 0;
+    \let is_top = align_items == ListItemAlign.FlexStart;
+
+    \let resolved_pad_x: Distance = (disable_padding || disable_gutters) ? 0px : padding_x;
+    \let default_pad_y: Distance = (dense && (padding_y == 8px)) ? 4px : padding_y;
+    \let resolved_pad_y: Distance = disable_padding ? 0px : default_pad_y;
+
+    \let resolved_avatar_size: Distance = has_avatar ? avatar_size : 0px;
+    \let avatar_col_w: Distance = has_avatar ? max(56px, avatar_size + 16px) : (inset ? inset_offset : 0px);
+    \let action_w: Distance = has_action ? max(children.width) : 0px;
+    \let action_h: Distance = has_action ? max(children.height) : 0px;
+    \let action_gap: Distance = has_action ? 16px : 0px;
+
+    \let text_x: Distance = x + resolved_pad_x + avatar_col_w;
+
+    \let primary_font = \Font(
+        font: font,
+        size: dense ? 14px : 16px,
+        weight: 400,
+        line_height: dense ? 20px : 24px
+    );
+    \let secondary_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+    \let avatar_font = \Font(
+        font: font,
+        size: avatar_size * 0.5,
+        weight: 400,
+        line_height: avatar_size * 0.5
+    );
+
+    \let text_content_w: Distance = has_secondary ? max(primary_node.width, sec_node.width) : primary_node.width;
+    \let resolved_width: Distance = max(min_width, (2 * resolved_pad_x) + avatar_col_w + text_content_w + action_gap + action_w);
+    \let text_block_h: Distance = has_secondary ? (primary_node.height + gap + sec_node.height) : primary_node.height;
+    \let text_pad_y: Distance = has_secondary ? 6px : 4px;
+    \let text_padded_h: Distance = text_block_h + (2 * text_pad_y);
+    \let inner_h: Distance = max(resolved_avatar_size, max(text_padded_h, action_h));
+    \let div_h: Distance = divider ? 1px : 0px;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = inner_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \let resolved_bg: Color = selected ? #1976d214 : bg;
+    \let resolved_primary_color: Color = disabled ? #00000061 : primary_color;
+    \let resolved_secondary_color: Color = disabled ? #00000061 : secondary_color;
+
+    \let text_y: Distance = is_top ? (y + resolved_pad_y + text_pad_y) : (y + (height - text_block_h) / 2);
+    \let avatar_x: Distance = x + resolved_pad_x;
+    \let avatar_y: Distance = is_top ? (y + resolved_pad_y + 4px) : (y + (height - resolved_avatar_size) / 2);
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: height,
+        color: resolved_bg
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? avatar_bg : #00000000
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? avatar_color : #00000000,
+        text: avatar
+    );
+
+    \let primary_node = \Text(
+        x: text_x,
+        y: text_y,
+        font: primary_font,
+        color: resolved_primary_color,
+        text_bounds: list_text_bounds,
+        text: primary
+    );
+
+    \let sec_node = \Text(
+        x: text_x,
+        y: text_y + primary_node.height + gap,
+        font: secondary_font,
+        color: has_secondary ? resolved_secondary_color : #00000000,
+        text_bounds: list_text_bounds,
+        text: secondary
+    );
+
+    \Rect(
+        x: x,
+        y: y + height - div_h,
+        width: resolved_width,
+        height: div_h,
+        color: divider ? divider_color : #00000000
+    )
+
+    \Children(
+        x: x + resolved_width - resolved_pad_x - child.width,
+        y: is_top ? (y + resolved_pad_y) : (y + (height - child.height) / 2)
+    )
+}
+
+// 3. Explicit Width ListItem with Child Composition (\ListItemAvatar, \ListItemText, trailing action, or \ListItemButton)
+\Component ListItem(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    disable_padding: Boolean = false,
+    disable_gutters: Boolean = false,
+    divider: Boolean = false,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    align_items: ListItemAlign = ListItemAlign.Center,
+    secondary_action: Boolean = false,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 8px,
+    gap: Distance = 0px,
+    bg: Color = #00000000,
+    divider_color: Color = #0000001f,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_top = align_items == ListItemAlign.FlexStart;
+    \let resolved_pad_x: Distance = (disable_padding || disable_gutters) ? 0px : padding_x;
+    \let default_pad_y: Distance = (dense && (padding_y == 8px)) ? 4px : padding_y;
+    \let resolved_pad_y: Distance = disable_padding ? 0px : default_pad_y;
+
+    \let inner_width: Distance = max(0px, width - (2 * resolved_pad_x));
+    \let content_h: Distance = children.len > 0 ? max(children.height) : 0px;
+    \let div_h: Distance = divider ? 1px : 0px;
+    \let has_trailing_child = (children.len >= 3) || secondary_action;
+
+    \env list_item_inner_width = max(0px, width - (2 * ((disable_padding || disable_gutters) ? 0px : padding_x)));
+    \env list_item_disabled = disabled;
+
+    \alias right = x + width;
+    \alias height = content_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \let resolved_bg: Color = selected ? #1976d214 : bg;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: resolved_bg
+    )
+
+    \Rect(
+        x: x,
+        y: y + height - div_h,
+        width: width,
+        height: div_h,
+        color: divider ? divider_color : #00000000
+    )
+
+    \Children(
+        x: !prev
+            ? (x + resolved_pad_x)
+            : (next
+                ? (prev.right + gap)
+                : (has_trailing_child
+                    ? max(prev.right + gap, x + width - resolved_pad_x - child.width)
+                    : (prev.right + gap))),
+        y: is_top ? (y + resolved_pad_y) : (y + (height - child.height) / 2)
+    )
+}
+
+// 4. Intrinsic Width ListItem with Child Composition (\ListItemAvatar, \ListItemText, trailing action)
+\Component ListItem(
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    min_width: Distance = 0px,
+    disable_padding: Boolean = false,
+    disable_gutters: Boolean = false,
+    divider: Boolean = false,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    align_items: ListItemAlign = ListItemAlign.Center,
+    secondary_action: Boolean = false,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 8px,
+    gap: Distance = 0px,
+    bg: Color = #00000000,
+    divider_color: Color = #0000001f,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let is_top = align_items == ListItemAlign.FlexStart;
+    \let resolved_pad_x: Distance = (disable_padding || disable_gutters) ? 0px : padding_x;
+    \let default_pad_y: Distance = (dense && (padding_y == 8px)) ? 4px : padding_y;
+    \let resolved_pad_y: Distance = disable_padding ? 0px : default_pad_y;
+
+    \let children_span: Distance = children.len > 0 ? (sum(children.width) + max(0, children.len - 1) * gap) : 0px;
+    \let content_h: Distance = children.len > 0 ? max(children.height) : 0px;
+    \let resolved_width: Distance = max(min_width, children_span + (2 * resolved_pad_x));
+    \let div_h: Distance = divider ? 1px : 0px;
+
+    \env list_item_inner_width = 0px;
+    \env list_item_disabled = disabled;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = content_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \let resolved_bg: Color = selected ? #1976d214 : bg;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: height,
+        color: resolved_bg
+    )
+
+    \Rect(
+        x: x,
+        y: y + height - div_h,
+        width: resolved_width,
+        height: div_h,
+        color: divider ? divider_color : #00000000
+    )
+
+    \Children(
+        x: prev ? (prev.right + gap) : (x + resolved_pad_x),
+        y: is_top ? (y + resolved_pad_y) : (y + (height - child.height) / 2)
+    )
+}
+
+// ============================================================================
+// ListItemButton
+// ============================================================================
+
+// 1. Explicit Width ListItemButton with `primary` prop (and optional `secondary`, `avatar`, `inset`, and trailing action child)
+\Component ListItemButton(
+    width: Distance,
+    primary: String,
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    secondary: String = "",
+    avatar: String = "",
+    avatar_bg: Color = #bdbdbd,
+    avatar_color: Color = #ffffff,
+    avatar_size: Distance = 40px,
+    inset: Boolean = false,
+    inset_offset: Distance = 56px,
+    color: MaterialColor = MaterialColor.Primary,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    disable_gutters: Boolean = false,
+    divider: Boolean = false,
+    align_items: ListItemAlign = ListItemAlign.Center,
+    primary_color: Color = #000000de,
+    secondary_color: Color = #00000099,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 8px,
+    gap: Distance = 0px,
+    radius: Distance = 0px,
+    bg: Color = #00000000,
+    divider_color: Color = #0000001f,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \assert children.len <= 1 as "ListItemButton with primary prop accepts at most one trailing action child.";
+
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let has_avatar = avatar != "";
+    \let has_secondary = secondary != "";
+    \let has_action = children.len > 0;
+    \let is_top = align_items == ListItemAlign.FlexStart;
+
+    \let resolved_pad_x: Distance = disable_gutters ? 0px : padding_x;
+    \let resolved_pad_y: Distance = (dense && (padding_y == 8px)) ? 4px : padding_y;
+
+    \let resolved_avatar_size: Distance = has_avatar ? avatar_size : 0px;
+    \let avatar_col_w: Distance = has_avatar ? max(56px, avatar_size + 16px) : (inset ? inset_offset : 0px);
+    \let action_w: Distance = has_action ? max(children.width) : 0px;
+    \let action_h: Distance = has_action ? max(children.height) : 0px;
+    \let action_gap: Distance = has_action ? 16px : 0px;
+
+    \let text_x: Distance = x + resolved_pad_x + avatar_col_w;
+    \let text_avail_width: Distance = max(0px, width - (2 * resolved_pad_x) - avatar_col_w - action_w - action_gap);
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_selected_bg = is_primary ? #1976d214 : (
+        is_secondary ? #9c27b014 : (
+            is_success ? #2e7d3214 : (
+                is_error ? #d32f2f14 : (
+                    is_info ? #0288d114 : (
+                        is_warning ? #ed6c0214 : #00000014
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let selected_bg: Color = pressed ? ch_active_bg : ((hovered || focused) ? ch_focus_bg : ch_selected_bg);
+    \let unselected_bg: Color = pressed ? #0000001f : (focused ? #0000001f : (hovered ? #0000000a : bg));
+    \let resolved_bg: Color = disabled ? bg : (selected ? selected_bg : unselected_bg);
+
+    \let primary_font = \Font(
+        font: font,
+        size: dense ? 14px : 16px,
+        weight: 400,
+        line_height: dense ? 20px : 24px
+    );
+    \let secondary_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+    \let avatar_font = \Font(
+        font: font,
+        size: avatar_size * 0.5,
+        weight: 400,
+        line_height: avatar_size * 0.5
+    );
+
+    \let text_block_h: Distance = has_secondary ? (primary_node.height + gap + sec_node.height) : primary_node.height;
+    \let text_pad_y: Distance = has_secondary ? 6px : 4px;
+    \let text_padded_h: Distance = text_block_h + (2 * text_pad_y);
+    \let inner_h: Distance = max(resolved_avatar_size, max(text_padded_h, action_h));
+    \let div_h: Distance = divider ? 1px : 0px;
+
+    \alias right = x + width;
+    \alias height = inner_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \let resolved_primary_color: Color = disabled ? #00000061 : primary_color;
+    \let resolved_secondary_color: Color = disabled ? #00000061 : secondary_color;
+
+    \let text_y: Distance = is_top ? (y + resolved_pad_y + text_pad_y) : (y + (height - text_block_h) / 2);
+    \let avatar_x: Distance = x + resolved_pad_x;
+    \let avatar_y: Distance = is_top ? (y + resolved_pad_y + 4px) : (y + (height - resolved_avatar_size) / 2);
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        radius: radius,
+        color: resolved_bg
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? avatar_bg : #00000000
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? avatar_color : #00000000,
+        text: avatar
+    );
+
+    \let primary_node = \Text(
+        x: text_x,
+        y: text_y,
+        width: text_avail_width,
+        font: primary_font,
+        color: resolved_primary_color,
+        text_bounds: list_text_bounds,
+        text: primary
+    );
+
+    \let sec_node = \Text(
+        x: text_x,
+        y: text_y + primary_node.height + gap,
+        width: text_avail_width,
+        font: secondary_font,
+        color: has_secondary ? resolved_secondary_color : #00000000,
+        text_bounds: list_text_bounds,
+        text: secondary
+    );
+
+    \Rect(
+        x: x,
+        y: y + height - div_h,
+        width: width,
+        height: div_h,
+        color: divider ? divider_color : #00000000
+    )
+
+    \Children(
+        x: x + width - resolved_pad_x - child.width,
+        y: is_top ? (y + resolved_pad_y) : (y + (height - child.height) / 2)
+    )
+}
+
+// 2. Intrinsic Width ListItemButton with `primary` prop (and optional `secondary`, `avatar`, `inset`, and trailing action child)
+\Component ListItemButton(
+    primary: String,
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    env list_item_inner_width: Distance = 0px,
+    min_width: Distance = 0px,
+    secondary: String = "",
+    avatar: String = "",
+    avatar_bg: Color = #bdbdbd,
+    avatar_color: Color = #ffffff,
+    avatar_size: Distance = 40px,
+    inset: Boolean = false,
+    inset_offset: Distance = 56px,
+    color: MaterialColor = MaterialColor.Primary,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    disable_gutters: Boolean = false,
+    divider: Boolean = false,
+    align_items: ListItemAlign = ListItemAlign.Center,
+    primary_color: Color = #000000de,
+    secondary_color: Color = #00000099,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 8px,
+    gap: Distance = 0px,
+    radius: Distance = 0px,
+    bg: Color = #00000000,
+    divider_color: Color = #0000001f,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \assert children.len <= 1 as "ListItemButton with primary prop accepts at most one trailing action child.";
+
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let has_avatar = avatar != "";
+    \let has_secondary = secondary != "";
+    \let has_action = children.len > 0;
+    \let is_top = align_items == ListItemAlign.FlexStart;
+
+    \let resolved_pad_x: Distance = disable_gutters ? 0px : padding_x;
+    \let resolved_pad_y: Distance = (dense && (padding_y == 8px)) ? 4px : padding_y;
+
+    \let resolved_avatar_size: Distance = has_avatar ? avatar_size : 0px;
+    \let avatar_col_w: Distance = has_avatar ? max(56px, avatar_size + 16px) : (inset ? inset_offset : 0px);
+    \let action_w: Distance = has_action ? max(children.width) : 0px;
+    \let action_h: Distance = has_action ? max(children.height) : 0px;
+    \let action_gap: Distance = has_action ? 16px : 0px;
+
+    \let text_x: Distance = x + resolved_pad_x + avatar_col_w;
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_selected_bg = is_primary ? #1976d214 : (
+        is_secondary ? #9c27b014 : (
+            is_success ? #2e7d3214 : (
+                is_error ? #d32f2f14 : (
+                    is_info ? #0288d114 : (
+                        is_warning ? #ed6c0214 : #00000014
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let selected_bg: Color = pressed ? ch_active_bg : ((hovered || focused) ? ch_focus_bg : ch_selected_bg);
+    \let unselected_bg: Color = pressed ? #0000001f : (focused ? #0000001f : (hovered ? #0000000a : bg));
+    \let resolved_bg: Color = disabled ? bg : (selected ? selected_bg : unselected_bg);
+
+    \let primary_font = \Font(
+        font: font,
+        size: dense ? 14px : 16px,
+        weight: 400,
+        line_height: dense ? 20px : 24px
+    );
+    \let secondary_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+    \let avatar_font = \Font(
+        font: font,
+        size: avatar_size * 0.5,
+        weight: 400,
+        line_height: avatar_size * 0.5
+    );
+
+    \let text_content_w: Distance = has_secondary ? max(primary_node.width, sec_node.width) : primary_node.width;
+    \let intrinsic_w: Distance = (2 * resolved_pad_x) + avatar_col_w + text_content_w + action_gap + action_w;
+    \let resolved_width: Distance = max(self.list_item_inner_width, max(min_width, intrinsic_w));
+    \let text_block_h: Distance = has_secondary ? (primary_node.height + gap + sec_node.height) : primary_node.height;
+    \let text_pad_y: Distance = has_secondary ? 6px : 4px;
+    \let text_padded_h: Distance = text_block_h + (2 * text_pad_y);
+    \let inner_h: Distance = max(resolved_avatar_size, max(text_padded_h, action_h));
+    \let div_h: Distance = divider ? 1px : 0px;
+
+    \env list_item_inner_width = 0px;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = inner_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \let resolved_primary_color: Color = disabled ? #00000061 : primary_color;
+    \let resolved_secondary_color: Color = disabled ? #00000061 : secondary_color;
+
+    \let text_y: Distance = is_top ? (y + resolved_pad_y + text_pad_y) : (y + (height - text_block_h) / 2);
+    \let avatar_x: Distance = x + resolved_pad_x;
+    \let avatar_y: Distance = is_top ? (y + resolved_pad_y + 4px) : (y + (height - resolved_avatar_size) / 2);
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: height,
+        radius: radius,
+        color: resolved_bg
+    )
+
+    \Rect(
+        x: avatar_x,
+        y: avatar_y,
+        width: resolved_avatar_size,
+        height: resolved_avatar_size,
+        radius: resolved_avatar_size / 2,
+        color: has_avatar ? avatar_bg : #00000000
+    )
+
+    \let avatar_text_node = \Text(
+        x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
+        y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
+        font: avatar_font,
+        color: has_avatar ? avatar_color : #00000000,
+        text: avatar
+    );
+
+    \let primary_node = \Text(
+        x: text_x,
+        y: text_y,
+        font: primary_font,
+        color: resolved_primary_color,
+        text_bounds: list_text_bounds,
+        text: primary
+    );
+
+    \let sec_node = \Text(
+        x: text_x,
+        y: text_y + primary_node.height + gap,
+        font: secondary_font,
+        color: has_secondary ? resolved_secondary_color : #00000000,
+        text_bounds: list_text_bounds,
+        text: secondary
+    );
+
+    \Rect(
+        x: x,
+        y: y + height - div_h,
+        width: resolved_width,
+        height: div_h,
+        color: divider ? divider_color : #00000000
+    )
+
+    \Children(
+        x: x + resolved_width - resolved_pad_x - child.width,
+        y: is_top ? (y + resolved_pad_y) : (y + (height - child.height) / 2)
+    )
+}
+
+// 3. Explicit Width ListItemButton with Child Composition (\ListItemAvatar, \ListItemText, trailing action)
+\Component ListItemButton(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    color: MaterialColor = MaterialColor.Primary,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    disable_gutters: Boolean = false,
+    divider: Boolean = false,
+    align_items: ListItemAlign = ListItemAlign.Center,
+    secondary_action: Boolean = false,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 8px,
+    gap: Distance = 0px,
+    radius: Distance = 0px,
+    bg: Color = #00000000,
+    divider_color: Color = #0000001f,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let is_top = align_items == ListItemAlign.FlexStart;
+    \let resolved_pad_x: Distance = disable_gutters ? 0px : padding_x;
+    \let resolved_pad_y: Distance = (dense && (padding_y == 8px)) ? 4px : padding_y;
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_selected_bg = is_primary ? #1976d214 : (
+        is_secondary ? #9c27b014 : (
+            is_success ? #2e7d3214 : (
+                is_error ? #d32f2f14 : (
+                    is_info ? #0288d114 : (
+                        is_warning ? #ed6c0214 : #00000014
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let selected_bg: Color = pressed ? ch_active_bg : ((hovered || focused) ? ch_focus_bg : ch_selected_bg);
+    \let unselected_bg: Color = pressed ? #0000001f : (focused ? #0000001f : (hovered ? #0000000a : bg));
+    \let resolved_bg: Color = disabled ? bg : (selected ? selected_bg : unselected_bg);
+
+    \let content_h: Distance = children.len > 0 ? max(children.height) : 0px;
+    \let div_h: Distance = divider ? 1px : 0px;
+    \let has_trailing_child = (children.len >= 3) || secondary_action;
+
+    \env list_item_inner_width = 0px;
+    \env list_item_disabled = disabled;
+
+    \alias right = x + width;
+    \alias height = content_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        radius: radius,
+        color: resolved_bg
+    )
+
+    \Rect(
+        x: x,
+        y: y + height - div_h,
+        width: width,
+        height: div_h,
+        color: divider ? divider_color : #00000000
+    )
+
+    \Children(
+        x: !prev
+            ? (x + resolved_pad_x)
+            : (next
+                ? (prev.right + gap)
+                : (has_trailing_child
+                    ? max(prev.right + gap, x + width - resolved_pad_x - child.width)
+                    : (prev.right + gap))),
+        y: is_top ? (y + resolved_pad_y) : (y + (height - child.height) / 2)
+    )
+}
+
+// 4. Intrinsic Width ListItemButton with Child Composition (\ListItemAvatar, \ListItemText, trailing action)
+\Component ListItemButton(
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    env list_item_inner_width: Distance = 0px,
+    min_width: Distance = 0px,
+    color: MaterialColor = MaterialColor.Primary,
+    selected: Boolean = false,
+    disabled: Boolean = false,
+    disable_gutters: Boolean = false,
+    divider: Boolean = false,
+    align_items: ListItemAlign = ListItemAlign.Center,
+    secondary_action: Boolean = false,
+    padding_x: Distance = 16px,
+    padding_y: Distance = 8px,
+    gap: Distance = 0px,
+    radius: Distance = 0px,
+    bg: Color = #00000000,
+    divider_color: Color = #0000001f,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let is_top = align_items == ListItemAlign.FlexStart;
+    \let resolved_pad_x: Distance = disable_gutters ? 0px : padding_x;
+    \let resolved_pad_y: Distance = (dense && (padding_y == 8px)) ? 4px : padding_y;
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+
+    \let ch_selected_bg = is_primary ? #1976d214 : (
+        is_secondary ? #9c27b014 : (
+            is_success ? #2e7d3214 : (
+                is_error ? #d32f2f14 : (
+                    is_info ? #0288d114 : (
+                        is_warning ? #ed6c0214 : #00000014
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : #0000001f
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : #00000029
+                    )
+                )
+            )
+        )
+    );
+
+    \let selected_bg: Color = pressed ? ch_active_bg : ((hovered || focused) ? ch_focus_bg : ch_selected_bg);
+    \let unselected_bg: Color = pressed ? #0000001f : (focused ? #0000001f : (hovered ? #0000000a : bg));
+    \let resolved_bg: Color = disabled ? bg : (selected ? selected_bg : unselected_bg);
+
+    \let children_span: Distance = children.len > 0 ? (sum(children.width) + max(0, children.len - 1) * gap) : 0px;
+    \let content_h: Distance = children.len > 0 ? max(children.height) : 0px;
+    \let resolved_width: Distance = max(self.list_item_inner_width, max(min_width, children_span + (2 * resolved_pad_x)));
+    \let div_h: Distance = divider ? 1px : 0px;
+    \let has_trailing_child = (children.len >= 3) || secondary_action;
+
+    \env list_item_inner_width = 0px;
+    \env list_item_disabled = disabled;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = content_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: resolved_width,
+        height: height,
+        radius: radius,
+        color: resolved_bg
+    )
+
+    \Rect(
+        x: x,
+        y: y + height - div_h,
+        width: resolved_width,
+        height: div_h,
+        color: divider ? divider_color : #00000000
+    )
+
+    \Children(
+        x: !prev
+            ? (x + resolved_pad_x)
+            : (next
+                ? (prev.right + gap)
+                : (has_trailing_child
+                    ? max(prev.right + gap, x + resolved_width - resolved_pad_x - child.width)
+                    : (prev.right + gap))),
+        y: is_top ? (y + resolved_pad_y) : (y + (height - child.height) / 2)
+    )
+}
+
+// ============================================================================
+// ListItemText
+// ============================================================================
+
+// 1. Explicit Width ListItemText with `primary` prop (and optional `secondary`)
+\Component ListItemText(
+    width: Distance,
+    primary: String,
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    env list_item_disabled: Boolean = false,
+    secondary: String = "",
+    inset: Boolean = false,
+    disabled: Boolean = false,
+    primary_color: Color = #000000de,
+    secondary_color: Color = #00000099,
+    inset_offset: Distance = 56px,
+    padding_y: Distance = 4px,
+    gap: Distance = 0px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let has_secondary = secondary != "";
+    \let is_disabled = disabled || list_item_disabled;
+    \let resolved_inset: Distance = inset ? inset_offset : 0px;
+    \let resolved_pad_y: Distance = (has_secondary && (padding_y == 4px)) ? 6px : padding_y;
+    \let text_avail_width: Distance = max(0px, width - resolved_inset);
+
+    \let primary_font = \Font(
+        font: font,
+        size: dense ? 14px : 16px,
+        weight: 400,
+        line_height: dense ? 20px : 24px
+    );
+    \let secondary_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+
+    \let resolved_primary_color: Color = is_disabled ? #00000061 : primary_color;
+    \let resolved_secondary_color: Color = is_disabled ? #00000061 : secondary_color;
+
+    \let text_block_h: Distance = has_secondary ? (primary_node.height + gap + sec_node.height) : primary_node.height;
+
+    \alias right = x + width;
+    \alias height = text_block_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \let primary_node = \Text(
+        x: x + resolved_inset,
+        y: y + resolved_pad_y,
+        width: text_avail_width,
+        font: primary_font,
+        color: resolved_primary_color,
+        text_bounds: list_text_bounds,
+        text: primary
+    );
+
+    \let sec_node = \Text(
+        x: x + resolved_inset,
+        y: y + resolved_pad_y + primary_node.height + gap,
+        width: text_avail_width,
+        font: secondary_font,
+        color: has_secondary ? resolved_secondary_color : #00000000,
+        text_bounds: list_text_bounds,
+        text: secondary
+    );
+}
+
+// 2. Intrinsic Width ListItemText with `primary` prop (and optional `secondary`)
+\Component ListItemText(
+    primary: String,
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    env list_item_disabled: Boolean = false,
+    secondary: String = "",
+    inset: Boolean = false,
+    disabled: Boolean = false,
+    primary_color: Color = #000000de,
+    secondary_color: Color = #00000099,
+    inset_offset: Distance = 56px,
+    padding_y: Distance = 4px,
+    gap: Distance = 0px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let has_secondary = secondary != "";
+    \let is_disabled = disabled || list_item_disabled;
+    \let resolved_inset: Distance = inset ? inset_offset : 0px;
+    \let resolved_pad_y: Distance = (has_secondary && (padding_y == 4px)) ? 6px : padding_y;
+
+    \let primary_font = \Font(
+        font: font,
+        size: dense ? 14px : 16px,
+        weight: 400,
+        line_height: dense ? 20px : 24px
+    );
+    \let secondary_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+
+    \let resolved_primary_color: Color = is_disabled ? #00000061 : primary_color;
+    \let resolved_secondary_color: Color = is_disabled ? #00000061 : secondary_color;
+
+    \let text_content_w: Distance = has_secondary ? max(primary_node.width, sec_node.width) : primary_node.width;
+    \let resolved_width: Distance = resolved_inset + text_content_w;
+    \let text_block_h: Distance = has_secondary ? (primary_node.height + gap + sec_node.height) : primary_node.height;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = text_block_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \let primary_node = \Text(
+        x: x + resolved_inset,
+        y: y + resolved_pad_y,
+        font: primary_font,
+        color: resolved_primary_color,
+        text_bounds: list_text_bounds,
+        text: primary
+    );
+
+    \let sec_node = \Text(
+        x: x + resolved_inset,
+        y: y + resolved_pad_y + primary_node.height + gap,
+        font: secondary_font,
+        color: has_secondary ? resolved_secondary_color : #00000000,
+        text_bounds: list_text_bounds,
+        text: secondary
+    );
+}
+
+// 3. Explicit Width ListItemText with Child Primary Text (and optional `secondary`)
+\Component ListItemText(
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    env list_item_disabled: Boolean = false,
+    secondary: String = "",
+    inset: Boolean = false,
+    disabled: Boolean = false,
+    primary_color: Color = #000000de,
+    secondary_color: Color = #00000099,
+    inset_offset: Distance = 56px,
+    padding_y: Distance = 4px,
+    gap: Distance = 0px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let has_secondary = secondary != "";
+    \let is_disabled = disabled || list_item_disabled;
+    \let resolved_inset: Distance = inset ? inset_offset : 0px;
+    \let resolved_pad_y: Distance = (has_secondary && (padding_y == 4px)) ? 6px : padding_y;
+    \let text_avail_width: Distance = max(0px, width - resolved_inset);
+
+    \env font = \Font(
+        font: self.font,
+        size: dense ? 14px : 16px,
+        weight: 400,
+        line_height: dense ? 20px : 24px
+    );
+    \let secondary_font = \Font(
+        font: self.font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+
+    \let resolved_primary_color: Color = is_disabled ? #00000061 : primary_color;
+    \let resolved_secondary_color: Color = is_disabled ? #00000061 : secondary_color;
+
+    \let text_block_h: Distance = has_secondary ? (primary_node.height + gap + sec_node.height) : primary_node.height;
+
+    \alias right = x + width;
+    \alias height = text_block_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \let primary_node = \Text(
+        x: x + resolved_inset,
+        y: y + resolved_pad_y,
+        width: text_avail_width,
+        font: env.font,
+        color: resolved_primary_color,
+        text_bounds: list_text_bounds
+    ) {
+        \Children
+    };
+
+    \let sec_node = \Text(
+        x: x + resolved_inset,
+        y: y + resolved_pad_y + primary_node.height + gap,
+        width: text_avail_width,
+        font: secondary_font,
+        color: has_secondary ? resolved_secondary_color : #00000000,
+        text_bounds: list_text_bounds,
+        text: secondary
+    );
+}
+
+// 4. Intrinsic Width ListItemText with Child Primary Text (and optional `secondary`)
+\Component ListItemText(
+    env font: Font = \Font(size: 16px),
+    env dense: Boolean = false,
+    env list_item_disabled: Boolean = false,
+    secondary: String = "",
+    inset: Boolean = false,
+    disabled: Boolean = false,
+    primary_color: Color = #000000de,
+    secondary_color: Color = #00000099,
+    inset_offset: Distance = 56px,
+    padding_y: Distance = 4px,
+    gap: Distance = 0px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let has_secondary = secondary != "";
+    \let is_disabled = disabled || list_item_disabled;
+    \let resolved_inset: Distance = inset ? inset_offset : 0px;
+    \let resolved_pad_y: Distance = (has_secondary && (padding_y == 4px)) ? 6px : padding_y;
+
+    \env font = \Font(
+        font: self.font,
+        size: dense ? 14px : 16px,
+        weight: 400,
+        line_height: dense ? 20px : 24px
+    );
+    \let secondary_font = \Font(
+        font: self.font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+
+    \let resolved_primary_color: Color = is_disabled ? #00000061 : primary_color;
+    \let resolved_secondary_color: Color = is_disabled ? #00000061 : secondary_color;
+
+    \let text_content_w: Distance = has_secondary ? max(primary_node.width, sec_node.width) : primary_node.width;
+    \let resolved_width: Distance = resolved_inset + text_content_w;
+    \let text_block_h: Distance = has_secondary ? (primary_node.height + gap + sec_node.height) : primary_node.height;
+
+    \alias width = resolved_width;
+    \alias right = x + resolved_width;
+    \alias height = text_block_h + (2 * resolved_pad_y);
+    \alias bottom = y + height;
+
+    \let primary_node = \Text(
+        x: x + resolved_inset,
+        y: y + resolved_pad_y,
+        font: env.font,
+        color: resolved_primary_color,
+        text_bounds: list_text_bounds
+    ) {
+        \Children
+    };
+
+    \let sec_node = \Text(
+        x: x + resolved_inset,
+        y: y + resolved_pad_y + primary_node.height + gap,
+        font: secondary_font,
+        color: has_secondary ? resolved_secondary_color : #00000000,
+        text_bounds: list_text_bounds,
+        text: secondary
+    );
+}
+
+// ============================================================================
+// ListItemAvatar
+// ============================================================================
+
+// 1. Shorthand ListItemAvatar with `label` prop (`\ListItemAvatar(label: "A", bg: material_primary.main)`)
+\Component ListItemAvatar(
+    label: String,
+    env font: Font = \Font(size: 16px),
+    size: Distance = 40px,
+    min_width: Distance = 56px,
+    variant: AvatarVariant = AvatarVariant.Circular,
+    radius: Distance = 4px,
+    bg: Color = #bdbdbd,
+    color: Color = #ffffff,
+    border_color: Color = #00000000,
+    border_width: Distance = 0px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \let resolved_width: Distance = max(min_width, size);
+
+    \alias width = resolved_width;
+    \alias height = size;
+    \alias right = x + resolved_width;
+    \alias bottom = y + size;
+
+    \Avatar(
+        x: x,
+        y: y,
+        size: size,
+        variant: variant,
+        radius: radius,
+        bg: bg,
+        color: color,
+        border_color: border_color,
+        border_width: border_width,
+        label: label
+    )
+}
+
+// 2. Child Wrapper ListItemAvatar (`\ListItemAvatar { \Avatar(bg: material_primary.main) { A } }`)
+\Component ListItemAvatar(
+    min_width: Distance = 56px,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \assert children.len == 1 as "ListItemAvatar expects a single child.";
+
+    \let child_w: Distance = only(children.width);
+    \let child_h: Distance = only(children.height);
+    \let resolved_width: Distance = max(min_width, child_w);
+
+    \alias width = resolved_width;
+    \alias height = child_h;
+    \alias right = x + resolved_width;
+    \alias bottom = y + child_h;
+
+    \Children(
+        x: x,
+        y: y
+    )
+}
+

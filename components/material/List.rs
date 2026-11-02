@@ -1,0 +1,87 @@
+// DirectedType Material UI Component Library: List Companion
+// Native companion struct for \ListItemButton providing hover, focus, pressed states,
+// disabled suppression, and on_click callback dispatch.
+
+use directedtype::prelude::*;
+
+#[derive(Default, Debug, Clone)]
+pub struct ListItemButton {
+    pub disabled: bool,
+    pub hovered: bool,
+    pub focused: bool,
+    pub pressed: bool,
+    pub on_click: Option<Callback<()>>,
+}
+
+impl ListItemButton {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[component]
+impl ListItemButton {
+    pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
+        self.on_click = ctx.get_callback("on_click");
+        if let Some(d) = ctx.get_port_bool("disabled") {
+            self.disabled = d;
+        }
+    }
+
+    pub fn click(&mut self, _ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        Ok(())
+    }
+
+    pub fn focus(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
+        if is_disabled {
+            return Ok(());
+        }
+        self.focused = true;
+        ctx.set_state("focused", true);
+        Ok(())
+    }
+
+    pub fn blur(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        self.focused = false;
+        self.pressed = false;
+        ctx.set_state("focused", false);
+        ctx.set_state("pressed", false);
+        Ok(())
+    }
+
+    pub fn pointer_enter(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
+        if is_disabled {
+            return Ok(());
+        }
+        self.hovered = true;
+        ctx.set_state("hovered", true);
+        Ok(())
+    }
+
+    pub fn pointer_leave(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        self.hovered = false;
+        self.pressed = false;
+        ctx.set_state("hovered", false);
+        ctx.set_state("pressed", false);
+        Ok(())
+    }
+
+    pub fn pointer_down(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
+        if is_disabled {
+            return Ok(());
+        }
+        self.pressed = true;
+        ctx.set_state("pressed", true);
+        Ok(())
+    }
+
+    pub fn pointer_up(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        self.pressed = false;
+        ctx.set_state("pressed", false);
+        Ok(())
+    }
+}
+

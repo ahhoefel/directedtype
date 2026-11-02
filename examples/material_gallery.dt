@@ -17,6 +17,7 @@
 \use "../components/material/Switch.dt"
 \use "../components/material/Checkbox.dt"
 \use "../components/material/Radio.dt"
+\use "../components/material/List.dt"
 
 \Window(title: "Material UI Component Gallery")
 
@@ -511,6 +512,86 @@
                 \Radio("rad_error"; checked: true, color: MaterialColor.Error) { Error }
                 \Radio("rad_small"; checked: true, size: RadioSize.Small, label: "Small")
                 \Radio("rad_disabled"; checked: true, disabled: true) { Disabled }
+            }
+        }
+    }
+
+    // Section 13: Lists (List, ListItem, ListItemButton, ListItemText & ListItemAvatar)
+    \Paper("card_lists"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
+        \VStack(min_width: target_inner_width, gap: 16px) {
+            \Subtitle2(color: material_text_secondary) {
+                13. LISTS (LIST, LISTITEM, LISTITEMBUTTON, LISTITEMTEXT & LISTITEMAVATAR)
+            }
+
+            \HStack(gap: 20px, align: Align.Top) {
+                // 13a. Interactive Navigation List (ListItemButton, Selected, Inset & Disabled)
+                \Paper("list_nav_paper"; variant: PaperVariant.Outlined, padding_x: 0px, padding_y: 0px) {
+                    \List("list_nav"; width: 266px, subheader: "Mailbox Folders") {
+                        \ListItemButton("list_btn_inbox"; selected: true) {
+                            \ListItemAvatar(label: "I", bg: material_primary.main)
+                            \ListItemText(primary: "Inbox", secondary: "3 unread messages")
+                        }
+                        \ListItemButton("list_btn_drafts";) {
+                            \ListItemAvatar {
+                                \Avatar(bg: material_secondary.main) { D }
+                            }
+                            \ListItemText(primary: "Drafts", secondary: "Updated 5m ago")
+                        }
+                        \Divider(variant: DividerVariant.Inset)
+                        \ListItemButton("list_btn_starred";) {
+                            \ListItemText(inset: true, primary: "Starred (Inset)")
+                        }
+                        \ListItemButton("list_btn_trash"; disabled: true) {
+                            \ListItemText(inset: true, primary: "Trash (Disabled)")
+                        }
+                    }
+                }
+
+                // 13b. Two-Line Avatar List (ListItem, ListItemAvatar, ListItemText & Inset Dividers)
+                \Paper("list_folders_paper"; variant: PaperVariant.Outlined, padding_x: 0px, padding_y: 0px) {
+                    \List("list_folders"; width: 266px, subheader: "Recent Albums") {
+                        \ListItem("list_item_photos";) {
+                            \ListItemAvatar {
+                                \Avatar(bg: material_success.main) { P }
+                            }
+                            \ListItemText(primary: "Photos", secondary: "Jan 9, 2026")
+                        }
+                        \Divider(variant: DividerVariant.Inset)
+                        \ListItem("list_item_work";) {
+                            \ListItemAvatar {
+                                \Avatar(bg: material_info.main) { W }
+                            }
+                            \ListItemText(primary: "Work", secondary: "Jan 7, 2026")
+                        }
+                        \Divider(variant: DividerVariant.Inset)
+                        \ListItem("list_item_vacation";) {
+                            \ListItemAvatar {
+                                \Avatar(bg: material_warning.main) { V }
+                            }
+                            \ListItemText(primary: "Vacation", secondary: "July 20, 2025")
+                        }
+                    }
+                }
+
+                // 13c. Settings List with Trailing Secondary Actions & Dense Mode
+                \Paper("list_settings_paper"; variant: PaperVariant.Outlined, padding_x: 0px, padding_y: 0px) {
+                    \List("list_settings"; width: 266px, dense: true, subheader: "Quick Settings (Dense)") {
+                        \ListItem("list_item_wifi"; divider: true) {
+                            \ListItemAvatar(label: "W", size: 32px, min_width: 48px, bg: material_primary.main)
+                            \ListItemText(primary: "Wi-Fi", secondary: "Home-5G")
+                            \Switch("list_sw_wifi"; checked: true, size: SwitchSize.Small)
+                        }
+                        \ListItem("list_item_bt"; divider: true) {
+                            \ListItemAvatar(label: "B", size: 32px, min_width: 48px, bg: material_info.main)
+                            \ListItemText(primary: "Bluetooth", secondary: "2 devices")
+                            \Switch("list_sw_bt"; checked: true, size: SwitchSize.Small)
+                        }
+                        \ListItem("list_item_sync"; secondary_action: true) {
+                            \ListItemText(primary: "Auto-Sync Backup", secondary: "Daily at 2:00 AM")
+                            \Checkbox("list_cb_sync"; checked: true, size: CheckboxSize.Small)
+                        }
+                    }
+                }
             }
         }
     }
