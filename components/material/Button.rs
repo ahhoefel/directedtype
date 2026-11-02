@@ -1,7 +1,7 @@
 // DirectedType Material UI Component Library: Button Companion
 // Native companion struct providing hover, focus, pressed states, disabled suppression, and on_click callback dispatch.
 
-use directedtype::component::{Callback, Context, DispatchError, EmitCallback};
+use directedtype::component::{Callback, Context, DispatchError};
 use directedtype_macros::component;
 
 #[derive(Default, Debug, Clone)]
@@ -28,12 +28,7 @@ impl Button {
         }
     }
 
-    pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
-        let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
-        if is_disabled {
-            return Ok(());
-        }
-        self.on_click.emit(ctx, ());
+    pub fn click(&mut self, _ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         Ok(())
     }
 

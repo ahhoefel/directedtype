@@ -610,6 +610,83 @@ pub(super) fn infer_expr_literal_for_typecheck<'a>(
     }
 }
 
+fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
+    match expr {
+        Expr::Paren(inner, _) => is_handler_expr_unset(inner, ctx),
+        Expr::Ident(id) => {
+            if id.as_str() == "unset" || id.as_str() == "None" {
+                return Some(true);
+            }
+            if let Some(comp_ports) = ctx.comp_ports {
+                if let Some(port_expr) = comp_ports.get(id.as_str()) {
+                    return match port_expr {
+                        Expr::Ident(pid) if pid.as_str() == "unset" || pid.as_str() == "None" => {
+                            Some(true)
+                        }
+                        Expr::MemberAccess(m) => {
+                            if let Expr::Ident(target_id) = m.target.as_ref() {
+                                if ctx.enums.contains_key(target_id.as_str()) {
+                                    return None;
+                                }
+                                let is_self = target_id.as_str() == "self"
+                                    || target_id.as_str() == ctx.current_node.canonical_name();
+                                Some(is_self)
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    };
+                }
+            }
+            if let Some(LexicalBinding::Expr(e)) = ctx.lexical_scope.get(id.as_str()) {
+                return is_handler_expr_unset(e, ctx);
+            }
+            None
+        }
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(target_id) = m.target.as_ref() {
+                if ctx.enums.contains_key(target_id.as_str()) {
+                    return None;
+                }
+                let is_target = target_id.as_str() == "parent"
+                    || target_id.as_str() == "self"
+                    || ctx.parent_node.is_some_and(|p| target_id.as_str() == p.canonical_name())
+                    || target_id.as_str() == ctx.current_node.canonical_name();
+                if is_target {
+                    if let Some(comp_ports) = ctx.comp_ports {
+                        if let Some(port_expr) = comp_ports.get(m.member.as_str()) {
+                            return match port_expr {
+                                Expr::Ident(pid)
+                                    if pid.as_str() == "unset" || pid.as_str() == "None" =>
+                                {
+                                    Some(true)
+                                }
+                                Expr::MemberAccess(sub_m) => {
+                                    if let Expr::Ident(sub_target_id) = sub_m.target.as_ref() {
+                                        if ctx.enums.contains_key(sub_target_id.as_str()) {
+                                            return None;
+                                        }
+                                        let is_self = sub_target_id.as_str() == "self"
+                                            || sub_target_id.as_str()
+                                                == ctx.current_node.canonical_name();
+                                        Some(is_self)
+                                    } else {
+                                        None
+                                    }
+                                }
+                                _ => None,
+                            };
+                        }
+                    }
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 pub(super) fn resolve_ident_or_member_to_literal<'a>(
     expr: &'a Expr,
     ctx: &ScopeContext<'a>,
@@ -718,6 +795,19 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
             None
         }
         Expr::Binary(bin) => {
+            if matches!(bin.op, BinaryOp::Eq | BinaryOp::Ne) {
+                if let (Some(l_unset), Some(r_unset)) = (
+                    is_handler_expr_unset(&bin.left, ctx),
+                    is_handler_expr_unset(&bin.right, ctx),
+                ) {
+                    let res = if bin.op == BinaryOp::Eq {
+                        l_unset == r_unset
+                    } else {
+                        l_unset != r_unset
+                    };
+                    return Some(Literal::Bool(res, bin.span));
+                }
+            }
             let left_lit = resolve_ident_or_member_to_literal(&bin.left, ctx)?;
             let right_lit = resolve_ident_or_member_to_literal(&bin.right, ctx)?;
             match bin.op {
@@ -739,6 +829,7 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                             *d1 == 0.0
                         }
                         (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 == b2,
+                        (Literal::Color(c1, _), Literal::Color(c2, _)) => c1 == c2,
                         (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 == e2 && v1 == v2,
                         _ => false,
                     };
@@ -762,6 +853,7 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                             *d1 != 0.0
                         }
                         (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 != b2,
+                        (Literal::Color(c1, _), Literal::Color(c2, _)) => c1 != c2,
                         (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 != e2 || v1 != v2,
                         _ => true,
                     };

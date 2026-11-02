@@ -506,9 +506,86 @@ impl CompiledDocument {
 
                             component.dispatch(&handler.method, event, &mut ctx)?;
 
+                            let should_call_default = ctx.take_call_default();
                             let mutations = ctx.take_mutations();
                             let actions = ctx.take_actions();
                             drop(ctx);
+
+                            if should_call_default {
+                                let default_handler_opt = self
+                                    .layout
+                                    .get_node(node_id)
+                                    .and_then(|n| {
+                                        n.default_event_handlers.get(event_handler_name).cloned()
+                                    });
+                                if let Some(def_handler) = default_handler_opt {
+                                    if let EventHandlerTarget::Component(def_target_id) =
+                                        def_handler.target
+                                    {
+                                        if (def_target_id, def_handler.method.as_str())
+                                            != (target_node_id, handler.method.as_str())
+                                        {
+                                            if let Some(def_comp) =
+                                                self.instances.get_mut(def_target_id)
+                                            {
+                                                if let Some(def_node) =
+                                                    self.layout.get_node(def_target_id)
+                                                {
+                                                    let mut def_ctx = Context::with_target(
+                                                        def_target_id,
+                                                        Some(event.target),
+                                                        def_node.parent,
+                                                        def_node.key.as_ref(),
+                                                        &def_node.properties,
+                                                        &self.layout,
+                                                    );
+                                                    def_comp.dispatch(
+                                                        &def_handler.method,
+                                                        event,
+                                                        &mut def_ctx,
+                                                    )?;
+                                                    let def_mutations = def_ctx.take_mutations();
+                                                    let def_actions = def_ctx.take_actions();
+                                                    drop(def_ctx);
+
+                                                    for (state_name, val) in def_mutations {
+                                                        if let Ok(changed) = self.set_state(
+                                                            def_target_id,
+                                                            &state_name,
+                                                            val,
+                                                        ) {
+                                                            all_changed_vars.extend(changed);
+                                                        }
+                                                    }
+                                                    for action in def_actions {
+                                                        match action {
+                                                            crate::component::ContextAction::InvokeCallback {
+                                                                target: cb_target,
+                                                                method: cb_method,
+                                                                payload: cb_payload,
+                                                            } => {
+                                                                if let Ok(cb_changed) =
+                                                                    self.dispatch_callback(
+                                                                        cb_target,
+                                                                        &cb_method,
+                                                                        cb_payload,
+                                                                    )
+                                                                {
+                                                                    all_changed_vars
+                                                                        .extend(cb_changed);
+                                                                }
+                                                            }
+                                                            other => {
+                                                                self.actions.push(other);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
                             for (state_name, val) in mutations {
                                 if let Ok(changed) = self.set_state(target_node_id, &state_name, val) {

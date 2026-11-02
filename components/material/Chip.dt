@@ -32,11 +32,19 @@
     disabled: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    on_click: Handler = unset
+    on_click: Handler = self.click,
+    on_focus: Handler = (!disabled && (clickable || on_click != unset)) ? self.focus : unset,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
 ) {
     \state hovered: Boolean = false;
     \state focused: Boolean = false;
     \state pressed: Boolean = false;
+
+    \let on_click: Handler = (!disabled && (clickable || self.on_click != unset)) ? self.on_click : self.click;
 
     \let is_outlined = variant == ChipVariant.Outlined;
     \let is_small = size == ChipSize.Small;
@@ -186,14 +194,7 @@
         color: bg_color,
         radius: chip_radius,
         border_color: border_color,
-        border_width: border_w,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        border_width: border_w
     )
 
     \Rect(
@@ -202,14 +203,7 @@
         width: resolved_avatar_size,
         height: resolved_avatar_size,
         radius: resolved_avatar_size / 2,
-        color: has_avatar ? eff_avatar_bg : #00000000,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        color: has_avatar ? eff_avatar_bg : #00000000
     )
 
     \let avatar_text_node = \Text(
@@ -217,14 +211,7 @@
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
         font: avatar_font,
         color: has_avatar ? eff_avatar_color : #00000000,
-        text: avatar,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        text: avatar
     );
 
     \let chip_text = \Text(
@@ -232,14 +219,7 @@
         y: y + max(0px, (chip_height - chip_text.height) / 2),
         font: env.font,
         color: text_color,
-        text: label,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        text: label
     );
 }
 
@@ -257,11 +237,19 @@
     disabled: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    on_click: Handler = unset
+    on_click: Handler = self.click,
+    on_focus: Handler = (!disabled && (clickable || on_click != unset)) ? self.focus : unset,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
 ) {
     \state hovered: Boolean = false;
     \state focused: Boolean = false;
     \state pressed: Boolean = false;
+
+    \let on_click: Handler = (!disabled && (clickable || self.on_click != unset)) ? self.on_click : self.click;
 
     \let is_outlined = variant == ChipVariant.Outlined;
     \let is_small = size == ChipSize.Small;
@@ -408,14 +396,7 @@
         color: bg_color,
         radius: chip_radius,
         border_color: border_color,
-        border_width: border_w,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        border_width: border_w
     )
 
     \Rect(
@@ -424,14 +405,7 @@
         width: resolved_avatar_size,
         height: resolved_avatar_size,
         radius: resolved_avatar_size / 2,
-        color: has_avatar ? eff_avatar_bg : #00000000,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        color: has_avatar ? eff_avatar_bg : #00000000
     )
 
     \let avatar_text_node = \Text(
@@ -439,14 +413,7 @@
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
         font: avatar_font,
         color: has_avatar ? eff_avatar_color : #00000000,
-        text: avatar,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        text: avatar
     );
 
     \let chip_text = \Text(
@@ -454,14 +421,7 @@
         y: y + max(0px, (chip_height - chip_text.height) / 2),
         font: env.font,
         color: text_color,
-        text: label,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        text: label
     );
 }
 
@@ -479,11 +439,19 @@
     disabled: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    on_click: Handler = unset
+    on_click: Handler = self.click,
+    on_focus: Handler = (!disabled && (clickable || on_click != unset)) ? self.focus : unset,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
 ) {
     \state hovered: Boolean = false;
     \state focused: Boolean = false;
     \state pressed: Boolean = false;
+
+    \let on_click: Handler = (!disabled && (clickable || self.on_click != unset)) ? self.on_click : self.click;
 
     \let is_outlined = variant == ChipVariant.Outlined;
     \let is_small = size == ChipSize.Small;
@@ -633,14 +601,7 @@
         color: bg_color,
         radius: chip_radius,
         border_color: border_color,
-        border_width: border_w,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        border_width: border_w
     )
 
     \Rect(
@@ -649,14 +610,7 @@
         width: resolved_avatar_size,
         height: resolved_avatar_size,
         radius: resolved_avatar_size / 2,
-        color: has_avatar ? eff_avatar_bg : #00000000,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        color: has_avatar ? eff_avatar_bg : #00000000
     )
 
     \let avatar_text_node = \Text(
@@ -664,28 +618,14 @@
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
         font: avatar_font,
         color: has_avatar ? eff_avatar_color : #00000000,
-        text: avatar,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        text: avatar
     );
 
     \let chip_text = \Text(
         x: text_x,
         y: y + max(0px, (chip_height - chip_text.height) / 2),
         font: env.font,
-        color: text_color,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        color: text_color
     ) {
         \Children
     };
@@ -704,11 +644,19 @@
     disabled: Boolean = false,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    on_click: Handler = unset
+    on_click: Handler = self.click,
+    on_focus: Handler = (!disabled && (clickable || on_click != unset)) ? self.focus : unset,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
 ) {
     \state hovered: Boolean = false;
     \state focused: Boolean = false;
     \state pressed: Boolean = false;
+
+    \let on_click: Handler = (!disabled && (clickable || self.on_click != unset)) ? self.on_click : self.click;
 
     \let is_outlined = variant == ChipVariant.Outlined;
     \let is_small = size == ChipSize.Small;
@@ -855,14 +803,7 @@
         color: bg_color,
         radius: chip_radius,
         border_color: border_color,
-        border_width: border_w,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        border_width: border_w
     )
 
     \Rect(
@@ -871,14 +812,7 @@
         width: resolved_avatar_size,
         height: resolved_avatar_size,
         radius: resolved_avatar_size / 2,
-        color: has_avatar ? eff_avatar_bg : #00000000,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        color: has_avatar ? eff_avatar_bg : #00000000
     )
 
     \let avatar_text_node = \Text(
@@ -886,28 +820,14 @@
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
         font: avatar_font,
         color: has_avatar ? eff_avatar_color : #00000000,
-        text: avatar,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        text: avatar
     );
 
     \let chip_text = \Text(
         x: text_x,
         y: y + max(0px, (chip_height - chip_text.height) / 2),
         font: env.font,
-        color: text_color,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        color: text_color
     ) {
         \Children
     };

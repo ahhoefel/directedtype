@@ -956,6 +956,95 @@ fn test_link_component_custom_on_click_override() {
 }
 
 #[test]
+fn test_custom_on_click_calling_default_via_context() {
+    let source = r##"
+        \use "components/Link.dt";
+        \use "theme/default.dt";
+
+        \Component CustomPage(env font: Font, x: Distance = 0, y: Distance = 0) {
+            \state custom_clicked: Boolean = false;
+
+            \Link(url: "https://example.com/docs", link_style: link_default, on_click: handle_custom_click) {
+                Docs Link
+            }
+        }
+
+        \CustomPage
+    "##;
+
+    struct PageWithDefaultCompanion;
+    impl Component for PageWithDefaultCompanion {
+        fn dispatch(
+            &mut self,
+            method: &str,
+            _event: &mut Event,
+            ctx: &mut Context<'_>,
+        ) -> Result<(), DispatchError> {
+            match method {
+                "handle_custom_click" => {
+                    ctx.call_default();
+                    ctx.set_state("custom_clicked", true);
+                    Ok(())
+                }
+                _ => Err(DispatchError::MethodNotFound {
+                    component: "CustomPage".into(),
+                    method: method.into(),
+                }),
+            }
+        }
+    }
+
+    let mut registry = ComponentRegistry::standard();
+    registry.register("CustomPage", || Box::new(PageWithDefaultCompanion));
+
+    let ast = parse_document(source).expect("Failed to parse document");
+    let mut compiled = CompiledDocument::compile_with_registry(
+        &ast,
+        400.0,
+        300.0,
+        std::path::Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("Compilation failed");
+
+    let link_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Link")
+        .expect("Link not found");
+
+    let mut click_event = Event::new(
+        EventKind::Click { button: MouseButton::Left },
+        Point::new(link_node.rect.x + 5.0, link_node.rect.y + 5.0),
+        Point::default(),
+        Modifiers::default(),
+        link_node.id,
+    );
+    click_event.bubble_path = compiled.layout.bubble_path_for_node(link_node.id);
+    compiled.dispatch_event(&mut click_event).expect("dispatch custom click ok");
+
+    // Both custom state mutation AND Link's default OpenUrl action ran!
+    let page_node = compiled
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "CustomPage")
+        .expect("CustomPage node not found");
+    assert_eq!(
+        compiled.get_state(page_node.id, "custom_clicked"),
+        Some(&directedtype::compiler::Value::Bool(true))
+    );
+    assert_eq!(
+        compiled.take_actions(),
+        vec![ContextAction::OpenUrl {
+            url: "https://example.com/docs".to_string(),
+        }]
+    );
+}
+
+#[test]
 fn test_link_demo_focus_and_blur_target_highlight_transitions() {
     let source = std::fs::read_to_string("examples/link_demo.dt").expect("read link_demo.dt");
     let doc = parse_document(&source).expect("parse link_demo.dt ok");

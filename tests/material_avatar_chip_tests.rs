@@ -471,3 +471,137 @@ fn test_material_gallery_avatars_and_chips_section_compiles() {
         assert!(node.rect.height > 0.0);
     }
 }
+
+#[test]
+fn test_component_level_focus_and_click_on_buttons_and_chips() {
+    use directedtype::render::{ViewerApp, ViewerConfig};
+    use winit::event::ElementState;
+
+    #[derive(Clone)]
+    struct HostApp {
+        clicks: Arc<AtomicUsize>,
+    }
+
+    impl Component for HostApp {
+        fn dispatch(
+            &mut self,
+            method: &str,
+            _event: &mut Event,
+            _ctx: &mut Context<'_>,
+        ) -> Result<(), DispatchError> {
+            if method == "on_activate" {
+                self.clicks.fetch_add(1, Ordering::SeqCst);
+            }
+            Ok(())
+        }
+    }
+
+    let input = r#"
+    \use "components/material/Palette.dt"
+    \use "components/material/Button.dt"
+    \use "components/material/Chip.dt"
+
+    \Component HostApp {
+        \Button("btn_enabled"; x: 20px, y: 20px, on_click: on_activate) { Enabled Button }
+        \Button("btn_disabled"; x: 20px, y: 70px, disabled: true, on_click: on_activate) { Disabled Button }
+        \Button("btn_unfocused"; x: 20px, y: 120px, on_focus: unset, on_click: on_activate) { Unfocused Button }
+        \Chip("chip_static"; x: 20px, y: 170px) { Static Chip }
+        \Chip("chip_clickable"; x: 20px, y: 210px, clickable: true) { Clickable Chip }
+        \Chip("chip_callback"; x: 20px, y: 250px, on_click: on_activate) { Callback Chip }
+        \Chip("chip_disabled"; x: 20px, y: 290px, clickable: true, disabled: true) { Disabled Chip }
+    }
+
+    \HostApp("app";)
+    "#;
+
+    let clicks = Arc::new(AtomicUsize::new(0));
+    let clicks_clone = Arc::clone(&clicks);
+
+    let doc = parse(input).expect("parse ok");
+    let mut registry = ComponentRegistry::standard();
+    registry.register("HostApp", move || {
+        Box::new(HostApp {
+            clicks: Arc::clone(&clicks_clone),
+        })
+    });
+
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let btn_enabled_id = compiled
+        .find_by_key(None, &ComponentKey::string("btn_enabled"))
+        .unwrap()
+        .id;
+    let btn_unfocused_id = compiled
+        .find_by_key(None, &ComponentKey::string("btn_unfocused"))
+        .unwrap()
+        .id;
+    let chip_clickable_id = compiled
+        .find_by_key(None, &ComponentKey::string("chip_clickable"))
+        .unwrap()
+        .id;
+    let chip_callback_id = compiled
+        .find_by_key(None, &ComponentKey::string("chip_callback"))
+        .unwrap()
+        .id;
+
+    let mut viewer = ViewerApp::new_with_compiled(compiled, ViewerConfig::default());
+
+    // 1. Focusable nodes include only nodes with an active `on_focus` handler
+    let focusable = viewer.focusable_nodes();
+    assert_eq!(
+        focusable,
+        vec![btn_enabled_id, chip_clickable_id, chip_callback_id],
+        "Only enabled Button and interactive Chips should be focusable; disabled, static, and on_focus: unset nodes must be excluded"
+    );
+
+    // 2. Clicking on the center of `btn_enabled` (which hits the sibling `\Text` node)
+    // focuses `btn_enabled` and invokes `HostApp::on_activate`.
+    let btn_rect = viewer.layout().get_node(btn_enabled_id).unwrap().rect;
+    let btn_center = Point::new(
+        btn_rect.x + btn_rect.width / 2.0,
+        btn_rect.y + btn_rect.height / 2.0,
+    );
+    let hit = viewer.layout().hit_test(btn_center).unwrap();
+    assert_eq!(
+        viewer.layout().get_node(hit.target).unwrap().name,
+        "Text",
+        "Center hit-test on Button should hit its sibling Text node"
+    );
+
+    viewer.dispatch_mouse_input(ElementState::Pressed, MouseButton::Left, btn_center);
+    viewer.dispatch_mouse_input(ElementState::Released, MouseButton::Left, btn_center);
+    assert_eq!(viewer.focused_node(), Some(btn_enabled_id));
+    assert_eq!(clicks.load(Ordering::SeqCst), 1);
+
+    // 3. Clicking on `btn_unfocused` (`on_focus: unset`) still invokes `on_click`, but does not focus it
+    let unfocused_rect = viewer.layout().get_node(btn_unfocused_id).unwrap().rect;
+    let unfocused_center = Point::new(
+        unfocused_rect.x + unfocused_rect.width / 2.0,
+        unfocused_rect.y + unfocused_rect.height / 2.0,
+    );
+    viewer.dispatch_mouse_input(ElementState::Pressed, MouseButton::Left, unfocused_center);
+    viewer.dispatch_mouse_input(ElementState::Released, MouseButton::Left, unfocused_center);
+    assert_eq!(viewer.focused_node(), None);
+    assert_eq!(clicks.load(Ordering::SeqCst), 2);
+
+    // 4. Clicking on the center of `chip_callback` (hitting its sibling `\Text` node)
+    // focuses `chip_callback` and invokes `HostApp::on_activate`.
+    let chip_rect = viewer.layout().get_node(chip_callback_id).unwrap().rect;
+    let chip_center = Point::new(
+        chip_rect.x + chip_rect.width / 2.0,
+        chip_rect.y + chip_rect.height / 2.0,
+    );
+    viewer.dispatch_mouse_input(ElementState::Pressed, MouseButton::Left, chip_center);
+    viewer.dispatch_mouse_input(ElementState::Released, MouseButton::Left, chip_center);
+    assert_eq!(viewer.focused_node(), Some(chip_callback_id));
+    assert_eq!(clicks.load(Ordering::SeqCst), 3);
+}
+

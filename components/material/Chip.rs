@@ -1,7 +1,7 @@
 // DirectedType Material UI Component Library: Chip Companion
 // Native companion struct providing hover, focus, pressed states, clickable/disabled gating, and on_click callback dispatch.
 
-use directedtype::component::{Callback, Context, DispatchError, EmitCallback};
+use directedtype::component::{Callback, Context, DispatchError};
 use directedtype_macros::component;
 
 #[derive(Default, Debug, Clone)]
@@ -39,11 +39,7 @@ impl Chip {
         }
     }
 
-    pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
-        if !self.is_interactive(ctx) {
-            return Ok(());
-        }
-        self.on_click.emit(ctx, ());
+    pub fn click(&mut self, _ctx: &mut Context<'_>) -> Result<(), DispatchError> {
         Ok(())
     }
 

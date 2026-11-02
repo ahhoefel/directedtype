@@ -49,6 +49,7 @@ struct ComponentExpander<'a> {
     comp_ports: HashMap<String, Expr>,
     explicit_unlowered_ports: HashMap<String, Expr>,
     already_rewritten_ports: HashSet<String>,
+    default_self_handlers: HashMap<String, crate::component::EventHandlerBinding>,
     instantiated_children_ids: &'a RefCell<Vec<NodeId>>,
     num_consumer_children: usize,
     internal_scope_ports: Vec<String>,
@@ -133,6 +134,7 @@ impl<'a> ComponentExpander<'a> {
             comp_ports,
             explicit_unlowered_ports: HashMap::new(),
             already_rewritten_ports: HashSet::new(),
+            default_self_handlers: HashMap::new(),
             instantiated_children_ids,
             num_consumer_children,
             internal_scope_ports: Vec::new(),
@@ -628,24 +630,46 @@ impl<'a> ComponentExpander<'a> {
                 .is_some_and(|t| t.name.as_str() == "Handler");
             if name.starts_with("on_") || is_handler_param {
                 if let Some(expr) = self.comp_ports.get(&name).cloned() {
+                    let event_default_ctx = ScopeContext::from_instance(
+                        ctx,
+                        &self.doc.nodes,
+                        &local_scope,
+                        self.caller_env_scope,
+                        self.node_fonts,
+                        &empty_children,
+                    )
+                    .with_children(&empty_children, self.num_consumer_children)
+                    .with_shadowed_ports(None)
+                    .with_enclosing_component(Some(ctx.comp_node_id))
+                    .with_comp_state(
+                        Some(&self.comp_ports),
+                        Some(&self.schema.declared_state_names),
+                    )
+                    .as_event_port(true);
                     if !self.already_rewritten_ports.contains(&name) {
-                        let event_default_ctx = ScopeContext::from_instance(
-                            ctx,
-                            &self.doc.nodes,
-                            &local_scope,
-                            self.caller_env_scope,
-                            self.node_fonts,
-                            &empty_children,
-                        )
-                        .with_children(&empty_children, self.num_consumer_children)
-                        .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
-                        .with_enclosing_component(Some(ctx.comp_node_id))
-                        .as_event_port(true);
                         let rewritten = rewrite_expr(&expr, &event_default_ctx)?;
                         self.already_rewritten_ports.insert(name.clone());
                         self.comp_ports.insert(name.clone(), rewritten.clone());
                         local_scope.insert(name, LexicalBinding::Expr(rewritten));
                     } else {
+                        if let Some(default_expr) = &param.default_edge {
+                            if let Ok(rewritten_default) =
+                                rewrite_expr(default_expr, &event_default_ctx)
+                            {
+                                if let Some(default_binding) =
+                                    extract_event_binding(&name, &rewritten_default)
+                                {
+                                    if default_binding.target
+                                        == crate::component::EventHandlerTarget::Component(
+                                            ctx.comp_node_id,
+                                        )
+                                    {
+                                        self.default_self_handlers
+                                            .insert(name.clone(), default_binding);
+                                    }
+                                }
+                            }
+                        }
                         local_scope.insert(name, LexicalBinding::Expr(expr));
                     }
                 }
@@ -759,6 +783,11 @@ impl<'a> ComponentExpander<'a> {
                         .comp_shadowed_ports
                         .contains(let_binding.name.as_str())
                     {
+                        let is_event_let = let_binding.name.as_str().starts_with("on_")
+                            || let_binding
+                                .type_annotation
+                                .as_ref()
+                                .is_some_and(|t| t.name.as_str() == "Handler");
                         let rewritten_res = {
                             let scope_ctx = ScopeContext::from_instance(
                                 ctx,
@@ -774,7 +803,8 @@ impl<'a> ComponentExpander<'a> {
                             .with_comp_state(
                                 Some(&self.comp_ports),
                                 Some(&self.schema.declared_state_names),
-                            );
+                            )
+                            .as_event_port(is_event_let);
                             rewrite_expr(raw_expr, &scope_ctx)
                         };
                         if try_preresolve_expr_binding(
@@ -911,6 +941,11 @@ impl<'a> ComponentExpander<'a> {
                 .comp_shadowed_ports
                 .contains(let_binding.name.as_str());
             if is_param_shadow {
+                let is_event_let = let_binding.name.as_str().starts_with("on_")
+                    || let_binding
+                        .type_annotation
+                        .as_ref()
+                        .is_some_and(|t| t.name.as_str() == "Handler");
                 let rewritten = {
                     let scope_borrow = self.local_scope.borrow();
                     let inst_borrow = self.instantiated_children_ids.borrow();
@@ -928,7 +963,8 @@ impl<'a> ComponentExpander<'a> {
                     .with_comp_state(
                         Some(&self.comp_ports),
                         Some(&self.schema.declared_state_names),
-                    );
+                    )
+                    .as_event_port(is_event_let);
                     rewrite_expr(raw_expr, &scope_ctx)?
                 };
                 let rewritten =
@@ -1519,7 +1555,7 @@ impl<'a> ComponentExpander<'a> {
     /// port type metadata, children, state/env bindings, event handlers, and text spans.
     fn finish(
         self,
-        rewritten_ports: HashMap<String, Expr>,
+        mut rewritten_ports: HashMap<String, Expr>,
         comp_authored_ports: HashMap<String, Expr>,
     ) {
         let comp_def = self.comp_def;
@@ -1620,12 +1656,29 @@ impl<'a> ComponentExpander<'a> {
                 .map(|t| t.name.as_str().to_string());
             node.env_vars.insert(env_name.clone(), type_name);
         }
-        for (port_name, expr) in &rewritten_ports {
+        let local_scope_borrow = self.local_scope.borrow();
+        let port_names: Vec<String> = rewritten_ports.keys().cloned().collect();
+        for port_name in port_names {
             if port_name.starts_with("on_")
-                || node_port_types.get(port_name).is_some_and(|t| t == "Handler")
+                || node_port_types
+                    .get(&port_name)
+                    .is_some_and(|t| t == "Handler")
             {
-                if let Some(binding) = extract_event_binding(port_name, expr) {
-                    node.event_handlers.insert(port_name.clone(), binding);
+                if self.schema.comp_shadowed_ports.contains(&port_name) {
+                    if let Some(LexicalBinding::Expr(shadowed_expr)) =
+                        local_scope_borrow.get(&port_name)
+                    {
+                        rewritten_ports.insert(port_name.clone(), shadowed_expr.clone());
+                    }
+                }
+                if let Some(expr) = rewritten_ports.get(&port_name) {
+                    if let Some(binding) = extract_event_binding(&port_name, expr) {
+                        node.event_handlers.insert(port_name.clone(), binding);
+                    }
+                }
+                if let Some(default_binding) = self.default_self_handlers.get(&port_name) {
+                    node.default_event_handlers
+                        .insert(port_name.clone(), default_binding.clone());
                 }
             }
         }

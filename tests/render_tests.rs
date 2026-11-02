@@ -12,7 +12,7 @@ fn assert_matches_golden(img: &image::RgbaImage, name: &str) {
     let out_dir = golden_dir();
     let _ = std::fs::create_dir_all(&out_dir);
     let golden_path = out_dir.join(name);
-    if std::env::var("DIRECTEDTYPE_UPDATE_GOLDENS").is_ok() || !golden_path.exists() {
+    if !golden_path.exists() {
         let _ = img.save(&golden_path);
         return;
     }
@@ -21,14 +21,18 @@ fn assert_matches_golden(img: &image::RgbaImage, name: &str) {
         .unwrap_or_else(|e| panic!("Failed to load golden image {}: {}", golden_path.display(), e))
         .to_rgba8();
 
-    assert_eq!(
-        img.dimensions(),
-        golden_img.dimensions(),
-        "Golden image {} dimensions mismatch: actual {:?} vs golden {:?}",
-        name,
-        img.dimensions(),
-        golden_img.dimensions()
-    );
+    if img.dimensions() != golden_img.dimensions() {
+        if std::env::var("DIRECTEDTYPE_UPDATE_GOLDENS").is_ok() {
+            let _ = img.save(&golden_path);
+            return;
+        }
+        panic!(
+            "Golden image {} dimensions mismatch: actual {:?} vs golden {:?}",
+            name,
+            img.dimensions(),
+            golden_img.dimensions()
+        );
+    }
 
     let (width, height) = img.dimensions();
     let total_pixels = (width * height) as usize;
@@ -42,7 +46,9 @@ fn assert_matches_golden(img: &image::RgbaImage, name: &str) {
         let da = (p_act[3] as i16 - p_gold[3] as i16).abs() as u8;
 
         let diff = dr.max(dg).max(db).max(da);
-        if diff > 2 {
+        // Allow at most 1/255 per-channel rounding noise from GPU/float quantization;
+        // every other pixel difference must be exact (mismatched == 0).
+        if diff > 1 {
             mismatched += 1;
             if diff > max_diff {
                 max_diff = diff;
@@ -50,11 +56,11 @@ fn assert_matches_golden(img: &image::RgbaImage, name: &str) {
         }
     }
 
-    let mismatch_pct = (mismatched as f64 / total_pixels as f64) * 100.0;
-    // Tolerate minor subpixel antialiasing edge variation across GPU rasterizers (<= 64 pixels or < 0.01%)
-    let is_acceptable_noise = mismatched <= 64 || mismatch_pct < 0.01;
-
-    if mismatched > 0 && !is_acceptable_noise {
+    if mismatched > 0 {
+        if std::env::var("DIRECTEDTYPE_UPDATE_GOLDENS").is_ok() {
+            let _ = img.save(&golden_path);
+            return;
+        }
         let actual_path = out_dir.join(format!("{}.actual.png", name.trim_end_matches(".png")));
         let _ = img.save(&actual_path);
 
@@ -65,7 +71,7 @@ fn assert_matches_golden(img: &image::RgbaImage, name: &str) {
             let db = (p_act[2] as i16 - p_gold[2] as i16).abs() as u8;
             let da = (p_act[3] as i16 - p_gold[3] as i16).abs() as u8;
             let diff = dr.max(dg).max(db).max(da);
-            if diff > 2 {
+            if diff > 1 {
                 *p_out = image::Rgba([255, 0, 0, 255]);
             } else {
                 *p_out = image::Rgba([p_gold[0] / 3, p_gold[1] / 3, p_gold[2] / 3, 255]);

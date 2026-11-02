@@ -328,7 +328,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
                 return Ok(chosen);
             }
-            let rewritten_cond = rewrite_expr(&tern.condition, ctx)?;
+            let mut cond_ctx = ctx.clone();
+            cond_ctx.is_event_port = false;
+            let rewritten_cond = rewrite_expr(&tern.condition, &cond_ctx)?;
             let mut const_env = HashMap::new();
             if let Some(comp_ports) = ctx.comp_ports {
                 for (port_name, port_expr) in comp_ports.iter() {
@@ -337,7 +339,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             continue;
                         }
                     }
-                    if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, ctx) {
+                    if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, &cond_ctx) {
                         let val = match lit {
                             Literal::Integer(i, _) => crate::compiler::value::Value::Integer(i),
                             Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
@@ -379,9 +381,17 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     }
                 }
             }
-            if let Ok(crate::compiler::value::Value::Bool(b)) =
-                crate::compiler::eval::eval_expr(&rewritten_cond, &const_env)
-            {
+            let cond_bool = match crate::compiler::eval::eval_expr(&rewritten_cond, &const_env) {
+                Ok(crate::compiler::value::Value::Bool(b)) => Some(b),
+                _ if ctx.is_event_port => {
+                    match resolve_ident_or_member_to_literal(&tern.condition, &cond_ctx) {
+                        Some(Literal::Bool(b, _)) => Some(b),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            if let Some(b) = cond_bool {
                 let (chosen_raw, other_raw) = if b {
                     (&tern.then_expr, &tern.else_expr)
                 } else {
@@ -490,6 +500,15 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             let resolved_target = if let Some(target_name) = &target_ident_name {
                 if target_name == "self" {
                     if ctx.is_event_port {
+                        if let Some(shadowed) = ctx.shadowed_ports {
+                            if shadowed.contains(m.member.as_str()) {
+                                if let Some(comp_ports) = ctx.comp_ports {
+                                    if let Some(port_expr) = comp_ports.get(m.member.as_str()) {
+                                        return Ok(port_expr.clone());
+                                    }
+                                }
+                            }
+                        }
                         Expr::Ident(Ident::new(
                             ctx.current_node.canonical_name(),
                             m.target.span(),
@@ -877,8 +896,26 @@ pub(super) fn extract_event_binding(
     port_name: &str,
     expr: &Expr,
 ) -> Option<crate::component::EventHandlerBinding> {
+    extract_event_binding_with_values(port_name, expr, None)
+}
+
+/// Evaluates an event handler expression (including runtime `Ternary` expressions when `values` is provided)
+/// into an `EventHandlerBinding`.
+pub(crate) fn extract_event_binding_with_values(
+    port_name: &str,
+    expr: &Expr,
+    values: Option<&HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>>,
+) -> Option<crate::component::EventHandlerBinding> {
     use crate::component::{EventHandlerBinding, EventHandlerTarget};
     match expr {
+        Expr::Paren(inner, _) => extract_event_binding_with_values(port_name, inner, values),
+        Expr::Ternary(tern) => {
+            let vals = values?;
+            let cond_val = crate::compiler::eval::eval_expr(&tern.condition, vals).ok()?;
+            let b = cond_val.as_bool()?;
+            let branch = if b { &tern.then_expr } else { &tern.else_expr };
+            extract_event_binding_with_values(port_name, branch, values)
+        }
         Expr::MemberAccess(m) => {
             let target = match m.target.as_ref() {
                 Expr::Ident(id) => {

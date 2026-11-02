@@ -794,27 +794,50 @@ impl ViewerApp {
 
         let mut handled = false;
         if new_hovered != self.hovered_node {
+            let old_bubble = self
+                .hovered_node
+                .map(|old_id| self.layout().bubble_path_for_node(old_id))
+                .unwrap_or_default();
+            let new_bubble = hit
+                .as_ref()
+                .map(|h| h.bubble_path.as_slice())
+                .unwrap_or(&[]);
+
             if let Some(old_id) = self.hovered_node {
-                let leave_event = Event::new(
-                    EventKind::PointerLeave,
-                    doc_point,
-                    Point::new(0.0, 0.0),
-                    self.modifiers,
-                    old_id,
-                );
-                let bubble = self.layout().bubble_path_for_node(old_id);
-                handled |= self.dispatch_event_with_bubble(leave_event, &bubble);
+                let leave_path: Vec<NodeId> = old_bubble
+                    .iter()
+                    .copied()
+                    .filter(|id| !new_bubble.contains(id))
+                    .collect();
+                if !leave_path.is_empty() {
+                    let leave_event = Event::new(
+                        EventKind::PointerLeave,
+                        doc_point,
+                        Point::new(0.0, 0.0),
+                        self.modifiers,
+                        old_id,
+                    );
+                    handled |= self.dispatch_event_with_bubble(leave_event, &leave_path);
+                }
             }
 
             if let Some(ref hit_res) = hit {
-                let enter_event = Event::new(
-                    EventKind::PointerEnter,
-                    doc_point,
-                    hit_res.local_point,
-                    self.modifiers,
-                    hit_res.target,
-                );
-                handled |= self.dispatch_event_with_bubble(enter_event, &hit_res.bubble_path);
+                let enter_path: Vec<NodeId> = hit_res
+                    .bubble_path
+                    .iter()
+                    .copied()
+                    .filter(|id| !old_bubble.contains(id))
+                    .collect();
+                if !enter_path.is_empty() {
+                    let enter_event = Event::new(
+                        EventKind::PointerEnter,
+                        doc_point,
+                        hit_res.local_point,
+                        self.modifiers,
+                        hit_res.target,
+                    );
+                    handled |= self.dispatch_event_with_bubble(enter_event, &enter_path);
+                }
             }
 
             self.hovered_node = new_hovered;
@@ -848,6 +871,18 @@ impl ViewerApp {
 
         match state {
             winit::event::ElementState::Pressed => {
+                let focus_target = hit.as_ref().and_then(|h| {
+                    h.bubble_path.iter().copied().find(|&id| {
+                        self.layout().get_node(id).is_some_and(|n| {
+                            if let Some(v) = n.properties.get("tabindex").and_then(|t| t.as_f64()) {
+                                return v >= 0.0;
+                            }
+                            n.event_handlers.contains_key("on_focus")
+                        })
+                    })
+                });
+                self.set_focused_node(focus_target);
+
                 if let Some(ref hit_res) = hit {
                     self.pressed_node = Some((hit_res.target, button));
                     let down_event = Event::new(
@@ -907,15 +942,23 @@ impl ViewerApp {
                         );
                         let mut handled = self.dispatch_event_with_bubble(up_event, &hit_res.bubble_path);
 
-                        if pressed_btn == button && hit_res.bubble_path.contains(&pressed_id) {
-                            let click_event = Event::new(
-                                EventKind::Click { button },
-                                doc_point,
-                                hit_res.local_point,
-                                self.modifiers,
-                                hit_res.target,
-                            );
-                            handled |= self.dispatch_event_with_bubble(click_event, &hit_res.bubble_path);
+                        if pressed_btn == button {
+                            let pressed_bubble = self.layout().bubble_path_for_node(pressed_id);
+                            if let Some(common_idx) = hit_res
+                                .bubble_path
+                                .iter()
+                                .position(|id| !id.is_window() && pressed_bubble.contains(id))
+                            {
+                                let click_bubble = &hit_res.bubble_path[common_idx..];
+                                let click_event = Event::new(
+                                    EventKind::Click { button },
+                                    doc_point,
+                                    hit_res.local_point,
+                                    self.modifiers,
+                                    click_bubble[0],
+                                );
+                                handled |= self.dispatch_event_with_bubble(click_event, click_bubble);
+                            }
                         }
                         handled
                     } else {
@@ -1214,34 +1257,7 @@ impl ViewerApp {
                 continue;
             }
 
-            // If an ancestor is already a Link or Button, this inner node is internal implementation detail:
-            let is_inside_interactive_component = {
-                let mut curr = node.parent;
-                let mut is_inside = false;
-                while let Some(pid) = curr {
-                    if let Some(p) = layout.get_node(pid) {
-                        if p.name == "Link" || p.name == "Button" {
-                            is_inside = true;
-                            break;
-                        }
-                        curr = p.parent;
-                    } else {
-                        break;
-                    }
-                }
-                is_inside
-            };
-            if is_inside_interactive_component {
-                continue;
-            }
-
-            // Sequentially focusable controls: Links, Buttons, or nodes with an explicit URL or custom on_click
-            let is_interactive = node.name == "Link"
-                || node.name == "Button"
-                || node.properties.contains_key("url")
-                || node.event_handlers.contains_key("on_click");
-
-            if is_interactive {
+            if node.event_handlers.contains_key("on_focus") {
                 focusable.push(node);
             }
         }
@@ -2982,27 +2998,50 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                 let new_hovered = hit.as_ref().map(|h| h.target);
 
                 if new_hovered != self.hovered_node {
+                    let old_bubble = self
+                        .hovered_node
+                        .map(|old_id| self.layout().bubble_path_for_node(old_id))
+                        .unwrap_or_default();
+                    let new_bubble = hit
+                        .as_ref()
+                        .map(|h| h.bubble_path.as_slice())
+                        .unwrap_or(&[]);
+
                     if let Some(old_id) = self.hovered_node {
-                        let leave_event = Event::new(
-                            EventKind::PointerLeave,
-                            doc_point,
-                            Point::new(0.0, 0.0),
-                            self.modifiers,
-                            old_id,
-                        );
-                        let bubble = self.layout().bubble_path_for_node(old_id);
-                        self.dispatch_event_with_bubble(leave_event, &bubble);
+                        let leave_path: Vec<NodeId> = old_bubble
+                            .iter()
+                            .copied()
+                            .filter(|id| !new_bubble.contains(id))
+                            .collect();
+                        if !leave_path.is_empty() {
+                            let leave_event = Event::new(
+                                EventKind::PointerLeave,
+                                doc_point,
+                                Point::new(0.0, 0.0),
+                                self.modifiers,
+                                old_id,
+                            );
+                            self.dispatch_event_with_bubble(leave_event, &leave_path);
+                        }
                     }
 
                     if let Some(ref hit_res) = hit {
-                        let enter_event = Event::new(
-                            EventKind::PointerEnter,
-                            doc_point,
-                            hit_res.local_point,
-                            self.modifiers,
-                            hit_res.target,
-                        );
-                        self.dispatch_event_with_bubble(enter_event, &hit_res.bubble_path);
+                        let enter_path: Vec<NodeId> = hit_res
+                            .bubble_path
+                            .iter()
+                            .copied()
+                            .filter(|id| !old_bubble.contains(id))
+                            .collect();
+                        if !enter_path.is_empty() {
+                            let enter_event = Event::new(
+                                EventKind::PointerEnter,
+                                doc_point,
+                                hit_res.local_point,
+                                self.modifiers,
+                                hit_res.target,
+                            );
+                            self.dispatch_event_with_bubble(enter_event, &enter_path);
+                        }
                     }
 
                     self.hovered_node = new_hovered;
@@ -3446,21 +3485,12 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
 
                             // Focus management on mouse click:
                             let focus_target = hit.as_ref().and_then(|h| {
-                                // If clicked element is inside a Link or Button component, focus that component
-                                if let Some(&comp_id) = h.bubble_path.iter().find(|&&id| {
-                                    self.layout().get_node(id).is_some_and(|n| n.name == "Link" || n.name == "Button")
-                                }) {
-                                    return Some(comp_id);
-                                }
                                 h.bubble_path.iter().copied().find(|&id| {
-                                    self.layout().get_node(id).map_or(false, |n| {
+                                    self.layout().get_node(id).is_some_and(|n| {
                                         if let Some(v) = n.properties.get("tabindex").and_then(|t| t.as_f64()) {
                                             return v >= 0.0;
                                         }
-                                        n.name == "Link"
-                                            || n.name == "Button"
-                                            || n.properties.contains_key("url")
-                                            || n.event_handlers.contains_key("on_click")
+                                        n.event_handlers.contains_key("on_focus")
                                     })
                                 })
                             });
@@ -3493,15 +3523,23 @@ impl ApplicationHandler<ViewerUserEvent> for ViewerApp {
                                     );
                                     self.dispatch_event_with_bubble(up_event, &hit_res.bubble_path);
 
-                                    if pressed_btn == btn && hit_res.bubble_path.contains(&pressed_id) {
-                                        let click_event = Event::new(
-                                            EventKind::Click { button: btn },
-                                            doc_point,
-                                            hit_res.local_point,
-                                            self.modifiers,
-                                            hit_res.target,
-                                        );
-                                        self.dispatch_event_with_bubble(click_event, &hit_res.bubble_path);
+                                    if pressed_btn == btn {
+                                        let pressed_bubble = self.layout().bubble_path_for_node(pressed_id);
+                                        if let Some(common_idx) = hit_res
+                                            .bubble_path
+                                            .iter()
+                                            .position(|id| !id.is_window() && pressed_bubble.contains(id))
+                                        {
+                                            let click_bubble = &hit_res.bubble_path[common_idx..];
+                                            let click_event = Event::new(
+                                                EventKind::Click { button: btn },
+                                                doc_point,
+                                                hit_res.local_point,
+                                                self.modifiers,
+                                                click_bubble[0],
+                                            );
+                                            self.dispatch_event_with_bubble(click_event, click_bubble);
+                                        }
                                     }
                                 }
                             }

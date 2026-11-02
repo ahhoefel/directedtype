@@ -3,7 +3,6 @@
 // semantic MaterialColor channels, Small/Medium/Large sizes, reactive hover/focus/pressed states,
 // and both `label: String` and child content overloads.
 
-\use "components/Center.dt"
 \use "components/material/Palette.dt"
 
 \Enum ButtonVariant {
@@ -30,11 +29,19 @@
     radius: Distance = 4px,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    on_click: Handler = unset
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
 ) {
     \state hovered: Boolean = false;
     \state focused: Boolean = false;
     \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
 
     \let is_contained = variant == ButtonVariant.Contained;
     \let is_outlined = variant == ButtonVariant.Outlined;
@@ -163,23 +170,16 @@
         color: bg_color,
         radius: radius,
         border_color: border_color,
-        border_width: border_w,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
-    ) {
-        \Center {
-            \Text(
-                font: env.font,
-                color: text_color,
-                text: label
-            )
-        }
-    }
+        border_width: border_w
+    )
+
+    \let btn_text = \Text(
+        x: x + max(0, (width - btn_text.width) / 2),
+        y: y + max(0, (btn_height - btn_text.height) / 2),
+        font: env.font,
+        color: text_color,
+        text: label
+    );
 }
 
 // 2. Intrinsic Width Button with `label` prop
@@ -193,11 +193,19 @@
     radius: Distance = 4px,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    on_click: Handler = unset
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
 ) {
     \state hovered: Boolean = false;
     \state focused: Boolean = false;
     \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
 
     \let is_contained = variant == ButtonVariant.Contained;
     \let is_outlined = variant == ButtonVariant.Outlined;
@@ -333,14 +341,7 @@
         color: bg_color,
         radius: radius,
         border_color: border_color,
-        border_width: border_w,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        border_width: border_w
     )
 
     \let btn_text = \Text(
@@ -348,14 +349,7 @@
         y: y + max(0, (btn_height - btn_text.height) / 2),
         font: env.font,
         color: text_color,
-        text: label,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        text: label
     );
 }
 
@@ -370,11 +364,19 @@
     radius: Distance = 4px,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    on_click: Handler = unset
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
 ) {
     \state hovered: Boolean = false;
     \state focused: Boolean = false;
     \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
 
     \let is_contained = variant == ButtonVariant.Contained;
     \let is_outlined = variant == ButtonVariant.Outlined;
@@ -503,28 +505,14 @@
         color: bg_color,
         radius: radius,
         border_color: border_color,
-        border_width: border_w,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        border_width: border_w
     )
 
     \let btn_text = \Text(
         x: x + max(0, (width - btn_text.width) / 2),
         y: y + max(0, (btn_height - btn_text.height) / 2),
         font: env.font,
-        color: text_color,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        color: text_color
     ) {
         \Children
     };
@@ -540,11 +528,19 @@
     radius: Distance = 4px,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    on_click: Handler = unset
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_up: Handler = self.pointer_up
 ) {
     \state hovered: Boolean = false;
     \state focused: Boolean = false;
     \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
 
     \let is_contained = variant == ButtonVariant.Contained;
     \let is_outlined = variant == ButtonVariant.Outlined;
@@ -680,28 +676,14 @@
         color: bg_color,
         radius: radius,
         border_color: border_color,
-        border_width: border_w,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        border_width: border_w
     )
 
     \let btn_text = \Text(
         x: x + max(0, (resolved_width - btn_text.width) / 2),
         y: y + max(0, (btn_height - btn_text.height) / 2),
         font: env.font,
-        color: text_color,
-        on_click: click,
-        on_focus: focus,
-        on_blur: blur,
-        on_pointer_enter: pointer_enter,
-        on_pointer_leave: pointer_leave,
-        on_pointer_down: pointer_down,
-        on_pointer_up: pointer_up
+        color: text_color
     ) {
         \Children
     };

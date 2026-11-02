@@ -11,8 +11,10 @@
     label: String,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    disabled: Boolean = false
+    disabled: Boolean = false,
+    on_click: Handler = self.click
 ) {
+    \let on_click: Handler = disabled ? self.click : self.on_click;
     \let is_disabled = disabled;
     \let bg_color = is_disabled ? style.disabled_bg : style.bg;
     \let text_color = is_disabled ? style.disabled_text : style.text_color;
@@ -30,8 +32,7 @@
         color: bg_color,
         radius: style.radius,
         border_color: border_color,
-        border_width: style.border_width,
-        on_click: click
+        border_width: style.border_width
     ) {
         \Center {
             \Text(
@@ -49,8 +50,10 @@
     label: String,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    disabled: Boolean = false
+    disabled: Boolean = false,
+    on_click: Handler = self.click
 ) {
+    \let on_click: Handler = disabled ? self.click : self.on_click;
     \let is_disabled = disabled;
     \let bg_color = is_disabled ? style.disabled_bg : style.bg;
     \let text_color = is_disabled ? style.disabled_text : style.text_color;
@@ -72,8 +75,7 @@
         color: bg_color,
         radius: style.radius,
         border_color: border_color,
-        border_width: style.border_width,
-        on_click: click
+        border_width: style.border_width
     ) {
         \Center {
             \Text(
@@ -92,8 +94,10 @@
     label: String,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    disabled: Boolean = false
+    disabled: Boolean = false,
+    on_click: Handler = self.click
 ) {
+    \let on_click: Handler = disabled ? self.click : self.on_click;
     \let is_primary = variant == ButtonVariant.Primary;
     \let is_secondary = variant == ButtonVariant.Secondary;
     \let is_outline = variant == ButtonVariant.Outline;
@@ -142,8 +146,7 @@
         color: bg_color,
         radius: 8px,
         border_color: border_color,
-        border_width: default_border_w,
-        on_click: click
+        border_width: default_border_w
     ) {
         \Center {
             \Text(
@@ -161,8 +164,10 @@
     label: String,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    disabled: Boolean = false
+    disabled: Boolean = false,
+    on_click: Handler = self.click
 ) {
+    \let on_click: Handler = disabled ? self.click : self.on_click;
     \let is_primary = variant == ButtonVariant.Primary;
     \let is_secondary = variant == ButtonVariant.Secondary;
     \let is_outline = variant == ButtonVariant.Outline;
@@ -215,8 +220,7 @@
         color: bg_color,
         radius: 8px,
         border_color: border_color,
-        border_width: default_border_w,
-        on_click: click
+        border_width: default_border_w
     ) {
         \Center {
             \Text(

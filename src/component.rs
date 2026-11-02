@@ -251,6 +251,7 @@ pub struct Context<'a> {
     layout: &'a ResolvedLayout,
     mutations: Vec<(String, Value)>,
     actions: Vec<ContextAction>,
+    call_default_requested: bool,
 }
 
 impl<'a> Context<'a> {
@@ -281,6 +282,7 @@ impl<'a> Context<'a> {
             layout,
             mutations: Vec::new(),
             actions: Vec::new(),
+            call_default_requested: false,
         }
     }
 
@@ -317,6 +319,20 @@ impl<'a> Context<'a> {
     /// Queues a context action.
     pub fn push_action(&mut self, action: ContextAction) {
         self.actions.push(action);
+    }
+
+    /// Requests that the component's default event handler for the current event be invoked.
+    ///
+    /// When a custom event handler overrides a component's default handler (such as `on_click`
+    /// on a `\Link` or stateful widget), calling `ctx.call_default()` runs the component's
+    /// default implementation in addition to the custom callback's logic.
+    pub fn call_default(&mut self) {
+        self.call_default_requested = true;
+    }
+
+    /// Drains and returns whether `call_default()` was requested during this dispatch.
+    pub fn take_call_default(&mut self) -> bool {
+        std::mem::take(&mut self.call_default_requested)
     }
 
     /// Reads an input port as an integer.
@@ -475,17 +491,16 @@ impl<'a> Context<'a> {
     /// and returns a strongly-typed `Callback<T>`.
     pub fn get_callback<T>(&self, port_name: &str) -> Option<Callback<T>> {
         let node = self.layout.get_node(self.node_id)?;
+        let alt_name = if !port_name.starts_with("on_") {
+            format!("on_{}", port_name)
+        } else {
+            port_name.strip_prefix("on_").unwrap_or(port_name).to_string()
+        };
         let binding = node
             .event_handlers
             .get(port_name)
-            .or_else(|| {
-                if !port_name.starts_with("on_") {
-                    let prefixed = format!("on_{}", port_name);
-                    node.event_handlers.get(&prefixed)
-                } else {
-                    node.event_handlers.get(port_name.strip_prefix("on_").unwrap_or(port_name))
-                }
-            })?;
+            .or_else(|| node.event_handlers.get(&alt_name))
+            .filter(|b| b.target != EventHandlerTarget::Component(self.node_id))?;
         match &binding.target {
             EventHandlerTarget::Component(id) => Some(Callback::new(*id, binding.method.clone())),
             EventHandlerTarget::Env(_) => None,
@@ -829,7 +844,7 @@ impl ComponentRegistry {
 }
 
 pub mod material_components {
-    use super::{Callback, Context, DispatchError, EmitCallback};
+    use super::{Callback, Context, DispatchError};
     use directedtype_macros::component;
 
     /// Material UI Button companion component (`components/material/Button.rs`).
@@ -857,12 +872,7 @@ pub mod material_components {
             }
         }
 
-        pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
-            let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
-            if is_disabled {
-                return Ok(());
-            }
-            self.on_click.emit(ctx, ());
+        pub fn click(&mut self, _ctx: &mut Context<'_>) -> Result<(), DispatchError> {
             Ok(())
         }
 
@@ -955,11 +965,7 @@ pub mod material_components {
             }
         }
 
-        pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
-            if !self.is_interactive(ctx) {
-                return Ok(());
-            }
-            self.on_click.emit(ctx, ());
+        pub fn click(&mut self, _ctx: &mut Context<'_>) -> Result<(), DispatchError> {
             Ok(())
         }
 
@@ -1015,13 +1021,14 @@ pub mod material_components {
 }
 
 pub mod std_components {
-    use super::{Context, DispatchError};
+    use super::{Callback, Context, DispatchError};
     use directedtype_macros::component;
 
     /// Standard interactive Button companion component.
     #[derive(Default, Debug, Clone)]
     pub struct Button {
         pub disabled: bool,
+        pub on_click: Option<Callback<()>>,
     }
 
     impl Button {
@@ -1033,16 +1040,13 @@ pub mod std_components {
     #[component]
     impl Button {
         pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
+            self.on_click = ctx.get_callback("on_click");
             if let Some(d) = ctx.get_port_bool("disabled") {
                 self.disabled = d;
             }
         }
 
-        pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
-            let is_disabled = ctx.get_port_bool("disabled").unwrap_or(self.disabled);
-            if is_disabled {
-                // Disabled button does nothing; click propagation is consumed by default
-            }
+        pub fn click(&mut self, _ctx: &mut Context<'_>) -> Result<(), DispatchError> {
             Ok(())
         }
     }
@@ -1052,6 +1056,7 @@ pub mod std_components {
     pub struct Link {
         pub focused: bool,
         pub hovered: bool,
+        pub on_click: Option<Callback<()>>,
     }
 
     impl Link {
@@ -1062,6 +1067,10 @@ pub mod std_components {
 
     #[component]
     impl Link {
+        pub fn on_mount(&mut self, ctx: &mut Context<'_>) {
+            self.on_click = ctx.get_callback("on_click");
+        }
+
         pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
             if let Some(url) = ctx.get_port_string("url") {
                 let url = url.to_string();

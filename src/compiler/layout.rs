@@ -206,6 +206,7 @@ pub struct ResolvedNode {
     pub state_vars: HashMap<String, Option<String>>,
     pub env_vars: HashMap<String, Option<String>>,
     pub event_handlers: HashMap<String, crate::component::EventHandlerBinding>,
+    pub default_event_handlers: HashMap<String, crate::component::EventHandlerBinding>,
     pub formulas: HashMap<String, String>,
     pub span: Span,
     pub handle: Option<NodeHandle>,
@@ -795,6 +796,27 @@ pub fn resolve_layout(
             })
             .collect();
 
+        let mut event_handlers = node.event_handlers.clone();
+        for (port_name, expr) in &node.ports {
+            if port_name.starts_with("on_")
+                || node.port_types.get(port_name).is_some_and(|t| t == "Handler")
+            {
+                if matches!(expr, Expr::Ternary(_) | Expr::Paren(_, _)) {
+                    if let Some(binding) =
+                        crate::compiler::expand::rewrite::extract_event_binding_with_values(
+                            port_name,
+                            expr,
+                            Some(&values),
+                        )
+                    {
+                        event_handlers.insert(port_name.clone(), binding);
+                    } else {
+                        event_handlers.remove(port_name);
+                    }
+                }
+            }
+        }
+
         resolved_nodes.push(ResolvedNode {
             id: node.id,
             name: node.name.clone(),
@@ -814,7 +836,8 @@ pub fn resolve_layout(
             properties,
             state_vars: node.state_vars.clone(),
             env_vars: node.env_vars.clone(),
-            event_handlers: node.event_handlers.clone(),
+            event_handlers,
+            default_event_handlers: node.default_event_handlers.clone(),
             formulas,
             span: node.span,
             handle: node.handle,
@@ -882,6 +905,31 @@ pub fn update_resolved_layout(
                 .get(&VarId::new(node.id, "clip"))
                 .and_then(|v| v.as_node())
                 .filter(|id| !id.is_window());
+
+            if let Some(expanded_node) = doc.get_node(node.id) {
+                for (port_name, expr) in &expanded_node.ports {
+                    if port_name.starts_with("on_")
+                        || expanded_node
+                            .port_types
+                            .get(port_name)
+                            .is_some_and(|t| t == "Handler")
+                    {
+                        if matches!(expr, Expr::Ternary(_) | Expr::Paren(_, _)) {
+                            if let Some(binding) =
+                                crate::compiler::expand::rewrite::extract_event_binding_with_values(
+                                    port_name,
+                                    expr,
+                                    Some(&layout.values),
+                                )
+                            {
+                                node.event_handlers.insert(port_name.clone(), binding);
+                            } else {
+                                node.event_handlers.remove(port_name);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Re-evaluate structured component keys if the node has a key
