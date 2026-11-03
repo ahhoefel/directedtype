@@ -20,6 +20,7 @@
 \use "../components/material/List.dt"
 \use "../components/material/AppBar.dt"
 \use "../components/material/Tabs.dt"
+\use "../components/material/Slider.dt"
 
 \Window(title: "Material UI Component Gallery")
 
@@ -732,6 +733,93 @@
                         \Tab("tab_vert_1"; label: "SECURITY & KEYS")
                         \Tab("tab_vert_2"; label: "NOTIFICATIONS")
                     }
+                }
+            }
+        }
+    }
+
+    // Section 16: Sliders (Sizes, Palette Colors, Discrete Steps & Marks, Labeled Marks & Disabled)
+    \Paper("card_sliders"; elevation: 1, radius: 8px, padding_x: 20px, padding_y: 20px) {
+        \VStack(min_width: target_inner_width, gap: 16px) {
+            \Subtitle2(color: material_text_secondary) {
+                16. SLIDERS (CONTINUOUS, SMALL/MEDIUM SIZES, PALETTE COLORS, DISCRETE STEPS, MARKS & DISABLED)
+            }
+
+            // 16a. Continuous, Small Size, Disabled & Value Label Always On
+            \HStack(gap: 28px, align: Align.Center) {
+                \VStack(gap: 4px) {
+                    \Caption(color: material_text_secondary) { Small (value=70) }
+                    \Slider("sl_small"; width: 180px, size: SliderSize.Small, value: 70)
+                }
+                \VStack(gap: 4px) {
+                    \Caption(color: material_text_secondary) { Medium Default (value=50) }
+                    \Slider("sl_default"; width: 180px, value: 50)
+                }
+                \VStack(gap: 4px) {
+                    \Caption(color: material_text_secondary) { Disabled (value=30) }
+                    \Slider("sl_disabled"; width: 180px, value: 30, disabled: true)
+                }
+                \VStack(gap: 20px) {
+                    \Caption(color: material_text_secondary) { Value Label On (value=80) }
+                    \Slider("sl_val_on"; width: 180px, value: 80, value_label_display: SliderValueLabelDisplay.On)
+                }
+            }
+
+            \Divider
+
+            // 16b. Semantic Palette Colors (Secondary, Success, Warning, Error, Info)
+            \HStack(gap: 20px, align: Align.Center) {
+                \Slider("sl_secondary"; width: 150px, value: 65, color: MaterialColor.Secondary)
+                \Slider("sl_success"; width: 150px, value: 80, color: MaterialColor.Success)
+                \Slider("sl_warning"; width: 150px, value: 45, color: MaterialColor.Warning)
+                \Slider("sl_error"; width: 150px, value: 25, color: MaterialColor.Error)
+                \Slider("sl_info"; width: 150px, value: 90, color: MaterialColor.Info)
+            }
+
+            \Divider
+
+            // 16c. Discrete Step Marks, Custom Labeled Marks & Inverted Track
+            \HStack(gap: 32px, align: Align.Top) {
+                \VStack(gap: 6px) {
+                    \Caption(color: material_text_secondary) { Discrete Step=10 with Marks }
+                    \Slider(
+                        "sl_discrete";
+                        width: 240px,
+                        value: 30,
+                        min: 0,
+                        max: 100,
+                        step: 10,
+                        marks: true,
+                        value_label_display: SliderValueLabelDisplay.Auto
+                    )
+                }
+
+                \VStack(gap: 6px) {
+                    \Caption(color: material_text_secondary) { Custom Labeled Marks (°C) }
+                    \Slider(
+                        "sl_custom_marks";
+                        width: 260px,
+                        value: 20,
+                        min: 0,
+                        max: 100,
+                        step: 10
+                    ) {
+                        \SliderMark(value: 0, label: "0°C")
+                        \SliderMark(value: 20, label: "20°C")
+                        \SliderMark(value: 37, label: "37°C")
+                        \SliderMark(value: 100, label: "100°C")
+                    }
+                }
+
+                \VStack(gap: 6px) {
+                    \Caption(color: material_text_secondary) { Inverted Track }
+                    \Slider(
+                        "sl_inverted";
+                        width: 220px,
+                        value: 30,
+                        track: SliderTrack.Inverted,
+                        color: MaterialColor.Secondary
+                    )
                 }
             }
         }

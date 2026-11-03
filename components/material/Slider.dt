@@ -1,0 +1,630 @@
+// DirectedType Material UI Component Library: Slider
+// Range input control (\Slider) and custom mark item (\SliderMark) supporting Small and Medium
+// sizes, semantic MaterialColor channels, Normal/Inverted/Hidden track modes, continuous and
+// discrete step snapping, automatic step tick marks (`marks: true`), custom labeled marks
+// (\SliderMark), value label badges (Off/Auto/On), reactive hover/focus/active thumb halos,
+// elevation shadow on the thumb, disabled state, controlled/uncontrolled mode, and on_change(f64).
+// Reference: https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Slider
+
+\use "components/Shadow.dt"
+\use "components/TextBounds.dt"
+\use "components/material/Palette.dt"
+
+\let slider_text_bounds = \TextBounds(
+    start_at: TextStart.LineHeight,
+    end_at: TextEnd.LineHeight
+);
+
+\Enum SliderSize {
+    Small,
+    Medium,
+}
+
+\Enum SliderTrack {
+    Normal,
+    Inverted,
+    Hidden,
+    None,
+}
+
+\Enum SliderValueLabelDisplay {
+    Off,
+    Auto,
+    On,
+}
+
+// Internal helper for a single discrete step tick mark along the slider rail
+\Component SliderStepTick(
+    index: Integer,
+    enabled: Boolean,
+    slider_x: Distance,
+    cy: Distance,
+    slider_width: Distance,
+    thumb_size: Distance,
+    min: Float,
+    max: Float,
+    step: Float,
+    value: Float,
+    track: SliderTrack,
+    disabled: Boolean,
+    color_main: Color
+) {
+    \let span_range: Float = max(0.000001, max - min);
+    \let eff_step: Float = (step > 0) ? step : span_range;
+    \let mark_val: Float = min + (index * eff_step);
+    \let is_visible = enabled && (step > 0) && (mark_val <= (max + (eff_step * 0.001)));
+
+    \let ratio: Float = clamp((mark_val - min) / span_range, 0, 1);
+    \let usable_w: Distance = max(0px, slider_width - thumb_size);
+    \let cx: Distance = slider_x + (thumb_size / 2) + (ratio * usable_w);
+
+    \let is_inverted = track == SliderTrack.Inverted;
+    \let is_hidden = (track == SliderTrack.Hidden) || (track == SliderTrack.None);
+    \let is_active = !is_hidden && (is_inverted ? (mark_val >= (value - 0.0001)) : (mark_val <= (value + 0.0001)));
+
+    \let inactive_color: Color = disabled ? #bdbdbd : color_main;
+    \let tick_color: Color = is_visible
+        ? (is_active ? #ffffffcc : inactive_color)
+        : #00000000;
+    \let tick_size: Distance = is_visible ? 2px : 0px;
+
+    \alias x = cx - (tick_size / 2);
+    \alias y = cy - (tick_size / 2);
+    \alias width = tick_size;
+    \alias height = tick_size;
+    \alias right = x + tick_size;
+    \alias bottom = y + tick_size;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: tick_size,
+        height: tick_size,
+        radius: tick_size / 2,
+        color: tick_color
+    )
+}
+
+// Internal container rendering automatic discrete step ticks (when `marks: true` and `step > 0`)
+\Component SliderStepMarks(
+    enabled: Boolean,
+    x: Distance,
+    cy: Distance,
+    width: Distance,
+    thumb_size: Distance,
+    min: Float,
+    max: Float,
+    step: Float,
+    value: Float,
+    track: SliderTrack,
+    disabled: Boolean,
+    color_main: Color
+) {
+    \alias y = cy - 1px;
+    \alias height = enabled ? 2px : 0px;
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \SliderStepTick(index: 0, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 1, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 2, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 3, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 4, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 5, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 6, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 7, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 8, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 9, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 10, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 11, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 12, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 13, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 14, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 15, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 16, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 17, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 18, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 19, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+    \SliderStepTick(index: 20, enabled: enabled, slider_x: x, cy: cy, slider_width: width, thumb_size: thumb_size, min: min, max: max, step: step, value: value, track: track, disabled: disabled, color_main: color_main)
+}
+
+// Internal helper rendering the floating value label badge above the thumb
+\Component SliderValueLabel(
+    visible: Boolean,
+    text: String,
+    env font: Font = \Font(size: 16px),
+    cx: Distance,
+    thumb_top_y: Distance,
+    disabled: Boolean = false
+) {
+    \let label_font = \Font(
+        font: font,
+        size: 12px,
+        weight: 500,
+        line_height: 16px
+    );
+
+    \let pill_h: Distance = visible ? 24px : 0px;
+    \let pill_w: Distance = visible ? max(28px, label_node.width + 12px) : 0px;
+    \let pill_x: Distance = cx - (pill_w / 2);
+    \let pill_y: Distance = thumb_top_y - pill_h - 4px;
+    \let pill_bg: Color = visible ? (disabled ? #bdbdbd : #616161eb) : #00000000;
+    \let text_color: Color = visible ? #ffffff : #00000000;
+
+    \alias x = pill_x;
+    \alias y = pill_y;
+    \alias width = pill_w;
+    \alias height = pill_h;
+    \alias right = pill_x + pill_w;
+    \alias bottom = pill_y + pill_h;
+
+    \Rect(
+        x: pill_x,
+        y: pill_y,
+        width: pill_w,
+        height: pill_h,
+        radius: 4px,
+        color: pill_bg
+    )
+
+    \let label_node = \Text(
+        x: pill_x + max(0px, (pill_w - label_node.width) / 2),
+        y: pill_y + max(0px, (pill_h - label_node.height) / 2),
+        font: label_font,
+        color: text_color,
+        text_bounds: slider_text_bounds,
+        text: text
+    );
+}
+
+// ============================================================================
+// SliderMark
+// ============================================================================
+
+// 1. SliderMark with `label` prop (`\SliderMark(value: 20, label: "20°C")`)
+\Component SliderMark(
+    value: Float,
+    label: String,
+    env font: Font = \Font(size: 16px),
+    env slider_x: Distance = parent.left,
+    env slider_y: Distance = parent.top,
+    env slider_width: Distance = 200px,
+    env slider_control_h: Distance = 30px,
+    env slider_thumb_size: Distance = 20px,
+    env slider_min: Float = 0,
+    env slider_max: Float = 100,
+    env slider_value: Float = 0,
+    env slider_track: SliderTrack = SliderTrack.Normal,
+    env slider_disabled: Boolean = false,
+    env slider_color_main: Color = #1976d2
+) {
+    \let span_range: Float = max(0.000001, slider_max - slider_min);
+    \let ratio: Float = clamp((value - slider_min) / span_range, 0, 1);
+    \let usable_w: Distance = max(0px, slider_width - slider_thumb_size);
+    \let cx: Distance = slider_x + (slider_thumb_size / 2) + (ratio * usable_w);
+    \let cy: Distance = slider_y + (slider_control_h / 2);
+
+    \let is_inverted = slider_track == SliderTrack.Inverted;
+    \let is_hidden = (slider_track == SliderTrack.Hidden) || (slider_track == SliderTrack.None);
+    \let is_active = !is_hidden && (is_inverted ? (value >= (slider_value - 0.0001)) : (value <= (slider_value + 0.0001)));
+
+    \let tick_color: Color = is_active
+        ? #ffffffcc
+        : (slider_disabled ? #bdbdbd : slider_color_main);
+
+    \let has_label = label != "";
+    \let label_color: Color = slider_disabled
+        ? #00000061
+        : (is_active ? #000000de : #00000099);
+
+    \let mark_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+
+    \let label_w: Distance = has_label ? mark_label.width : 0px;
+    \let label_h: Distance = has_label ? mark_label.height : 0px;
+    \let label_x: Distance = cx - (label_w / 2);
+    \let label_y: Distance = slider_y + slider_control_h + 2px;
+
+    \let resolved_x: Distance = has_label ? label_x : (cx - 1px);
+    \let resolved_w: Distance = has_label ? max(2px, label_w) : 2px;
+    \let resolved_h: Distance = has_label ? (label_h + 4px) : 0px;
+
+    \alias x = resolved_x;
+    \alias y = cy - 1px;
+    \alias width = resolved_w;
+    \alias height = resolved_h;
+    \alias right = resolved_x + resolved_w;
+    \alias bottom = has_label ? (label_y + label_h) : (cy + 1px);
+
+    \Rect(
+        x: cx - 1px,
+        y: cy - 1px,
+        width: 2px,
+        height: 2px,
+        radius: 1px,
+        color: tick_color
+    )
+
+    \let mark_label = \Text(
+        x: label_x,
+        y: label_y,
+        font: mark_font,
+        color: has_label ? label_color : #00000000,
+        text_bounds: slider_text_bounds,
+        text: label
+    );
+}
+
+// 2. SliderMark without `label` prop (tick-only `\SliderMark(value: 20)` or child text `\SliderMark(value: 20) { 20°C }`)
+\Component SliderMark(
+    value: Float,
+    env font: Font = \Font(size: 16px),
+    env slider_x: Distance = parent.left,
+    env slider_y: Distance = parent.top,
+    env slider_width: Distance = 200px,
+    env slider_control_h: Distance = 30px,
+    env slider_thumb_size: Distance = 20px,
+    env slider_min: Float = 0,
+    env slider_max: Float = 100,
+    env slider_value: Float = 0,
+    env slider_track: SliderTrack = SliderTrack.Normal,
+    env slider_disabled: Boolean = false,
+    env slider_color_main: Color = #1976d2
+) {
+    \let span_range: Float = max(0.000001, slider_max - slider_min);
+    \let ratio: Float = clamp((value - slider_min) / span_range, 0, 1);
+    \let usable_w: Distance = max(0px, slider_width - slider_thumb_size);
+    \let cx: Distance = slider_x + (slider_thumb_size / 2) + (ratio * usable_w);
+    \let cy: Distance = slider_y + (slider_control_h / 2);
+
+    \let is_inverted = slider_track == SliderTrack.Inverted;
+    \let is_hidden = (slider_track == SliderTrack.Hidden) || (slider_track == SliderTrack.None);
+    \let is_active = !is_hidden && (is_inverted ? (value >= (slider_value - 0.0001)) : (value <= (slider_value + 0.0001)));
+
+    \let tick_color: Color = is_active
+        ? #ffffffcc
+        : (slider_disabled ? #bdbdbd : slider_color_main);
+
+    \let has_label = children.len > 0;
+    \let label_color: Color = slider_disabled
+        ? #00000061
+        : (is_active ? #000000de : #00000099);
+
+    \let mark_font = \Font(
+        font: font,
+        size: 14px,
+        weight: 400,
+        line_height: 20px
+    );
+
+    \let label_w: Distance = has_label ? mark_label.width : 0px;
+    \let label_h: Distance = has_label ? mark_label.height : 0px;
+    \let label_x: Distance = cx - (label_w / 2);
+    \let label_y: Distance = slider_y + slider_control_h + 2px;
+
+    \let resolved_x: Distance = has_label ? label_x : (cx - 1px);
+    \let resolved_w: Distance = has_label ? max(2px, label_w) : 2px;
+    \let resolved_h: Distance = has_label ? (label_h + 4px) : 0px;
+
+    \alias x = resolved_x;
+    \alias y = cy - 1px;
+    \alias width = resolved_w;
+    \alias height = resolved_h;
+    \alias right = resolved_x + resolved_w;
+    \alias bottom = has_label ? (label_y + label_h) : (cy + 1px);
+
+    \Rect(
+        x: cx - 1px,
+        y: cy - 1px,
+        width: 2px,
+        height: 2px,
+        radius: 1px,
+        color: tick_color
+    )
+
+    \let mark_label = \Text(
+        x: label_x,
+        y: label_y,
+        font: mark_font,
+        color: has_label ? label_color : #00000000,
+        text_bounds: slider_text_bounds
+    ) {
+        \Children
+    };
+}
+
+// ============================================================================
+// Slider
+// ============================================================================
+
+\Component Slider(
+    env font: Font = \Font(size: 16px),
+    env inherit_color: Color = #212121,
+    width: Distance = 200px,
+    min_height: Distance = 0px,
+    min: Float = 0,
+    max: Float = 100,
+    value: Float = 0,
+    step: Float = 0,
+    marks: Boolean = false,
+    track: SliderTrack = SliderTrack.Normal,
+    value_label_display: SliderValueLabelDisplay = SliderValueLabelDisplay.Off,
+    value_label: String = "",
+    value_label_decimals: Integer = 0,
+    color: MaterialColor = MaterialColor.Primary,
+    size: SliderSize = SliderSize.Medium,
+    disabled: Boolean = false,
+    controlled: Boolean = false,
+    track_height: Distance = 0px,
+    thumb_size: Distance = 0px,
+    rail_color: Color = #00000000,
+    track_color: Color = #00000000,
+    fill_color: Color = #00000000,
+    thumb_color: Color = #00000000,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    on_change: Handler = unset,
+    on_click: Handler = self.click,
+    on_focus: Handler = disabled ? unset : self.focus,
+    on_blur: Handler = self.blur,
+    on_pointer_enter: Handler = self.pointer_enter,
+    on_pointer_leave: Handler = self.pointer_leave,
+    on_pointer_down: Handler = self.pointer_down,
+    on_pointer_move: Handler = self.pointer_move,
+    on_pointer_up: Handler = self.pointer_up
+) {
+    \state current_value: Float = value;
+    \state hovered: Boolean = false;
+    \state focused: Boolean = false;
+    \state pressed: Boolean = false;
+
+    \let on_click: Handler = disabled ? self.click : self.on_click;
+
+    \let is_small = size == SliderSize.Small;
+    \let default_control_h: Distance = is_small ? 24px : 30px;
+    \alias control_h: Distance = max(min_height, default_control_h);
+    \let rail_h: Distance = (track_height > 0px) ? track_height : (is_small ? 2px : 4px);
+    \alias resolved_thumb_size: Distance = (thumb_size > 0px) ? thumb_size : (is_small ? 12px : 20px);
+    \let halo_size: Distance = is_small
+        ? (pressed ? 32px : 28px)
+        : (pressed ? 42px : 36px);
+
+    \let is_primary = color == MaterialColor.Primary;
+    \let is_secondary = color == MaterialColor.Secondary;
+    \let is_success = color == MaterialColor.Success;
+    \let is_error = color == MaterialColor.Error;
+    \let is_info = color == MaterialColor.Info;
+    \let is_warning = color == MaterialColor.Warning;
+    \let is_light_inherit = (color == MaterialColor.Inherit) && (inherit_color == #ffffff);
+
+    \alias ch_main: Color = is_primary ? #1976d2 : (
+        is_secondary ? #9c27b0 : (
+            is_success ? #2e7d32 : (
+                is_error ? #d32f2f : (
+                    is_info ? #0288d1 : (
+                        is_warning ? #ed6c02 : inherit_color
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_rail = is_primary ? #1976d261 : (
+        is_secondary ? #9c27b061 : (
+            is_success ? #2e7d3261 : (
+                is_error ? #d32f2f61 : (
+                    is_info ? #0288d161 : (
+                        is_warning ? #ed6c0261 : (is_light_inherit ? #ffffff61 : #21212161)
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_hover_bg = is_primary ? #1976d20a : (
+        is_secondary ? #9c27b00a : (
+            is_success ? #2e7d320a : (
+                is_error ? #d32f2f0a : (
+                    is_info ? #0288d10a : (
+                        is_warning ? #ed6c020a : (is_light_inherit ? #ffffff14 : #0000000a)
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_focus_bg = is_primary ? #1976d21f : (
+        is_secondary ? #9c27b01f : (
+            is_success ? #2e7d321f : (
+                is_error ? #d32f2f1f : (
+                    is_info ? #0288d11f : (
+                        is_warning ? #ed6c021f : (is_light_inherit ? #ffffff26 : #0000001f)
+                    )
+                )
+            )
+        )
+    );
+
+    \let ch_active_bg = is_primary ? #1976d229 : (
+        is_secondary ? #9c27b029 : (
+            is_success ? #2e7d3229 : (
+                is_error ? #d32f2f29 : (
+                    is_info ? #0288d129 : (
+                        is_warning ? #ed6c0229 : (is_light_inherit ? #ffffff33 : #00000029)
+                    )
+                )
+            )
+        )
+    );
+
+    \let custom_rail_color: Color = (rail_color != #00000000)
+        ? rail_color
+        : ((fill_color != #00000000 && track_color != #00000000) ? track_color : #00000000);
+    \let custom_fill_color: Color = (fill_color != #00000000)
+        ? fill_color
+        : ((rail_color == #00000000 && track_color != #00000000) ? track_color : #00000000);
+
+    \let is_track_inverted = track == SliderTrack.Inverted;
+    \let is_track_hidden = (track == SliderTrack.Hidden) || (track == SliderTrack.None);
+
+    \let resolved_rail_color: Color = disabled
+        ? #0000001f
+        : ((custom_rail_color != #00000000) ? custom_rail_color : ch_rail);
+    \let resolved_track_color: Color = is_track_hidden
+        ? #00000000
+        : (disabled
+            ? #bdbdbd
+            : ((custom_fill_color != #00000000) ? custom_fill_color : ch_main));
+    \let resolved_thumb_color: Color = disabled
+        ? #bdbdbd
+        : ((thumb_color != #00000000) ? thumb_color : ch_main);
+    \let halo_color: Color = disabled
+        ? #00000000
+        : (pressed
+            ? ch_active_bg
+            : (focused
+                ? ch_focus_bg
+                : (hovered ? ch_hover_bg : #00000000)));
+
+    \let raw_val: Float = controlled ? value : current_value;
+    \let span_range: Float = max(0.000001, max - min);
+    \let clamped_val: Float = clamp(raw_val, min, max);
+    \let eff_step: Float = (step > 0) ? step : 1;
+    \let snapped_val: Float = (step > 0)
+        ? clamp(min + (round((clamped_val - min) / eff_step) * eff_step), min, max)
+        : clamped_val;
+    \alias active_value: Float = snapped_val;
+
+    \let ratio: Float = clamp((snapped_val - min) / span_range, 0, 1);
+    \let usable_w: Distance = max(0px, width - resolved_thumb_size);
+
+    \let control_cy: Distance = y + (control_h / 2);
+    \let rail_y: Distance = control_cy - (rail_h / 2);
+
+    \let active_track_x: Distance = is_track_inverted ? (x + (ratio * width)) : x;
+    \let active_track_w: Distance = is_track_hidden
+        ? 0px
+        : (is_track_inverted ? ((1 - ratio) * width) : (ratio * width));
+
+    \let thumb_x: Distance = x + (ratio * usable_w);
+    \let thumb_y: Distance = control_cy - (resolved_thumb_size / 2);
+    \let thumb_cx: Distance = thumb_x + (resolved_thumb_size / 2);
+
+    \let halo_x: Distance = thumb_cx - (halo_size / 2);
+    \let halo_y: Distance = control_cy - (halo_size / 2);
+
+    \let marks_extra_h: Distance = children.len > 0 ? max(children.height) : 0px;
+    \let resolved_h: Distance = control_h + marks_extra_h;
+
+    \let show_value_label = (value_label_display == SliderValueLabelDisplay.On)
+        || ((value_label_display == SliderValueLabelDisplay.Auto) && (hovered || focused || pressed));
+    \let formatted_value_label: String = (value_label != "")
+        ? value_label
+        : to_fixed(snapped_val, value_label_decimals);
+
+    \env slider_x = x;
+    \env slider_y = y;
+    \env slider_width = width;
+    \env slider_control_h = control_h;
+    \env slider_thumb_size = resolved_thumb_size;
+    \env slider_min = min;
+    \env slider_max = max;
+    \env slider_value = active_value;
+    \env slider_track = track;
+    \env slider_disabled = disabled;
+    \env slider_color_main = ch_main;
+
+    \alias right = x + width;
+    \alias height = resolved_h;
+    \alias bottom = y + resolved_h;
+
+    \let thumb_shadow = \Shadow(
+        offset_x: 0px,
+        offset_y: disabled ? 0px : 1px,
+        blur: disabled ? 0px : 3px,
+        spread: 0px,
+        color: disabled ? #00000000 : #0000003d
+    );
+
+    // 1. Inactive rail background
+    \let rail_rect = \Rect(
+        x: x,
+        y: rail_y,
+        width: width,
+        height: rail_h,
+        radius: rail_h / 2,
+        color: resolved_rail_color
+    );
+
+    // 2. Active filled track
+    \let active_track_rect = \Rect(
+        x: active_track_x,
+        y: rail_y,
+        width: active_track_w,
+        height: rail_h,
+        radius: rail_h / 2,
+        color: resolved_track_color
+    );
+
+    // 3. Automatic discrete step marks (when `marks: true` and `step > 0`)
+    \SliderStepMarks(
+        enabled: marks && (step > 0),
+        x: x,
+        cy: control_cy,
+        width: width,
+        thumb_size: resolved_thumb_size,
+        min: min,
+        max: max,
+        step: step,
+        value: snapped_val,
+        track: track,
+        disabled: disabled,
+        color_main: ch_main
+    )
+
+    // 4. Custom child marks (\SliderMark)
+    \Children
+
+    // 5. Hover / Focus / Active circular thumb halo
+    \let halo_rect = \Rect(
+        x: halo_x,
+        y: halo_y,
+        width: halo_size,
+        height: halo_size,
+        radius: halo_size / 2,
+        color: halo_color
+    );
+
+    // 6. Draggable circular thumb knob
+    \let thumb_rect = \Rect(
+        x: thumb_x,
+        y: thumb_y,
+        width: resolved_thumb_size,
+        height: resolved_thumb_size,
+        radius: resolved_thumb_size / 2,
+        color: resolved_thumb_color,
+        shadow: thumb_shadow
+    );
+
+    // 7. Floating value label badge (Off / Auto / On)
+    \SliderValueLabel(
+        visible: show_value_label,
+        text: formatted_value_label,
+        cx: thumb_cx,
+        thumb_top_y: thumb_y,
+        disabled: disabled
+    )
+
+    // 8. Full interactive hit area covering slider bounds
+    \let hit_area = \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: resolved_h,
+        color: #00000000
+    );
+}
