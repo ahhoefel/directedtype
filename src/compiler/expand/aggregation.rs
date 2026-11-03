@@ -623,6 +623,36 @@ fn fold_const_ternaries(
     }
 }
 
+fn expr_contains_agg_prefix(expr: &Expr, agg_prefix: &str) -> bool {
+    match expr {
+        Expr::Ident(id) => id.as_str().starts_with(agg_prefix),
+        Expr::MemberAccess(m) => expr_contains_agg_prefix(&m.target, agg_prefix),
+        Expr::Call(c) => c
+            .args
+            .iter()
+            .any(|a| expr_contains_agg_prefix(a, agg_prefix)),
+        Expr::MethodCall(mc) => {
+            expr_contains_agg_prefix(&mc.target, agg_prefix)
+                || mc
+                    .args
+                    .iter()
+                    .any(|a| expr_contains_agg_prefix(a, agg_prefix))
+        }
+        Expr::Binary(b) => {
+            expr_contains_agg_prefix(&b.left, agg_prefix)
+                || expr_contains_agg_prefix(&b.right, agg_prefix)
+        }
+        Expr::Unary(u) => expr_contains_agg_prefix(&u.operand, agg_prefix),
+        Expr::Ternary(t) => {
+            expr_contains_agg_prefix(&t.condition, agg_prefix)
+                || expr_contains_agg_prefix(&t.then_expr, agg_prefix)
+                || expr_contains_agg_prefix(&t.else_expr, agg_prefix)
+        }
+        Expr::Paren(inner, _) => expr_contains_agg_prefix(inner, agg_prefix),
+        Expr::Literal(_) | Expr::Node(_) => false,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn resolve_and_filter_component_aggregations(
     comp_id: NodeId,
@@ -703,6 +733,9 @@ pub(super) fn resolve_and_filter_component_aggregations(
     let mut comp_unfiltered_ports = HashMap::new();
     let mut comp_skipped_upstream = HashMap::new();
     for (port_name, expr) in rewritten_ports.iter_mut() {
+        if !expr_contains_agg_prefix(expr, &agg_prefix) {
+            continue;
+        }
         let mut skipped_vars = Vec::new();
         let (filt, unfilt) = resolve_and_filter_agg_expr(
             expr,
@@ -727,38 +760,41 @@ pub(super) fn resolve_and_filter_component_aggregations(
         node.skipped_upstream = comp_skipped_upstream;
     }
 
-    let nodes_snapshot = doc.nodes.clone();
+    let mut node_updates = Vec::new();
     for node_idx in start_node_idx..doc.nodes.len() {
-        let node = &mut doc.nodes[node_idx];
-        let mut node_unfilt = HashMap::new();
-        let mut node_skipped = HashMap::new();
-        for (port_name, expr) in node.ports.iter_mut() {
-            let mut skipped_vars = Vec::new();
-            let (filt, unfilt) = resolve_and_filter_agg_expr(
-                expr,
-                comp_id,
-                comp_name,
-                &agg_prefix,
-                instantiated_children_ids,
-                &parent_ports_by_member,
-                &nodes_snapshot,
-                &mut skipped_vars,
-            )?;
-            *expr = filt;
-            if !skipped_vars.is_empty() {
-                node_unfilt.insert(port_name.clone(), unfilt);
-                node_skipped.insert(port_name.clone(), skipped_vars);
+        for (port_name, expr) in &doc.nodes[node_idx].ports {
+            if expr_contains_agg_prefix(expr, &agg_prefix) {
+                let mut skipped_vars = Vec::new();
+                let (filt, unfilt) = resolve_and_filter_agg_expr(
+                    expr,
+                    comp_id,
+                    comp_name,
+                    &agg_prefix,
+                    instantiated_children_ids,
+                    &parent_ports_by_member,
+                    &doc.nodes,
+                    &mut skipped_vars,
+                )?;
+                node_updates.push((node_idx, port_name.clone(), filt, unfilt, skipped_vars));
             }
         }
-        node.unfiltered_ports.extend(node_unfilt);
-        node.skipped_upstream.extend(node_skipped);
+    }
+    for (node_idx, port_name, filt, unfilt, skipped_vars) in node_updates {
+        let node = &mut doc.nodes[node_idx];
+        node.ports.insert(port_name.clone(), filt);
+        if !skipped_vars.is_empty() {
+            node.unfiltered_ports.insert(port_name.clone(), unfilt);
+            node.skipped_upstream.insert(port_name, skipped_vars);
+        }
     }
 
     for binding_idx in start_local_bindings_idx..doc.local_bindings.len() {
-        let (expr, _, _) = &mut doc.local_bindings[binding_idx];
+        if !expr_contains_agg_prefix(&doc.local_bindings[binding_idx].0, &agg_prefix) {
+            continue;
+        }
         let mut skipped_vars = Vec::new();
         let (filt, _) = resolve_and_filter_agg_expr(
-            expr,
+            &doc.local_bindings[binding_idx].0,
             comp_id,
             comp_name,
             &agg_prefix,
@@ -767,7 +803,7 @@ pub(super) fn resolve_and_filter_component_aggregations(
             &doc.nodes,
             &mut skipped_vars,
         )?;
-        *expr = filt;
+        doc.local_bindings[binding_idx].0 = filt;
     }
 
     Ok(())

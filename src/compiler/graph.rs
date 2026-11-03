@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 /// Unique identifier for a variable / port in the layout graph: `(NodeId, PortName)`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VarId {
     pub node: NodeId,
     pub port: String,

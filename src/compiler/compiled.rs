@@ -4,7 +4,9 @@ use crate::compiler::eval::{evaluate_graph_with_state, invalidate_and_reevaluate
 use crate::compiler::expand::expand_document_with_resolver;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::graph::{build_variable_graph_with_window, VarId, VariableGraph};
-use crate::compiler::layout::{resolve_layout, update_resolved_layout, ResolvedLayout, ResolvedNode};
+use crate::compiler::layout::{
+    resolve_layout_with_graph, update_resolved_layout, ResolvedLayout, ResolvedNode,
+};
 use crate::compiler::module::{FileResolver, FsResolver};
 use crate::compiler::scope::ScopeId;
 use crate::compiler::topo::{sort_graph, TopologicalSchedule};
@@ -100,8 +102,7 @@ impl CompiledDocument {
         let schedule = sort_graph(&graph)?;
         let state_overrides = HashMap::new();
         let values = evaluate_graph_with_state(&graph, &schedule, &state_overrides)?;
-        let mut layout = resolve_layout(&expanded, values);
-        layout.graph = Some(graph.clone());
+        let layout = resolve_layout_with_graph(&expanded, values, Some(graph.clone()));
         let active_timers = Self::collect_active_timers(&layout.values);
 
         Ok(Self {

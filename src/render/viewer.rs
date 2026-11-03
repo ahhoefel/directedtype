@@ -3918,6 +3918,22 @@ pub fn run_viewer_with_document(
     run_viewer_app(&mut app, None)
 }
 
+/// Launches an interactive window viewer using an already-compiled `CompiledDocument`,
+/// watching `file_path` on disk for live hot-reloads.
+pub fn run_viewer_with_compiled_file(
+    file_path: PathBuf,
+    doc: Document,
+    compiled: CompiledDocument,
+    registry: ComponentRegistry,
+    config: ViewerConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut app = ViewerApp::new_with_compiled(compiled, config)
+        .with_document(doc)
+        .with_watch_path(file_path.clone())
+        .with_registry(registry);
+    run_viewer_app(&mut app, Some(&file_path))
+}
+
 /// Launches an interactive window viewer watching a source file on disk, hot-reloading on changes,
 /// and wiring a `ComponentRegistry` for companion component lifecycle and event dispatching.
 pub fn run_viewer_with_file_and_registry(
@@ -3941,11 +3957,7 @@ pub fn run_viewer_with_file_and_registry(
         &resolver,
         &registry,
     )?;
-    let mut app = ViewerApp::new_with_compiled(compiled, config)
-        .with_document(doc)
-        .with_watch_path(file_path.clone())
-        .with_registry(registry);
-    run_viewer_app(&mut app, Some(&file_path))
+    run_viewer_with_compiled_file(file_path, doc, compiled, registry, config)
 }
 
 /// Launches an interactive window viewer watching a source file on disk, hot-reloading on changes.

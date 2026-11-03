@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use directedtype::parser::parse_document_with_file;
 use directedtype::render::{
-    run_viewer_with_file, HeadlessRenderer, SceneOptions, ViewerConfig,
+    run_viewer_with_compiled_file, HeadlessRenderer, SceneOptions, ViewerConfig,
 };
 use vello::peniko::Color;
 
@@ -90,7 +90,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     registry.auto_discover_wasm(&file_path, &resolver);
     registry.auto_discover_wasm_for_document(&doc, &file_path, &resolver);
 
-    println!("Evaluating DAG layout ({}x{})...", width, height);
+    use std::io::Write;
+    print!("Evaluating DAG layout ({}x{})...", width, height);
+    let _ = std::io::stdout().flush();
+    let eval_start = std::time::Instant::now();
     let compiled = directedtype::compiler::CompiledDocument::compile_with_registry(
         &doc,
         width as f64,
@@ -100,6 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &registry,
     )
     .map_err(|e| format!("Layout evaluation error in '{}': {e}", file_path.display()))?;
+    println!(" {:.2}s", eval_start.elapsed().as_secs_f64());
     let layout = compiled.layout();
 
     println!(
@@ -139,7 +143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             show_nav_bar: true,
             ..Default::default()
         };
-        run_viewer_with_file(file_path, config)?;
+        run_viewer_with_compiled_file(file_path, doc, compiled, registry, config)?;
     }
 
     Ok(())

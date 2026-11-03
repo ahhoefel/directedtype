@@ -99,6 +99,28 @@ pub(super) fn resolve_forward_scope_refs(
     }
 }
 
+fn expr_has_scope_ref(expr: &Expr, scope: &HashMap<String, LexicalBinding>) -> bool {
+    match expr {
+        Expr::Ident(id) => scope.contains_key(id.as_str()),
+        Expr::MemberAccess(m) => expr_has_scope_ref(&m.target, scope),
+        Expr::Binary(b) => expr_has_scope_ref(&b.left, scope) || expr_has_scope_ref(&b.right, scope),
+        Expr::Unary(u) => expr_has_scope_ref(&u.operand, scope),
+        Expr::Ternary(t) => {
+            expr_has_scope_ref(&t.condition, scope)
+                || expr_has_scope_ref(&t.then_expr, scope)
+                || expr_has_scope_ref(&t.else_expr, scope)
+        }
+        Expr::Paren(inner, _) => expr_has_scope_ref(inner, scope),
+        Expr::Call(c) => c.args.iter().any(|a| expr_has_scope_ref(a, scope)),
+        Expr::MethodCall(m) => {
+            expr_has_scope_ref(&m.target, scope)
+                || m.args.iter().any(|a| expr_has_scope_ref(a, scope))
+        }
+        Expr::Node(n) => n.ports.iter().any(|p| expr_has_scope_ref(&p.expr, scope)),
+        _ => false,
+    }
+}
+
 /// Resolves forward lexical scope references in node ports and local bindings starting from the given indices.
 pub(super) fn resolve_forward_refs_in_range(
     doc: &mut crate::compiler::expanded::ExpandedDocument,
@@ -106,13 +128,20 @@ pub(super) fn resolve_forward_refs_in_range(
     start_binding_idx: usize,
     scope: &HashMap<String, LexicalBinding>,
 ) {
+    if scope.is_empty() {
+        return;
+    }
     for node in &mut doc.nodes[start_node_idx..] {
         for expr in node.ports.values_mut() {
-            *expr = resolve_forward_scope_refs(expr, scope);
+            if expr_has_scope_ref(expr, scope) {
+                *expr = resolve_forward_scope_refs(expr, scope);
+            }
         }
     }
     for (expr, _, _) in &mut doc.local_bindings[start_binding_idx..] {
-        *expr = resolve_forward_scope_refs(expr, scope);
+        if expr_has_scope_ref(expr, scope) {
+            *expr = resolve_forward_scope_refs(expr, scope);
+        }
     }
 }
 

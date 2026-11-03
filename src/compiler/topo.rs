@@ -1,7 +1,8 @@
 use crate::compiler::error::CompileError;
 use crate::compiler::graph::{VarId, VariableGraph};
 use crate::span::Span;
-use std::collections::{HashMap, HashSet};
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 /// A deterministic, topologically sorted execution schedule for all variables in the graph.
 #[derive(Debug, Clone, PartialEq)]
@@ -33,42 +34,28 @@ pub fn sort_graph(graph: &VariableGraph) -> Result<TopologicalSchedule, CompileE
         in_degrees.insert(var_id.clone(), graph.in_degree(var_id));
     }
 
-    // 2. Queue all variables with in-degree 0
-    let mut ready: Vec<VarId> = in_degrees
+    // 2. Queue all variables with in-degree 0 in a min-heap ordered by canonical string
+    let mut ready: BinaryHeap<Reverse<(String, VarId)>> = in_degrees
         .iter()
         .filter(|(_, &deg)| deg == 0)
-        .map(|(v, _)| v.clone())
+        .map(|(v, _)| Reverse((v.to_string(), v.clone())))
         .collect();
-
-    // Sort ready queue in reverse canonical order so `pop()` yields ascending canonical order
-    ready.sort_by_key(|v| v.to_string());
-    ready.reverse();
 
     let mut order = Vec::with_capacity(graph.variables.len());
 
     // 3. Process ready queue
-    while let Some(current) = ready.pop() {
-        order.push(current.clone());
-
+    while let Some(Reverse((_, current))) = ready.pop() {
         if let Some(downstream_list) = graph.downstream.get(&current) {
-            let mut newly_ready = Vec::new();
-
             for downstream in downstream_list {
                 if let Some(deg) = in_degrees.get_mut(downstream) {
                     *deg = deg.saturating_sub(1);
                     if *deg == 0 {
-                        newly_ready.push(downstream.clone());
+                        ready.push(Reverse((downstream.to_string(), downstream.clone())));
                     }
                 }
             }
-
-            // Insert newly ready variables maintaining deterministic order
-            if !newly_ready.is_empty() {
-                ready.extend(newly_ready);
-                ready.sort_by_key(|v| v.to_string());
-                ready.reverse();
-            }
         }
+        order.push(current);
     }
 
     // 4. Check for cycles

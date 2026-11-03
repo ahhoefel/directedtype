@@ -278,6 +278,11 @@ impl ResolvedLayout {
     }
 
     pub fn get_node(&self, id: NodeId) -> Option<&ResolvedNode> {
+        if let Some(n) = self.nodes.get(id.0) {
+            if n.id == id {
+                return Some(n);
+            }
+        }
         self.nodes.iter().find(|n| n.id == id)
     }
 
@@ -446,8 +451,6 @@ impl ResolvedLayout {
             let test_point = Point::new(point.x + sx, point.y + sy);
 
             // Check primitive geometry
-            let radii = extract_corner_radii(&node.properties);
-
             if !node.fragments.is_empty() {
                 let hits_fragment = node.fragments.iter().any(|frag| {
                     test_point.x >= frag.x && test_point.x <= frag.x + frag.width
@@ -456,8 +459,14 @@ impl ResolvedLayout {
                 if !hits_fragment {
                     continue;
                 }
-            } else if !rounded_rect_radii_contains(&node.rect, radii, test_point) {
-                continue;
+            } else {
+                if !node.rect.contains_point(test_point) {
+                    continue;
+                }
+                let radii = extract_corner_radii(&node.properties);
+                if !rounded_rect_radii_contains(&node.rect, radii, test_point) {
+                    continue;
+                }
             }
 
             let bubble_path = self.bubble_path_for_node(node.id);
@@ -703,12 +712,26 @@ pub fn resolve_layout(
     doc: &ExpandedDocument,
     values: HashMap<VarId, Value>,
 ) -> ResolvedLayout {
-    let mut resolved_nodes = Vec::with_capacity(doc.nodes.len());
+    resolve_layout_with_graph(doc, values, None)
+}
 
-    for node in &doc.nodes {
+pub fn resolve_layout_with_graph(
+    doc: &ExpandedDocument,
+    values: HashMap<VarId, Value>,
+    prebuilt_graph: Option<VariableGraph>,
+) -> ResolvedLayout {
+    let mut resolved_nodes = Vec::with_capacity(doc.nodes.len());
+    let mut props_by_node: Vec<HashMap<String, Value>> = vec![HashMap::new(); doc.nodes.len()];
+    for (var_id, val) in &values {
+        if let Some(map) = props_by_node.get_mut(var_id.node.0) {
+            map.insert(var_id.port.clone(), val.clone());
+        }
+    }
+
+    for (node, properties) in doc.nodes.iter().zip(props_by_node.into_iter()) {
         let get_num = |port: &str| -> f64 {
-            values
-                .get(&VarId::new(node.id, port))
+            properties
+                .get(port)
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0)
         };
@@ -718,13 +741,6 @@ pub fn resolve_layout(
         let width = get_num("width");
         let height = get_num("height");
         let z = get_num("z");
-
-        let mut properties = HashMap::new();
-        for (var_id, val) in &values {
-            if var_id.node == node.id {
-                properties.insert(var_id.port.clone(), val.clone());
-            }
-        }
 
         let clip = values
             .get(&VarId::new(node.id, "clip"))
@@ -861,7 +877,7 @@ pub fn resolve_layout(
         });
     }
 
-    let graph = crate::compiler::graph::build_variable_graph(doc).ok();
+    let graph = prebuilt_graph.or_else(|| crate::compiler::graph::build_variable_graph(doc).ok());
     let mut layout = ResolvedLayout {
         roots: doc.roots.clone(),
         nodes: resolved_nodes,
@@ -885,11 +901,25 @@ pub fn update_resolved_layout(
         return;
     }
 
-    let affected_node_ids: std::collections::HashSet<NodeId> =
-        changed_vars.iter().map(|v| v.node).collect();
+    let mut vars_by_node: HashMap<NodeId, Vec<&VarId>> = HashMap::new();
+    for var_id in changed_vars {
+        vars_by_node.entry(var_id.node).or_default().push(var_id);
+    }
+
+    let mut needs_inline_projection = false;
 
     for node in &mut layout.nodes {
-        if affected_node_ids.contains(&node.id) {
+        if let Some(node_vars) = vars_by_node.get(&node.id) {
+            if node.text_content.is_some()
+                || !node.text_spans.is_empty()
+                || !node.inline_boxes.is_empty()
+                || node.is_inline_box
+                || !node.fragments.is_empty()
+                || node.name == "Font"
+            {
+                needs_inline_projection = true;
+            }
+
             let get_num = |port: &str| -> f64 {
                 layout
                     .values
@@ -904,11 +934,9 @@ pub fn update_resolved_layout(
             node.rect.height = get_num("height");
             node.z = get_num("z");
 
-            for var_id in changed_vars {
-                if var_id.node == node.id {
-                    if let Some(val) = layout.values.get(var_id) {
-                        node.properties.insert(var_id.port.clone(), val.clone());
-                    }
+            for &var_id in node_vars {
+                if let Some(val) = layout.values.get(var_id) {
+                    node.properties.insert(var_id.port.clone(), val.clone());
                 }
             }
 
@@ -919,6 +947,9 @@ pub fn update_resolved_layout(
                 .filter(|id| !id.is_window());
 
             if let Some(expanded_node) = doc.get_node(node.id) {
+                if expanded_node.is_span || expanded_node.is_inline_box {
+                    needs_inline_projection = true;
+                }
                 for (port_name, expr) in &expanded_node.ports {
                     if port_name.starts_with("on_")
                         || expanded_node
@@ -944,53 +975,63 @@ pub fn update_resolved_layout(
             }
         }
 
-        // Re-evaluate structured component keys if the node has a key
+        // Re-evaluate structured component keys if the node has a dynamic key expression
         if let Some(expanded_node) = doc.get_node(node.id) {
             if let Some(k) = &expanded_node.key {
-                let resolved_parts = k
-                    .parts
-                    .iter()
-                    .map(|part| {
-                        if let Ok(val) = eval_expr(part, &layout.values) {
-                            match val {
-                                Value::Integer(i) => {
-                                    Expr::Literal(Literal::Integer(i, part.span()))
+                if k.parts.iter().any(|p| !matches!(p, Expr::Literal(_))) {
+                    let resolved_parts = k
+                        .parts
+                        .iter()
+                        .map(|part| {
+                            if let Ok(val) = eval_expr(part, &layout.values) {
+                                match val {
+                                    Value::Integer(i) => {
+                                        Expr::Literal(Literal::Integer(i, part.span()))
+                                    }
+                                    Value::Float(n) => {
+                                        Expr::Literal(Literal::Float(n, part.span()))
+                                    }
+                                    Value::Distance(d) => Expr::Literal(Literal::Distance(
+                                        d,
+                                        crate::ast::DistanceUnit::Px,
+                                        part.span(),
+                                    )),
+                                    Value::Area(a) => Expr::Literal(Literal::Area(
+                                        a,
+                                        crate::ast::DistanceUnit::Px,
+                                        part.span(),
+                                    )),
+                                    Value::Duration(d) => Expr::Literal(Literal::Duration(
+                                        d,
+                                        crate::ast::DurationUnit::S,
+                                        part.span(),
+                                    )),
+                                    Value::String(s) => {
+                                        Expr::Literal(Literal::String(s, part.span()))
+                                    }
+                                    Value::Bool(b) => Expr::Literal(Literal::Bool(b, part.span())),
+                                    Value::Color(c) => {
+                                        Expr::Literal(Literal::Color(c, part.span()))
+                                    }
+                                    Value::Enum { enum_name, variant } => {
+                                        Expr::Literal(Literal::Enum(enum_name, variant, part.span()))
+                                    }
+                                    _ => part.clone(),
                                 }
-                                Value::Float(n) => Expr::Literal(Literal::Float(n, part.span())),
-                                Value::Distance(d) => Expr::Literal(Literal::Distance(
-                                    d,
-                                    crate::ast::DistanceUnit::Px,
-                                    part.span(),
-                                )),
-                                Value::Area(a) => Expr::Literal(Literal::Area(
-                                    a,
-                                    crate::ast::DistanceUnit::Px,
-                                    part.span(),
-                                )),
-                                Value::Duration(d) => Expr::Literal(Literal::Duration(
-                                    d,
-                                    crate::ast::DurationUnit::S,
-                                    part.span(),
-                                )),
-                                Value::String(s) => Expr::Literal(Literal::String(s, part.span())),
-                                Value::Bool(b) => Expr::Literal(Literal::Bool(b, part.span())),
-                                Value::Color(c) => Expr::Literal(Literal::Color(c, part.span())),
-                                Value::Enum { enum_name, variant } => {
-                                    Expr::Literal(Literal::Enum(enum_name, variant, part.span()))
-                                }
-                                _ => part.clone(),
+                            } else {
+                                part.clone()
                             }
-                        } else {
-                            part.clone()
-                        }
-                    })
-                    .collect();
-                node.key = Some(ComponentKey::new(resolved_parts, k.span));
+                        })
+                        .collect();
+                    node.key = Some(ComponentKey::new(resolved_parts, k.span));
+                }
             }
         }
     }
 
-    project_inline_fragments(layout);
+    if needs_inline_projection {
+        project_inline_fragments(layout);
+    }
 }
 
 /// Projects Parley line fragments and post-shaping metrics onto inline child nodes within rich text blocks.

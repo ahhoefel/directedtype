@@ -14,7 +14,7 @@ pub use scene::{
     SceneOptions, SpanRenderKey, TextRenderKey, TextSceneCache,
 };
 pub use viewer::{
-    run_viewer, run_viewer_with_document, run_viewer_with_file,
+    run_viewer, run_viewer_with_compiled_file, run_viewer_with_document, run_viewer_with_file,
     run_viewer_with_file_and_registry, PendingScroll, ViewerApp, ViewerConfig, ViewerUserEvent,
 };
 

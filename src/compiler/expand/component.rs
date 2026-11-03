@@ -1490,74 +1490,80 @@ impl<'a> ComponentExpander<'a> {
             rewritten_ports,
         )?;
 
-        // Validate assertions in component body
-        let mut const_env = HashMap::new();
-        const_env.insert(
-            crate::compiler::graph::VarId::new(NodeId::WINDOW, "dpi"),
-            self.doc
-                .window_ports
-                .get("dpi")
-                .and_then(|e| eval_expr(e, &HashMap::new()).ok())
-                .unwrap_or(crate::compiler::value::Value::Float(96.0)),
-        );
-        for n in &self.doc.nodes {
-            if n.name == "Font" {
-                for fp in ["size", "weight", "family", "italic"] {
-                    if let Some(fp_expr) = n.ports.get(fp) {
-                        if let Ok(val) = eval_expr(fp_expr, &const_env) {
-                            const_env.insert(crate::compiler::graph::VarId::new(n.id, fp), val);
+        // Validate assertions in component body (only build const_env if the component actually contains \assert)
+        if comp_def
+            .body
+            .iter()
+            .any(|item| matches!(item, ComponentBodyItem::Assert(_)))
+        {
+            let mut const_env = HashMap::new();
+            const_env.insert(
+                crate::compiler::graph::VarId::new(NodeId::WINDOW, "dpi"),
+                self.doc
+                    .window_ports
+                    .get("dpi")
+                    .and_then(|e| eval_expr(e, &HashMap::new()).ok())
+                    .unwrap_or(crate::compiler::value::Value::Float(96.0)),
+            );
+            for n in &self.doc.nodes {
+                if n.name == "Font" {
+                    for fp in ["size", "weight", "family", "italic"] {
+                        if let Some(fp_expr) = n.ports.get(fp) {
+                            if let Ok(val) = eval_expr(fp_expr, &const_env) {
+                                const_env.insert(crate::compiler::graph::VarId::new(n.id, fp), val);
+                            }
                         }
                     }
                 }
             }
-        }
-        for (port_name, port_expr) in rewritten_ports.iter() {
-            if self.schema.declared_state_names.contains(port_name) {
-                continue;
-            }
-            if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, &scope_ctx) {
-                let val = match lit {
-                    Literal::Integer(i, _) => crate::compiler::value::Value::Integer(i),
-                    Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
-                    Literal::Distance(d, _, _) => crate::compiler::value::Value::Distance(d),
-                    Literal::Area(a, _, _) => crate::compiler::value::Value::Area(a),
-                    Literal::Duration(d, _, _) => {
-                        crate::compiler::value::Value::Duration(d)
+            for (port_name, port_expr) in rewritten_ports.iter() {
+                if self.schema.declared_state_names.contains(port_name) {
+                    continue;
+                }
+                if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, &scope_ctx) {
+                    let val = match lit {
+                        Literal::Integer(i, _) => crate::compiler::value::Value::Integer(i),
+                        Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
+                        Literal::Distance(d, _, _) => crate::compiler::value::Value::Distance(d),
+                        Literal::Area(a, _, _) => crate::compiler::value::Value::Area(a),
+                        Literal::Duration(d, _, _) => {
+                            crate::compiler::value::Value::Duration(d)
+                        }
+                        Literal::String(s, _) => crate::compiler::value::Value::String(s),
+                        Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
+                        Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
+                        Literal::Enum(e, v, _) => crate::compiler::value::Value::Enum {
+                            enum_name: e,
+                            variant: v,
+                        },
+                    };
+                    const_env.insert(
+                        crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name),
+                        val.clone(),
+                    );
+                    if let Some(parent) = ctx.parent_id {
+                        const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
                     }
-                    Literal::String(s, _) => crate::compiler::value::Value::String(s),
-                    Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
-                    Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
-                    Literal::Enum(e, v, _) => crate::compiler::value::Value::Enum {
-                        enum_name: e,
-                        variant: v,
-                    },
-                };
-                const_env.insert(
-                    crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name),
-                    val.clone(),
-                );
-                if let Some(parent) = ctx.parent_id {
-                    const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
-                }
-            } else if let Ok(val) = eval_expr(port_expr, &const_env) {
-                const_env.insert(
-                    crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name),
-                    val.clone(),
-                );
-                if let Some(parent) = ctx.parent_id {
-                    const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
+                } else if let Ok(val) = eval_expr(port_expr, &const_env) {
+                    const_env.insert(
+                        crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name),
+                        val.clone(),
+                    );
+                    if let Some(parent) = ctx.parent_id {
+                        const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
+                    }
                 }
             }
-        }
 
-        for item in &comp_def.body {
-            if let ComponentBodyItem::Assert(assert_dir) = item {
-                eval_assert_directive(
-                    assert_dir,
-                    &scope_ctx,
-                    &const_env,
-                    Some(&final_local_scope),
-                )?;
+            for item in &comp_def.body {
+                if let ComponentBodyItem::Assert(assert_dir) = item {
+                    eval_assert_directive(
+                        assert_dir,
+                        &scope_ctx,
+                        &const_env,
+                        Some(&final_local_scope),
+                    )?;
+                }
             }
         }
 
