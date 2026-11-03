@@ -233,7 +233,7 @@ fn test_material_switch_interactive_toggle_halo_and_on_change_callback() {
         Some(&Value::Color("#0000000a".to_string()))
     );
 
-    // 2. First click toggles switch ON (thumb moves to x+29, halo becomes primary hover_bg #1976d20a, callback receives true)
+    // 2. First click toggles switch ON (thumb animates from x+9 to x+29 over 150ms, halo becomes primary hover_bg #1976d20a, callback receives true)
     let mut click_ev = Event::new(
         EventKind::Click {
             button: MouseButton::Left,
@@ -250,6 +250,22 @@ fn test_material_switch_interactive_toggle_halo_and_on_change_callback() {
         compiled.get_state(sw_id, "is_checked"),
         Some(&Value::Bool(true))
     );
+    assert!(compiled.has_active_timers());
+    // At t = 0ms, thumb is at start of transition (x + 9)
+    assert_eq!(
+        compiled.layout.get_node(thumb_rect_id).unwrap().rect.x,
+        10.0 + 9.0
+    );
+    // At t = 75ms (midpoint), thumb is halfway (x + 19)
+    assert!(!compiled.advance_timers(75_000).unwrap().is_empty());
+    assert_eq!(
+        compiled.layout.get_node(thumb_rect_id).unwrap().rect.x,
+        10.0 + 19.0
+    );
+    // At t = 150ms (completion), timer unsets and thumb settles at x + 29
+    assert!(!compiled.advance_timers(75_000).unwrap().is_empty());
+    assert!(!compiled.has_active_timers());
+    assert_eq!(compiled.get_state(sw_id, "anim"), Some(&Value::Unset));
     assert_eq!(
         compiled.layout.get_node(thumb_rect_id).unwrap().rect.x,
         10.0 + 29.0
@@ -264,7 +280,7 @@ fn test_material_switch_interactive_toggle_halo_and_on_change_callback() {
         Some(&Value::Color("#1976d20a".to_string()))
     );
 
-    // 3. Second click toggles switch OFF (thumb moves back to x+9, callback receives false)
+    // 3. Second click toggles switch OFF (thumb animates from x+29 back to x+9 over 150ms, callback receives false)
     let mut click_ev2 = Event::new(
         EventKind::Click {
             button: MouseButton::Left,
@@ -277,6 +293,21 @@ fn test_material_switch_interactive_toggle_halo_and_on_change_callback() {
     compiled.dispatch_event(&mut click_ev2).unwrap();
     assert_eq!(changes.load(Ordering::SeqCst), 2);
     assert!(!last_val.load(Ordering::SeqCst));
+    assert!(compiled.has_active_timers());
+    // At t = 0ms, thumb starts at x + 29
+    assert_eq!(
+        compiled.layout.get_node(thumb_rect_id).unwrap().rect.x,
+        10.0 + 29.0
+    );
+    // At t = 75ms, thumb is halfway back at x + 19
+    assert!(!compiled.advance_timers(75_000).unwrap().is_empty());
+    assert_eq!(
+        compiled.layout.get_node(thumb_rect_id).unwrap().rect.x,
+        10.0 + 19.0
+    );
+    // At t = 150ms, timer unsets and thumb settles at x + 9
+    assert!(!compiled.advance_timers(75_000).unwrap().is_empty());
+    assert!(!compiled.has_active_timers());
     assert_eq!(
         compiled.layout.get_node(thumb_rect_id).unwrap().rect.x,
         10.0 + 9.0

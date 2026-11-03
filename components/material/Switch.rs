@@ -54,6 +54,7 @@ impl Switch {
         let is_controlled = ctx.get_port_bool("controlled").unwrap_or(self.controlled);
         if !is_controlled {
             ctx.set_state("is_checked", next);
+            ctx.set_state("anim", Timer::from_millis(150));
         }
         self.on_change.emit(ctx, next);
         Ok(())

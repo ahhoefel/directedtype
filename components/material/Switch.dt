@@ -35,6 +35,7 @@
     on_pointer_up: Handler = self.pointer_up
 ) {
     \state is_checked: Boolean = checked;
+    \state anim: Timer = unset;
     \state hovered: Boolean = false;
     \state focused: Boolean = false;
     \state pressed: Boolean = false;
@@ -155,11 +156,15 @@
     \let resolved_h: Distance = has_label ? max(control_h, switch_label.height) : control_h;
     \let control_y: Distance = y + (resolved_h - control_h) / 2;
 
+    \let anim_p: Float = anim ? anim.elapsed : 1.0;
+    \let eased_p: Float = anim_p * anim_p * (3.0 - 2.0 * anim_p);
+    \let check_progress: Float = is_checked ? eased_p : (1.0 - eased_p);
+
     \let track_x: Distance = x + track_x_offset;
     \let track_y: Distance = control_y + track_y_offset;
-    \let halo_x: Distance = x + (is_checked ? halo_checked_x : 0px);
+    \let halo_x: Distance = x + halo_checked_x * check_progress;
     \let halo_y: Distance = control_y;
-    \let thumb_x: Distance = x + (is_checked ? thumb_checked_x : thumb_unchecked_x);
+    \let thumb_x: Distance = x + thumb_unchecked_x + (thumb_checked_x - thumb_unchecked_x) * check_progress;
     \let thumb_y: Distance = control_y + thumb_y_offset;
 
     \let label_color = disabled ? #00000061 : #000000de;
@@ -243,6 +248,7 @@
     on_pointer_up: Handler = self.pointer_up
 ) {
     \state is_checked: Boolean = checked;
+    \state anim: Timer = unset;
     \state hovered: Boolean = false;
     \state focused: Boolean = false;
     \state pressed: Boolean = false;
@@ -366,11 +372,15 @@
     \let resolved_h: Distance = has_label ? max(control_h, label_h) : control_h;
     \let control_y: Distance = y + (resolved_h - control_h) / 2;
 
+    \let anim_p: Float = anim ? anim.elapsed : 1.0;
+    \let eased_p: Float = anim_p * anim_p * (3.0 - 2.0 * anim_p);
+    \let check_progress: Float = is_checked ? eased_p : (1.0 - eased_p);
+
     \let track_x: Distance = x + track_x_offset;
     \let track_y: Distance = control_y + track_y_offset;
-    \let halo_x: Distance = x + (is_checked ? halo_checked_x : 0px);
+    \let halo_x: Distance = x + halo_checked_x * check_progress;
     \let halo_y: Distance = control_y;
-    \let thumb_x: Distance = x + (is_checked ? thumb_checked_x : thumb_unchecked_x);
+    \let thumb_x: Distance = x + thumb_unchecked_x + (thumb_checked_x - thumb_unchecked_x) * check_progress;
     \let thumb_y: Distance = control_y + thumb_y_offset;
 
     \let label_color = disabled ? #00000061 : #000000de;
