@@ -165,6 +165,7 @@ pub struct ViewerApp {
     text_cache: TextSceneCache,
     clip_cache: ClipSceneCache,
     frame_count: u64,
+    last_frame_instant: Option<std::time::Instant>,
 
     // Interaction state
     cursor_pos: Option<Point>,
@@ -239,6 +240,7 @@ impl ViewerApp {
             text_cache: TextSceneCache::new(),
             clip_cache: ClipSceneCache::new(),
             frame_count: 0,
+            last_frame_instant: None,
             cursor_pos: None,
             hovered_node: None,
             pressed_node: None,
@@ -296,6 +298,7 @@ impl ViewerApp {
             text_cache: TextSceneCache::new(),
             clip_cache: ClipSceneCache::new(),
             frame_count: 0,
+            last_frame_instant: None,
             cursor_pos: None,
             hovered_node: None,
             pressed_node: None,
@@ -2474,6 +2477,31 @@ impl ViewerApp {
         surface_texture.present();
         flush_metal_transaction();
         self.frame_count += 1;
+
+        if self
+            .compiled
+            .as_ref()
+            .is_some_and(|c| c.has_active_timers())
+        {
+            let now = std::time::Instant::now();
+            let dt = self
+                .last_frame_instant
+                .map(|prev| now.saturating_duration_since(prev))
+                .unwrap_or_default();
+            self.last_frame_instant = Some(now);
+            let dt_us = dt.as_micros() as i64;
+            if dt_us > 0 {
+                if let Some(compiled) = &mut self.compiled {
+                    let _ = compiled.advance_timers(dt_us);
+                }
+                self.clamp_scroll();
+            }
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+        } else {
+            self.last_frame_instant = None;
+        }
     }
 }
 

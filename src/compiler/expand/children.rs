@@ -647,7 +647,7 @@ pub(super) fn expand_caller_slot_envs(
         if let ContentItem::Env(env_binding) = item {
             if let Some(raw_expr) = &env_binding.value {
                 match raw_expr {
-                    Expr::Node(elem) => {
+                    Expr::Node(elem) if !super::is_value_node_name(elem.name.as_str()) => {
                         validate_node_type_annotation(
                             elem.name.as_str(),
                             elem.span,

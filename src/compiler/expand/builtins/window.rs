@@ -190,11 +190,41 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
         all_doc_let_names.insert(let_name);
     }
 
-    // Pre-register uninitialized let and env items
+    // Pre-register uninitialized let and env items, and promote document-level timer lets to window ports
     for l in &all_doc_lets {
         if l.value.is_none() {
             global_scope.insert(l.name.as_str().to_string(), LexicalBinding::Uninitialized);
             global_env_scope.insert(l.name.as_str().to_string(), EnvEntry::Tombstone);
+        } else if let Some(crate::ast::LetValue::Expr(raw_expr)) = &l.value {
+            let is_timer_type = l
+                .type_annotation
+                .as_ref()
+                .is_some_and(|t| matches!(t.name.as_str(), "Timer" | "IndefiniteTimer"));
+            if is_timer_type || super::super::expr_contains_timer(raw_expr) {
+                let let_name = l.name.as_str().to_string();
+                if !window_scope_ports.contains(&let_name) {
+                    window_scope_ports.push(let_name.clone());
+                }
+                if let Some(ref ty) = l.type_annotation {
+                    expanded_doc
+                        .window_port_types
+                        .insert(let_name.clone(), ty.name.as_str().to_string());
+                }
+                expanded_doc
+                    .window_ports
+                    .insert(let_name.clone(), raw_expr.clone());
+                global_scope.insert(
+                    let_name.clone(),
+                    LexicalBinding::Expr(Expr::MemberAccess(crate::ast::MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::new(
+                            NodeId::WINDOW.canonical_name(),
+                            l.name.span,
+                        ))),
+                        member: l.name.clone(),
+                        span: l.name.span,
+                    })),
+                );
+            }
         }
     }
     for item in &doc.items {

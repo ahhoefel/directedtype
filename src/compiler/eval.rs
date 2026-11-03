@@ -203,6 +203,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         Expr::Ident(id) => match id.as_str() {
             "true" => Ok(Value::Bool(true)),
             "false" => Ok(Value::Bool(false)),
+            "unset" | "None" => Ok(Value::Unset),
             other => {
                 if let Some(node_id) = NodeId::from_canonical_name(other) {
                     return Ok(Value::Node(node_id));
@@ -215,38 +216,80 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         },
 
         Expr::MemberAccess(m) => {
-            let target_node_id = match m.target.as_ref() {
-                Expr::Ident(target_id) => NodeId::from_canonical_name(target_id.as_str()),
-                other => match eval_expr(other, env)? {
-                    Value::Node(id) => Some(id),
-                    _ => None,
-                },
-            };
-
-            if let Some(node_id) = target_node_id {
-                let var = VarId::new(node_id, m.member.as_str());
-                if let Some(val) = env.get(&var) {
-                    return Ok(val.clone());
-                } else {
-                    return Err(CompileError::Custom {
-                        message: format!(
-                            "Variable '{}' evaluated before being set in environment",
-                            var
-                        ),
-                        span: m.span,
-                    });
+            if let Expr::Ident(target_id) = m.target.as_ref() {
+                if let Some(node_id) = NodeId::from_canonical_name(target_id.as_str()) {
+                    let var = VarId::new(node_id, m.member.as_str());
+                    if let Some(val) = env.get(&var) {
+                        return Ok(val.clone());
+                    } else {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Variable '{}' evaluated before being set in environment",
+                                var
+                            ),
+                            span: m.span,
+                        });
+                    }
                 }
             }
-            if let Expr::Ident(target_id) = m.target.as_ref() {
-                return Err(CompileError::UnresolvedIdentifier {
-                    name: target_id.as_str().to_string(),
-                    span: target_id.span,
-                });
+
+            let target_val = eval_expr(&m.target, env)?;
+            match target_val {
+                Value::Node(node_id) => {
+                    let var = VarId::new(node_id, m.member.as_str());
+                    if let Some(val) = env.get(&var) {
+                        Ok(val.clone())
+                    } else {
+                        Err(CompileError::Custom {
+                            message: format!(
+                                "Variable '{}' evaluated before being set in environment",
+                                var
+                            ),
+                            span: m.span,
+                        })
+                    }
+                }
+                Value::Timer {
+                    time,
+                    duration,
+                    dt,
+                    frames,
+                } => match m.member.as_str() {
+                    "time" => Ok(Value::Duration(time)),
+                    "duration" => Ok(Value::Duration(duration)),
+                    "elapsed" => Ok(Value::Float(if duration > 0 {
+                        (time as f64 / duration as f64).clamp(0.0, 1.0)
+                    } else {
+                        1.0
+                    })),
+                    "dt" => Ok(Value::Duration(dt)),
+                    "frames" => Ok(Value::Integer(frames)),
+                    other => Err(CompileError::Custom {
+                        message: format!("Node 'Timer' has no public property '{}'", other),
+                        span: m.span,
+                    }),
+                },
+                Value::IndefiniteTimer { time, dt, frames } => match m.member.as_str() {
+                    "time" => Ok(Value::Duration(time)),
+                    "dt" => Ok(Value::Duration(dt)),
+                    "frames" => Ok(Value::Integer(frames)),
+                    other => Err(CompileError::Custom {
+                        message: format!(
+                            "Node 'IndefiniteTimer' has no public property '{}'",
+                            other
+                        ),
+                        span: m.span,
+                    }),
+                },
+                Value::Unset => Err(CompileError::Custom {
+                    message: format!("Cannot access property '{}' on an unset value", m.member),
+                    span: m.span,
+                }),
+                _ => Err(CompileError::Custom {
+                    message: format!("Unsupported member access target in evaluation: {:?}", m.target),
+                    span: m.span,
+                }),
             }
-            Err(CompileError::Custom {
-                message: format!("Unsupported member access target in evaluation: {:?}", m.target),
-                span: m.span,
-            })
         }
 
         Expr::Binary(b) => {
@@ -1304,10 +1347,71 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         }
 
         Expr::Paren(inner, _) => eval_expr(inner, env),
-        Expr::Node(n) => Err(CompileError::Custom {
-            message: format!("Unexpanded node in expression: '{}'", n.name.as_str()),
-            span: n.span,
-        }),
+        Expr::Node(n) => match n.name.as_str() {
+            "Timer" => {
+                if n.ports.is_empty() {
+                    return Err(CompileError::MissingPort {
+                        node: "Timer".to_string(),
+                        port: "duration".to_string(),
+                        span: n.span,
+                    });
+                }
+                let mut duration_us: Option<i64> = None;
+                for port in &n.ports {
+                    if port.name.as_str() == "duration" {
+                        let val = eval_expr(&port.expr, env)?;
+                        let us = val.as_duration().ok_or_else(|| CompileError::TypeMismatch {
+                            expected: "Duration".to_string(),
+                            actual: val.type_name().to_string(),
+                            span: port.expr.span(),
+                        })?;
+                        duration_us = Some(us);
+                    } else {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Node 'Timer' does not accept property '{}'",
+                                port.name.as_str()
+                            ),
+                            span: port.name.span,
+                        });
+                    }
+                }
+                match duration_us {
+                    Some(us) if us > 0 => Ok(Value::Timer {
+                        time: 0,
+                        duration: us,
+                        dt: 0,
+                        frames: 0,
+                    }),
+                    Some(_) => Ok(Value::Unset),
+                    None => Err(CompileError::MissingPort {
+                        node: "Timer".to_string(),
+                        port: "duration".to_string(),
+                        span: n.span,
+                    }),
+                }
+            }
+            "IndefiniteTimer" => {
+                if let Some(port) = n.ports.first() {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Node 'IndefiniteTimer' does not accept property '{}'",
+                            port.name.as_str()
+                        ),
+                        span: port.name.span,
+                    });
+                }
+                Ok(Value::IndefiniteTimer {
+                    time: 0,
+                    dt: 0,
+                    frames: 0,
+                })
+            }
+            _ => Err(CompileError::Custom {
+                message: format!("Unexpanded node in expression: '{}'", n.name.as_str()),
+                span: n.span,
+            }),
+        },
     }
 }
 

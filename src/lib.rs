@@ -21,8 +21,8 @@ pub use component::{
 };
 pub use directedtype_macros::component;
 pub use compiler::{
-    evaluate_document, evaluate_document_with_window, project_inline_fragments, CursorKind, Rect,
-    ResolvedLayout, ResolvedNode, SpanStyle, TextSpan, Value,
+    evaluate_document, evaluate_document_with_window, project_inline_fragments, CursorKind,
+    IndefiniteTimer, Rect, ResolvedLayout, ResolvedNode, SpanStyle, TextSpan, Timer, Value,
 };
 pub use dom::{Dom, DomError, DomHitTestResult, NodeHandle, Transaction};
 pub use error::ParseError;
@@ -34,7 +34,7 @@ pub use interaction::{Event, EventKind, HitTestResult, Modifiers, MouseButton, P
 pub use parser::parse_document as parse;
 
 pub mod prelude {
-    pub use crate::compiler::Value;
+    pub use crate::compiler::{IndefiniteTimer, Timer, Value};
     pub use crate::component::{
         Callback, Component, Context, DispatchError, EmitCallback, FromPayload,
     };

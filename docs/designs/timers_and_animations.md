@@ -30,7 +30,7 @@ We introduce the `\Timer` component, which provides a time-varying member `t.tim
 1. **Starts on Creation:** A timer begins counting (`t.time = 0s`) the moment it is created—either when a component mounts (for `\let t = \Timer(...)` or initialized `\state`) or when application logic assigns a new timer to a `\state` variable (`ctx.set_state("t", Timer::from_secs(5.0))`).
 2. **Nullable / `unset` Lifecycle:** Timer-valued variables can be `unset`. When a fixed-length timer reaches its `duration`, it **automatically unsets itself**.
 3. **Ternary Existence Guard (`t ? ... : ...`):** Evaluating a timer variable `t` in a conditional expression tests whether the timer is currently active. When `t` is `unset` (before being started, or after expiring), the ternary short-circuits to the `: else` branch.
-4. **Compile-Time Type Safety (`Timer` vs. `IndefiniteTimer`):** Fixed-length timers (`\Timer(duration: 5s)`) have static type `Timer` and expose both `t.time: Duration` and `t.elapsed: Float` (`0.0..=1.0`). Indefinite timers (`\Timer()` or `\IndefiniteTimer()`) have static type `IndefiniteTimer` and expose only `t.time: Duration`. Accessing `t.elapsed` on an indefinite timer is rejected at compile time.
+4. **Compile-Time Type Safety (`Timer` vs. `IndefiniteTimer`):** Fixed-length timers (`\Timer(duration: 5s)`) have static type `Timer` and expose both `t.time: Duration` and `t.elapsed: Float` (`0.0..=1.0`). Indefinite timers (`\IndefiniteTimer()`) have static type `IndefiniteTimer` and expose `t.time: Duration`, `t.dt: Duration`, and `t.frames: Integer`. Accessing `t.elapsed` or `t.duration` on an indefinite timer is rejected at compile time.
 5. **Static DAG Topology & Zero Idle Overhead:** Starting, ticking, or auto-unsetting a timer never alters the DAG structure or triggers a topological re-sort. It simply updates the timer's cell in the `VariableGraph` and incrementally re-evaluates downstream dependents. When no timers are active, the viewer does not schedule animation frames and consumes zero CPU/GPU while idle.
 
 ---
@@ -79,11 +79,11 @@ Because `t.time.to_seconds()` and `t.time.to_ms()` return a `Float`, they can be
 
 ---
 
-## 3. `\Timer` Signatures, Overloads, & Static Types
+## 3. `\Timer` and `\IndefiniteTimer` Signatures & Static Types
 
-Following DirectedType's [Component Constructor Overloading](file:///Users/hoefel/dev/directedtype/docs/designs/overloading.md) model, `\Timer` provides two distinct constructor signatures based on whether `duration` is supplied, corresponding to two distinct static types: **`Timer`** (fixed-length) and **`IndefiniteTimer`** (unbounded).
+To avoid constructor/type name mismatch (where a `\Timer(...)` expression would unexpectedly produce a non-`Timer` static type), fixed-length and indefinite timers use distinct, 1-to-1 constructor and static type names: **`\Timer(duration: Duration)` $\rightarrow$ `Timer`** and **`\IndefiniteTimer()` $\rightarrow$ `IndefiniteTimer`**.
 
-### 3.1 Overload 1: Fixed-Length Timer (`Timer`)
+### 3.1 Fixed-Length Timer (`\Timer` $\rightarrow$ `Timer`)
 
 ```dtml
 // Constructor signature:
@@ -106,11 +106,10 @@ Because `t.elapsed` is a dimensionless `Float` in `[0.0, 1.0)`, multiplying it a
 \let d = t ? t.elapsed * 5em : 0;
 ```
 
-### 3.2 Overload 2: Indefinite Timer (`IndefiniteTimer`)
+### 3.2 Indefinite Timer (`\IndefiniteTimer` $\rightarrow$ `IndefiniteTimer`)
 
 ```dtml
-// Constructor signature (also aliased as \IndefiniteTimer()):
-\Timer()
+// Constructor signature:
 \IndefiniteTimer()
 ```
 
@@ -132,7 +131,7 @@ Because DirectedType's layout graph is a pure, stateless **Directed Acyclic Grap
 The answer is that **the timer itself is the time-state root of the DAG**. Because the runtime already measures the frame delta $\Delta t$ to advance each active timer between frames, storing `dt: Duration` (the latest frame delta) and `frames: Integer` (cumulative frame count) directly on the timer value allows downstream DAG formulas to compute both instantaneous and average FPS purely declaratively—with zero feedback loops or mutable state:
 
 ```dtml
-\let clock = \Timer();
+\let clock = \IndefiniteTimer();
 
 // Instantaneous FPS from the latest frame delta (1.0 / dt):
 \let inst_fps = clock ? (clock.dt > 0s ? 1.0 / clock.dt.to_seconds() : 0.0) : 0.0;
@@ -143,7 +142,7 @@ The answer is that **the timer itself is the time-state root of the DAG**. Becau
 
 ### 3.4 Why Separate Static Types (`Timer` vs. `IndefiniteTimer`) Matter
 
-When a timer is declared inline via `\let t = \Timer(duration: 5s);` vs. `\let t = \Timer();`, the compiler knows the overload at the binding site. However, when a component declares a reactive state variable initialized to `unset`:
+When a timer is declared inline via `\let t = \Timer(duration: 5s);` vs. `\let t = \IndefiniteTimer();`, each constructor maps 1-to-1 to its static type (`Timer` vs. `IndefiniteTimer`). Similarly, when a component declares a reactive state variable initialized to `unset`:
 
 ```dtml
 \state transition: Timer = unset;
@@ -396,7 +395,7 @@ If a timer is stored as a **`Value::Timer` / `Value::IndefiniteTimer` inside a `
    - References to `t` rewrite to `__node_X.t`.
    - References to `t.time` rewrite to `(__node_X.t).time`.
    - `extract_var_dependencies` in `graph.rs` walks `(__node_X.t).time`, recurses into `__node_X.t`, and records `VarId(comp_node_id, "t")` as the upstream dependency!
-2. **For `\let t = \Timer(duration: 5s)` (or `\let t = \Timer()`):**
+2. **For `\let t = \Timer(duration: 5s)` (or `\let t = \IndefiniteTimer()`):**
    - Expands to a non-spatial `Timer` node `timer_node_id` (or a synthetic state/value port `VarId(timer_node_id, "value")`) whose equation initializes to `Value::Timer { time: 0.0, duration: 5.0, dt: 0.0, frames: 0 }`.
    - In lexical scope, `t` binds to `Expr::MemberAccess { target: __node_timer, member: "value" }`.
    - Consequently, `t ? t.elapsed * 5em : 0` rewrites to:
@@ -542,7 +541,7 @@ Because `\Timer` exposes `t.dt: Duration` (frame delta $\Delta t$) and `t.frames
 ```dtml
 \env font = \Font(size: 16px);
 
-\let clock = \Timer();
+\let clock = \IndefiniteTimer();
 
 // Instantaneous FPS (1 / frame delta in seconds) and Average FPS (total frames / elapsed seconds):
 \let inst_fps = clock ? (clock.dt > 0s ? round(1.0 / to_seconds(clock.dt)) : 0) : 0;

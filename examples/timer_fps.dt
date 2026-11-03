@@ -1,0 +1,98 @@
+\Window(title: "DirectedType — Timer & Live Framerate Demo")
+
+\env font = \Font(family: "sans-serif", size: 16px)
+
+// Indefinite timer: runs continuously from creation, tracking elapsed time, frame delta (dt), and frame count
+\let clock = \IndefiniteTimer()
+
+// Fixed-length timer: runs for 5 seconds and automatically unsets itself when finished
+\let intro = \Timer(duration: 5s)
+
+// Framerate calculations using `clock.dt` and `clock.frames`
+\let inst_fps = clock.dt > 0s ? 1s / clock.dt : 0.0
+\let avg_fps  = clock.time > 0s ? clock.frames / clock.time.to_seconds() : 0.0
+\let dt_ms    = clock.dt.to_ms()
+
+// Continuous harmonic oscillation driven by `clock.time`
+\let phase    = clock.time.to_seconds() * 3.14159265
+\let wave_x   = 40px + (sin(phase) + 1.0) * 0.5 * 360px
+
+// Fixed-length progress bar width that unsets to 0 when `intro` expires
+\let intro_w  = intro ? intro.elapsed * 400px : 0
+\let intro_status = intro
+    ? "Running (" + intro.time.to_seconds().to_fixed(2) + "s / " + intro.duration.to_seconds().to_fixed(1) + "s)"
+    : "Completed (auto-unset)"
+
+// Background canvas
+\Rect(x: 0, y: 0, width: window.width, height: window.height, color: #0f172a)
+
+// Header & Telemetry Card
+\Rect(x: 24px, y: 24px, width: 448px, height: 180px, radius: 12px, color: #1e293b, border_width: 1px, border_color: #334155)
+
+\Text(
+    x: 40px,
+    y: 44px,
+    font: \Font(family: "sans-serif", size: 20px, weight: 700),
+    color: #f8fafc,
+    text: "Timer & Frame Loop Telemetry"
+)
+
+\Text(
+    x: 40px,
+    y: 80px,
+    font: \Font(family: "sans-serif", size: 16px, weight: 600),
+    color: #38bdf8,
+    text: "Instantaneous FPS: " + inst_fps.to_fixed(1)
+)
+
+\Text(
+    x: 40px,
+    y: 108px,
+    font: \Font(family: "sans-serif", size: 16px, weight: 600),
+    color: #34d399,
+    text: "Average FPS: " + avg_fps.to_fixed(1)
+)
+
+\Text(
+    x: 40px,
+    y: 136px,
+    font: font,
+    color: #e2e8f0,
+    text: "Frame Delta (dt): " + dt_ms.to_fixed(2) + " ms   |   Frames: " + clock.frames
+)
+
+\Text(
+    x: 40px,
+    y: 164px,
+    font: font,
+    color: #e2e8f0,
+    text: "Elapsed Time: " + clock.time.to_seconds().to_fixed(2) + " s"
+)
+
+// Fixed-Length 5s Timer Card
+\Rect(x: 24px, y: 224px, width: 448px, height: 116px, radius: 12px, color: #1e293b, border_width: 1px, border_color: #334155)
+
+\Text(
+    x: 40px,
+    y: 244px,
+    font: font,
+    color: #e2e8f0,
+    text: "Fixed 5s Timer: " + intro_status
+)
+
+\Rect(x: 40px, y: 280px, width: 400px, height: 20px, radius: 10px, color: #0f172a)
+\Rect(x: 40px, y: 280px, width: intro_w, height: 20px, radius: 10px, color: #a855f7)
+
+// Indefinite Timer Harmonic Oscillator Card
+\Rect(x: 24px, y: 360px, width: 448px, height: 116px, radius: 12px, color: #1e293b, border_width: 1px, border_color: #334155)
+
+\Text(
+    x: 40px,
+    y: 380px,
+    font: font,
+    color: #e2e8f0,
+    text: "Indefinite Oscillator (IndefiniteTimer()):"
+)
+
+\Rect(x: 40px, y: 420px, width: 400px, height: 24px, radius: 12px, color: #0f172a)
+\Rect(x: wave_x, y: 416px, width: 40px, height: 32px, radius: 8px, color: #38bdf8)

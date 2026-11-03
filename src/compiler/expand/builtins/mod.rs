@@ -771,6 +771,64 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 &mut self.inline_boxes,
                 true,
             );
+        } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
+            let empty_children: [NodeId; 0] = [];
+            let rewritten = {
+                let lexical_borrow = self.ctx.lexical_scope.borrow();
+                let inst_borrow = self
+                    .ctx
+                    .enclosing_instantiated_children
+                    .map(|c| c.borrow());
+                let enc_child_ids: &[NodeId] = match &inst_borrow {
+                    Some(b) => b.as_slice(),
+                    None => &empty_children,
+                };
+                let scope_ctx = ScopeContext::from_element(
+                    self.node_id,
+                    self.ctx,
+                    &self.doc.nodes,
+                    &lexical_borrow,
+                    self.node_fonts,
+                    enc_child_ids,
+                )
+                .with_parent(
+                    Some(self.node_id),
+                    Some(self.elem.name.as_str()),
+                    &self.primitive_scope_ports,
+                )
+                .with_env_scope(content_env_scope);
+                rewrite_expr(raw_expr, &scope_ctx)?
+            };
+            let rewritten =
+                super::coerce_typed_binding_expr(rewritten, let_binding.type_annotation.as_ref());
+            if self.ctx.enclosing_component_id.is_none()
+                && self
+                    .doc
+                    .window_ports
+                    .contains_key(let_binding.name.as_str())
+            {
+                self.doc
+                    .window_ports
+                    .insert(let_binding.name.as_str().to_string(), rewritten);
+            } else if !self
+                .ctx
+                .lexical_scope
+                .borrow()
+                .contains_key(let_binding.name.as_str())
+            {
+                self.doc.local_bindings.push((
+                    rewritten.clone(),
+                    let_binding
+                        .type_annotation
+                        .as_ref()
+                        .map(|t| t.name.as_str().to_string()),
+                    raw_expr.span(),
+                ));
+                self.ctx.lexical_scope.borrow_mut().insert(
+                    let_binding.name.as_str().to_string(),
+                    LexicalBinding::Expr(rewritten),
+                );
+            }
         }
         Ok(())
     }
@@ -996,7 +1054,9 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 }
             }
             match &port.expr {
-                Expr::Node(inline_elem) => {
+                Expr::Node(inline_elem)
+                    if !super::is_value_node_name(inline_elem.name.as_str()) =>
+                {
                     let parent_id = if self.ctx.is_let {
                         self.ctx.parent_id
                     } else {

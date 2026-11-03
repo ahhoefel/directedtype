@@ -6,7 +6,7 @@ pub mod value;
 pub use context::{Callback, Context, EmitCallback};
 pub use event::{Event, EventKind, Modifiers, MouseButton, Point};
 pub use protocol::{Action, ComponentResponse, DispatchRequest, MountRequest, StateMutation};
-pub use value::Value;
+pub use value::{IndefiniteTimer, Timer, Value};
 
 pub use directedtype_macros::guest_component as component;
 
@@ -308,7 +308,7 @@ macro_rules! export_component {
 pub mod prelude {
     pub use crate::context::{Callback, Context, EmitCallback};
     pub use crate::event::{Event, EventKind, Modifiers, MouseButton, Point};
-    pub use crate::value::Value;
+    pub use crate::value::{IndefiniteTimer, Timer, Value};
     pub use crate::{export_component, Component, DispatchError, FromPayload};
     pub use directedtype_macros::guest_component as component;
 }

@@ -88,6 +88,13 @@ pub(super) fn resolve_forward_scope_refs(
                 .collect(),
             span: m.span,
         }),
+        Expr::Node(n) => {
+            let mut cloned = n.clone();
+            for port in &mut cloned.ports {
+                port.expr = resolve_forward_scope_refs(&port.expr, scope);
+            }
+            Expr::Node(cloned)
+        }
         _ => expr.clone(),
     }
 }
@@ -375,15 +382,22 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     } else if let Ok(val) =
                         crate::compiler::eval::eval_expr(port_expr, &HashMap::new())
                     {
-                        const_env.insert(
-                            crate::compiler::graph::VarId::new(ctx.current_node, port_name),
-                            val.clone(),
-                        );
-                        if let Some(parent) = ctx.parent_node {
+                        if !matches!(
+                            val,
+                            crate::compiler::value::Value::Timer { .. }
+                                | crate::compiler::value::Value::IndefiniteTimer { .. }
+                                | crate::compiler::value::Value::Unset
+                        ) {
                             const_env.insert(
-                                crate::compiler::graph::VarId::new(parent, port_name),
-                                val,
+                                crate::compiler::graph::VarId::new(ctx.current_node, port_name),
+                                val.clone(),
                             );
+                            if let Some(parent) = ctx.parent_node {
+                                const_env.insert(
+                                    crate::compiler::graph::VarId::new(parent, port_name),
+                                    val,
+                                );
+                            }
                         }
                     }
                 }
@@ -425,10 +439,44 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
                 return Ok(chosen);
             }
+            let mut then_rewritten = rewrite_expr(&tern.then_expr, ctx)?;
+            let mut else_rewritten = rewrite_expr(&tern.else_expr, ctx)?;
+            if let Expr::Literal(Literal::Integer(0, span)) = then_rewritten {
+                match infer_expr_literal_for_typecheck(&else_rewritten, ctx) {
+                    Some(Literal::Distance(_, _, _)) => {
+                        then_rewritten =
+                            Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+                    }
+                    Some(Literal::Area(_, _, _)) => {
+                        then_rewritten = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, span));
+                    }
+                    Some(Literal::Duration(_, _, _)) => {
+                        then_rewritten =
+                            Expr::Literal(Literal::Duration(0, DurationUnit::S, span));
+                    }
+                    _ => {}
+                }
+            }
+            if let Expr::Literal(Literal::Integer(0, span)) = else_rewritten {
+                match infer_expr_literal_for_typecheck(&then_rewritten, ctx) {
+                    Some(Literal::Distance(_, _, _)) => {
+                        else_rewritten =
+                            Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+                    }
+                    Some(Literal::Area(_, _, _)) => {
+                        else_rewritten = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, span));
+                    }
+                    Some(Literal::Duration(_, _, _)) => {
+                        else_rewritten =
+                            Expr::Literal(Literal::Duration(0, DurationUnit::S, span));
+                    }
+                    _ => {}
+                }
+            }
             Ok(Expr::Ternary(TernaryExpr {
                 condition: Box::new(rewritten_cond),
-                then_expr: Box::new(rewrite_expr(&tern.then_expr, ctx)?),
-                else_expr: Box::new(rewrite_expr(&tern.else_expr, ctx)?),
+                then_expr: Box::new(then_rewritten),
+                else_expr: Box::new(else_rewritten),
                 span: tern.span,
             }))
         }
@@ -846,7 +894,22 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
         },
         Expr::Literal(_) => Ok(expr.clone()),
-        Expr::Node(n) => Ok(Expr::Node(n.clone())),
+        Expr::Node(n) => {
+            let mut cloned = n.clone();
+            for port in &mut cloned.ports {
+                let mut rewritten_port = rewrite_expr(&port.expr, ctx)?;
+                if matches!(n.name.as_str(), "Timer" | "IndefiniteTimer")
+                    && port.name.as_str() == "duration"
+                {
+                    if let Expr::Literal(Literal::Integer(0, span)) = rewritten_port {
+                        rewritten_port =
+                            Expr::Literal(Literal::Duration(0, DurationUnit::S, span));
+                    }
+                }
+                port.expr = rewritten_port;
+            }
+            Ok(Expr::Node(cloned))
+        }
     }
 }
 
@@ -887,7 +950,9 @@ pub fn default_expr_for_state_with_enums(
             "Distance" => Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, state.span)),
             "Area" => Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, state.span)),
             "Duration" => Expr::Literal(Literal::Duration(0, DurationUnit::S, state.span)),
-            "Handler" => Expr::Ident(Ident::new("unset", state.span)),
+            "Handler" | "Timer" | "IndefiniteTimer" => {
+                Expr::Ident(Ident::new("unset", state.span))
+            }
             other => {
                 if let Some(enum_def) = enums.get(other) {
                     if let Some(first_var) = enum_def.variants.first() {

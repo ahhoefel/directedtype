@@ -188,6 +188,24 @@ fn validate_top_level_type_annotations(
     Ok(())
 }
 
+pub(super) fn is_value_node_name(name: &str) -> bool {
+    matches!(name, "Timer" | "IndefiniteTimer")
+}
+
+pub(super) fn expr_contains_timer(expr: &Expr) -> bool {
+    match expr {
+        Expr::Node(elem) => is_value_node_name(elem.name.as_str()),
+        Expr::Paren(inner, _) => expr_contains_timer(inner),
+        Expr::Unary(u) => expr_contains_timer(&u.operand),
+        Expr::Ternary(t) => {
+            expr_contains_timer(&t.condition)
+                || expr_contains_timer(&t.then_expr)
+                || expr_contains_timer(&t.else_expr)
+        }
+        _ => false,
+    }
+}
+
 fn preresolve_top_level_lets_and_envs(
     doc: &Document,
     enums: &HashMap<String, EnumDef>,
@@ -210,6 +228,12 @@ fn preresolve_top_level_lets_and_envs(
                             LexicalBinding::Uninitialized,
                         );
                     } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
+                        if expanded_doc
+                            .window_ports
+                            .contains_key(let_binding.name.as_str())
+                        {
+                            continue;
+                        }
                         let rewritten_res = {
                             let scope_ctx = ScopeContext::for_window(
                                 &expanded_doc.nodes,
@@ -241,7 +265,7 @@ fn preresolve_top_level_lets_and_envs(
                         global_env_scope
                             .insert(env_binding.name.as_str().to_string(), EnvEntry::Tombstone);
                     } else if let Some(raw_expr) = &env_binding.value {
-                        if !matches!(raw_expr, Expr::Node(_)) {
+                        if !matches!(raw_expr, Expr::Node(elem) if !is_value_node_name(elem.name.as_str())) {
                             let rewritten_res = {
                                 let scope_ctx = ScopeContext::for_window(
                                     &expanded_doc.nodes,
@@ -303,50 +327,55 @@ fn expand_top_level_items(
         match item {
             Item::Env(env_binding) => {
                 if let Some(Expr::Node(elem)) = &env_binding.value {
-                    validate_node_type_annotation(
-                        elem.name.as_str(),
-                        elem.span,
-                        env_binding.type_annotation.as_ref(),
-                        enums,
-                        registry,
-                    )?;
-                    let elem_ctx = ElementContext {
-                        parent_id: Some(NodeId::WINDOW),
-                        parent_name: Some("window"),
-                        prev_sibling_id: last_root_id,
-                        has_next_sibling: false,
-                        parent_ports: window_scope_ports,
-                        lexical_scope: global_scope,
-                        env_scope: global_env_scope,
-                        enclosing_component_id: None,
-                        enclosing_num_children: 0,
-                        enclosing_instantiated_children: None,
-                        shadowed_ports: None,
-                        is_let: true,
-                        ambient_authored_ports: None,
-                        enums,
-                        active_scope_id: ScopeId::ROOT,
-                        consumer_children: None,
-                    };
-                    let root_id =
-                        expand_element(elem, &elem_ctx, registry, expanded_doc, node_fonts)?;
-                    expanded_doc.get_node_mut(root_id).unwrap().var_name =
-                        Some(env_binding.name.as_str().to_string());
-                    expanded_doc.roots.push(root_id);
-                    last_root_id = Some(root_id);
-                    global_scope.borrow_mut().insert(
-                        env_binding.name.as_str().to_string(),
-                        LexicalBinding::Node(root_id),
-                    );
-                    let bound_expr = Expr::Ident(Ident::new(root_id.canonical_name(), elem.span));
-                    global_env_scope.insert(
-                        env_binding.name.as_str().to_string(),
-                        EnvEntry::Bound(bound_expr),
-                    );
-                    if elem.name.as_str() == "Font" {
-                        node_fonts.insert(root_id, root_id);
+                    if !is_value_node_name(elem.name.as_str()) {
+                        validate_node_type_annotation(
+                            elem.name.as_str(),
+                            elem.span,
+                            env_binding.type_annotation.as_ref(),
+                            enums,
+                            registry,
+                        )?;
+                        let elem_ctx = ElementContext {
+                            parent_id: Some(NodeId::WINDOW),
+                            parent_name: Some("window"),
+                            prev_sibling_id: last_root_id,
+                            has_next_sibling: false,
+                            parent_ports: window_scope_ports,
+                            lexical_scope: global_scope,
+                            env_scope: global_env_scope,
+                            enclosing_component_id: None,
+                            enclosing_num_children: 0,
+                            enclosing_instantiated_children: None,
+                            shadowed_ports: None,
+                            is_let: true,
+                            ambient_authored_ports: None,
+                            enums,
+                            active_scope_id: ScopeId::ROOT,
+                            consumer_children: None,
+                        };
+                        let root_id =
+                            expand_element(elem, &elem_ctx, registry, expanded_doc, node_fonts)?;
+                        expanded_doc.get_node_mut(root_id).unwrap().var_name =
+                            Some(env_binding.name.as_str().to_string());
+                        expanded_doc.roots.push(root_id);
+                        last_root_id = Some(root_id);
+                        global_scope.borrow_mut().insert(
+                            env_binding.name.as_str().to_string(),
+                            LexicalBinding::Node(root_id),
+                        );
+                        let bound_expr =
+                            Expr::Ident(Ident::new(root_id.canonical_name(), elem.span));
+                        global_env_scope.insert(
+                            env_binding.name.as_str().to_string(),
+                            EnvEntry::Bound(bound_expr),
+                        );
+                        if elem.name.as_str() == "Font" {
+                            node_fonts.insert(root_id, root_id);
+                        }
+                        continue;
                     }
-                } else if let Some(raw_expr) = &env_binding.value {
+                }
+                if let Some(raw_expr) = &env_binding.value {
                     let rewritten = {
                         let scope_borrow = global_scope.borrow();
                         let scope_ctx = ScopeContext::for_window(
@@ -424,18 +453,27 @@ fn expand_top_level_items(
                         rewritten,
                         let_binding.type_annotation.as_ref(),
                     );
-                    expanded_doc.local_bindings.push((
-                        rewritten.clone(),
-                        let_binding
-                            .type_annotation
-                            .as_ref()
-                            .map(|t| t.name.as_str().to_string()),
-                        raw_expr.span(),
-                    ));
-                    global_scope.borrow_mut().insert(
-                        let_binding.name.as_str().to_string(),
-                        LexicalBinding::Expr(rewritten),
-                    );
+                    if expanded_doc
+                        .window_ports
+                        .contains_key(let_binding.name.as_str())
+                    {
+                        expanded_doc
+                            .window_ports
+                            .insert(let_binding.name.as_str().to_string(), rewritten);
+                    } else {
+                        expanded_doc.local_bindings.push((
+                            rewritten.clone(),
+                            let_binding
+                                .type_annotation
+                                .as_ref()
+                                .map(|t| t.name.as_str().to_string()),
+                            raw_expr.span(),
+                        ));
+                        global_scope.borrow_mut().insert(
+                            let_binding.name.as_str().to_string(),
+                            LexicalBinding::Expr(rewritten),
+                        );
+                    }
                 }
                 Some(LetValue::Node(elem)) => {
                     validate_node_type_annotation(

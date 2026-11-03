@@ -15,6 +15,60 @@ pub enum Value {
         enum_name: String,
         variant: String,
     },
+    Timer {
+        time: i64,
+        duration: i64,
+        dt: i64,
+        frames: i64,
+    },
+    IndefiniteTimer {
+        time: i64,
+        dt: i64,
+        frames: i64,
+    },
+    Unset,
+}
+
+/// Helper type for constructing a fixed-length `\Timer` value from guest component code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Timer {
+    pub duration_micros: i64,
+}
+
+impl Timer {
+    pub fn new(duration: std::time::Duration) -> Self {
+        Self {
+            duration_micros: duration.as_micros() as i64,
+        }
+    }
+
+    pub fn from_micros(micros: i64) -> Self {
+        Self {
+            duration_micros: micros,
+        }
+    }
+
+    pub fn from_millis(millis: i64) -> Self {
+        Self {
+            duration_micros: millis.saturating_mul(1_000),
+        }
+    }
+
+    pub fn from_secs_f64(secs: f64) -> Self {
+        Self {
+            duration_micros: (secs * 1_000_000.0).round() as i64,
+        }
+    }
+}
+
+/// Helper type for constructing an `\IndefiniteTimer()` value from guest component code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct IndefiniteTimer;
+
+impl IndefiniteTimer {
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Value {
@@ -74,6 +128,34 @@ impl Value {
             Value::Color(_) => true,
             Value::Node(_) => true,
             Value::Enum { .. } => true,
+            Value::Timer { time, duration, .. } => *duration > 0 && *time < *duration,
+            Value::IndefiniteTimer { .. } => true,
+            Value::Unset => false,
+        }
+    }
+}
+
+impl From<Timer> for Value {
+    fn from(t: Timer) -> Self {
+        if t.duration_micros <= 0 {
+            Value::Unset
+        } else {
+            Value::Timer {
+                time: 0,
+                duration: t.duration_micros,
+                dt: 0,
+                frames: 0,
+            }
+        }
+    }
+}
+
+impl From<IndefiniteTimer> for Value {
+    fn from(_: IndefiniteTimer) -> Self {
+        Value::IndefiniteTimer {
+            time: 0,
+            dt: 0,
+            frames: 0,
         }
     }
 }

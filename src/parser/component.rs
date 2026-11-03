@@ -163,7 +163,11 @@ pub fn parse_let_binding(cursor: &mut ParserCursor<'_>) -> Result<LetBinding, Pa
 
     let (value, end_span) = if let Some((Token::Eq, _)) = cursor.peek_token()? {
         cursor.consume_token(&Token::Eq)?;
-        let val = if let Some((Token::Backslash, _)) = cursor.peek_token()? {
+        let is_value_node = matches!(
+            cursor.peek_nth(1)?,
+            Some((Token::Ident(ref n), _)) if matches!(n.as_str(), "Timer" | "IndefiniteTimer")
+        );
+        let val = if matches!(cursor.peek_token()?, Some((Token::Backslash, _))) && !is_value_node {
             let node = parse_element_node(cursor)?;
             LetValue::Node(node)
         } else {

@@ -453,6 +453,11 @@ fn collect_dependencies(expr: &Expr, out: &mut Vec<VarId>) {
         Expr::Paren(p, _) => {
             collect_dependencies(p, out);
         }
-        Expr::Ident(_) | Expr::Literal(_) | Expr::Node(_) => {}
+        Expr::Node(n) => {
+            for port in &n.ports {
+                collect_dependencies(&port.expr, out);
+            }
+        }
+        Expr::Ident(_) | Expr::Literal(_) => {}
     }
 }

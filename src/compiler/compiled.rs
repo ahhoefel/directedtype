@@ -26,6 +26,7 @@ pub struct CompiledDocument {
     pub schedule: TopologicalSchedule,
     pub layout: ResolvedLayout,
     pub state_overrides: HashMap<VarId, Value>,
+    pub active_timers: HashSet<VarId>,
     pub instances: crate::component::InstanceManager,
     pub focused_node: Option<NodeId>,
     pub actions: Vec<crate::component::ContextAction>,
@@ -39,16 +40,31 @@ impl CompiledDocument {
         layout: ResolvedLayout,
         state_overrides: HashMap<VarId, Value>,
     ) -> Self {
+        let active_timers = Self::collect_active_timers(&layout.values);
         Self {
             expanded,
             graph,
             schedule,
             layout,
             state_overrides,
+            active_timers,
             instances: crate::component::InstanceManager::new(),
             focused_node: None,
             actions: Vec::new(),
         }
+    }
+
+    fn collect_active_timers(values: &HashMap<VarId, Value>) -> HashSet<VarId> {
+        values
+            .iter()
+            .filter_map(|(var_id, val)| match val {
+                Value::Timer { time, duration, .. } if *duration > 0 && *time < *duration => {
+                    Some(var_id.clone())
+                }
+                Value::IndefiniteTimer { .. } => Some(var_id.clone()),
+                _ => None,
+            })
+            .collect()
     }
 
     /// Compiles an AST document into an execution-ready `CompiledDocument` using default window dimensions (800x600).
@@ -86,6 +102,7 @@ impl CompiledDocument {
         let values = evaluate_graph_with_state(&graph, &schedule, &state_overrides)?;
         let mut layout = resolve_layout(&expanded, values);
         layout.graph = Some(graph.clone());
+        let active_timers = Self::collect_active_timers(&layout.values);
 
         Ok(Self {
             expanded,
@@ -93,6 +110,7 @@ impl CompiledDocument {
             schedule,
             layout,
             state_overrides,
+            active_timers,
             instances: crate::component::InstanceManager::new(),
             focused_node: None,
             actions: Vec::new(),
@@ -249,6 +267,17 @@ impl CompiledDocument {
         }
 
         // 3. Inject new state value into the cell
+        match &value {
+            Value::Timer { time, duration, .. } if *duration > 0 && *time < *duration => {
+                self.active_timers.insert(var_id.clone());
+            }
+            Value::IndefiniteTimer { .. } => {
+                self.active_timers.insert(var_id.clone());
+            }
+            _ => {
+                self.active_timers.remove(&var_id);
+            }
+        }
         self.state_overrides.insert(var_id.clone(), value);
 
         // 4. Incrementally re-evaluate downstream variables in the DAG
@@ -260,10 +289,116 @@ impl CompiledDocument {
             &self.state_overrides,
         )?;
 
+        // Sync any downstream timer bindings affected by this state update
+        for changed_id in &changed {
+            match self.layout.values.get(changed_id) {
+                Some(Value::Timer { time, duration, .. }) if *duration > 0 && *time < *duration => {
+                    self.active_timers.insert(changed_id.clone());
+                }
+                Some(Value::IndefiniteTimer { .. }) => {
+                    self.active_timers.insert(changed_id.clone());
+                }
+                _ => {
+                    self.active_timers.remove(changed_id);
+                }
+            }
+        }
+
         // 5. Update layout nodes and structured keys
         update_resolved_layout(&mut self.layout, &self.expanded, &changed);
 
         Ok(changed)
+    }
+
+    /// Returns `true` if there is at least one active fixed-length or indefinite timer in the document.
+    pub fn has_active_timers(&self) -> bool {
+        !self.active_timers.is_empty()
+    }
+
+    /// Advances all active timers in the document by `dt_micros` microseconds (`1s = 1_000_000`, `1ms = 1_000`).
+    ///
+    /// Fixed-length timers whose elapsed `time` reaches or exceeds `duration` automatically transition
+    /// to `Value::Unset` and are removed from `active_timers`.
+    /// All downstream DAG variables and layout nodes are incrementally re-evaluated.
+    pub fn advance_timers(&mut self, dt_micros: i64) -> Result<HashSet<VarId>, CompileError> {
+        let dt_us = dt_micros.max(0);
+        if self.active_timers.is_empty() || dt_us == 0 {
+            return Ok(HashSet::new());
+        }
+
+        let timer_vars: Vec<VarId> = self.active_timers.iter().cloned().collect();
+        let mut mutated_vars = Vec::with_capacity(timer_vars.len());
+
+        for var_id in timer_vars {
+            let current = self
+                .state_overrides
+                .get(&var_id)
+                .or_else(|| self.layout.values.get(&var_id))
+                .cloned();
+            match current {
+                Some(Value::Timer {
+                    time,
+                    duration,
+                    frames,
+                    ..
+                }) => {
+                    let next_time = time.saturating_add(dt_us);
+                    if next_time >= duration {
+                        self.active_timers.remove(&var_id);
+                        self.state_overrides.insert(var_id.clone(), Value::Unset);
+                    } else {
+                        self.state_overrides.insert(
+                            var_id.clone(),
+                            Value::Timer {
+                                time: next_time,
+                                duration,
+                                dt: dt_us,
+                                frames: frames.saturating_add(1),
+                            },
+                        );
+                    }
+                    mutated_vars.push(var_id);
+                }
+                Some(Value::IndefiniteTimer { time, frames, .. }) => {
+                    let next_time = time.saturating_add(dt_us);
+                    self.state_overrides.insert(
+                        var_id.clone(),
+                        Value::IndefiniteTimer {
+                            time: next_time,
+                            dt: dt_us,
+                            frames: frames.saturating_add(1),
+                        },
+                    );
+                    mutated_vars.push(var_id);
+                }
+                _ => {
+                    self.active_timers.remove(&var_id);
+                }
+            }
+        }
+
+        if mutated_vars.is_empty() {
+            return Ok(HashSet::new());
+        }
+
+        let changed = invalidate_and_reevaluate(
+            &self.graph,
+            &self.schedule,
+            &mut self.layout.values,
+            &mutated_vars,
+            &self.state_overrides,
+        )?;
+
+        update_resolved_layout(&mut self.layout, &self.expanded, &changed);
+        Ok(changed)
+    }
+
+    /// Convenience wrapper around `advance_timers` accepting a `std::time::Duration`.
+    pub fn advance_timers_duration(
+        &mut self,
+        dt: std::time::Duration,
+    ) -> Result<HashSet<VarId>, CompileError> {
+        self.advance_timers(dt.as_micros() as i64)
     }
 
     /// Mutates a state variable on a child component identified by its structured identity key.

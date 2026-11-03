@@ -34,7 +34,7 @@ pub use module::{
 pub use scope::{NavigationScope, ScopeId, ScopeTree};
 pub use topo::{sort_graph, TopologicalSchedule};
 pub use text::{CursorKind, FontMetrics, SpanStyle, TextSpan};
-pub use value::Value;
+pub use value::{IndefiniteTimer, Timer, Value};
 
 use crate::ast::Document;
 use std::path::Path;

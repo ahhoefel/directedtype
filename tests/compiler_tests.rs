@@ -5409,3 +5409,222 @@ fn test_duration_typecheck_errors() {
     }
 }
 
+#[test]
+fn test_timer_fixed_and_indefinite_lifecycle_and_advancement() {
+    let src = r#"
+    \env font = \Font(size: 20px);
+    \let t = \Timer(duration: 2s);
+    \let inf = \IndefiniteTimer();
+    \let inf2: IndefiniteTimer = \IndefiniteTimer();
+    \let d = t ? t.elapsed * 5em : 0;
+    \let rem = t ? t.duration - t.time : 0s;
+    \let fps = inf.dt > 0s ? 1s / inf.dt : 0.0;
+    \let avg_fps = inf.time > 0s ? inf.frames / inf.time.to_seconds() : 0.0;
+    \Rect(
+        x: d,
+        y: fps * 1px,
+        width: avg_fps * 1px + 10px,
+        height: rem.to_ms() * 1px + 10px,
+        color: #3b82f6
+    )
+    "#;
+    let doc = parse(src).expect("Should parse timer document");
+    let mut compiled = directedtype::compiler::compile_document(&doc)
+        .expect("Should compile timer document");
+
+    assert!(compiled.has_active_timers());
+    let rect_id = compiled
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| n.name == "Rect")
+        .unwrap()
+        .id;
+
+    // Initial frame (t = 0s, dt = 0s, frames = 0)
+    let r0 = compiled.layout().get_node(rect_id).unwrap();
+    assert!((r0.rect.x - 0.0).abs() < 1e-6);
+    assert!((r0.rect.y - 0.0).abs() < 1e-6);
+    assert!((r0.rect.width - 10.0).abs() < 1e-6);
+    assert!((r0.rect.height - 2010.0).abs() < 1e-6);
+
+    // Advance by 500ms (500_000 us):
+    // t.time = 0.5s, t.elapsed = 0.25, d = 0.25 * 100px = 25px, rem = 1500ms
+    // inf.dt = 0.5s => fps = 2.0, inf.frames = 1, inf.time = 0.5s => avg_fps = 2.0
+    compiled
+        .advance_timers(500_000)
+        .expect("Should advance timers by 500ms");
+    assert!(compiled.has_active_timers());
+    let r1 = compiled.layout().get_node(rect_id).unwrap();
+    assert!((r1.rect.x - 25.0).abs() < 1e-6);
+    assert!((r1.rect.y - 2.0).abs() < 1e-6);
+    assert!((r1.rect.width - 12.0).abs() < 1e-6);
+    assert!((r1.rect.height - 1510.0).abs() < 1e-6);
+
+    // Advance by 1500ms (1_500_000 us):
+    // Fixed timer `t` reaches 2s and automatically unsets itself!
+    // `d` falls back to `: 0` (0px) and `rem` falls back to `: 0s` (0ms -> height 10px).
+    // Indefinite timers `inf` and `inf2` continue counting (time = 2s, frames = 2, dt = 1.5s).
+    compiled
+        .advance_timers(1_500_000)
+        .expect("Should advance timers by 1500ms");
+    assert!(compiled.has_active_timers());
+    assert_eq!(
+        compiled.get_state(directedtype::compiler::NodeId::WINDOW, "t"),
+        Some(&Value::Unset)
+    );
+    let r2 = compiled.layout().get_node(rect_id).unwrap();
+    assert!((r2.rect.x - 0.0).abs() < 1e-6);
+    assert!((r2.rect.height - 10.0).abs() < 1e-6);
+    // inf.frames = 2, inf.time = 2.0s => avg_fps = 1.0 => width = 11.0
+    assert!((r2.rect.width - 11.0).abs() < 1e-6);
+}
+
+#[test]
+fn test_timer_state_variable_and_sdk_set_state() {
+    let src = r#"
+    \Component AnimatedBar(x: Distance = 0, y: Distance = 0) {
+        \state anim: Timer = unset;
+        \let w = anim ? 50px + anim.elapsed * 150px : 50px;
+        \Rect(x: x, y: y, width: w, height: 20px, color: #10b981)
+    }
+    \AnimatedBar()
+    "#;
+    let doc = parse(src).expect("Should parse component with Timer state");
+    let mut compiled = directedtype::compiler::compile_document(&doc)
+        .expect("Should compile component with Timer state");
+
+    // Initially `anim` is unset, so no timers are active
+    assert!(!compiled.has_active_timers());
+    let comp_id = compiled
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| n.name == "AnimatedBar")
+        .unwrap()
+        .id;
+    let rect_id = compiled
+        .layout()
+        .nodes
+        .iter()
+        .find(|n| n.name == "Rect")
+        .unwrap()
+        .id;
+    assert_eq!(compiled.layout().get_node(rect_id).unwrap().rect.width, 50.0);
+
+    // Start a 1s timer from Rust/SDK via set_state
+    compiled
+        .set_state(comp_id, "anim", directedtype::Timer::from_millis(1000).into())
+        .expect("Should set Timer state");
+    assert!(compiled.has_active_timers());
+    assert_eq!(compiled.layout().get_node(rect_id).unwrap().rect.width, 50.0);
+
+    // Advance by 400ms -> elapsed = 0.4 -> width = 50 + 60 = 110px
+    compiled.advance_timers(400_000).unwrap();
+    assert!(compiled.has_active_timers());
+    assert!(
+        (compiled.layout().get_node(rect_id).unwrap().rect.width - 110.0).abs() < 1e-6
+    );
+
+    // Advance by 600ms -> reaches 1000ms -> auto-unsets -> width returns to 50px and no active timers remain
+    compiled.advance_timers(600_000).unwrap();
+    assert!(!compiled.has_active_timers());
+    assert_eq!(compiled.get_state(comp_id, "anim"), Some(&Value::Unset));
+    assert_eq!(compiled.layout().get_node(rect_id).unwrap().rect.width, 50.0);
+}
+
+#[test]
+fn test_timer_typecheck_errors() {
+    for (src, expected_msg) in [
+        (
+            r#"
+            \let t = \Timer();
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Node 'Timer' is missing required property 'duration'",
+        ),
+        (
+            r#"
+            \let t = \IndefiniteTimer();
+            \let bad = t.elapsed;
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Node 'IndefiniteTimer' has no public property 'elapsed'",
+        ),
+        (
+            r#"
+            \let t = \IndefiniteTimer();
+            \let bad = t.duration;
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Node 'IndefiniteTimer' has no public property 'duration'",
+        ),
+        (
+            r#"
+            \let t = \Timer(duration: 10px);
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Duration', found 'Distance'",
+        ),
+        (
+            r#"
+            \let t: Timer = \IndefiniteTimer();
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Timer', found 'IndefiniteTimer'",
+        ),
+        (
+            r#"
+            \let t: IndefiniteTimer = \Timer(duration: 5s);
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'IndefiniteTimer', found 'Timer'",
+        ),
+        (
+            r#"
+            \let t = \Timer(foo: 5s);
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Node 'Timer' does not accept property 'foo'",
+        ),
+    ] {
+        let doc = parse(src).expect("Should parse");
+        let err = compile_to_graph(&doc).expect_err(expected_msg);
+        assert!(
+            err.to_string().contains(expected_msg),
+            "Expected '{}', got: {}",
+            expected_msg,
+            err
+        );
+    }
+}
+
+#[test]
+fn test_timer_fps_example_compiles_and_runs() {
+    let src = std::fs::read_to_string("examples/timer_fps.dt")
+        .expect("Should read examples/timer_fps.dt");
+    let doc = parse(&src).expect("Should parse examples/timer_fps.dt");
+    let mut compiled = directedtype::compiler::compile_document(&doc)
+        .expect("Should compile examples/timer_fps.dt");
+
+    assert!(compiled.has_active_timers());
+
+    // Simulate a 60 FPS frame (16_667 us)
+    compiled
+        .advance_timers(16_667)
+        .expect("Should advance timers by 1 frame");
+    assert!(compiled.has_active_timers());
+
+    // Advance past 5s so `intro` auto-unsets while `clock` stays active
+    compiled
+        .advance_timers(5_000_000)
+        .expect("Should advance timers past 5s");
+    assert!(compiled.has_active_timers());
+    assert_eq!(
+        compiled.get_state(directedtype::compiler::NodeId::WINDOW, "intro"),
+        Some(&Value::Unset)
+    );
+}
+
+
+

@@ -106,7 +106,10 @@ impl<'a> ComponentExpander<'a> {
         for (env_name, e) in &schema.declared_envs {
             if !schema.comp_shadowed_ports.contains(env_name) {
                 if let Some(raw_expr) = &e.value {
-                    if !matches!(raw_expr, Expr::Node(_)) {
+                    if !matches!(
+                        raw_expr,
+                        Expr::Node(elem) if !super::is_value_node_name(elem.name.as_str())
+                    ) {
                         comp_ports.insert(env_name.clone(), raw_expr.clone());
                     }
                 }
@@ -206,7 +209,9 @@ impl<'a> ComponentExpander<'a> {
                         .is_some_and(|t| t.name.as_str() == "Handler")
             });
             let expr = match &port.expr {
-                Expr::Node(inline_elem) => {
+                Expr::Node(inline_elem)
+                    if !super::is_value_node_name(inline_elem.name.as_str()) =>
+                {
                     let child_ctx = ElementContext {
                         parent_id: Some(ctx.comp_node_id),
                         parent_name: ctx.parent_name,
@@ -271,7 +276,9 @@ impl<'a> ComponentExpander<'a> {
     ) -> Result<Expr, CompileError> {
         let ctx = self.ctx;
         match default_expr {
-            Expr::Node(inline_elem) => {
+            Expr::Node(inline_elem)
+                if !super::is_value_node_name(inline_elem.name.as_str()) =>
+            {
                 let child_ctx = ElementContext {
                     parent_id: Some(ctx.comp_node_id),
                     parent_name: ctx.parent_name,
@@ -828,7 +835,10 @@ impl<'a> ComponentExpander<'a> {
                             LexicalBinding::Uninitialized,
                         );
                     } else if let Some(raw_expr) = &env_binding.value {
-                        if !matches!(raw_expr, Expr::Node(_)) {
+                        if !matches!(
+                            raw_expr,
+                            Expr::Node(elem) if !super::is_value_node_name(elem.name.as_str())
+                        ) {
                             let rewritten_res = {
                                 let scope_ctx = ScopeContext::from_instance(
                                     ctx,
@@ -1008,7 +1018,7 @@ impl<'a> ComponentExpander<'a> {
         let comp_def = self.comp_def;
         if let Some(raw_expr) = &env_binding.value {
             match raw_expr {
-                Expr::Node(elem) => {
+                Expr::Node(elem) if !super::is_value_node_name(elem.name.as_str()) => {
                     validate_node_type_annotation(
                         elem.name.as_str(),
                         elem.span,

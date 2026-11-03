@@ -17,6 +17,60 @@ pub enum Value {
         enum_name: String,
         variant: String,
     },
+    Timer {
+        time: i64,
+        duration: i64,
+        dt: i64,
+        frames: i64,
+    },
+    IndefiniteTimer {
+        time: i64,
+        dt: i64,
+        frames: i64,
+    },
+    Unset,
+}
+
+/// Helper type for constructing a fixed-length `\Timer` value from Rust/WASM companion code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Timer {
+    pub duration_micros: i64,
+}
+
+impl Timer {
+    pub fn new(duration: std::time::Duration) -> Self {
+        Self {
+            duration_micros: duration.as_micros() as i64,
+        }
+    }
+
+    pub fn from_micros(micros: i64) -> Self {
+        Self {
+            duration_micros: micros,
+        }
+    }
+
+    pub fn from_millis(millis: i64) -> Self {
+        Self {
+            duration_micros: millis.saturating_mul(1_000),
+        }
+    }
+
+    pub fn from_secs_f64(secs: f64) -> Self {
+        Self {
+            duration_micros: (secs * 1_000_000.0).round() as i64,
+        }
+    }
+}
+
+/// Helper type for constructing an `\IndefiniteTimer()` value from Rust/WASM companion code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct IndefiniteTimer;
+
+impl IndefiniteTimer {
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Value {
@@ -101,6 +155,9 @@ impl Value {
             Value::Color(_) => true,
             Value::Node(_) => true,
             Value::Enum { .. } => true,
+            Value::Timer { time, duration, .. } => *duration > 0 && *time < *duration,
+            Value::IndefiniteTimer { .. } => true,
+            Value::Unset => false,
         }
     }
 
@@ -134,6 +191,16 @@ impl Value {
             Value::Color(c) => c.clone(),
             Value::Node(id) => id.canonical_name(),
             Value::Enum { enum_name, variant } => format!("{}.{}", enum_name, variant),
+            Value::Timer { time, duration, .. } => format!(
+                "Timer({} / {})",
+                crate::ast::DurationUnit::S.format_micros(*time),
+                crate::ast::DurationUnit::S.format_micros(*duration)
+            ),
+            Value::IndefiniteTimer { time, .. } => format!(
+                "IndefiniteTimer({})",
+                crate::ast::DurationUnit::S.format_micros(*time)
+            ),
+            Value::Unset => "unset".to_string(),
         }
     }
 
@@ -149,6 +216,9 @@ impl Value {
             Value::Color(_) => "Color",
             Value::Node(_) => "Node",
             Value::Enum { enum_name, .. } => enum_name.as_str(),
+            Value::Timer { .. } => "Timer",
+            Value::IndefiniteTimer { .. } => "IndefiniteTimer",
+            Value::Unset => "unset",
         }
     }
 
@@ -163,6 +233,9 @@ impl Value {
             "Boolean" => matches!(self, Value::Bool(_)),
             "Color" => matches!(self, Value::Color(_)),
             "Node" | "ViewPort" => matches!(self, Value::Node(_)),
+            "Timer" => matches!(self, Value::Timer { .. } | Value::Unset),
+            "IndefiniteTimer" => matches!(self, Value::IndefiniteTimer { .. } | Value::Unset),
+            "Handler" => matches!(self, Value::Unset),
             custom => match self {
                 Value::Enum { enum_name, .. } => enum_name == custom,
                 Value::Node(_) => true,
@@ -197,6 +270,43 @@ impl fmt::Display for Value {
             Value::Color(c) => write!(f, "{}", c),
             Value::Node(id) => write!(f, "{}", id.canonical_name()),
             Value::Enum { enum_name, variant } => write!(f, "{}.{}", enum_name, variant),
+            Value::Timer { time, duration, .. } => write!(
+                f,
+                "Timer({} / {})",
+                crate::ast::DurationUnit::S.format_micros(*time),
+                crate::ast::DurationUnit::S.format_micros(*duration)
+            ),
+            Value::IndefiniteTimer { time, .. } => write!(
+                f,
+                "IndefiniteTimer({})",
+                crate::ast::DurationUnit::S.format_micros(*time)
+            ),
+            Value::Unset => write!(f, "unset"),
+        }
+    }
+}
+
+impl From<Timer> for Value {
+    fn from(t: Timer) -> Self {
+        if t.duration_micros <= 0 {
+            Value::Unset
+        } else {
+            Value::Timer {
+                time: 0,
+                duration: t.duration_micros,
+                dt: 0,
+                frames: 0,
+            }
+        }
+    }
+}
+
+impl From<IndefiniteTimer> for Value {
+    fn from(_: IndefiniteTimer) -> Self {
+        Value::IndefiniteTimer {
+            time: 0,
+            dt: 0,
+            frames: 0,
         }
     }
 }

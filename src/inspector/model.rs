@@ -487,6 +487,9 @@ pub fn build_property_dag_trace(
             Value::Color(_) => "Color".to_string(),
             Value::Node(_) => "Node Reference".to_string(),
             Value::Enum { enum_name, .. } => format!("Enum ({enum_name})"),
+            Value::Timer { .. } => "Timer".to_string(),
+            Value::IndefiniteTimer { .. } => "IndefiniteTimer".to_string(),
+            Value::Unset => "unset".to_string(),
         }
     } else {
         match port {

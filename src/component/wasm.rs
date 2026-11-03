@@ -260,6 +260,23 @@ fn host_to_guest_value(val: &Value) -> GuestValue {
             enum_name: enum_name.clone(),
             variant: variant.clone(),
         },
+        Value::Timer {
+            time,
+            duration,
+            dt,
+            frames,
+        } => GuestValue::Timer {
+            time: *time,
+            duration: *duration,
+            dt: *dt,
+            frames: *frames,
+        },
+        Value::IndefiniteTimer { time, dt, frames } => GuestValue::IndefiniteTimer {
+            time: *time,
+            dt: *dt,
+            frames: *frames,
+        },
+        Value::Unset => GuestValue::Unset,
     }
 }
 
@@ -274,6 +291,21 @@ fn guest_to_host_value(val: GuestValue) -> Value {
         GuestValue::Color(c) => Value::Color(c),
         GuestValue::Node(id) => Value::Node(NodeId(id as usize)),
         GuestValue::Enum { enum_name, variant } => Value::Enum { enum_name, variant },
+        GuestValue::Timer {
+            time,
+            duration,
+            dt,
+            frames,
+        } => Value::Timer {
+            time,
+            duration,
+            dt,
+            frames,
+        },
+        GuestValue::IndefiniteTimer { time, dt, frames } => {
+            Value::IndefiniteTimer { time, dt, frames }
+        }
+        GuestValue::Unset => Value::Unset,
     }
 }
 

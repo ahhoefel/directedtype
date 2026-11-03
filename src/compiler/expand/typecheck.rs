@@ -18,6 +18,8 @@ pub enum StaticType {
     Boolean,
     Color,
     Handler,
+    Timer,
+    IndefiniteTimer,
     Unset,
     ViewPort,
     Enum(String),
@@ -36,6 +38,8 @@ impl StaticType {
             StaticType::Boolean => "Boolean".to_string(),
             StaticType::Color => "Color".to_string(),
             StaticType::Handler | StaticType::Unset => "Handler".to_string(),
+            StaticType::Timer => "Timer".to_string(),
+            StaticType::IndefiniteTimer => "IndefiniteTimer".to_string(),
             StaticType::ViewPort => "ViewPort".to_string(),
             StaticType::Enum(name) => name.clone(),
             StaticType::Node(name) => name.clone(),
@@ -74,6 +78,8 @@ impl StaticType {
             "Boolean" => Ok(StaticType::Boolean),
             "Color" => Ok(StaticType::Color),
             "Handler" => Ok(StaticType::Handler),
+            "Timer" => Ok(StaticType::Timer),
+            "IndefiniteTimer" => Ok(StaticType::IndefiniteTimer),
             "ViewPort" => Ok(StaticType::ViewPort),
             "Node" => Ok(StaticType::Node("Node".to_string())),
             "Window" | "Rect" | "Line" | "Text" | "Font" | "Clip" | "Box" | "Anchor" | "AnchorScope" => {
@@ -118,8 +124,14 @@ impl StaticType {
             ) => true,
             (StaticType::Integer, StaticType::ZeroInteger) => true,
             (StaticType::Integer, StaticType::Float) => true,
-            (StaticType::Unset, StaticType::Handler) => true,
-            (StaticType::Handler, StaticType::Unset) => true,
+            (
+                StaticType::Unset,
+                StaticType::Handler | StaticType::Timer | StaticType::IndefiniteTimer,
+            ) => true,
+            (
+                StaticType::Handler | StaticType::Timer | StaticType::IndefiniteTimer,
+                StaticType::Unset,
+            ) => true,
             (StaticType::Node(n), StaticType::ViewPort)
                 if n == "Window" || n == "ScrollView" || n == "Node" =>
             {
@@ -470,10 +482,13 @@ pub(super) fn infer_expr_literal_for_typecheck<'a>(
             ) {
                 return Some(Literal::Distance(0.0, DistanceUnit::Px, m.span));
             }
-            if member == "dpi" {
+            if member == "dpi" || member == "elapsed" {
                 return Some(Literal::Float(96.0, m.span));
             }
-            if member == "weight" || member == "z" || member == "len" {
+            if matches!(member, "time" | "duration" | "dt") {
+                return Some(Literal::Duration(0, DurationUnit::S, m.span));
+            }
+            if member == "weight" || member == "z" || member == "len" || member == "frames" {
                 return Some(Literal::Integer(1, m.span));
             }
             None
@@ -639,6 +654,8 @@ pub(super) fn infer_expr_literal_for_typecheck<'a>(
                 _ => None,
             }
         }
+        Expr::Ternary(tern) => infer_expr_literal_for_typecheck(&tern.then_expr, ctx)
+            .or_else(|| infer_expr_literal_for_typecheck(&tern.else_expr, ctx)),
         _ => None,
     }
 }
@@ -649,6 +666,12 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
         Expr::Ident(id) => {
             if id.as_str() == "unset" || id.as_str() == "None" {
                 return Some(true);
+            }
+            if ctx
+                .declared_state_names
+                .is_some_and(|s| s.contains(id.as_str()))
+            {
+                return None;
             }
             if let Some(comp_ports) = ctx.comp_ports {
                 if let Some(port_expr) = comp_ports.get(id.as_str()) {
@@ -687,6 +710,12 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
                     || ctx.parent_node.is_some_and(|p| target_id.as_str() == p.canonical_name())
                     || target_id.as_str() == ctx.current_node.canonical_name();
                 if is_target {
+                    if ctx
+                        .declared_state_names
+                        .is_some_and(|s| s.contains(m.member.as_str()))
+                    {
+                        return None;
+                    }
                     if let Some(comp_ports) = ctx.comp_ports {
                         if let Some(port_expr) = comp_ports.get(m.member.as_str()) {
                             return match port_expr {
@@ -1164,7 +1193,7 @@ fn infer_expr_type(
         Expr::Paren(inner, _) => infer_expr_type(inner, doc, enums, registry, cache, visiting),
         Expr::Ident(id) => {
             if id.as_str() == "unset" || id.as_str() == "None" {
-                return Ok(StaticType::Handler);
+                return Ok(StaticType::Unset);
             }
             if id.as_str() == "window" {
                 return Ok(StaticType::Node("Window".to_string()));
@@ -1267,6 +1296,26 @@ fn infer_expr_type(
                         span: m.span,
                     }),
                 },
+                StaticType::Timer => match m.member.as_str() {
+                    "time" | "duration" | "dt" => Ok(StaticType::Duration),
+                    "elapsed" => Ok(StaticType::Float),
+                    "frames" => Ok(StaticType::Integer),
+                    _ => Err(CompileError::Custom {
+                        message: format!("Node 'Timer' has no public property '{}'", m.member),
+                        span: m.span,
+                    }),
+                },
+                StaticType::IndefiniteTimer => match m.member.as_str() {
+                    "time" | "dt" => Ok(StaticType::Duration),
+                    "frames" => Ok(StaticType::Integer),
+                    _ => Err(CompileError::Custom {
+                        message: format!(
+                            "Node 'IndefiniteTimer' has no public property '{}'",
+                            m.member
+                        ),
+                        span: m.span,
+                    }),
+                },
                 other => Err(CompileError::Custom {
                     message: format!(
                         "Cannot access member '{}' on value of type '{}'",
@@ -1293,9 +1342,12 @@ fn infer_expr_type(
                     }),
                 },
                 UnaryOp::Not => match op_ty.decay() {
-                    StaticType::Boolean => Ok(StaticType::Boolean),
+                    StaticType::Boolean
+                    | StaticType::Timer
+                    | StaticType::IndefiniteTimer
+                    | StaticType::Handler => Ok(StaticType::Boolean),
                     other => Err(CompileError::TypeMismatch {
-                        expected: "Boolean".to_string(),
+                        expected: "Boolean or Timer".to_string(),
                         actual: other.type_name(),
                         span: u.span,
                     }),
@@ -1587,7 +1639,14 @@ fn infer_expr_type(
         }
         Expr::Ternary(tern) => {
             let cond_ty = infer_expr_type(&tern.condition, doc, enums, registry, cache, visiting)?;
-            if cond_ty != StaticType::Boolean {
+            if !matches!(
+                cond_ty,
+                StaticType::Boolean
+                    | StaticType::Timer
+                    | StaticType::IndefiniteTimer
+                    | StaticType::Handler
+                    | StaticType::Unset
+            ) {
                 return Err(CompileError::TypeMismatch {
                     expected: "Boolean".to_string(),
                     actual: cond_ty.type_name(),
@@ -1743,7 +1802,76 @@ fn infer_expr_type(
                 _ => Ok(StaticType::Float),
             }
         }
-        Expr::Node(elem) => Ok(StaticType::Node(elem.name.as_str().to_string())),
+        Expr::Node(elem) => match elem.name.as_str() {
+            "Timer" => {
+                if elem.content.is_some() {
+                    return Err(CompileError::Custom {
+                        message: "Node 'Timer' does not accept a content block".to_string(),
+                        span: elem.span,
+                    });
+                }
+                if elem.key.is_some() {
+                    return Err(CompileError::Custom {
+                        message: "Node 'Timer' does not accept a key".to_string(),
+                        span: elem.span,
+                    });
+                }
+                if elem.ports.is_empty() {
+                    return Err(CompileError::MissingPort {
+                        node: "Timer".to_string(),
+                        port: "duration".to_string(),
+                        span: elem.span,
+                    });
+                }
+                for port in &elem.ports {
+                    if port.name.as_str() != "duration" {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Node 'Timer' does not accept property '{}'",
+                                port.name.as_str()
+                            ),
+                            span: port.name.span,
+                        });
+                    }
+                    let port_ty =
+                        infer_expr_type(&port.expr, doc, enums, registry, cache, visiting)?;
+                    if !port_ty.matches(&StaticType::Duration) {
+                        return Err(CompileError::TypeMismatch {
+                            expected: "Duration".to_string(),
+                            actual: port_ty.type_name(),
+                            span: port.expr.span(),
+                        });
+                    }
+                }
+                Ok(StaticType::Timer)
+            }
+            "IndefiniteTimer" => {
+                if elem.content.is_some() {
+                    return Err(CompileError::Custom {
+                        message: "Node 'IndefiniteTimer' does not accept a content block"
+                            .to_string(),
+                        span: elem.span,
+                    });
+                }
+                if elem.key.is_some() {
+                    return Err(CompileError::Custom {
+                        message: "Node 'IndefiniteTimer' does not accept a key".to_string(),
+                        span: elem.span,
+                    });
+                }
+                if let Some(port) = elem.ports.first() {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Node 'IndefiniteTimer' does not accept property '{}'",
+                            port.name.as_str()
+                        ),
+                        span: port.name.span,
+                    });
+                }
+                Ok(StaticType::IndefiniteTimer)
+            }
+            _ => Ok(StaticType::Node(elem.name.as_str().to_string())),
+        },
     }
 }
 
