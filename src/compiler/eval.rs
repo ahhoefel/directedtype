@@ -190,6 +190,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     span: *span,
                 }),
             },
+            Literal::Duration(d, _, _) => Ok(Value::Duration(*d)),
             Literal::String(s, _) => Ok(Value::String(s.clone())),
             Literal::Bool(b, _) => Ok(Value::Bool(*b)),
             Literal::Color(c, _) => Ok(Value::Color(c.clone())),
@@ -264,6 +265,11 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     (Value::Area(l), Value::Area(r)) => Ok(Value::Area(l + r)),
                     (Value::Area(l), Value::Integer(0))
                     | (Value::Integer(0), Value::Area(l)) => Ok(Value::Area(*l)),
+                    (Value::Duration(l), Value::Duration(r)) => {
+                        Ok(Value::Duration(l.wrapping_add(*r)))
+                    }
+                    (Value::Duration(l), Value::Integer(0))
+                    | (Value::Integer(0), Value::Duration(l)) => Ok(Value::Duration(*l)),
                     (Value::String(_), _) | (_, Value::String(_)) => Ok(Value::String(format!(
                         "{}{}",
                         left.to_display_string(),
@@ -291,6 +297,13 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     (Value::Area(l), Value::Area(r)) => Ok(Value::Area(l - r)),
                     (Value::Area(l), Value::Integer(0)) => Ok(Value::Area(*l)),
                     (Value::Integer(0), Value::Area(r)) => Ok(Value::Area(-*r)),
+                    (Value::Duration(l), Value::Duration(r)) => {
+                        Ok(Value::Duration(l.wrapping_sub(*r)))
+                    }
+                    (Value::Duration(l), Value::Integer(0)) => Ok(Value::Duration(*l)),
+                    (Value::Integer(0), Value::Duration(r)) => {
+                        Ok(Value::Duration(r.wrapping_neg()))
+                    }
                     _ => Err(CompileError::Custom {
                         message: format!(
                             "Cannot subtract {} ({}) from {} ({})",
@@ -316,6 +329,14 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     | (Value::Integer(i), Value::Area(a)) => Ok(Value::Area(a * *i as f64)),
                     (Value::Area(a), Value::Float(f))
                     | (Value::Float(f), Value::Area(a)) => Ok(Value::Area(a * f)),
+                    (Value::Duration(d), Value::Integer(i))
+                    | (Value::Integer(i), Value::Duration(d)) => {
+                        Ok(Value::Duration(d.wrapping_mul(*i)))
+                    }
+                    (Value::Duration(d), Value::Float(f))
+                    | (Value::Float(f), Value::Duration(d)) => {
+                        Ok(Value::Duration((*d as f64 * f).round() as i64))
+                    }
                     _ => Err(CompileError::Custom {
                         message: format!(
                             "Cannot multiply {} ({}) and {} ({})",
@@ -407,6 +428,28 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                             Ok(Value::Area(a / r))
                         }
                     }
+                    (Value::Integer(0), Value::Duration(_)) => Ok(Value::Float(0.0)),
+                    (Value::Duration(l), Value::Duration(r)) => {
+                        if *r == 0 {
+                            Ok(Value::Float(0.0))
+                        } else {
+                            Ok(Value::Float(*l as f64 / *r as f64))
+                        }
+                    }
+                    (Value::Duration(d), Value::Integer(r)) => {
+                        if *r == 0 {
+                            Ok(Value::Duration(0))
+                        } else {
+                            Ok(Value::Duration((*d as f64 / *r as f64).round() as i64))
+                        }
+                    }
+                    (Value::Duration(d), Value::Float(r)) => {
+                        if *r == 0.0 {
+                            Ok(Value::Duration(0))
+                        } else {
+                            Ok(Value::Duration((*d as f64 / r).round() as i64))
+                        }
+                    }
                     _ => Err(CompileError::Custom {
                         message: format!(
                             "Cannot divide {} ({}) by {} ({})",
@@ -461,6 +504,13 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                             Ok(Value::Area(l % r))
                         }
                     }
+                    (Value::Duration(l), Value::Duration(r)) => {
+                        if *r == 0 {
+                            Ok(Value::Duration(0))
+                        } else {
+                            Ok(Value::Duration(l % r))
+                        }
+                    }
                     _ => Err(CompileError::Custom {
                         message: format!(
                             "Cannot compute remainder of {} ({}) and {} ({})",
@@ -498,6 +548,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     Value::Float(n) => Ok(Value::Float(-n)),
                     Value::Distance(d) => Ok(Value::Distance(-d)),
                     Value::Area(a) => Ok(Value::Area(-a)),
+                    Value::Duration(d) => Ok(Value::Duration(d.wrapping_neg())),
                     other => Err(CompileError::Custom {
                         message: format!("Cannot negate value of type {}", other.type_name()),
                         span: u.span,
@@ -515,6 +566,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     match eval_expr(&t.else_expr, env) {
                         Ok(Value::Distance(_)) => return Ok(Value::Distance(0.0)),
                         Ok(Value::Area(_)) => return Ok(Value::Area(0.0)),
+                        Ok(Value::Duration(_)) => return Ok(Value::Duration(0)),
                         _ => {}
                     }
                 }
@@ -525,6 +577,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     match eval_expr(&t.then_expr, env) {
                         Ok(Value::Distance(_)) => return Ok(Value::Distance(0.0)),
                         Ok(Value::Area(_)) => return Ok(Value::Area(0.0)),
+                        Ok(Value::Duration(_)) => return Ok(Value::Duration(0)),
                         _ => {}
                     }
                 }
@@ -637,6 +690,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 "round" => match evaluated_args.first() {
                     Some(Value::Distance(d)) => Ok(Value::Distance(d.round())),
                     Some(Value::Area(a)) => Ok(Value::Area(a.round())),
+                    Some(Value::Duration(d)) => Ok(Value::Duration(*d)),
                     Some(Value::Float(f)) => Ok(Value::Integer(f.round() as i64)),
                     Some(Value::Integer(i)) => Ok(Value::Integer(*i)),
                     _ => Ok(Value::Integer(0)),
@@ -644,6 +698,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 "floor" => match evaluated_args.first() {
                     Some(Value::Distance(d)) => Ok(Value::Distance(d.floor())),
                     Some(Value::Area(a)) => Ok(Value::Area(a.floor())),
+                    Some(Value::Duration(d)) => Ok(Value::Duration(*d)),
                     Some(Value::Float(f)) => Ok(Value::Integer(f.floor() as i64)),
                     Some(Value::Integer(i)) => Ok(Value::Integer(*i)),
                     _ => Ok(Value::Integer(0)),
@@ -651,6 +706,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 "ceil" => match evaluated_args.first() {
                     Some(Value::Distance(d)) => Ok(Value::Distance(d.ceil())),
                     Some(Value::Area(a)) => Ok(Value::Area(a.ceil())),
+                    Some(Value::Duration(d)) => Ok(Value::Duration(*d)),
                     Some(Value::Float(f)) => Ok(Value::Integer(f.ceil() as i64)),
                     Some(Value::Integer(i)) => Ok(Value::Integer(*i)),
                     _ => Ok(Value::Integer(0)),
@@ -658,6 +714,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 "abs" => match evaluated_args.first() {
                     Some(Value::Distance(d)) => Ok(Value::Distance(d.abs())),
                     Some(Value::Area(a)) => Ok(Value::Area(a.abs())),
+                    Some(Value::Duration(d)) => Ok(Value::Duration(d.abs())),
                     Some(Value::Float(f)) => Ok(Value::Float(f.abs())),
                     Some(Value::Integer(i)) => Ok(Value::Integer(i.abs())),
                     _ => Ok(Value::Integer(0)),
@@ -1151,7 +1208,13 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let decimals = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(0.0).max(0.0) as usize;
                     match target_val {
                         Value::Integer(n) => Ok(Value::String(format_fixed(n as f64, decimals))),
-                        Value::Float(n) | Value::Distance(n) | Value::Area(n) => Ok(Value::String(format_fixed(n, decimals))),
+                        Value::Float(n) | Value::Distance(n) | Value::Area(n) => {
+                            Ok(Value::String(format_fixed(n, decimals)))
+                        }
+                        Value::Duration(us) => Ok(Value::String(format_fixed(
+                            us as f64 / 1_000_000.0,
+                            decimals,
+                        ))),
                         _ => Err(CompileError::Custom {
                             message: format!("to_fixed() can only be called on numeric values, got {}", target_val.type_name()),
                             span: mc.span,
@@ -1162,7 +1225,13 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     let sigfigs = evaluated_args.first().and_then(|v| v.as_f64()).unwrap_or(1.0).max(1.0) as usize;
                     match target_val {
                         Value::Integer(n) => Ok(Value::String(format_sigfigs(n as f64, sigfigs))),
-                        Value::Float(n) | Value::Distance(n) | Value::Area(n) => Ok(Value::String(format_sigfigs(n, sigfigs))),
+                        Value::Float(n) | Value::Distance(n) | Value::Area(n) => {
+                            Ok(Value::String(format_sigfigs(n, sigfigs)))
+                        }
+                        Value::Duration(us) => Ok(Value::String(format_sigfigs(
+                            us as f64 / 1_000_000.0,
+                            sigfigs,
+                        ))),
                         _ => Err(CompileError::Custom {
                             message: format!("to_precision() can only be called on numeric values, got {}", target_val.type_name()),
                             span: mc.span,
@@ -1188,6 +1257,22 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                     Value::Integer(0) => Ok(Value::Float(0.0)),
                     other => Err(CompileError::Custom {
                         message: format!("to_pt() can only be called on Distance, got {}", other.type_name()),
+                        span: mc.span,
+                    }),
+                },
+                "to_seconds" => match target_val {
+                    Value::Duration(d) => Ok(Value::Float(d as f64 / 1_000_000.0)),
+                    Value::Integer(0) => Ok(Value::Float(0.0)),
+                    other => Err(CompileError::Custom {
+                        message: format!("to_seconds() can only be called on Duration, got {}", other.type_name()),
+                        span: mc.span,
+                    }),
+                },
+                "to_ms" => match target_val {
+                    Value::Duration(d) => Ok(Value::Float(d as f64 / 1_000.0)),
+                    Value::Integer(0) => Ok(Value::Float(0.0)),
+                    other => Err(CompileError::Custom {
+                        message: format!("to_ms() can only be called on Duration, got {}", other.type_name()),
                         span: mc.span,
                     }),
                 },
@@ -1241,6 +1326,10 @@ fn values_equal(left: &Value, right: &Value) -> bool {
         (Value::Area(a), Value::Integer(0)) | (Value::Integer(0), Value::Area(a)) => {
             a.abs() < 1e-9
         }
+        (Value::Duration(a), Value::Duration(b)) => a == b,
+        (Value::Duration(a), Value::Integer(0)) | (Value::Integer(0), Value::Duration(a)) => {
+            *a == 0
+        }
         _ => left == right,
     }
 }
@@ -1261,6 +1350,9 @@ fn extract_comparable_pair(
         (Value::Area(a), Value::Area(b)) => Ok((*a, *b)),
         (Value::Area(a), Value::Integer(0)) => Ok((*a, 0.0)),
         (Value::Integer(0), Value::Area(b)) => Ok((0.0, *b)),
+        (Value::Duration(a), Value::Duration(b)) => Ok((*a as f64, *b as f64)),
+        (Value::Duration(a), Value::Integer(0)) => Ok((*a as f64, 0.0)),
+        (Value::Integer(0), Value::Duration(b)) => Ok((0.0, *b as f64)),
         _ => Err(CompileError::Custom {
             message: format!(
                 "Cannot compare {} ({}) and {} ({})",
@@ -1288,6 +1380,7 @@ where
     }
     let has_distance = args.iter().any(|v| matches!(v, Value::Distance(_)));
     let has_area = args.iter().any(|v| matches!(v, Value::Area(_)));
+    let has_duration = args.iter().any(|v| matches!(v, Value::Duration(_)));
     let has_float = args.iter().any(|v| matches!(v, Value::Float(_)));
 
     if has_distance {
@@ -1330,6 +1423,26 @@ where
             }
         }
         Ok(Value::Area(f(&nums)))
+    } else if has_duration {
+        let mut nums = Vec::with_capacity(args.len());
+        for arg in args {
+            match arg {
+                Value::Duration(d) => nums.push(*d as f64),
+                Value::Integer(0) => nums.push(0.0),
+                other => {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "{}() cannot mix Duration with {} ({})",
+                            name,
+                            other,
+                            other.type_name()
+                        ),
+                        span,
+                    });
+                }
+            }
+        }
+        Ok(Value::Duration(f(&nums).round() as i64))
     } else if has_float {
         let mut nums = Vec::with_capacity(args.len());
         for arg in args {

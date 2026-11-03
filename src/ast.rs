@@ -226,6 +226,7 @@ impl ComponentKey {
                 Expr::Literal(Literal::Integer(n, _)) => format!("{n}"),
                 Expr::Literal(Literal::Float(n, _)) => format!("{n}"),
                 Expr::Literal(Literal::Distance(n, u, _)) => format!("{n}{u}"),
+                Expr::Literal(Literal::Duration(us, u, _)) => u.format_micros(*us),
                 Expr::Ident(id) => id.as_str().to_string(),
                 other => format!("{other}"),
             }
@@ -238,6 +239,7 @@ impl ComponentKey {
                     Expr::Literal(Literal::Integer(n, _)) => format!("{n}"),
                     Expr::Literal(Literal::Float(n, _)) => format!("{n}"),
                     Expr::Literal(Literal::Distance(n, u, _)) => format!("{n}{u}"),
+                    Expr::Literal(Literal::Duration(us, u, _)) => u.format_micros(*us),
                     Expr::Ident(id) => id.as_str().to_string(),
                     other => format!("{other}"),
                 })
@@ -285,6 +287,7 @@ pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
             | (Literal::Area(d1, u1, _), Literal::Area(d2, u2, _)) => {
                 u1 == u2 && (d1 - d2).abs() < f64::EPSILON
             }
+            (Literal::Duration(d1, _, _), Literal::Duration(d2, _, _)) => d1 == d2,
             (Literal::String(s1, _), Literal::String(s2, _)) => s1 == s2,
             (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 == b2,
             (Literal::Color(c1, _), Literal::Color(c2, _)) => c1 == c2,
@@ -518,6 +521,18 @@ impl Expr {
         Expr::Literal(Literal::Distance(val, DistanceUnit::Px, Span::default()))
     }
 
+    pub fn duration(micros: i64, unit: DurationUnit) -> Self {
+        Expr::Literal(Literal::Duration(micros, unit, Span::default()))
+    }
+
+    pub fn duration_secs(secs: i64) -> Self {
+        Expr::Literal(Literal::Duration(secs * 1_000_000, DurationUnit::S, Span::default()))
+    }
+
+    pub fn duration_ms(ms: i64) -> Self {
+        Expr::Literal(Literal::Duration(ms * 1_000, DurationUnit::Ms, Span::default()))
+    }
+
     pub fn number(val: f64) -> Self {
         if val.fract() == 0.0 && val.abs() < 1e15 {
             Self::integer(val as i64)
@@ -643,12 +658,130 @@ impl fmt::Display for DistanceUnit {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DurationUnit {
+    S,
+    Ms,
+}
+
+impl DurationUnit {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "s" => Some(Self::S),
+            "ms" => Some(Self::Ms),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::S => "s",
+            Self::Ms => "ms",
+        }
+    }
+
+    /// Maximum number of base-10 decimal places supported for this unit.
+    pub fn max_decimals(&self) -> usize {
+        match self {
+            Self::S => 6,
+            Self::Ms => 3,
+        }
+    }
+
+    /// Microseconds per 1 whole unit.
+    pub fn micros_per_unit(&self) -> i64 {
+        match self {
+            Self::S => 1_000_000,
+            Self::Ms => 1_000,
+        }
+    }
+
+    /// Parses a base-10 numeric literal string (without the unit suffix) into exact `i64` microseconds.
+    /// Rejects scientific notation or decimal digits exceeding `self.max_decimals()`.
+    pub fn parse_micros(&self, num_str: &str) -> Result<i64, String> {
+        let max_dec = self.max_decimals();
+        let scale = self.micros_per_unit();
+
+        if num_str.contains(['e', 'E']) {
+            return Err(format!(
+                "Duration literal '{}{}' cannot use scientific notation; use base-10 decimals up to {} decimal places",
+                num_str,
+                self.as_str(),
+                max_dec
+            ));
+        }
+
+        let (whole_str, frac_str) = match num_str.split_once('.') {
+            Some((w, f)) => (w, f),
+            None => (num_str, ""),
+        };
+
+        if frac_str.len() > max_dec {
+            return Err(format!(
+                "Duration literal '{}{}' has {} decimal places, exceeding the maximum of {} decimal places for '{}'",
+                num_str,
+                self.as_str(),
+                frac_str.len(),
+                max_dec,
+                self.as_str()
+            ));
+        }
+
+        let whole = whole_str.parse::<i64>().map_err(|_| {
+            format!("Invalid duration literal '{}{}'", num_str, self.as_str())
+        })?;
+        let whole_micros = whole.checked_mul(scale).ok_or_else(|| {
+            format!("Duration literal '{}{}' overflows i64 microseconds", num_str, self.as_str())
+        })?;
+
+        if frac_str.is_empty() {
+            return Ok(whole_micros);
+        }
+
+        let frac = frac_str.parse::<i64>().map_err(|_| {
+            format!("Invalid duration literal '{}{}'", num_str, self.as_str())
+        })?;
+        let frac_scale = 10_i64.pow((max_dec - frac_str.len()) as u32);
+        let frac_micros = frac.checked_mul(frac_scale).ok_or_else(|| {
+            format!("Duration literal '{}{}' overflows i64 microseconds", num_str, self.as_str())
+        })?;
+
+        whole_micros.checked_add(frac_micros).ok_or_else(|| {
+            format!("Duration literal '{}{}' overflows i64 microseconds", num_str, self.as_str())
+        })
+    }
+
+    /// Formats an `i64` microsecond value in this unit (`s` or `ms`), preserving exact base-10 decimals.
+    pub fn format_micros(&self, micros: i64) -> String {
+        let scale = self.micros_per_unit() as u64;
+        let width = self.max_decimals();
+        let sign = if micros < 0 { "-" } else { "" };
+        let abs = micros.unsigned_abs();
+        let whole = abs / scale;
+        let rem = abs % scale;
+        if rem == 0 {
+            format!("{}{}{}", sign, whole, self.as_str())
+        } else {
+            let frac_padded = format!("{:0width$}", rem, width = width);
+            let frac_trimmed = frac_padded.trim_end_matches('0');
+            format!("{}{}.{}{}", sign, whole, frac_trimmed, self.as_str())
+        }
+    }
+}
+
+impl fmt::Display for DurationUnit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Integer(i64, Span),
     Float(f64, Span),
     Distance(f64, DistanceUnit, Span),
     Area(f64, DistanceUnit, Span),
+    Duration(i64, DurationUnit, Span),
     String(String, Span),
     Bool(bool, Span),
     Color(String, Span),
@@ -662,6 +795,7 @@ impl Literal {
             | Literal::Float(_, span)
             | Literal::Distance(_, _, span)
             | Literal::Area(_, _, span)
+            | Literal::Duration(_, _, span)
             | Literal::String(_, span)
             | Literal::Bool(_, span)
             | Literal::Color(_, span)
@@ -675,6 +809,7 @@ impl Literal {
             Literal::Float(..) => "Float",
             Literal::Distance(..) => "Distance",
             Literal::Area(..) => "Area",
+            Literal::Duration(..) => "Duration",
             Literal::String(..) => "String",
             Literal::Bool(..) => "Boolean",
             Literal::Color(..) => "Color",
@@ -688,6 +823,7 @@ impl Literal {
             "Float" => matches!(self, Literal::Float(..) | Literal::Integer(..)),
             "Distance" => matches!(self, Literal::Distance(..) | Literal::Integer(0, _)),
             "Area" => matches!(self, Literal::Area(..) | Literal::Integer(0, _)),
+            "Duration" => matches!(self, Literal::Duration(..) | Literal::Integer(0, _)),
             "String" => matches!(self, Literal::String(..)),
             "Boolean" => matches!(self, Literal::Bool(..)),
             "Color" => matches!(self, Literal::Color(..)),
@@ -753,6 +889,7 @@ impl fmt::Display for Literal {
                     write!(f, "{}{}^2", n, u)
                 }
             }
+            Literal::Duration(us, u, _) => write!(f, "{}", u.format_micros(*us)),
             Literal::String(s, _) => write!(f, "\"{}\"", s),
             Literal::Bool(b, _) => write!(f, "{}", b),
             Literal::Color(c, _) => write!(f, "{}", c),

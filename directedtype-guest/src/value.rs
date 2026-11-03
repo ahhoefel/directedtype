@@ -6,6 +6,7 @@ pub enum Value {
     Integer(i64),
     Float(f64),
     Distance(f64),
+    Duration(i64),
     String(String),
     Bool(bool),
     Color(String),
@@ -19,7 +20,7 @@ pub enum Value {
 impl Value {
     pub fn as_i64(&self) -> Option<i64> {
         match self {
-            Value::Integer(i) => Some(*i),
+            Value::Integer(i) | Value::Duration(i) => Some(*i),
             _ => None,
         }
     }
@@ -28,6 +29,7 @@ impl Value {
         match self {
             Value::Integer(i) => Some(*i as f64),
             Value::Float(n) | Value::Distance(n) => Some(*n),
+            Value::Duration(us) => Some(*us as f64 / 1_000_000.0),
             _ => None,
         }
     }
@@ -36,6 +38,14 @@ impl Value {
         match self {
             Value::Distance(d) => Some(*d),
             Value::Integer(0) => Some(0.0),
+            _ => None,
+        }
+    }
+
+    pub fn as_duration(&self) -> Option<i64> {
+        match self {
+            Value::Duration(d) => Some(*d),
+            Value::Integer(0) => Some(0),
             _ => None,
         }
     }
@@ -58,7 +68,7 @@ impl Value {
     pub fn is_truthy(&self) -> bool {
         match self {
             Value::Bool(b) => *b,
-            Value::Integer(i) => *i != 0,
+            Value::Integer(i) | Value::Duration(i) => *i != 0,
             Value::Float(n) | Value::Distance(n) => *n != 0.0,
             Value::String(s) => !s.is_empty(),
             Value::Color(_) => true,

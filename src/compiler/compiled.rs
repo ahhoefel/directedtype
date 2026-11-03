@@ -212,6 +212,9 @@ impl CompiledDocument {
         let target_is_distance = expected_type_opt.as_deref() == Some("Distance")
             || (expected_type_opt.is_none()
                 && matches!(self.layout.values.get(&var_id), Some(Value::Distance(_))));
+        let target_is_duration = expected_type_opt.as_deref() == Some("Duration")
+            || (expected_type_opt.is_none()
+                && matches!(self.layout.values.get(&var_id), Some(Value::Duration(_))));
         let target_is_float = expected_type_opt.as_deref() == Some("Float")
             || (expected_type_opt.is_none()
                 && matches!(self.layout.values.get(&var_id), Some(Value::Float(_))));
@@ -220,6 +223,12 @@ impl CompiledDocument {
             match value {
                 Value::Float(d) => value = Value::Distance(d),
                 Value::Integer(0) => value = Value::Distance(0.0),
+                _ => {}
+            }
+        } else if target_is_duration {
+            match value {
+                Value::Float(d) => value = Value::Duration((d * 1_000_000.0).round() as i64),
+                Value::Integer(0) => value = Value::Duration(0),
                 _ => {}
             }
         } else if target_is_float {

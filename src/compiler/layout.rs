@@ -656,6 +656,13 @@ impl ResolvedLayout {
                     Value::Float(n) | Value::Distance(n) | Value::Area(n) => {
                         ports.push(format!("{}: {}", key, format_num(*n)))
                     }
+                    Value::Duration(us) => {
+                        ports.push(format!(
+                            "{}: {}",
+                            key,
+                            crate::ast::DurationUnit::S.format_micros(*us)
+                        ))
+                    }
                     Value::Color(c) | Value::String(c) => ports.push(format!("{}: {}", key, c)),
                     Value::Enum { enum_name, variant } => {
                         ports.push(format!("{}: {}.{}", key, enum_name, variant))
@@ -752,6 +759,11 @@ pub fn resolve_layout(
                             Value::Area(a) => Expr::Literal(Literal::Area(
                                 a,
                                 crate::ast::DistanceUnit::Px,
+                                part.span(),
+                            )),
+                            Value::Duration(d) => Expr::Literal(Literal::Duration(
+                                d,
+                                crate::ast::DurationUnit::S,
                                 part.span(),
                             )),
                             Value::String(s) => Expr::Literal(Literal::String(s, part.span())),
@@ -953,6 +965,11 @@ pub fn update_resolved_layout(
                                 Value::Area(a) => Expr::Literal(Literal::Area(
                                     a,
                                     crate::ast::DistanceUnit::Px,
+                                    part.span(),
+                                )),
+                                Value::Duration(d) => Expr::Literal(Literal::Duration(
+                                    d,
+                                    crate::ast::DurationUnit::S,
                                     part.span(),
                                 )),
                                 Value::String(s) => Expr::Literal(Literal::String(s, part.span())),

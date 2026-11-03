@@ -1664,3 +1664,87 @@ fn test_stage1_escapes_and_non_breaking_space() {
     }
 }
 
+#[test]
+fn test_parse_duration_literals() {
+    let input = r#"
+    \let a: Duration = 5s;
+    \let b: Duration = 250ms;
+    \let c: Duration = 0.5s;
+    \let d: Duration = 0.001ms;
+    \let e: Duration = 0.000001s;
+    "#;
+
+    let doc = parse(input).expect("Failed to parse duration literals");
+    assert_eq!(doc.items.len(), 5);
+
+    match &doc.items[0] {
+        Item::Let(l) => match &l.value {
+            Some(LetValue::Expr(Expr::Literal(Literal::Duration(val, DurationUnit::S, _)))) => {
+                assert_eq!(*val, 5_000_000);
+            }
+            other => panic!("Expected Duration(5_000_000, S), got {other:?}"),
+        },
+        other => panic!("Expected Item::Let, got {other:?}"),
+    }
+
+    match &doc.items[1] {
+        Item::Let(l) => match &l.value {
+            Some(LetValue::Expr(Expr::Literal(Literal::Duration(val, DurationUnit::Ms, _)))) => {
+                assert_eq!(*val, 250_000);
+            }
+            other => panic!("Expected Duration(250_000, Ms), got {other:?}"),
+        },
+        other => panic!("Expected Item::Let, got {other:?}"),
+    }
+
+    match &doc.items[2] {
+        Item::Let(l) => match &l.value {
+            Some(LetValue::Expr(Expr::Literal(Literal::Duration(val, DurationUnit::S, _)))) => {
+                assert_eq!(*val, 500_000);
+            }
+            other => panic!("Expected Duration(500_000, S), got {other:?}"),
+        },
+        other => panic!("Expected Item::Let, got {other:?}"),
+    }
+
+    match &doc.items[3] {
+        Item::Let(l) => match &l.value {
+            Some(LetValue::Expr(Expr::Literal(Literal::Duration(val, DurationUnit::Ms, _)))) => {
+                assert_eq!(*val, 1);
+            }
+            other => panic!("Expected Duration(1, Ms), got {other:?}"),
+        },
+        other => panic!("Expected Item::Let, got {other:?}"),
+    }
+
+    match &doc.items[4] {
+        Item::Let(l) => match &l.value {
+            Some(LetValue::Expr(Expr::Literal(Literal::Duration(val, DurationUnit::S, _)))) => {
+                assert_eq!(*val, 1);
+            }
+            other => panic!("Expected Duration(1, S), got {other:?}"),
+        },
+        other => panic!("Expected Item::Let, got {other:?}"),
+    }
+
+    // Precision limit errors: >3 decimals for ms, >6 decimals for s
+    let err_ms = parse(r#"\let bad: Duration = 0.0001ms;"#)
+        .expect_err("0.0001ms should fail with too many decimal places");
+    assert!(
+        err_ms
+            .to_string()
+            .contains("exceeding the maximum of 3 decimal places for 'ms'"),
+        "Unexpected error for 0.0001ms: {err_ms}"
+    );
+
+    let err_s = parse(r#"\let bad: Duration = 0.0000001s;"#)
+        .expect_err("0.0000001s should fail with too many decimal places");
+    assert!(
+        err_s
+            .to_string()
+            .contains("exceeding the maximum of 6 decimal places for 's'"),
+        "Unexpected error for 0.0000001s: {err_s}"
+    );
+}
+
+

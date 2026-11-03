@@ -5307,3 +5307,105 @@ fn test_text_align_port_and_span_metrics() {
         s_center.rect.x
     );
 }
+
+#[test]
+fn test_duration_units_arithmetic_and_conversions() {
+    let src = r#"
+    \Component TimedBox(
+        x: Distance = 0,
+        y: Distance = 0,
+        duration: Duration = 2s,
+        delay: Duration = 0
+    ) {
+        \let total: Duration = duration + 500ms + delay;
+        \let diff: Duration = total - 250ms;
+        \let scaled: Duration = 2 * (diff / 2);
+        \let ratio: Float = 500ms / 2s;
+        \let clamped: Duration = clamp(scaled, 1s, 5s);
+        \let secs: Float = clamped.to_seconds();
+        \let ms_val: Float = (1.5s).to_ms();
+        \let zero_tern: Duration = (duration > 0) ? duration : 0;
+        \let micro_check: Boolean = (0.001ms == 0.000001s);
+        \let is_equal: Boolean = (1000ms == 1s) && (0s == 0) && (zero_tern == 2s) && micro_check;
+
+        \Rect(
+            x: secs * 10px,
+            y: ratio * 100px,
+            width: ms_val * 0.1px,
+            height: is_equal ? ((250ms).to_ms() * 0.1px) : 0,
+            color: #000
+        )
+    }
+
+    \TimedBox()
+    "#;
+
+    let doc = parse(src).expect("Failed to parse Duration document");
+    let layout = directedtype::evaluate_document(&doc).expect("Duration evaluation should succeed");
+    let rect = layout.nodes.iter().find(|n| n.name == "Rect").unwrap();
+
+    // total = 2s + 0.5s + 0s = 2.5s
+    // diff = 2.5s - 0.25s = 2.25s
+    // scaled = 2 * (2.25s / 2) = 2.25s
+    // clamped = clamp(2.25s, 1s, 5s) = 2.25s
+    // secs = 2.25 -> x = 22.5
+    assert!((rect.rect.x - 22.5).abs() < 1e-6, "Expected x=22.5, got {}", rect.rect.x);
+    // ratio = 0.5s / 2.0s = 0.25 -> y = 25.0
+    assert!((rect.rect.y - 25.0).abs() < 1e-6, "Expected y=25.0, got {}", rect.rect.y);
+    // ms_val = 1500.0 -> width = 150.0
+    assert!((rect.rect.width - 150.0).abs() < 1e-6, "Expected width=150.0, got {}", rect.rect.width);
+    // is_equal = true -> height = 250.0 * 0.1 = 25.0
+    assert!((rect.rect.height - 25.0).abs() < 1e-6, "Expected height=25.0, got {}", rect.rect.height);
+}
+
+#[test]
+fn test_duration_typecheck_errors() {
+    for (src, expected_msg) in [
+        (
+            r#"
+            \let bad = 5s + 10px;
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Duration', found 'Distance'",
+        ),
+        (
+            r#"
+            \let bad = 5s + 10;
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Duration', found 'Integer'",
+        ),
+        (
+            r#"
+            \let d = 10px;
+            \let bad = d.to_seconds();
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Duration', found 'Distance'",
+        ),
+        (
+            r#"
+            \let d = 10px;
+            \let bad = d.to_ms();
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Duration', found 'Distance'",
+        ),
+        (
+            r#"
+            \Rect(x: 0, y: 0, width: 5s, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Distance', found 'Duration'",
+        ),
+    ] {
+        let doc = parse(src).expect("Should parse");
+        let err = compile_to_graph(&doc).expect_err(expected_msg);
+        assert!(
+            err.to_string().contains(expected_msg),
+            "Expected '{}', got: {}",
+            expected_msg,
+            err
+        );
+    }
+}
+

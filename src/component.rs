@@ -350,6 +350,11 @@ impl<'a> Context<'a> {
         self.get_port(name).and_then(|v| v.as_distance())
     }
 
+    /// Reads an input port as a duration in microseconds (`1s = 1_000_000`, `1ms = 1_000`).
+    pub fn get_port_duration(&self, name: &str) -> Option<i64> {
+        self.get_port(name).and_then(|v| v.as_duration())
+    }
+
     /// Reads an input port as a floating-point number.
     pub fn get_port_number(&self, name: &str) -> Option<f64> {
         self.get_port(name).and_then(|v| v.as_f64())
@@ -439,6 +444,11 @@ impl<'a> Context<'a> {
     /// Reads a state variable as a distance in logical pixels.
     pub fn get_state_distance(&self, name: &str) -> Option<f64> {
         self.get_state(name).and_then(|v| v.as_f64())
+    }
+
+    /// Reads a state variable as a duration in microseconds (`1s = 1_000_000`, `1ms = 1_000`).
+    pub fn get_state_duration(&self, name: &str) -> Option<i64> {
+        self.get_state(name).and_then(|v| v.as_duration())
     }
 
     /// Reads a state variable as a floating-point number.

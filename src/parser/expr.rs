@@ -143,10 +143,18 @@ fn parse_prefix(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
         Token::Dimension((val, unit_str)) => {
             if let Some(unit) = crate::ast::DistanceUnit::from_str(&unit_str) {
                 Ok(Expr::Literal(Literal::Distance(val, unit, span)))
+            } else if let Some(unit) = crate::ast::DurationUnit::from_str(&unit_str) {
+                let raw = &cursor.source()[span.start..span.end];
+                let num_str = raw.strip_suffix(&unit_str).unwrap_or(raw);
+                let micros = unit.parse_micros(num_str).map_err(|message| ParseError::Custom {
+                    message,
+                    span,
+                })?;
+                Ok(Expr::Literal(Literal::Duration(micros, unit, span)))
             } else {
                 Err(ParseError::Custom {
                     message: format!(
-                        "Unknown distance unit '{}'. Supported units are 'px', 'pt', and 'em'",
+                        "Unknown distance unit '{}'. Supported units are 'px', 'pt', 'em', 's', and 'ms'",
                         unit_str
                     ),
                     span,

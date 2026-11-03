@@ -5,14 +5,21 @@
 ### 1. Diagnostics & Language Ergonomics
 * **Human-Readable Node & Error Diagnostics**: Replace raw numbered node IDs (`NodeId(1)`) with hierarchical, human-readable DOM/DAG component path references (e.g. `Window/VStack/Card#header/Text`). Add source spans and clear diagnostic explanations to all compiler and runtime errors.
 * **Compile-Time DAG Flow Checks & Cycle Diagnostics**: Find ways to compile-time check DAG flow compatibility. For example, does wrapping a top-down sized component with `\PadOut` produce a clear error? Identify component combinations that conflict or need clearer diagnostics explaining why certain component pairs cannot compose.
-* **Ternary Compile-time Specialization**: Is this necessary? What does it allow? Could we do without it?
-* Remove duplicate : and = default assignment style. Just pick one.
+* **Ternary Compile-time Specialization**: Is this necessary? What does it allow? Could we do without it? (See [docs/designs/compiler_modularity.md](file:///Users/hoefel/dev/directedtype/docs/designs/compiler_modularity.md#3-phase-3-simplify-compile-time-ternary-specialization-in-expand))
+* Remove duplicate : and = default assignment style. Just pick one. (DONE???)
+* Remove truthy coersion. It's more clear if designers have to write boolean expressions. A few components should permit truthy coersion (like Timer and handlers). Maybe those components should be wrapped in optional: Option<Timer>. 
 
-### 2. Documentation
+### 2. Compiler Architecture & Modularity ([docs/designs/compiler_modularity.md](file:///Users/hoefel/dev/directedtype/docs/designs/compiler_modularity.md))
+* **Phase 1: Standardize on Method Call Syntax for Primitive Operations**: Require method call syntax (`receiver.method(...)`) for single-receiver conversions and formatting on primitives (`d.to_px()`, `d.to_pt()`, `d.to_float(unit)`, `t.to_seconds()`, `t.to_ms()`, `n.to_float()`, `n.to_integer()`, `n.to_fixed(decimals)`, `n.to_precision(sigfigs)`), removing the duplicate free-standing function forms (`to_px(d)`, `distance_to_float(d, unit)`, `to_seconds(t)`, etc.). Keep aggregates (`min`, `max`, `sum`, `only`, `clamp`), math functions (`abs`, `round`, `floor`, `ceil`, `sqrt`, `sin`, `cos`, `tan`, `atan2`, `hypot`), and color constructors (`rgb`, `rgba`, `hsl`, `hsla`) as free functions.
+* **Phase 2: Unify Type Inference on `StaticType` & Centralize Zero-Polymorphism**: Delete the legacy `infer_expr_literal_for_typecheck` and `Literal::matches_type_name` pass in `src/compiler/expand/typecheck.rs` so operator and function type rules are defined only once on `StaticType`. Consolidate the 6 scattered `0`-coercion blocks (`0` $\rightarrow$ `0px`, `0px²`, `0s`, `0.0`) into `StaticType::coerce_zero_expr` and `Value::coerce_to_type_name`.
+* **Phase 3: Simplify Compile-Time Ternary Specialization in `expand/`**: Replace duplicate `Literal` $\rightarrow$ `Value` conversion tables in `rewrite.rs` and `component.rs` with `Value::from_literal_const`, and delegate constant ternary condition evaluation to `eval_expr` instead of maintaining a parallel `Literal` equality/boolean evaluator in `resolve_ident_or_member_to_literal`.
+* **Phase 4 & 5: Co-locate Operator/Built-in Tables & Split Oversized Compiler Files**: Extract binary/unary operator typechecking + evaluation into `src/compiler/operators.rs` (~250 lines), primitive methods + math/aggregate functions into `src/compiler/builtins.rs` (~300 lines), and Parley text measurement intrinsics into `src/compiler/text_intrinsics.rs` (~300 lines), shrinking `typecheck.rs` and `eval.rs` so developers and agents only need to read a single ~250-line file for most changes.
+
+### 3. Documentation
 * **Language & Component Reference**: Public-facing documentation of the language ([docs/language.md](file:///Users/hoefel/dev/directedtype/docs/language.md))—capturing scope variables, implicit functions, and native primitives like `\Text`—and documentation of the individual standard library components (potentially using generated documentation components).
 * **Typography Guide**: Write a typography guide mirroring https://webtypography.net/ and following Bringhurst's book. This should be a good test of the language and serve as a tutorial.
 
-### 3. Text Selection & Copying
+### 4. Text Selection & Copying
 * **Overview**: Enable native-feeling single-node and cross-node text selection, double/triple-click word/line selection, visual selection highlights, keyboard shortcuts (`Cmd+C` / `Ctrl+C`, `Cmd+A` / `Ctrl+A`, `Escape`), and system clipboard integration across both the document canvas and the DOM Inspector.
 * **Phase 1: Retaining Shaped Parley Layouts & Character Hit-Testing (`src/render/scene.rs`)**
   * Store the shaped `parley::Layout<()>` (alongside `y_offset`) inside `CachedTextScene` in `TextSceneCache` so glyph cluster positions, line metrics, and byte ranges are available for hit-testing and geometry queries without re-shaping on mouse move.
@@ -38,7 +45,7 @@
   * Handle `Cmd+A` / `Ctrl+A` (select all selectable text in document), `Escape` (clear active selection), and `Shift + ArrowLeft/ArrowRight` (extend selection by grapheme cluster).
   * Extend selection/copy support to the DOM Inspector details panel so formulas, evaluated values, and component signatures can also be copied directly.
 
-### 4. Component Library & Primitives
+### 5. Component Library & Primitives
 * **Standard Component Library**: Expand standard components beyond `Button`, `Card`, `Link`, `HCenter`, `VCenter`, `PadIn`, `PadOut`, `VStack`, `VStackStretch`, `HStack`, `HStackStretch`, `ScrollView`, `Slider`, and `NavBar` to include `TextInput`, `Checkbox`, `Toggle`, `Tabs`, `Dialog/Modal`, and menus.
 * **Graphical Primitives**: Add vector paths, strokes, complex borders, gradients, and custom canvas-like layout compositions.
 * **Showcase Applications**: Build multi-pane documentation readers, split editors, and rich interactive applications demonstrating single-pass reactive DAG layout and event flows.

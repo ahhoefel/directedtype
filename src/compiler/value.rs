@@ -8,6 +8,7 @@ pub enum Value {
     Float(f64),
     Distance(f64),
     Area(f64),
+    Duration(i64),
     String(String),
     Bool(bool),
     Color(String),
@@ -21,7 +22,7 @@ pub enum Value {
 impl Value {
     pub fn as_f64(&self) -> Option<f64> {
         match self {
-            Value::Integer(n) => Some(*n as f64),
+            Value::Integer(n) | Value::Duration(n) => Some(*n as f64),
             Value::Float(n) | Value::Distance(n) | Value::Area(n) => Some(*n),
             _ => None,
         }
@@ -29,7 +30,7 @@ impl Value {
 
     pub fn as_i64(&self) -> Option<i64> {
         match self {
-            Value::Integer(n) => Some(*n),
+            Value::Integer(n) | Value::Duration(n) => Some(*n),
             Value::Float(n) | Value::Distance(n) | Value::Area(n) => Some(*n as i64),
             _ => None,
         }
@@ -49,6 +50,20 @@ impl Value {
             Value::Integer(0) => Some(0.0),
             _ => None,
         }
+    }
+
+    /// Returns the duration in microseconds (`1s = 1_000_000`, `1ms = 1_000`).
+    pub fn as_duration(&self) -> Option<i64> {
+        match self {
+            Value::Duration(d) => Some(*d),
+            Value::Integer(0) => Some(0),
+            _ => None,
+        }
+    }
+
+    /// Returns the duration in seconds as a floating-point number.
+    pub fn as_duration_secs(&self) -> Option<f64> {
+        self.as_duration().map(|us| us as f64 / 1_000_000.0)
     }
 
     pub fn is_zero_integer(&self) -> bool {
@@ -80,7 +95,7 @@ impl Value {
     pub fn is_truthy(&self) -> bool {
         match self {
             Value::Bool(b) => *b,
-            Value::Integer(n) => *n != 0,
+            Value::Integer(n) | Value::Duration(n) => *n != 0,
             Value::Float(n) | Value::Distance(n) | Value::Area(n) => *n != 0.0,
             Value::String(s) => !s.is_empty(),
             Value::Color(_) => true,
@@ -114,6 +129,7 @@ impl Value {
                     format!("{n}px^2")
                 }
             }
+            Value::Duration(us) => crate::ast::DurationUnit::S.format_micros(*us),
             Value::Bool(b) => format!("{b}"),
             Value::Color(c) => c.clone(),
             Value::Node(id) => id.canonical_name(),
@@ -127,6 +143,7 @@ impl Value {
             Value::Float(_) => "Float",
             Value::Distance(_) => "Distance",
             Value::Area(_) => "Area",
+            Value::Duration(_) => "Duration",
             Value::String(_) => "String",
             Value::Bool(_) => "Boolean",
             Value::Color(_) => "Color",
@@ -141,6 +158,7 @@ impl Value {
             "Float" => matches!(self, Value::Float(_) | Value::Integer(_)),
             "Distance" => matches!(self, Value::Distance(_) | Value::Integer(0)),
             "Area" => matches!(self, Value::Area(_) | Value::Integer(0)),
+            "Duration" => matches!(self, Value::Duration(_) | Value::Integer(0)),
             "String" => matches!(self, Value::String(_)),
             "Boolean" => matches!(self, Value::Bool(_)),
             "Color" => matches!(self, Value::Color(_)),
@@ -173,12 +191,19 @@ impl fmt::Display for Value {
                     write!(f, "{}px^2", n)
                 }
             }
+            Value::Duration(us) => write!(f, "{}", crate::ast::DurationUnit::S.format_micros(*us)),
             Value::String(s) => write!(f, "\"{}\"", s),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Color(c) => write!(f, "{}", c),
             Value::Node(id) => write!(f, "{}", id.canonical_name()),
             Value::Enum { enum_name, variant } => write!(f, "{}.{}", enum_name, variant),
         }
+    }
+}
+
+impl From<std::time::Duration> for Value {
+    fn from(d: std::time::Duration) -> Self {
+        Value::Duration(d.as_micros() as i64)
     }
 }
 

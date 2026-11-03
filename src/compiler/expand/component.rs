@@ -1511,6 +1511,9 @@ impl<'a> ComponentExpander<'a> {
                     Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
                     Literal::Distance(d, _, _) => crate::compiler::value::Value::Distance(d),
                     Literal::Area(a, _, _) => crate::compiler::value::Value::Area(a),
+                    Literal::Duration(d, _, _) => {
+                        crate::compiler::value::Value::Duration(d)
+                    }
                     Literal::String(s, _) => crate::compiler::value::Value::String(s),
                     Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
                     Literal::Color(c, _) => crate::compiler::value::Value::Color(c),

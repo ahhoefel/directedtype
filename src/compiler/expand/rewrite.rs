@@ -322,6 +322,10 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             Some(Literal::Area(_, _, _)) => {
                                 chosen = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, span));
                             }
+                            Some(Literal::Duration(_, _, _)) => {
+                                chosen =
+                                    Expr::Literal(Literal::Duration(0, DurationUnit::S, span));
+                            }
                             _ => {}
                         }
                     }
@@ -347,6 +351,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                                 crate::compiler::value::Value::Distance(d)
                             }
                             Literal::Area(a, _, _) => crate::compiler::value::Value::Area(a),
+                            Literal::Duration(d, _, _) => {
+                                crate::compiler::value::Value::Duration(d)
+                            }
                             Literal::String(s, _) => crate::compiler::value::Value::String(s),
                             Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
                             Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
@@ -407,6 +414,10 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             }
                             Some(Literal::Area(_, _, _)) => {
                                 chosen = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, span));
+                            }
+                            Some(Literal::Duration(_, _, _)) => {
+                                chosen =
+                                    Expr::Literal(Literal::Duration(0, DurationUnit::S, span));
                             }
                             _ => {}
                         }
@@ -856,6 +867,8 @@ pub fn default_expr_for_state_with_enums(
                 return Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, *span));
             } else if ty_name == Some("Area") {
                 return Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, *span));
+            } else if ty_name == Some("Duration") {
+                return Expr::Literal(Literal::Duration(0, DurationUnit::S, *span));
             } else if ty_name == Some("Float") {
                 return Expr::Literal(Literal::Float(0.0, *span));
             }
@@ -873,6 +886,7 @@ pub fn default_expr_for_state_with_enums(
             "Float" => Expr::Literal(Literal::Float(0.0, state.span)),
             "Distance" => Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, state.span)),
             "Area" => Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, state.span)),
+            "Duration" => Expr::Literal(Literal::Duration(0, DurationUnit::S, state.span)),
             "Handler" => Expr::Ident(Ident::new("unset", state.span)),
             other => {
                 if let Some(enum_def) = enums.get(other) {
