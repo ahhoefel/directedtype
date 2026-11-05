@@ -177,24 +177,20 @@ impl CompiledDocument {
             }
         }
 
-        // Apply any initial state mutations produced during on_mount
-        for (node_id, state_name, val) in initial_mutations {
-            let _ = self.set_state(node_id, &state_name, val);
-        }
+        // Apply any initial state mutations produced during on_mount in a single batched pass
+        let _ = self.set_state_batch(initial_mutations);
 
         Ok(())
     }
 
-    /// Mutates a declared reactive state variable on a component instance, triggering an
-    /// incremental topological re-evaluation of all downstream dependent variables in microseconds.
-    ///
-    /// Returns the set of `VarId`s whose computed values were updated.
-    pub fn set_state(
+    /// Validates, coerces, and records a single state mutation in `state_overrides`,
+    /// returning `Some(var_id)` if its value differs from the current layout value.
+    fn prepare_state_mutation(
         &mut self,
         node_id: NodeId,
         state_name: &str,
         value: Value,
-    ) -> Result<HashSet<VarId>, CompileError> {
+    ) -> Result<Option<VarId>, CompileError> {
         let span = if node_id.is_window() {
             Span::default()
         } else {
@@ -216,7 +212,10 @@ impl CompiledDocument {
                     span,
                 });
             }
-            self.expanded.window_state_vars.get(state_name).and_then(|opt| opt.clone())
+            self.expanded
+                .window_state_vars
+                .get(state_name)
+                .and_then(|opt| opt.clone())
         } else {
             let node = self.expanded.get_node(node_id).unwrap();
             if !node.state_vars.contains_key(state_name) {
@@ -284,16 +283,31 @@ impl CompiledDocument {
                 self.active_timers.remove(&var_id);
             }
         }
+        let is_changed = self.layout.values.get(&var_id) != Some(&value);
         self.state_overrides.insert(var_id.clone(), value);
+        Ok(if is_changed { Some(var_id) } else { None })
+    }
+
+    fn finalize_state_mutations(
+        &mut self,
+        dirty_roots: &[VarId],
+    ) -> Result<HashSet<VarId>, CompileError> {
+        if dirty_roots.is_empty() {
+            return Ok(HashSet::new());
+        }
 
         // 4. Incrementally re-evaluate downstream variables in the DAG
         let changed = invalidate_and_reevaluate(
             &self.graph,
             &self.schedule,
             &mut self.layout.values,
-            &[var_id],
+            dirty_roots,
             &self.state_overrides,
         )?;
+
+        if changed.is_empty() {
+            return Ok(changed);
+        }
 
         // Sync any downstream timer bindings affected by this state update
         for changed_id in &changed {
@@ -314,6 +328,37 @@ impl CompiledDocument {
         update_resolved_layout(&mut self.layout, &self.expanded, &changed);
 
         Ok(changed)
+    }
+
+    /// Applies a batch of state mutations in a single incremental DAG re-evaluation pass.
+    pub fn set_state_batch(
+        &mut self,
+        mutations: impl IntoIterator<Item = (NodeId, String, Value)>,
+    ) -> Result<HashSet<VarId>, CompileError> {
+        let mut dirty_roots = Vec::new();
+        for (node_id, state_name, val) in mutations {
+            if let Ok(Some(var_id)) = self.prepare_state_mutation(node_id, &state_name, val) {
+                dirty_roots.push(var_id);
+            }
+        }
+        self.finalize_state_mutations(&dirty_roots)
+    }
+
+    /// Mutates a declared reactive state variable on a component instance, triggering an
+    /// incremental topological re-evaluation of all downstream dependent variables in microseconds.
+    ///
+    /// Returns the set of `VarId`s whose computed values were updated.
+    pub fn set_state(
+        &mut self,
+        node_id: NodeId,
+        state_name: &str,
+        value: Value,
+    ) -> Result<HashSet<VarId>, CompileError> {
+        if let Some(var_id) = self.prepare_state_mutation(node_id, state_name, value)? {
+            self.finalize_state_mutations(&[var_id])
+        } else {
+            Ok(HashSet::new())
+        }
     }
 
     /// Returns `true` if there is at least one active fixed-length or indefinite timer in the document.
@@ -665,14 +710,14 @@ impl CompiledDocument {
                                                     let def_actions = def_ctx.take_actions();
                                                     drop(def_ctx);
 
-                                                    for (state_name, val) in def_mutations {
-                                                        if let Ok(changed) = self.set_state(
-                                                            def_target_id,
-                                                            &state_name,
-                                                            val,
-                                                        ) {
-                                                            all_changed_vars.extend(changed);
-                                                        }
+                                                    if let Ok(changed) = self.set_state_batch(
+                                                        def_mutations.into_iter().map(
+                                                            |(state_name, val)| {
+                                                                (def_target_id, state_name, val)
+                                                            },
+                                                        ),
+                                                    ) {
+                                                        all_changed_vars.extend(changed);
                                                     }
                                                     for action in def_actions {
                                                         match action {
@@ -704,10 +749,12 @@ impl CompiledDocument {
                                 }
                             }
 
-                            for (state_name, val) in mutations {
-                                if let Ok(changed) = self.set_state(target_node_id, &state_name, val) {
-                                    all_changed_vars.extend(changed);
-                                }
+                            if let Ok(changed) = self.set_state_batch(
+                                mutations
+                                    .into_iter()
+                                    .map(|(state_name, val)| (target_node_id, state_name, val)),
+                            ) {
+                                all_changed_vars.extend(changed);
                             }
 
                             for action in actions {
@@ -864,10 +911,12 @@ impl CompiledDocument {
             pending_actions = ctx.take_actions();
             drop(ctx);
 
-            for (state_name, val) in mutations {
-                if let Ok(changed) = self.set_state(target, &state_name, val) {
-                    all_changed_vars.extend(changed);
-                }
+            if let Ok(changed) = self.set_state_batch(
+                mutations
+                    .into_iter()
+                    .map(|(state_name, val)| (target, state_name, val)),
+            ) {
+                all_changed_vars.extend(changed);
             }
         } else {
             return Err(DispatchError::InstanceNotFound(target));

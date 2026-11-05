@@ -174,6 +174,60 @@ pub fn invalidate_and_reevaluate(
     dirty_roots: &[VarId],
     state_overrides: &HashMap<VarId, Value>,
 ) -> Result<HashSet<VarId>, CompileError> {
+    if dirty_roots.is_empty() {
+        return Ok(HashSet::new());
+    }
+
+    let num_vars = graph.var_nodes.len();
+    if schedule.order_indices.len() == num_vars && graph.downstream_idx.len() == num_vars {
+        let mut dirty_mask = vec![false; num_vars];
+        let mut any_dirty = false;
+        for root in dirty_roots {
+            if let Some(idx) = graph.lookup_var_index(root.node, &root.port) {
+                dirty_mask[idx.0 as usize] = true;
+                any_dirty = true;
+            }
+        }
+        if !any_dirty {
+            return Ok(HashSet::new());
+        }
+
+        let mut changed = HashSet::new();
+        for &var_idx in &schedule.order_indices {
+            let idx = var_idx.0 as usize;
+            if !dirty_mask[idx] {
+                continue;
+            }
+            let node = &graph.var_nodes[idx];
+            let new_val = if let Some(override_val) = state_overrides.get(&node.id) {
+                override_val.clone()
+            } else {
+                eval_expr(&node.equation, current_values)?
+            };
+
+            if node.id.port == "family" {
+                if let Value::String(ref s) = new_val {
+                    if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
+                        return Err(CompileError::FontFamilyNotFound {
+                            family: s.clone(),
+                            span: node.span,
+                        });
+                    }
+                }
+            }
+
+            if current_values.get(&node.id) != Some(&new_val) {
+                current_values.insert(node.id.clone(), new_val);
+                changed.insert(node.id.clone());
+                for &down_idx in &graph.downstream_idx[idx] {
+                    dirty_mask[down_idx.0 as usize] = true;
+                }
+            }
+        }
+
+        return Ok(changed);
+    }
+
     let dirty = find_downstream_dependents(graph, dirty_roots);
     let mut changed = HashSet::new();
 

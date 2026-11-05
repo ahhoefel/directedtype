@@ -1019,123 +1019,114 @@ pub fn update_resolved_layout(
 
     let mut needs_inline_projection = false;
 
-    for node in &mut layout.nodes {
-        if let Some(node_vars) = vars_by_node.get(&node.id) {
-            if node.text_content.is_some()
-                || !node.text_spans.is_empty()
-                || !node.inline_boxes.is_empty()
-                || node.is_inline_box
-                || !node.fragments.is_empty()
-                || node.name == "Font"
-            {
+    for (&node_id, node_vars) in &vars_by_node {
+        let Some(node) = layout.nodes.get_mut(node_id.0) else {
+            continue;
+        };
+        if node.text_content.is_some()
+            || !node.text_spans.is_empty()
+            || !node.inline_boxes.is_empty()
+            || node.is_inline_box
+            || !node.fragments.is_empty()
+            || node.name == "Font"
+        {
+            needs_inline_projection = true;
+        }
+
+        for &var_id in node_vars {
+            if let Some(val) = layout.values.get(var_id) {
+                node.properties.insert(var_id.port.clone(), val.clone());
+            }
+        }
+
+        let get_num = |props: &HashMap<String, Value>, port: &str| -> f64 {
+            props.get(port).and_then(|v| v.as_f64()).unwrap_or(0.0)
+        };
+
+        node.rect.x = get_num(&node.properties, "x");
+        node.rect.y = get_num(&node.properties, "y");
+        node.rect.width = get_num(&node.properties, "width");
+        node.rect.height = get_num(&node.properties, "height");
+        node.z = get_num(&node.properties, "z");
+
+        node.clip = node
+            .properties
+            .get("clip")
+            .and_then(|v| v.as_node())
+            .filter(|id| !id.is_window());
+
+        if let Some(expanded_node) = doc.get_node(node_id) {
+            if expanded_node.is_span || expanded_node.is_inline_box {
                 needs_inline_projection = true;
             }
-
-            let get_num = |port: &str| -> f64 {
-                layout
-                    .values
-                    .get(&VarId::new(node.id, port))
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0)
-            };
-
-            node.rect.x = get_num("x");
-            node.rect.y = get_num("y");
-            node.rect.width = get_num("width");
-            node.rect.height = get_num("height");
-            node.z = get_num("z");
-
-            for &var_id in node_vars {
-                if let Some(val) = layout.values.get(var_id) {
-                    node.properties.insert(var_id.port.clone(), val.clone());
-                }
-            }
-
-            node.clip = layout
-                .values
-                .get(&VarId::new(node.id, "clip"))
-                .and_then(|v| v.as_node())
-                .filter(|id| !id.is_window());
-
-            if let Some(expanded_node) = doc.get_node(node.id) {
-                if expanded_node.is_span || expanded_node.is_inline_box {
-                    needs_inline_projection = true;
-                }
-                for (port_name, expr) in &expanded_node.ports {
-                    if port_name.starts_with("on_")
-                        || expanded_node
-                            .port_types
-                            .get(port_name)
-                            .is_some_and(|t| t == "Handler")
-                    {
-                        if matches!(expr, Expr::Ternary(_) | Expr::Paren(_, _)) {
-                            if let Some(binding) =
-                                crate::compiler::expand::rewrite::extract_event_binding_with_values(
-                                    port_name,
-                                    expr,
-                                    Some(&layout.values),
-                                )
-                            {
-                                node.event_handlers.insert(port_name.clone(), binding);
-                            } else {
-                                node.event_handlers.remove(port_name);
-                            }
+            for (port_name, expr) in &expanded_node.ports {
+                if port_name.starts_with("on_")
+                    || expanded_node
+                        .port_types
+                        .get(port_name)
+                        .is_some_and(|t| t == "Handler")
+                {
+                    if matches!(expr, Expr::Ternary(_) | Expr::Paren(_, _)) {
+                        if let Some(binding) =
+                            crate::compiler::expand::rewrite::extract_event_binding_with_values(
+                                port_name,
+                                expr,
+                                Some(&layout.values),
+                            )
+                        {
+                            node.event_handlers.insert(port_name.clone(), binding);
+                        } else {
+                            node.event_handlers.remove(port_name);
                         }
                     }
                 }
             }
         }
+    }
 
+    for (expanded_node, node) in doc.nodes.iter().zip(layout.nodes.iter_mut()) {
         // Re-evaluate structured component keys if the node has a dynamic key expression
-        if let Some(expanded_node) = doc.get_node(node.id) {
-            if let Some(k) = &expanded_node.key {
-                if k.parts.iter().any(|p| !matches!(p, Expr::Literal(_))) {
-                    let resolved_parts = k
-                        .parts
-                        .iter()
-                        .map(|part| {
-                            if let Ok(val) = eval_expr(part, &layout.values) {
-                                match val {
-                                    Value::Integer(i) => {
-                                        Expr::Literal(Literal::Integer(i, part.span()))
-                                    }
-                                    Value::Float(n) => {
-                                        Expr::Literal(Literal::Float(n, part.span()))
-                                    }
-                                    Value::Distance(d) => Expr::Literal(Literal::Distance(
-                                        d,
-                                        crate::ast::DistanceUnit::Px,
-                                        part.span(),
-                                    )),
-                                    Value::Area(a) => Expr::Literal(Literal::Area(
-                                        a,
-                                        crate::ast::DistanceUnit::Px,
-                                        part.span(),
-                                    )),
-                                    Value::Duration(d) => Expr::Literal(Literal::Duration(
-                                        d,
-                                        crate::ast::DurationUnit::S,
-                                        part.span(),
-                                    )),
-                                    Value::String(s) => {
-                                        Expr::Literal(Literal::String(s, part.span()))
-                                    }
-                                    Value::Bool(b) => Expr::Literal(Literal::Bool(b, part.span())),
-                                    Value::Color(c) => {
-                                        Expr::Literal(Literal::Color(c, part.span()))
-                                    }
-                                    Value::Enum { enum_name, variant } => {
-                                        Expr::Literal(Literal::Enum(enum_name, variant, part.span()))
-                                    }
-                                    _ => part.clone(),
+        if let Some(k) = &expanded_node.key {
+            if k.parts.iter().any(|p| !matches!(p, Expr::Literal(_))) {
+                let resolved_parts = k
+                    .parts
+                    .iter()
+                    .map(|part| {
+                        if let Ok(val) = eval_expr(part, &layout.values) {
+                            match val {
+                                Value::Integer(i) => {
+                                    Expr::Literal(Literal::Integer(i, part.span()))
                                 }
-                            } else {
-                                part.clone()
+                                Value::Float(n) => Expr::Literal(Literal::Float(n, part.span())),
+                                Value::Distance(d) => Expr::Literal(Literal::Distance(
+                                    d,
+                                    crate::ast::DistanceUnit::Px,
+                                    part.span(),
+                                )),
+                                Value::Area(a) => Expr::Literal(Literal::Area(
+                                    a,
+                                    crate::ast::DistanceUnit::Px,
+                                    part.span(),
+                                )),
+                                Value::Duration(d) => Expr::Literal(Literal::Duration(
+                                    d,
+                                    crate::ast::DurationUnit::S,
+                                    part.span(),
+                                )),
+                                Value::String(s) => Expr::Literal(Literal::String(s, part.span())),
+                                Value::Bool(b) => Expr::Literal(Literal::Bool(b, part.span())),
+                                Value::Color(c) => Expr::Literal(Literal::Color(c, part.span())),
+                                Value::Enum { enum_name, variant } => {
+                                    Expr::Literal(Literal::Enum(enum_name, variant, part.span()))
+                                }
+                                _ => part.clone(),
                             }
-                        })
-                        .collect();
-                    node.key = Some(ComponentKey::new(resolved_parts, k.span));
-                }
+                        } else {
+                            part.clone()
+                        }
+                    })
+                    .collect();
+                node.key = Some(ComponentKey::new(resolved_parts, k.span));
             }
         }
     }
