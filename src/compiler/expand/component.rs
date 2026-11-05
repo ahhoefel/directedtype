@@ -1655,7 +1655,7 @@ impl<'a> ComponentExpander<'a> {
         node.component_path = comp_def.span.file_path();
         node.overload_params = self.schema.overload_params.clone();
         node.children = self.all_children_ids;
-        node.authored_ports = comp_authored_ports;
+        node.authored_ports = std::sync::Arc::new(comp_authored_ports);
         node.private_ports = self.schema.private_ports.clone();
         node.state_vars = self.schema.state_var_types.clone();
         node.env_vars = self.schema.env_var_types.clone();

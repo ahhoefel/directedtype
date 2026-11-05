@@ -1267,7 +1267,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             node.overload_params = overload_params;
             node.children = state.child_ids;
             node.ports = state.ports;
-            node.authored_ports = state.authored_ports;
+            node.authored_ports = std::sync::Arc::new(state.authored_ports);
             node.font = Some(self.node_id);
             state.node_fonts.insert(self.node_id, self.node_id);
             return Ok(());
@@ -1300,7 +1300,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
         node.overload_params = overload_params;
         node.children = state.child_ids;
         node.ports = state.ports;
-        node.authored_ports = state.authored_ports;
+        node.authored_ports = std::sync::Arc::new(state.authored_ports);
         node.event_handlers = state.event_handlers;
 
         Ok(())

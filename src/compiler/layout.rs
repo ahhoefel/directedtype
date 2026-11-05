@@ -184,6 +184,114 @@ pub fn rounded_rect_contains(rect: &Rect, radius: f64, point: Point) -> bool {
     rounded_rect_radii_contains(rect, (radius, radius, radius, radius), point)
 }
 
+/// Lazily formats authored port AST expressions (`Expr`) into display strings (`String`) on first access.
+#[derive(Clone, Default)]
+pub struct FormulaMap {
+    authored_ports: std::sync::Arc<HashMap<String, Expr>>,
+    formatted: std::sync::OnceLock<HashMap<String, String>>,
+}
+
+impl FormulaMap {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_arc(authored_ports: std::sync::Arc<HashMap<String, Expr>>) -> Self {
+        Self {
+            authored_ports,
+            formatted: std::sync::OnceLock::new(),
+        }
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.authored_ports.is_empty() && self.formatted.get().is_none_or(|m| m.is_empty())
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        if let Some(m) = self.formatted.get() {
+            m.len()
+        } else {
+            self.authored_ports.len()
+        }
+    }
+
+    #[inline]
+    pub fn contains_key<Q>(&self, k: &Q) -> bool
+    where
+        String: std::borrow::Borrow<Q>,
+        Q: std::hash::Hash + Eq + ?Sized,
+    {
+        if let Some(m) = self.formatted.get() {
+            m.contains_key(k)
+        } else {
+            self.authored_ports.contains_key(k)
+        }
+    }
+
+    /// Checks whether `line_height` was explicitly authored without formatting AST strings.
+    #[inline]
+    pub fn has_custom_line_height(&self) -> bool {
+        if let Some(expr) = self.authored_ports.get("line_height") {
+            !matches!(expr, Expr::Call(c) if c.callee.as_str() == "font_line_height")
+        } else if let Some(m) = self.formatted.get() {
+            m.get("line_height")
+                .is_some_and(|eq| !eq.starts_with("font_line_height("))
+        } else {
+            false
+        }
+    }
+
+    fn ensure_formatted(&self) -> &HashMap<String, String> {
+        self.formatted.get_or_init(|| {
+            let mut map = HashMap::with_capacity(self.authored_ports.len());
+            for (port, expr) in self.authored_ports.iter() {
+                map.insert(port.clone(), expr.to_string());
+            }
+            map
+        })
+    }
+}
+
+impl std::ops::Deref for FormulaMap {
+    type Target = HashMap<String, String>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.ensure_formatted()
+    }
+}
+
+impl std::fmt::Debug for FormulaMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self.ensure_formatted(), f)
+    }
+}
+
+impl PartialEq for FormulaMap {
+    fn eq(&self, other: &Self) -> bool {
+        if std::sync::Arc::ptr_eq(&self.authored_ports, &other.authored_ports)
+            && self.formatted.get().is_none()
+            && other.formatted.get().is_none()
+        {
+            return true;
+        }
+        self.ensure_formatted() == other.ensure_formatted()
+    }
+}
+
+impl Eq for FormulaMap {}
+
+impl<'a> IntoIterator for &'a FormulaMap {
+    type Item = (&'a String, &'a String);
+    type IntoIter = std::collections::hash_map::Iter<'a, String, String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.ensure_formatted().iter()
+    }
+}
+
 /// A resolved visual element with concrete spatial boundaries and computed properties.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedNode {
@@ -207,7 +315,7 @@ pub struct ResolvedNode {
     pub env_vars: HashMap<String, Option<String>>,
     pub event_handlers: HashMap<String, crate::component::EventHandlerBinding>,
     pub default_event_handlers: HashMap<String, crate::component::EventHandlerBinding>,
-    pub formulas: HashMap<String, String>,
+    pub formulas: FormulaMap,
     pub span: Span,
     pub handle: Option<NodeHandle>,
     pub font: Option<NodeId>,
@@ -575,7 +683,7 @@ impl ResolvedLayout {
                 }
             }
             if let Some(lh) = node.properties.get("line_height").and_then(|v| v.as_f64()) {
-                if node.formulas.get("line_height").is_some_and(|f| !f.starts_with("font_line_height(")) {
+                if node.formulas.has_custom_line_height() {
                     ports.push(format!("line_height: {}", format_num(lh)));
                 }
             }
@@ -721,7 +829,11 @@ pub fn resolve_layout_with_graph(
     prebuilt_graph: Option<std::sync::Arc<VariableGraph>>,
 ) -> ResolvedLayout {
     let mut resolved_nodes = Vec::with_capacity(doc.nodes.len());
-    let mut props_by_node: Vec<HashMap<String, Value>> = vec![HashMap::new(); doc.nodes.len()];
+    let mut props_by_node: Vec<HashMap<String, Value>> = doc
+        .nodes
+        .iter()
+        .map(|n| HashMap::with_capacity(n.ports.len() + 9))
+        .collect();
     for (var_id, val) in &values {
         if let Some(map) = props_by_node.get_mut(var_id.node.0) {
             map.insert(var_id.port.clone(), val.clone());
@@ -747,10 +859,7 @@ pub fn resolve_layout_with_graph(
             .and_then(|v| v.as_node())
             .filter(|id| !id.is_window());
 
-        let mut formulas = HashMap::with_capacity(node.authored_ports.len());
-        for (port, expr) in &node.authored_ports {
-            formulas.insert(port.clone(), expr.to_string());
-        }
+        let formulas = FormulaMap::from_arc(std::sync::Arc::clone(&node.authored_ports));
 
         let font = node
             .font
@@ -1038,13 +1147,6 @@ pub fn update_resolved_layout(
 
 /// Projects Parley line fragments and post-shaping metrics onto inline child nodes within rich text blocks.
 pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
-    let nodes_with_text: std::collections::HashSet<NodeId> = layout
-        .nodes
-        .iter()
-        .filter(|n| n.text_content.is_some())
-        .map(|n| n.id)
-        .collect();
-
     let text_root_ids: Vec<NodeId> = layout
         .nodes
         .iter()
@@ -1052,22 +1154,26 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             n.text_content.is_some()
                 && (n.text_spans.iter().any(|s| s.node_id.is_some() || !s.node_ids.is_empty())
                     || !n.inline_boxes.is_empty())
-                && !n.parent.map_or(false, |pid| nodes_with_text.contains(&pid))
+                && !n
+                    .parent
+                    .and_then(|pid| layout.nodes.get(pid.0))
+                    .is_some_and(|p| p.text_content.is_some())
         })
         .map(|n| n.id)
         .collect();
 
     for text_id in text_root_ids {
-        let Some(text_node_idx) = layout.nodes.iter().position(|n| n.id == text_id) else {
+        let text_node_idx = text_id.0;
+        if text_node_idx >= layout.nodes.len() {
             continue;
-        };
+        }
 
         let (text, font_size, font_weight, font_family, max_width, line_height, align, ox, oy, raw_spans, raw_boxes) = {
             let n = &layout.nodes[text_node_idx];
             let fnode = n
                 .font
                 .or_else(|| n.properties.get("font").and_then(|v| v.as_node()))
-                .and_then(|fid| layout.nodes.iter().find(|fn_node| fn_node.id == fid));
+                .and_then(|fid| layout.nodes.get(fid.0));
             let text = n.text_content.clone().unwrap_or_default();
             let font_size = fnode
                 .and_then(|f| f.properties.get("size"))
@@ -1089,11 +1195,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 None
             };
             let line_height = fnode
-                .filter(|f| {
-                    f.formulas
-                        .get("line_height")
-                        .is_some_and(|eq| !eq.starts_with("font_line_height("))
-                })
+                .filter(|f| f.formulas.has_custom_line_height())
                 .and_then(|f| f.properties.get("line_height"))
                 .and_then(|v| v.as_f64())
                 .filter(|&h| h > 0.0);
@@ -1167,12 +1269,12 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 }
             }
             for &span_id in chain.iter().rev() {
-                if let Some(snode) = layout.nodes.iter().find(|n| n.id == span_id) {
+                if let Some(snode) = layout.nodes.get(span_id.0) {
                     let font_id = snode
                         .font
                         .or_else(|| snode.properties.get("font").and_then(|v| v.as_node()));
                     if let Some(fid) = font_id {
-                        if let Some(fnode) = layout.nodes.iter().find(|n| n.id == fid) {
+                        if let Some(fnode) = layout.nodes.get(fid.0) {
                             if let Some(sz) = fnode.properties.get("size").and_then(|v| v.as_f64()) {
                                 if sz > 0.0 {
                                     span.style.font_size = Some(sz);
@@ -1283,7 +1385,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 .find(|s| s.node_id == Some(child_id) || s.node_ids.contains(&child_id))
                 .map(|s| &s.style);
 
-            if let Some(child_node) = layout.nodes.iter_mut().find(|n| n.id == child_id) {
+            if let Some(child_node) = layout.nodes.get_mut(child_id.0) {
                 child_node.fragments = metrics.fragments;
 
                 if child_id != text_id {

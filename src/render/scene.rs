@@ -817,11 +817,7 @@ pub fn build_scene(
                     .and_then(|v| v.as_str());
 
                 let line_height_prop = fnode
-                    .filter(|f| {
-                        f.formulas
-                            .get("line_height")
-                            .is_some_and(|eq| !eq.starts_with("font_line_height("))
-                    })
+                    .filter(|f| f.formulas.has_custom_line_height())
                     .and_then(|f| f.properties.get("line_height"))
                     .and_then(|v| v.as_f64())
                     .filter(|&h| h > 0.0);
@@ -1168,7 +1164,7 @@ mod tests {
             env_vars: HashMap::new(),
             event_handlers: HashMap::new(),
             callbacks: HashMap::new(),
-            formulas: HashMap::new(),
+            formulas: Default::default(),
             span: Span::default(),
             handle: None,
             font: None,
@@ -1241,7 +1237,7 @@ mod tests {
             env_vars: HashMap::new(),
             event_handlers: HashMap::new(),
             callbacks: HashMap::new(),
-            formulas: HashMap::new(),
+            formulas: Default::default(),
             span: Span::default(),
             handle: None,
             font: None,
@@ -1275,7 +1271,7 @@ mod tests {
             env_vars: HashMap::new(),
             event_handlers: HashMap::new(),
             callbacks: HashMap::new(),
-            formulas: HashMap::new(),
+            formulas: Default::default(),
             span: Span::default(),
             handle: None,
             font: None,
@@ -1308,7 +1304,7 @@ mod tests {
             env_vars: HashMap::new(),
             event_handlers: HashMap::new(),
             callbacks: HashMap::new(),
-            formulas: HashMap::new(),
+            formulas: Default::default(),
             span: Span::default(),
             handle: None,
             font: None,
