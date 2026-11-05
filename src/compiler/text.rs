@@ -5,6 +5,8 @@ use std::cell::RefCell;
 thread_local! {
     static FONT_CONTEXT: RefCell<FontContext> = RefCell::new(FontContext::new());
     static LAYOUT_CONTEXT: RefCell<LayoutContext<()>> = RefCell::new(LayoutContext::new());
+    static FONT_METRICS_CACHE: RefCell<std::collections::HashMap<(u64, u64, String), FontMetrics>> =
+        RefCell::new(std::collections::HashMap::new());
 }
 
 /// Measures the rendered height of the given text when wrapped to `max_width`.
@@ -369,8 +371,13 @@ pub fn measure_font_metrics(
 
     let size = if font_size > 0.0 { font_size as f32 } else { 16.0 };
     let weight = if font_weight > 0.0 { font_weight as f32 } else { 400.0 };
+    let family_key = font_family.unwrap_or("").to_string();
+    let cache_key = ((size as f64).to_bits(), (weight as f64).to_bits(), family_key);
+    if let Some(cached) = FONT_METRICS_CACHE.with(|c| c.borrow().get(&cache_key).copied()) {
+        return cached;
+    }
 
-    FONT_CONTEXT.with(|font_cx_cell| {
+    let computed = FONT_CONTEXT.with(|font_cx_cell| {
         LAYOUT_CONTEXT.with(|layout_cx_cell| {
             let mut font_cx = font_cx_cell.borrow_mut();
             let mut layout_cx = layout_cx_cell.borrow_mut();
@@ -500,7 +507,11 @@ pub fn measure_font_metrics(
                 baseline,
             }
         })
-    })
+    });
+    FONT_METRICS_CACHE.with(|c| {
+        c.borrow_mut().insert(cache_key, computed);
+    });
+    computed
 }
 
 /// Standard W3C / CSS generic font families that resolve to system fallbacks.

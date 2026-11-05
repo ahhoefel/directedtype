@@ -44,11 +44,60 @@ impl CachedComponentSchema {
     }
 }
 
+/// Zero-based slot offset of a port within a component's `PortTable`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PortSlot(pub u16);
+
+/// Fixed-layout table mapping port names of a component definition to dense `PortSlot` offsets.
+#[derive(Debug, Clone, Default)]
+pub struct PortTable {
+    pub slot_names: Vec<String>,
+    pub name_to_slot: HashMap<String, PortSlot>,
+}
+
+impl PortTable {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn get_or_insert(&mut self, name: &str) -> PortSlot {
+        if let Some(&slot) = self.name_to_slot.get(name) {
+            return slot;
+        }
+        let slot = PortSlot(self.slot_names.len() as u16);
+        let owned = name.to_string();
+        self.slot_names.push(owned.clone());
+        self.name_to_slot.insert(owned, slot);
+        slot
+    }
+
+    #[inline]
+    pub fn slot_of(&self, name: &str) -> Option<PortSlot> {
+        self.name_to_slot.get(name).copied()
+    }
+
+    #[inline]
+    pub fn name_of(&self, slot: PortSlot) -> Option<&str> {
+        self.slot_names.get(slot.0 as usize).map(|s| s.as_str())
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.slot_names.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.slot_names.is_empty()
+    }
+}
+
 /// Pre-validated schema of a `ComponentDef`'s ports, aliases, state, let bindings, and env bindings.
 #[derive(Debug, Clone)]
 pub struct ComponentSchema {
     pub is_span_def: bool,
     pub is_inline_box_def: bool,
+    pub port_table: PortTable,
     pub param_names: HashSet<String>,
     pub handler_param_names: HashSet<String>,
     pub env_param_names: HashSet<String>,
@@ -383,9 +432,23 @@ impl ComponentSchema {
             })
             .collect();
 
+        let mut port_table = PortTable::new();
+        for p in &comp_scope_ports {
+            port_table.get_or_insert(p);
+        }
+        for let_name in declared_lets.keys() {
+            if !comp_shadowed_ports.contains(let_name) {
+                port_table.get_or_insert(let_name);
+            }
+        }
+        for sp in ["left", "top", "right", "bottom"] {
+            port_table.get_or_insert(sp);
+        }
+
         Ok(Self {
             is_span_def,
             is_inline_box_def,
+            port_table,
             param_names,
             handler_param_names,
             env_param_names,

@@ -685,7 +685,7 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
                                     return None;
                                 }
                                 let is_self = target_id.as_str() == "self"
-                                    || target_id.as_str() == ctx.current_node.canonical_name();
+                                    || ctx.current_node.matches_str(target_id.as_str());
                                 Some(is_self)
                             } else {
                                 None
@@ -707,8 +707,8 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
                 }
                 let is_target = target_id.as_str() == "parent"
                     || target_id.as_str() == "self"
-                    || ctx.parent_node.is_some_and(|p| target_id.as_str() == p.canonical_name())
-                    || target_id.as_str() == ctx.current_node.canonical_name();
+                    || ctx.parent_node.is_some_and(|p| p.matches_str(target_id.as_str()))
+                    || ctx.current_node.matches_str(target_id.as_str());
                 if is_target {
                     if ctx
                         .declared_state_names
@@ -730,8 +730,9 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
                                             return None;
                                         }
                                         let is_self = sub_target_id.as_str() == "self"
-                                            || sub_target_id.as_str()
-                                                == ctx.current_node.canonical_name();
+                                            || ctx
+                                                .current_node
+                                                .matches_str(sub_target_id.as_str());
                                         Some(is_self)
                                     } else {
                                         None
@@ -817,8 +818,8 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                 }
                 let is_target = target_id.as_str() == "parent"
                     || target_id.as_str() == "self"
-                    || ctx.parent_node.is_some_and(|p| target_id.as_str() == p.canonical_name())
-                    || target_id.as_str() == ctx.current_node.canonical_name();
+                    || ctx.parent_node.is_some_and(|p| p.matches_str(target_id.as_str()))
+                    || ctx.current_node.matches_str(target_id.as_str());
                 if is_target {
                     if ctx
                         .declared_state_names
@@ -983,14 +984,47 @@ pub(super) fn known_builtin_port_type(node_name: &str, port_name: &str) -> Optio
     super::builtins::default_builtin_port_type(port_name)
 }
 
+struct TypecheckCache {
+    node_caches: Vec<HashMap<String, StaticType>>,
+    window_cache: HashMap<String, StaticType>,
+    visiting: HashSet<(NodeId, String)>,
+}
+
+impl TypecheckCache {
+    fn new(num_nodes: usize) -> Self {
+        Self {
+            node_caches: vec![HashMap::new(); num_nodes],
+            window_cache: HashMap::new(),
+            visiting: HashSet::new(),
+        }
+    }
+
+    #[inline]
+    fn get(&self, node_id: NodeId, port_name: &str) -> Option<&StaticType> {
+        if node_id.is_window() {
+            self.window_cache.get(port_name)
+        } else {
+            self.node_caches.get(node_id.0)?.get(port_name)
+        }
+    }
+
+    #[inline]
+    fn insert(&mut self, node_id: NodeId, port_name: String, ty: StaticType) {
+        if node_id.is_window() {
+            self.window_cache.insert(port_name, ty);
+        } else if let Some(map) = self.node_caches.get_mut(node_id.0) {
+            map.insert(port_name, ty);
+        }
+    }
+}
+
 /// Strictly type-checks all expanded node ports, window ports, and local bindings at compile time.
 pub fn typecheck_expanded_document(
     doc: &mut ExpandedDocument,
     enums: &HashMap<String, EnumDef>,
     registry: &HashMap<String, Vec<ComponentDef>>,
 ) -> Result<(), CompileError> {
-    let mut cache: HashMap<(NodeId, String), StaticType> = HashMap::new();
-    let mut visiting: HashSet<(NodeId, String)> = HashSet::new();
+    let mut cache = TypecheckCache::new(doc.nodes.len());
 
     // 1. Validate and infer all window ports
     let window_port_names: Vec<String> = doc.window_ports.keys().cloned().collect();
@@ -1002,7 +1036,6 @@ pub fn typecheck_expanded_document(
             enums,
             registry,
             &mut cache,
-            &mut visiting,
         )?;
         doc.window_port_types
             .entry(port_name)
@@ -1021,7 +1054,6 @@ pub fn typecheck_expanded_document(
                 enums,
                 registry,
                 &mut cache,
-                &mut visiting,
             )?;
             doc.nodes[idx]
                 .port_types
@@ -1031,16 +1063,22 @@ pub fn typecheck_expanded_document(
     }
 
     // 3. Validate and infer all local bindings (\let, \env, \alias)
-    let local_bindings = doc.local_bindings.clone();
-    for (expr, explicit_type, span) in local_bindings {
-        let actual = infer_expr_type(&expr, doc, enums, registry, &mut cache, &mut visiting)?;
-        if let Some(expected_name) = explicit_type {
-            let expected = StaticType::from_type_name(&expected_name, span, enums, registry)?;
+    for idx in 0..doc.local_bindings.len() {
+        let actual = infer_expr_type(
+            &doc.local_bindings[idx].0,
+            doc,
+            enums,
+            registry,
+            &mut cache,
+        )?;
+        if let Some(ref expected_name) = doc.local_bindings[idx].1 {
+            let span = doc.local_bindings[idx].2;
+            let expected = StaticType::from_type_name(expected_name, span, enums, registry)?;
             if !actual.matches(&expected) {
                 return Err(CompileError::TypeMismatch {
                     expected: expected.type_name(),
                     actual: actual.type_name(),
-                    span: expr.span(),
+                    span: doc.local_bindings[idx].0.span(),
                 });
             }
         }
@@ -1055,22 +1093,20 @@ fn infer_port_type(
     doc: &ExpandedDocument,
     enums: &HashMap<String, EnumDef>,
     registry: &HashMap<String, Vec<ComponentDef>>,
-    cache: &mut HashMap<(NodeId, String), StaticType>,
-    visiting: &mut HashSet<(NodeId, String)>,
+    cache: &mut TypecheckCache,
 ) -> Result<StaticType, CompileError> {
-    let key = (node_id, port_name.to_string());
-    if let Some(cached) = cache.get(&key) {
+    if let Some(cached) = cache.get(node_id, port_name) {
         return Ok(cached.clone());
     }
 
     let explicit_type_name = if node_id.is_window() {
-        doc.window_port_types.get(port_name).cloned()
+        doc.window_port_types.get(port_name).map(|s| s.as_str())
     } else {
         doc.get_node(node_id)
-            .and_then(|n| n.port_types.get(port_name).cloned())
+            .and_then(|n| n.port_types.get(port_name).map(|s| s.as_str()))
     };
 
-    let explicit_ty = if let Some(ref name) = explicit_type_name {
+    let explicit_ty = if let Some(name) = explicit_type_name {
         Some(StaticType::from_type_name(
             name,
             Span::default(),
@@ -1081,7 +1117,8 @@ fn infer_port_type(
         None
     };
 
-    if !visiting.insert(key.clone()) {
+    let key = (node_id, port_name.to_string());
+    if !cache.visiting.insert(key.clone()) {
         // Cycle detected: if there is an explicit or builtin type, return it; otherwise let graph cycle checker report it
         if let Some(ty) = explicit_ty {
             return Ok(ty);
@@ -1104,10 +1141,10 @@ fn infer_port_type(
     };
 
     let result = if let Some(expr) = expr_opt {
-        let actual = infer_expr_type(expr, doc, enums, registry, cache, visiting)?;
+        let actual = infer_expr_type(expr, doc, enums, registry, cache)?;
         if let Some(expected) = explicit_ty {
             if !actual.matches(&expected) {
-                visiting.remove(&key);
+                cache.visiting.remove(&key);
                 return Err(CompileError::TypeMismatch {
                     expected: expected.type_name(),
                     actual: actual.type_name(),
@@ -1124,7 +1161,7 @@ fn infer_port_type(
             if let Some(builtin) = known_builtin_port_type(node_name, port_name) {
                 if !node_id.is_window() && doc.get_node(node_id).is_some_and(|n| !n.is_component) {
                     if !actual.matches(&builtin) {
-                        visiting.remove(&key);
+                        cache.visiting.remove(&key);
                         return Err(CompileError::TypeMismatch {
                             expected: builtin.type_name(),
                             actual: actual.type_name(),
@@ -1151,7 +1188,7 @@ fn infer_port_type(
         if let Some(builtin) = known_builtin_port_type(node_name, port_name) {
             Ok(builtin)
         } else {
-            visiting.remove(&key);
+            cache.visiting.remove(&key);
             return Err(CompileError::Custom {
                 message: format!(
                     "Node '{}' has no known type for property '{}'",
@@ -1162,9 +1199,9 @@ fn infer_port_type(
         }
     };
 
-    visiting.remove(&key);
+    cache.visiting.remove(&key);
     if let Ok(ref ty) = result {
-        cache.insert(key, ty.clone());
+        cache.insert(key.0, key.1, ty.clone());
     }
     result
 }
@@ -1174,8 +1211,7 @@ fn infer_expr_type(
     doc: &ExpandedDocument,
     enums: &HashMap<String, EnumDef>,
     registry: &HashMap<String, Vec<ComponentDef>>,
-    cache: &mut HashMap<(NodeId, String), StaticType>,
-    visiting: &mut HashSet<(NodeId, String)>,
+    cache: &mut TypecheckCache,
 ) -> Result<StaticType, CompileError> {
     match expr {
         Expr::Literal(lit) => Ok(match lit {
@@ -1190,7 +1226,7 @@ fn infer_expr_type(
             Literal::Color(_, _) => StaticType::Color,
             Literal::Enum(enum_name, _, _) => StaticType::Enum(enum_name.clone()),
         }),
-        Expr::Paren(inner, _) => infer_expr_type(inner, doc, enums, registry, cache, visiting),
+        Expr::Paren(inner, _) => infer_expr_type(inner, doc, enums, registry, cache),
         Expr::Ident(id) => {
             if id.as_str() == "unset" || id.as_str() == "None" {
                 return Ok(StaticType::Unset);
@@ -1238,7 +1274,6 @@ fn infer_expr_type(
                             enums,
                             registry,
                             cache,
-                            visiting,
                         );
                     }
                     // Check if it's an event handler method on a component node
@@ -1249,7 +1284,7 @@ fn infer_expr_type(
                     }
                 }
             }
-            let target_ty = infer_expr_type(&m.target, doc, enums, registry, cache, visiting)?;
+            let target_ty = infer_expr_type(&m.target, doc, enums, registry, cache)?;
             match target_ty {
                 StaticType::Node(ref node_name) => {
                     if let Some(builtin) = known_builtin_port_type(node_name, m.member.as_str()) {
@@ -1327,7 +1362,7 @@ fn infer_expr_type(
             }
         }
         Expr::Unary(u) => {
-            let op_ty = infer_expr_type(&u.operand, doc, enums, registry, cache, visiting)?;
+            let op_ty = infer_expr_type(&u.operand, doc, enums, registry, cache)?;
             match u.op {
                 UnaryOp::Neg => match op_ty.decay() {
                     StaticType::Integer => Ok(StaticType::Integer),
@@ -1355,8 +1390,8 @@ fn infer_expr_type(
             }
         }
         Expr::Binary(bin) => {
-            let left_ty = infer_expr_type(&bin.left, doc, enums, registry, cache, visiting)?;
-            let right_ty = infer_expr_type(&bin.right, doc, enums, registry, cache, visiting)?;
+            let left_ty = infer_expr_type(&bin.left, doc, enums, registry, cache)?;
+            let right_ty = infer_expr_type(&bin.right, doc, enums, registry, cache)?;
             match bin.op {
                 BinaryOp::Add => match (&left_ty, &right_ty) {
                     (StaticType::String, _) | (_, StaticType::String) => Ok(StaticType::String),
@@ -1638,7 +1673,7 @@ fn infer_expr_type(
             }
         }
         Expr::Ternary(tern) => {
-            let cond_ty = infer_expr_type(&tern.condition, doc, enums, registry, cache, visiting)?;
+            let cond_ty = infer_expr_type(&tern.condition, doc, enums, registry, cache)?;
             if !matches!(
                 cond_ty,
                 StaticType::Boolean
@@ -1653,8 +1688,8 @@ fn infer_expr_type(
                     span: tern.condition.span(),
                 });
             }
-            let then_ty = infer_expr_type(&tern.then_expr, doc, enums, registry, cache, visiting)?;
-            let else_ty = infer_expr_type(&tern.else_expr, doc, enums, registry, cache, visiting)?;
+            let then_ty = infer_expr_type(&tern.then_expr, doc, enums, registry, cache)?;
+            let else_ty = infer_expr_type(&tern.else_expr, doc, enums, registry, cache)?;
             if then_ty == else_ty {
                 Ok(then_ty.decay())
             } else if then_ty.matches(&else_ty) {
@@ -1680,20 +1715,20 @@ fn infer_expr_type(
             match call.callee.as_str() {
                 "distance_to_float" | "to_px" | "to_pt" | "to_float" | "to_number" => {
                     for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
                     }
                     Ok(StaticType::Float)
                 }
                 "to_integer" => {
                     for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
                     }
                     Ok(StaticType::Integer)
                 }
                 "sqrt" => {
                     let mut first_ty = None;
                     for (i, arg) in call.args.iter().enumerate() {
-                        let t = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        let t = infer_expr_type(arg, doc, enums, registry, cache)?;
                         if i == 0 {
                             first_ty = Some(t);
                         }
@@ -1707,7 +1742,7 @@ fn infer_expr_type(
                 "round" | "floor" | "ceil" => {
                     let mut first_ty = None;
                     for (i, arg) in call.args.iter().enumerate() {
-                        let t = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        let t = infer_expr_type(arg, doc, enums, registry, cache)?;
                         if i == 0 {
                             first_ty = Some(t);
                         }
@@ -1721,13 +1756,13 @@ fn infer_expr_type(
                 }
                 "to_fixed" | "to_precision" => {
                     for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
                     }
                     Ok(StaticType::String)
                 }
                 "hsl" | "hsla" | "rgb" | "rgba" => {
                     for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
                     }
                     Ok(StaticType::Color)
                 }
@@ -1742,7 +1777,7 @@ fn infer_expr_type(
                 | "font_line_gap"
                 | "font_line_height" => {
                     for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
                     }
                     Ok(StaticType::Distance)
                 }
@@ -1751,9 +1786,9 @@ fn infer_expr_type(
                         return Ok(StaticType::Distance);
                     }
                     let mut acc_ty =
-                        infer_expr_type(&call.args[0], doc, enums, registry, cache, visiting)?;
+                        infer_expr_type(&call.args[0], doc, enums, registry, cache)?;
                     for arg in &call.args[1..] {
-                        let arg_ty = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        let arg_ty = infer_expr_type(arg, doc, enums, registry, cache)?;
                         if arg_ty.matches(&acc_ty) {
                             // keep acc_ty
                         } else if acc_ty.matches(&arg_ty) {
@@ -1774,16 +1809,16 @@ fn infer_expr_type(
                 }
                 _ => {
                     for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
                     }
                     Ok(StaticType::Float)
                 }
             }
         }
         Expr::MethodCall(mc) => {
-            let target_ty = infer_expr_type(&mc.target, doc, enums, registry, cache, visiting)?;
+            let target_ty = infer_expr_type(&mc.target, doc, enums, registry, cache)?;
             for arg in &mc.args {
-                let _ = infer_expr_type(arg, doc, enums, registry, cache, visiting)?;
+                let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
             }
             match mc.method.as_str() {
                 "append" | "to_fixed" | "to_precision" => Ok(StaticType::String),
@@ -1834,7 +1869,7 @@ fn infer_expr_type(
                         });
                     }
                     let port_ty =
-                        infer_expr_type(&port.expr, doc, enums, registry, cache, visiting)?;
+                        infer_expr_type(&port.expr, doc, enums, registry, cache)?;
                     if !port_ty.matches(&StaticType::Duration) {
                         return Err(CompileError::TypeMismatch {
                             expected: "Duration".to_string(),

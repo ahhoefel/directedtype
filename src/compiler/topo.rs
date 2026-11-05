@@ -1,5 +1,5 @@
 use crate::compiler::error::CompileError;
-use crate::compiler::graph::{VarId, VariableGraph};
+use crate::compiler::graph::{VarId, VarIndex, VariableGraph};
 use crate::span::Span;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -8,6 +8,7 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopologicalSchedule {
     pub order: Vec<VarId>,
+    pub order_indices: Vec<VarIndex>,
 }
 
 impl TopologicalSchedule {
@@ -27,6 +28,46 @@ impl TopologicalSchedule {
 /// Performs Kahn's algorithm on the variable graph to produce a topological evaluation schedule
 /// or return a detailed cycle diagnostic error.
 pub fn sort_graph(graph: &VariableGraph) -> Result<TopologicalSchedule, CompileError> {
+    let num_vars = graph.var_nodes.len();
+    if num_vars == graph.variables.len() && graph.upstream_idx.len() == num_vars {
+        let mut in_degrees: Vec<u32> = graph
+            .upstream_idx
+            .iter()
+            .map(|deps| deps.len() as u32)
+            .collect();
+
+        let mut ready: BinaryHeap<Reverse<VarIndex>> = in_degrees
+            .iter()
+            .enumerate()
+            .filter(|(_, &deg)| deg == 0)
+            .map(|(idx, _)| Reverse(VarIndex(idx as u32)))
+            .collect();
+
+        let mut order_indices = Vec::with_capacity(num_vars);
+
+        while let Some(Reverse(curr_idx)) = ready.pop() {
+            for &down_idx in &graph.downstream_idx[curr_idx.0 as usize] {
+                let deg = &mut in_degrees[down_idx.0 as usize];
+                *deg = deg.saturating_sub(1);
+                if *deg == 0 {
+                    ready.push(Reverse(down_idx));
+                }
+            }
+            order_indices.push(curr_idx);
+        }
+
+        if order_indices.len() == num_vars {
+            let order = order_indices
+                .iter()
+                .map(|&idx| graph.var_nodes[idx.0 as usize].id.clone())
+                .collect();
+            return Ok(TopologicalSchedule {
+                order,
+                order_indices,
+            });
+        }
+    }
+
     let mut in_degrees: HashMap<VarId, usize> = HashMap::new();
 
     // 1. Calculate in-degrees
@@ -97,7 +138,15 @@ pub fn sort_graph(graph: &VariableGraph) -> Result<TopologicalSchedule, CompileE
         });
     }
 
-    Ok(TopologicalSchedule { order })
+    let order_indices = order
+        .iter()
+        .filter_map(|v| graph.lookup_var_index(v.node, &v.port))
+        .collect();
+
+    Ok(TopologicalSchedule {
+        order,
+        order_indices,
+    })
 }
 
 /// Finds a directed cycle among the set of remaining nodes using DFS.

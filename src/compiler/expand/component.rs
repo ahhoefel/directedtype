@@ -575,8 +575,8 @@ impl<'a> ComponentExpander<'a> {
             local_scope.insert(
                 name.clone(),
                 LexicalBinding::Expr(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(
-                        ctx.comp_node_id.canonical_name(),
+                    target: Box::new(Expr::Ident(Ident::from_node(
+                        ctx.comp_node_id,
                         param.name.span,
                     ))),
                     member: param.name.clone(),
@@ -590,8 +590,8 @@ impl<'a> ComponentExpander<'a> {
                 local_scope.insert(
                     let_name.clone(),
                     LexicalBinding::Expr(Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::new(
-                            ctx.comp_node_id.canonical_name(),
+                        target: Box::new(Expr::Ident(Ident::from_node(
+                            ctx.comp_node_id,
                             let_binding.name.span,
                         ))),
                         member: let_binding.name.clone(),
@@ -603,8 +603,8 @@ impl<'a> ComponentExpander<'a> {
         for port_name in &self.comp_scope_ports {
             if !populated_comp_ports.contains(port_name) {
                 let member_expr = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(
-                        ctx.comp_node_id.canonical_name(),
+                    target: Box::new(Expr::Ident(Ident::from_node(
+                        ctx.comp_node_id,
                         instance.span,
                     ))),
                     member: Ident::new(port_name.clone(), instance.span),
@@ -676,7 +676,7 @@ impl<'a> ComponentExpander<'a> {
         let comp_node_id = self.ctx.comp_node_id;
         if param.name.as_str() == "font" {
             if let Some(&fid) = self.node_fonts.get(&comp_node_id) {
-                return Expr::Ident(Ident::new(fid.canonical_name(), span));
+                return Expr::Ident(Ident::from_node(fid, span));
             }
         } else if let Some(Expr::Ident(id)) = self.comp_ports.get(param.name.as_str()) {
             if NodeId::from_canonical_name(id.as_str()).is_some() {
@@ -684,7 +684,7 @@ impl<'a> ComponentExpander<'a> {
             }
         }
         Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(Expr::Ident(Ident::new(comp_node_id.canonical_name(), span))),
+            target: Box::new(Expr::Ident(Ident::from_node(comp_node_id, span))),
             member: param.name.clone(),
             span,
         })
@@ -701,8 +701,8 @@ impl<'a> ComponentExpander<'a> {
         let mut local_scope = self.init_local_lexical_scope()?;
 
         let self_clip_entry = EnvEntry::Bound(Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(Expr::Ident(Ident::new(
-                ctx.comp_node_id.canonical_name(),
+            target: Box::new(Expr::Ident(Ident::from_node(
+                ctx.comp_node_id,
                 instance.span,
             ))),
             member: Ident::new("clip", instance.span),
@@ -963,8 +963,8 @@ impl<'a> ComponentExpander<'a> {
                 );
             } else if !is_env_param_shadow {
                 let member_expr = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(
-                        ctx.comp_node_id.canonical_name(),
+                    target: Box::new(Expr::Ident(Ident::from_node(
+                        ctx.comp_node_id,
                         let_binding.name.span,
                     ))),
                     member: let_binding.name.clone(),

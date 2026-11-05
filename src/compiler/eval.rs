@@ -6,6 +6,30 @@ use crate::compiler::topo::TopologicalSchedule;
 use crate::compiler::value::Value;
 use std::collections::{HashMap, HashSet};
 
+pub trait EvalEnv {
+    fn get_var(&self, node: NodeId, port: &str) -> Option<&Value>;
+}
+
+impl EvalEnv for HashMap<VarId, Value> {
+    #[inline]
+    fn get_var(&self, node: NodeId, port: &str) -> Option<&Value> {
+        self.get(&VarId::new(node, port))
+    }
+}
+
+struct IndexedEvalEnv<'a> {
+    graph: &'a VariableGraph,
+    slots: &'a [Option<Value>],
+}
+
+impl<'a> EvalEnv for IndexedEvalEnv<'a> {
+    #[inline]
+    fn get_var(&self, node: NodeId, port: &str) -> Option<&Value> {
+        let idx = self.graph.lookup_var_index(node, port)?;
+        self.slots.get(idx.0 as usize)?.as_ref()
+    }
+}
+
 /// Evaluates all variables in the graph according to the topological schedule,
 /// returning an environment mapping each `VarId` to its computed `Value`.
 pub fn evaluate_graph(
@@ -22,6 +46,53 @@ pub fn evaluate_graph_with_state(
     schedule: &TopologicalSchedule,
     state_overrides: &HashMap<VarId, Value>,
 ) -> Result<HashMap<VarId, Value>, CompileError> {
+    let num_vars = graph.var_nodes.len();
+    if schedule.order_indices.len() == num_vars && num_vars == graph.variables.len() {
+        let mut slots: Vec<Option<Value>> = vec![None; num_vars];
+        let has_overrides = !state_overrides.is_empty();
+
+        for &var_idx in &schedule.order_indices {
+            let idx = var_idx.0 as usize;
+            let node = &graph.var_nodes[idx];
+            if has_overrides {
+                if let Some(override_val) = state_overrides.get(&node.id) {
+                    if node.id.port == "family" {
+                        if let Value::String(ref s) = override_val {
+                            if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
+                                return Err(CompileError::FontFamilyNotFound {
+                                    family: s.clone(),
+                                    span: node.span,
+                                });
+                            }
+                        }
+                    }
+                    slots[idx] = Some(override_val.clone());
+                    continue;
+                }
+            }
+            let val = eval_expr_with_env(&node.equation, &IndexedEvalEnv { graph, slots: &slots })?;
+            if node.id.port == "family" {
+                if let Value::String(ref s) = val {
+                    if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
+                        return Err(CompileError::FontFamilyNotFound {
+                            family: s.clone(),
+                            span: node.span,
+                        });
+                    }
+                }
+            }
+            slots[idx] = Some(val);
+        }
+
+        let mut env = HashMap::with_capacity(num_vars);
+        for (node, slot) in graph.var_nodes.iter().zip(slots.into_iter()) {
+            if let Some(val) = slot {
+                env.insert(node.id.clone(), val);
+            }
+        }
+        return Ok(env);
+    }
+
     let mut env = HashMap::with_capacity(schedule.len());
 
     for var_id in schedule.iter() {
@@ -135,10 +206,10 @@ pub fn invalidate_and_reevaluate(
     Ok(changed)
 }
 
-fn get_family_from_val<'a>(val: Option<&'a Value>, env: &'a HashMap<VarId, Value>) -> Option<&'a str> {
+fn get_family_from_val<'a, E: EvalEnv>(val: Option<&'a Value>, env: &'a E) -> Option<&'a str> {
     match val {
         Some(Value::String(s)) => Some(s.as_str()),
-        Some(Value::Node(id)) => env.get(&VarId::new(*id, "family")).and_then(|v| v.as_str()),
+        Some(Value::Node(id)) => env.get_var(*id, "family").and_then(|v| v.as_str()),
         _ => None,
     }
 }
@@ -157,6 +228,11 @@ fn validate_font_family(family: Option<&str>, span: crate::span::Span) -> Result
 
 /// Evaluates an algebraic expression in the given environment.
 pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, CompileError> {
+    eval_expr_with_env(expr, env)
+}
+
+/// Evaluates an algebraic expression against any `EvalEnv` (flat slot table or `HashMap`).
+pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, CompileError> {
     match expr {
         Expr::Literal(lit) => match lit {
             Literal::Integer(n, _) => Ok(Value::Integer(*n)),
@@ -165,7 +241,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 crate::ast::DistanceUnit::Px => Ok(Value::Distance(*d)),
                 crate::ast::DistanceUnit::Pt => {
                     let dpi = env
-                        .get(&VarId::new(NodeId::WINDOW, "dpi"))
+                        .get_var(NodeId::WINDOW, "dpi")
                         .and_then(|v| v.as_f64())
                         .unwrap_or(96.0);
                     Ok(Value::Distance(*d * (dpi / 72.0)))
@@ -179,7 +255,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 crate::ast::DistanceUnit::Px => Ok(Value::Area(*a)),
                 crate::ast::DistanceUnit::Pt => {
                     let dpi = env
-                        .get(&VarId::new(NodeId::WINDOW, "dpi"))
+                        .get_var(NodeId::WINDOW, "dpi")
                         .and_then(|v| v.as_f64())
                         .unwrap_or(96.0);
                     let factor = dpi / 72.0;
@@ -218,14 +294,14 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         Expr::MemberAccess(m) => {
             if let Expr::Ident(target_id) = m.target.as_ref() {
                 if let Some(node_id) = NodeId::from_canonical_name(target_id.as_str()) {
-                    let var = VarId::new(node_id, m.member.as_str());
-                    if let Some(val) = env.get(&var) {
+                    if let Some(val) = env.get_var(node_id, m.member.as_str()) {
                         return Ok(val.clone());
                     } else {
                         return Err(CompileError::Custom {
                             message: format!(
-                                "Variable '{}' evaluated before being set in environment",
-                                var
+                                "Variable '{}.{}' evaluated before being set in environment",
+                                node_id.canonical_str(),
+                                m.member.as_str()
                             ),
                             span: m.span,
                         });
@@ -233,17 +309,17 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 }
             }
 
-            let target_val = eval_expr(&m.target, env)?;
+            let target_val = eval_expr_with_env(&m.target, env)?;
             match target_val {
                 Value::Node(node_id) => {
-                    let var = VarId::new(node_id, m.member.as_str());
-                    if let Some(val) = env.get(&var) {
+                    if let Some(val) = env.get_var(node_id, m.member.as_str()) {
                         Ok(val.clone())
                     } else {
                         Err(CompileError::Custom {
                             message: format!(
-                                "Variable '{}' evaluated before being set in environment",
-                                var
+                                "Variable '{}.{}' evaluated before being set in environment",
+                                node_id.canonical_str(),
+                                m.member.as_str()
                             ),
                             span: m.span,
                         })
@@ -293,8 +369,8 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         }
 
         Expr::Binary(b) => {
-            let left = eval_expr(&b.left, env)?;
-            let right = eval_expr(&b.right, env)?;
+            let left = eval_expr_with_env(&b.left, env)?;
+            let right = eval_expr_with_env(&b.right, env)?;
 
             match b.op {
                 BinaryOp::Add => match (&left, &right) {
@@ -584,7 +660,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         }
 
         Expr::Unary(u) => {
-            let operand = eval_expr(&u.operand, env)?;
+            let operand = eval_expr_with_env(&u.operand, env)?;
             match u.op {
                 UnaryOp::Neg => match operand {
                     Value::Integer(n) => Ok(Value::Integer(-n)),
@@ -602,11 +678,11 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         }
 
         Expr::Ternary(t) => {
-            let cond = eval_expr(&t.condition, env)?;
+            let cond = eval_expr_with_env(&t.condition, env)?;
             if cond.is_truthy() {
-                let val = eval_expr(&t.then_expr, env)?;
+                let val = eval_expr_with_env(&t.then_expr, env)?;
                 if matches!(val, Value::Integer(0)) {
-                    match eval_expr(&t.else_expr, env) {
+                    match eval_expr_with_env(&t.else_expr, env) {
                         Ok(Value::Distance(_)) => return Ok(Value::Distance(0.0)),
                         Ok(Value::Area(_)) => return Ok(Value::Area(0.0)),
                         Ok(Value::Duration(_)) => return Ok(Value::Duration(0)),
@@ -615,9 +691,9 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 }
                 Ok(val)
             } else {
-                let val = eval_expr(&t.else_expr, env)?;
+                let val = eval_expr_with_env(&t.else_expr, env)?;
                 if matches!(val, Value::Integer(0)) {
-                    match eval_expr(&t.then_expr, env) {
+                    match eval_expr_with_env(&t.then_expr, env) {
                         Ok(Value::Distance(_)) => return Ok(Value::Distance(0.0)),
                         Ok(Value::Area(_)) => return Ok(Value::Area(0.0)),
                         Ok(Value::Duration(_)) => return Ok(Value::Duration(0)),
@@ -636,7 +712,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         span: c.span,
                     });
                 }
-                let d_val = eval_expr(&c.args[0], env)?;
+                let d_val = eval_expr_with_env(&c.args[0], env)?;
                 let d_px = match d_val {
                     Value::Distance(d) => d,
                     Value::Integer(0) => 0.0,
@@ -655,7 +731,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         "px" => 1.0,
                         "pt" => {
                             let dpi = env
-                                .get(&VarId::new(NodeId::WINDOW, "dpi"))
+                                .get_var(NodeId::WINDOW, "dpi")
                                 .and_then(|v| v.as_f64())
                                 .unwrap_or(96.0);
                             dpi / 72.0
@@ -677,7 +753,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                         }
                     },
                     other_expr => {
-                        let unit_val = eval_expr(other_expr, env)?;
+                        let unit_val = eval_expr_with_env(other_expr, env)?;
                         unit_val.as_f64().unwrap_or(1.0)
                     }
                 };
@@ -690,7 +766,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
             let evaluated_args: Vec<Value> = c
                 .args
                 .iter()
-                .map(|arg| eval_expr(arg, env))
+                .map(|arg| eval_expr_with_env(arg, env))
                 .collect::<Result<_, _>>()?;
 
             match c.callee.as_str() {
@@ -861,7 +937,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 "to_pt" => match evaluated_args.first() {
                     Some(Value::Distance(d)) => {
                         let dpi = env
-                            .get(&VarId::new(NodeId::WINDOW, "dpi"))
+                            .get_var(NodeId::WINDOW, "dpi")
                             .and_then(|v| v.as_f64())
                             .unwrap_or(96.0);
                         Ok(Value::Float(*d / (dpi / 72.0)))
@@ -1209,11 +1285,11 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
         }
 
         Expr::MethodCall(mc) => {
-            let target_val = eval_expr(&mc.target, env)?;
+            let target_val = eval_expr_with_env(&mc.target, env)?;
             let evaluated_args: Vec<Value> = mc
                 .args
                 .iter()
-                .map(|arg| eval_expr(arg, env))
+                .map(|arg| eval_expr_with_env(arg, env))
                 .collect::<Result<_, _>>()?;
 
             match mc.method.as_str() {
@@ -1225,7 +1301,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
 
                     let base_path = match target_val {
                         Value::Node(id) => env
-                            .get(&VarId::new(id, "path"))
+                            .get_var(id, "path")
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string()),
                         Value::String(s) => Some(s),
@@ -1292,7 +1368,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 "to_pt" => match target_val {
                     Value::Distance(d) => {
                         let dpi = env
-                            .get(&VarId::new(NodeId::WINDOW, "dpi"))
+                            .get_var(NodeId::WINDOW, "dpi")
                             .and_then(|v| v.as_f64())
                             .unwrap_or(96.0);
                         Ok(Value::Float(d / (dpi / 72.0)))
@@ -1346,7 +1422,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
             }
         }
 
-        Expr::Paren(inner, _) => eval_expr(inner, env),
+        Expr::Paren(inner, _) => eval_expr_with_env(inner, env),
         Expr::Node(n) => match n.name.as_str() {
             "Timer" => {
                 if n.ports.is_empty() {
@@ -1359,7 +1435,7 @@ pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, Comp
                 let mut duration_us: Option<i64> = None;
                 for port in &n.ports {
                     if port.name.as_str() == "duration" {
-                        let val = eval_expr(&port.expr, env)?;
+                        let val = eval_expr_with_env(&port.expr, env)?;
                         let us = val.as_duration().ok_or_else(|| CompileError::TypeMismatch {
                             expected: "Duration".to_string(),
                             actual: val.type_name().to_string(),

@@ -24,7 +24,7 @@ use std::path::Path;
 #[derive(Debug)]
 pub struct CompiledDocument {
     pub expanded: ExpandedDocument,
-    pub graph: VariableGraph,
+    pub graph: std::sync::Arc<VariableGraph>,
     pub schedule: TopologicalSchedule,
     pub layout: ResolvedLayout,
     pub state_overrides: HashMap<VarId, Value>,
@@ -45,7 +45,7 @@ impl CompiledDocument {
         let active_timers = Self::collect_active_timers(&layout.values);
         Self {
             expanded,
-            graph,
+            graph: std::sync::Arc::new(graph),
             schedule,
             layout,
             state_overrides,
@@ -98,11 +98,16 @@ impl CompiledDocument {
         resolver: &R,
     ) -> Result<Self, CompileError> {
         let expanded = expand_document_with_resolver(doc, base_dir, resolver)?;
-        let graph = build_variable_graph_with_window(&expanded, window_width, window_height)?;
+        let graph = std::sync::Arc::new(build_variable_graph_with_window(
+            &expanded,
+            window_width,
+            window_height,
+        )?);
         let schedule = sort_graph(&graph)?;
         let state_overrides = HashMap::new();
         let values = evaluate_graph_with_state(&graph, &schedule, &state_overrides)?;
-        let layout = resolve_layout_with_graph(&expanded, values, Some(graph.clone()));
+        let layout =
+            resolve_layout_with_graph(&expanded, values, Some(std::sync::Arc::clone(&graph)));
         let active_timers = Self::collect_active_timers(&layout.values);
 
         Ok(Self {
@@ -443,53 +448,20 @@ impl CompiledDocument {
         let bottom_id = VarId::new(NodeId::WINDOW, "bottom");
         let px = crate::ast::DistanceUnit::Px;
 
-        if let Some(var) = self.graph.variables.get_mut(&width_id) {
-            var.equation =
-                crate::ast::Expr::Literal(crate::ast::Literal::Distance(window_width, px, window_span));
-        }
-        if let Some(var) = self.graph.variables.get_mut(&height_id) {
-            var.equation =
-                crate::ast::Expr::Literal(crate::ast::Literal::Distance(window_height, px, window_span));
-        }
-        if let Some(var) = self.graph.variables.get_mut(&right_id) {
-            var.equation =
-                crate::ast::Expr::Literal(crate::ast::Literal::Distance(window_width, px, window_span));
-        }
-        if let Some(var) = self.graph.variables.get_mut(&bottom_id) {
-            var.equation =
-                crate::ast::Expr::Literal(crate::ast::Literal::Distance(window_height, px, window_span));
-        }
-
-        if let Some(ref mut layout_graph) = self.layout.graph {
-            if let Some(var) = layout_graph.variables.get_mut(&width_id) {
-                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Distance(
-                    window_width,
-                    px,
-                    window_span,
-                ));
-            }
-            if let Some(var) = layout_graph.variables.get_mut(&height_id) {
-                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Distance(
-                    window_height,
-                    px,
-                    window_span,
-                ));
-            }
-            if let Some(var) = layout_graph.variables.get_mut(&right_id) {
-                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Distance(
-                    window_width,
-                    px,
-                    window_span,
-                ));
-            }
-            if let Some(var) = layout_graph.variables.get_mut(&bottom_id) {
-                var.equation = crate::ast::Expr::Literal(crate::ast::Literal::Distance(
-                    window_height,
-                    px,
-                    window_span,
-                ));
-            }
-        }
+        let width_expr =
+            crate::ast::Expr::Literal(crate::ast::Literal::Distance(window_width, px, window_span));
+        let height_expr = crate::ast::Expr::Literal(crate::ast::Literal::Distance(
+            window_height,
+            px,
+            window_span,
+        ));
+        self.layout.graph = None;
+        let graph_mut = std::sync::Arc::make_mut(&mut self.graph);
+        graph_mut.update_variable_equation(&width_id, width_expr.clone());
+        graph_mut.update_variable_equation(&height_id, height_expr.clone());
+        graph_mut.update_variable_equation(&right_id, width_expr);
+        graph_mut.update_variable_equation(&bottom_id, height_expr);
+        self.layout.graph = Some(std::sync::Arc::clone(&self.graph));
 
         let dirty_roots = [width_id, height_id, right_id, bottom_id];
         let changed = invalidate_and_reevaluate(

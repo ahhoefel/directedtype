@@ -2,6 +2,31 @@ use crate::ast::{ComponentKey, Expr};
 use crate::dom::NodeHandle;
 use crate::span::Span;
 use std::collections::{HashMap, HashSet};
+use std::sync::{OnceLock, RwLock};
+
+static CANONICAL_NODE_NAMES: OnceLock<RwLock<Vec<&'static str>>> = OnceLock::new();
+
+fn interned_canonical_node_name(idx: usize) -> &'static str {
+    let lock = CANONICAL_NODE_NAMES.get_or_init(|| {
+        let mut v = Vec::with_capacity(4096);
+        for i in 0..4096 {
+            v.push(&*Box::leak(format!("__node_{}", i).into_boxed_str()));
+        }
+        RwLock::new(v)
+    });
+    {
+        let read = lock.read().unwrap();
+        if let Some(&s) = read.get(idx) {
+            return s;
+        }
+    }
+    let mut write = lock.write().unwrap();
+    while write.len() <= idx {
+        let i = write.len();
+        write.push(&*Box::leak(format!("__node_{}", i).into_boxed_str()));
+    }
+    write[idx]
+}
 
 /// A unique, zero-based index for an expanded node in the layout tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -11,25 +36,49 @@ impl NodeId {
     /// Sentinel NodeId representing the ambient window root container.
     pub const WINDOW: NodeId = NodeId(usize::MAX);
 
+    #[inline]
     pub fn is_window(&self) -> bool {
         self.0 == usize::MAX
     }
 
-    pub fn canonical_name(&self) -> String {
+    #[inline]
+    pub fn canonical_str(&self) -> &'static str {
         if self.is_window() {
-            "__window".to_string()
+            "__window"
         } else {
-            format!("__node_{}", self.0)
+            interned_canonical_node_name(self.0)
         }
     }
 
+    #[inline]
+    pub fn canonical_name(&self) -> String {
+        self.canonical_str().to_string()
+    }
+
+    #[inline]
+    pub fn matches_str(&self, name: &str) -> bool {
+        if self.is_window() {
+            name == "__window" || name == "window"
+        } else {
+            Self::from_canonical_name(name) == Some(*self)
+        }
+    }
+
+    #[inline]
     pub fn from_canonical_name(name: &str) -> Option<Self> {
-        if name == "__window" || name == "window" {
+        let bytes = name.as_bytes();
+        if bytes.first() == Some(&b'_') {
+            if let Some(num_str) = name.strip_prefix("__node_") {
+                return num_str.parse::<usize>().ok().map(NodeId);
+            }
+            if name == "__window" {
+                return Some(NodeId::WINDOW);
+            }
+            None
+        } else if name == "window" {
             Some(NodeId::WINDOW)
         } else {
-            name.strip_prefix("__node_")
-                .and_then(|num_str| num_str.parse::<usize>().ok())
-                .map(NodeId)
+            None
         }
     }
 }

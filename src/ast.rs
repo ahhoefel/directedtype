@@ -19,6 +19,18 @@ impl Ident {
         }
     }
 
+    pub fn from_node(id: crate::compiler::expanded::NodeId, span: Span) -> Self {
+        Self {
+            name: id.canonical_str().to_string(),
+            span,
+        }
+    }
+
+    #[inline]
+    pub fn node_id(&self) -> Option<crate::compiler::expanded::NodeId> {
+        crate::compiler::expanded::NodeId::from_canonical_name(&self.name)
+    }
+
     pub fn as_str(&self) -> &str {
         &self.name
     }

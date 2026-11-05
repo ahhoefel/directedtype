@@ -165,6 +165,121 @@ pub(super) fn try_preresolve_expr_binding(
 }
 
 /// Evaluates sibling existence conditions (`prev`, `next`, `!prev`, `!next`, `&&`, `||`) at expansion time.
+fn populate_const_env_for_cond(
+    expr: &Expr,
+    cond_ctx: &ScopeContext<'_>,
+    const_env: &mut HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
+) {
+    let Some(comp_ports) = cond_ctx.comp_ports else {
+        return;
+    };
+    match expr {
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(target_id) = m.target.as_ref() {
+                if let Some(nid) = target_id.node_id() {
+                    if nid == cond_ctx.current_node || Some(nid) == cond_ctx.parent_node {
+                        let port_name = m.member.as_str();
+                        let var_id =
+                            crate::compiler::graph::VarId::new(cond_ctx.current_node, port_name);
+                        if !const_env.contains_key(&var_id)
+                            && !cond_ctx
+                                .declared_state_names
+                                .is_some_and(|s| s.contains(port_name))
+                        {
+                            if let Some(port_expr) = comp_ports.get(port_name) {
+                                let resolved_val = if let Some(lit) =
+                                    resolve_ident_or_member_to_literal(port_expr, cond_ctx)
+                                {
+                                    Some(match lit {
+                                        Literal::Integer(i, _) => {
+                                            crate::compiler::value::Value::Integer(i)
+                                        }
+                                        Literal::Float(n, _) => {
+                                            crate::compiler::value::Value::Float(n)
+                                        }
+                                        Literal::Distance(d, _, _) => {
+                                            crate::compiler::value::Value::Distance(d)
+                                        }
+                                        Literal::Area(a, _, _) => {
+                                            crate::compiler::value::Value::Area(a)
+                                        }
+                                        Literal::Duration(d, _, _) => {
+                                            crate::compiler::value::Value::Duration(d)
+                                        }
+                                        Literal::String(s, _) => {
+                                            crate::compiler::value::Value::String(s)
+                                        }
+                                        Literal::Bool(b, _) => {
+                                            crate::compiler::value::Value::Bool(b)
+                                        }
+                                        Literal::Color(c, _) => {
+                                            crate::compiler::value::Value::Color(c)
+                                        }
+                                        Literal::Enum(e, v, _) => {
+                                            crate::compiler::value::Value::Enum {
+                                                enum_name: e,
+                                                variant: v,
+                                            }
+                                        }
+                                    })
+                                } else if let Ok(val) =
+                                    crate::compiler::eval::eval_expr(port_expr, &HashMap::new())
+                                {
+                                    if !matches!(
+                                        val,
+                                        crate::compiler::value::Value::Timer { .. }
+                                            | crate::compiler::value::Value::IndefiniteTimer { .. }
+                                            | crate::compiler::value::Value::Unset
+                                    ) {
+                                        Some(val)
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                };
+                                if let Some(val) = resolved_val {
+                                    const_env.insert(var_id, val.clone());
+                                    if let Some(parent) = cond_ctx.parent_node {
+                                        const_env.insert(
+                                            crate::compiler::graph::VarId::new(parent, port_name),
+                                            val,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            populate_const_env_for_cond(&m.target, cond_ctx, const_env);
+        }
+        Expr::Binary(b) => {
+            populate_const_env_for_cond(&b.left, cond_ctx, const_env);
+            populate_const_env_for_cond(&b.right, cond_ctx, const_env);
+        }
+        Expr::Unary(u) => populate_const_env_for_cond(&u.operand, cond_ctx, const_env),
+        Expr::Paren(inner, _) => populate_const_env_for_cond(inner, cond_ctx, const_env),
+        Expr::Ternary(t) => {
+            populate_const_env_for_cond(&t.condition, cond_ctx, const_env);
+            populate_const_env_for_cond(&t.then_expr, cond_ctx, const_env);
+            populate_const_env_for_cond(&t.else_expr, cond_ctx, const_env);
+        }
+        Expr::Call(c) => {
+            for arg in &c.args {
+                populate_const_env_for_cond(arg, cond_ctx, const_env);
+            }
+        }
+        Expr::MethodCall(m) => {
+            populate_const_env_for_cond(&m.target, cond_ctx, const_env);
+            for arg in &m.args {
+                populate_const_env_for_cond(arg, cond_ctx, const_env);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn eval_sibling_condition(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
     match expr {
         Expr::Paren(inner, _) => eval_sibling_condition(inner, ctx),
@@ -372,65 +487,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             cond_ctx.is_event_port = false;
             let rewritten_cond = rewrite_expr(&tern.condition, &cond_ctx)?;
             let mut const_env = HashMap::new();
-            if let Some(comp_ports) = ctx.comp_ports {
-                for (port_name, port_expr) in comp_ports.iter() {
-                    if let Some(states) = ctx.declared_state_names {
-                        if states.contains(port_name) {
-                            continue;
-                        }
-                    }
-                    if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, &cond_ctx) {
-                        let val = match lit {
-                            Literal::Integer(i, _) => crate::compiler::value::Value::Integer(i),
-                            Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
-                            Literal::Distance(d, _, _) => {
-                                crate::compiler::value::Value::Distance(d)
-                            }
-                            Literal::Area(a, _, _) => crate::compiler::value::Value::Area(a),
-                            Literal::Duration(d, _, _) => {
-                                crate::compiler::value::Value::Duration(d)
-                            }
-                            Literal::String(s, _) => crate::compiler::value::Value::String(s),
-                            Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
-                            Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
-                            Literal::Enum(e, v, _) => crate::compiler::value::Value::Enum {
-                                enum_name: e,
-                                variant: v,
-                            },
-                        };
-                        const_env.insert(
-                            crate::compiler::graph::VarId::new(ctx.current_node, port_name),
-                            val.clone(),
-                        );
-                        if let Some(parent) = ctx.parent_node {
-                            const_env.insert(
-                                crate::compiler::graph::VarId::new(parent, port_name),
-                                val,
-                            );
-                        }
-                    } else if let Ok(val) =
-                        crate::compiler::eval::eval_expr(port_expr, &HashMap::new())
-                    {
-                        if !matches!(
-                            val,
-                            crate::compiler::value::Value::Timer { .. }
-                                | crate::compiler::value::Value::IndefiniteTimer { .. }
-                                | crate::compiler::value::Value::Unset
-                        ) {
-                            const_env.insert(
-                                crate::compiler::graph::VarId::new(ctx.current_node, port_name),
-                                val.clone(),
-                            );
-                            if let Some(parent) = ctx.parent_node {
-                                const_env.insert(
-                                    crate::compiler::graph::VarId::new(parent, port_name),
-                                    val,
-                                );
-                            }
-                        }
-                    }
-                }
-            }
+            populate_const_env_for_cond(&rewritten_cond, &cond_ctx, &mut const_env);
             let cond_bool = match crate::compiler::eval::eval_expr(&rewritten_cond, &const_env) {
                 Ok(crate::compiler::value::Value::Bool(b)) => Some(b),
                 _ if ctx.is_event_port => {

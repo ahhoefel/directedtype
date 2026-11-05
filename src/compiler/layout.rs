@@ -246,7 +246,7 @@ pub struct ResolvedLayout {
     pub nodes: Vec<ResolvedNode>,
     pub values: HashMap<VarId, Value>,
     pub scope_tree: ScopeTree,
-    pub graph: Option<VariableGraph>,
+    pub graph: Option<std::sync::Arc<VariableGraph>>,
 }
 
 impl ResolvedLayout {
@@ -718,7 +718,7 @@ pub fn resolve_layout(
 pub fn resolve_layout_with_graph(
     doc: &ExpandedDocument,
     values: HashMap<VarId, Value>,
-    prebuilt_graph: Option<VariableGraph>,
+    prebuilt_graph: Option<std::sync::Arc<VariableGraph>>,
 ) -> ResolvedLayout {
     let mut resolved_nodes = Vec::with_capacity(doc.nodes.len());
     let mut props_by_node: Vec<HashMap<String, Value>> = vec![HashMap::new(); doc.nodes.len()];
@@ -742,21 +742,19 @@ pub fn resolve_layout_with_graph(
         let height = get_num("height");
         let z = get_num("z");
 
-        let clip = values
-            .get(&VarId::new(node.id, "clip"))
+        let clip = properties
+            .get("clip")
             .and_then(|v| v.as_node())
             .filter(|id| !id.is_window());
 
-        let mut formulas = HashMap::new();
+        let mut formulas = HashMap::with_capacity(node.authored_ports.len());
         for (port, expr) in &node.authored_ports {
             formulas.insert(port.clone(), expr.to_string());
         }
 
-        let font = node.font.or_else(|| {
-            values
-                .get(&VarId::new(node.id, "font"))
-                .and_then(|v| v.as_node())
-        });
+        let font = node
+            .font
+            .or_else(|| properties.get("font").and_then(|v| v.as_node()));
 
         let resolved_key = node.key.as_ref().map(|k| {
             let resolved_parts = k
@@ -877,7 +875,11 @@ pub fn resolve_layout_with_graph(
         });
     }
 
-    let graph = prebuilt_graph.or_else(|| crate::compiler::graph::build_variable_graph(doc).ok());
+    let graph = prebuilt_graph.or_else(|| {
+        crate::compiler::graph::build_variable_graph(doc)
+            .ok()
+            .map(std::sync::Arc::new)
+    });
     let mut layout = ResolvedLayout {
         roots: doc.roots.clone(),
         nodes: resolved_nodes,

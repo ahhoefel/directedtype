@@ -53,6 +53,10 @@ pub fn unmangle_component_name(name: &str) -> &str {
     name
 }
 
+/// Compact index of a variable in `VariableGraph::var_nodes`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct VarIndex(pub u32);
+
 /// The flat layout dependency graph.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariableGraph {
@@ -64,6 +68,16 @@ pub struct VariableGraph {
     pub downstream: HashMap<VarId, Vec<VarId>>,
     /// Node metadata (component/element type name and source span) keyed by NodeId
     pub node_info: HashMap<NodeId, GraphNodeInfo>,
+    /// Contiguous arena of variable nodes indexed by `VarIndex`
+    pub var_nodes: Vec<VariableNode>,
+    /// Upstream dependencies indexed by `VarIndex`
+    pub upstream_idx: Vec<Vec<VarIndex>>,
+    /// Downstream dependents indexed by `VarIndex`
+    pub downstream_idx: Vec<Vec<VarIndex>>,
+    /// Per-node lookup from port name to `VarIndex` (indexed by `NodeId.0`)
+    pub node_port_to_idx: Vec<HashMap<String, VarIndex>>,
+    /// Window port lookup from port name to `VarIndex`
+    pub window_port_to_idx: HashMap<String, VarIndex>,
 }
 
 impl VariableGraph {
@@ -73,6 +87,36 @@ impl VariableGraph {
             upstream: HashMap::new(),
             downstream: HashMap::new(),
             node_info: HashMap::new(),
+            var_nodes: Vec::new(),
+            upstream_idx: Vec::new(),
+            downstream_idx: Vec::new(),
+            node_port_to_idx: Vec::new(),
+            window_port_to_idx: HashMap::new(),
+        }
+    }
+
+    pub fn with_node_capacity(num_nodes: usize) -> Self {
+        let est_vars = num_nodes.saturating_mul(14).max(32);
+        Self {
+            variables: HashMap::with_capacity(est_vars),
+            upstream: HashMap::with_capacity(est_vars),
+            downstream: HashMap::with_capacity(est_vars),
+            node_info: HashMap::with_capacity(num_nodes + 1),
+            var_nodes: Vec::with_capacity(est_vars),
+            upstream_idx: Vec::new(),
+            downstream_idx: Vec::new(),
+            node_port_to_idx: vec![HashMap::new(); num_nodes],
+            window_port_to_idx: HashMap::with_capacity(16),
+        }
+    }
+
+    /// Looks up a variable's `VarIndex` by `(NodeId, &str)` without heap allocation.
+    #[inline]
+    pub fn lookup_var_index(&self, node: NodeId, port: &str) -> Option<VarIndex> {
+        if node.is_window() {
+            self.window_port_to_idx.get(port).copied()
+        } else {
+            self.node_port_to_idx.get(node.0)?.get(port).copied()
         }
     }
 
@@ -91,32 +135,66 @@ impl VariableGraph {
     pub fn add_variable(&mut self, id: VarId, equation: Expr, span: Span) {
         let deps = extract_var_dependencies(&equation);
 
+        let up_entry = self.upstream.entry(id.clone()).or_default();
+        up_entry.clear();
+        up_entry.reserve(deps.len());
         for dep in &deps {
-            self.upstream
-                .entry(id.clone())
-                .or_default()
-                .push(dep.clone());
+            up_entry.push(dep.clone());
             self.downstream
                 .entry(dep.clone())
                 .or_default()
                 .push(id.clone());
         }
 
-        self.upstream.entry(id.clone()).or_default();
         self.downstream.entry(id.clone()).or_default();
 
-        self.variables.insert(
-            id.clone(),
-            VariableNode {
-                id,
-                equation,
-                span,
-            },
-        );
+        let vnode = VariableNode {
+            id: id.clone(),
+            equation,
+            span,
+        };
+
+        if id.node.is_window() {
+            if let Some(&idx) = self.window_port_to_idx.get(&id.port) {
+                self.var_nodes[idx.0 as usize] = vnode.clone();
+            } else {
+                let idx = VarIndex(self.var_nodes.len() as u32);
+                self.window_port_to_idx.insert(id.port.clone(), idx);
+                self.var_nodes.push(vnode.clone());
+            }
+        } else {
+            if id.node.0 >= self.node_port_to_idx.len() {
+                self.node_port_to_idx.resize_with(id.node.0 + 1, HashMap::new);
+            }
+            if let Some(&idx) = self.node_port_to_idx[id.node.0].get(&id.port) {
+                self.var_nodes[idx.0 as usize] = vnode.clone();
+            } else {
+                let idx = VarIndex(self.var_nodes.len() as u32);
+                self.node_port_to_idx[id.node.0].insert(id.port.clone(), idx);
+                self.var_nodes.push(vnode.clone());
+            }
+        }
+
+        self.variables.insert(id, vnode);
+    }
+
+    pub fn update_variable_equation(&mut self, id: &VarId, equation: Expr) {
+        if let Some(idx) = self.lookup_var_index(id.node, &id.port) {
+            if let Some(var) = self.var_nodes.get_mut(idx.0 as usize) {
+                var.equation = equation.clone();
+            }
+        }
+        if let Some(var) = self.variables.get_mut(id) {
+            var.equation = equation;
+        }
     }
 
     pub fn get_variable(&self, id: &VarId) -> Option<&VariableNode> {
-        self.variables.get(id)
+        if let Some(idx) = self.lookup_var_index(id.node, &id.port) {
+            self.var_nodes.get(idx.0 as usize)
+        } else {
+            self.variables.get(id)
+        }
     }
 
     /// Returns the in-degree (number of upstream dependencies) for a variable.
@@ -147,7 +225,7 @@ pub fn build_variable_graph_with_window(
     window_width: f64,
     window_height: f64,
 ) -> Result<VariableGraph, CompileError> {
-    let mut graph = VariableGraph::new();
+    let mut graph = VariableGraph::with_node_capacity(doc.nodes.len());
 
     // 0. Ambient Window Node Variables
     let window_span = Span::default();
@@ -184,7 +262,7 @@ pub fn build_variable_graph_with_window(
     );
     graph.add_variable(
         VarId::new(NodeId::WINDOW, "clip"),
-        Expr::Ident(Ident::new(NodeId::WINDOW.canonical_name(), window_span)),
+        Expr::Ident(Ident::from_node(NodeId::WINDOW, window_span)),
         window_span,
     );
     graph.add_variable(
@@ -224,177 +302,202 @@ pub fn build_variable_graph_with_window(
             node.span,
         );
         let is_root = doc.roots.contains(&node.id) || node.parent.is_none_or(|p| p.is_window());
-        let mut ports = node.ports.clone();
+        let is_prim_spatial = !node.is_component && node.name != "Font";
 
-        if !node.is_component && node.name != "Font" {
+        for (port_name, expr) in &node.ports {
+            if port_name.starts_with("on_")
+                || node.port_types.get(port_name).map(|s| s.as_str()) == Some("Handler")
+            {
+                continue;
+            }
+            graph.add_variable(
+                VarId::new(node.id, port_name.clone()),
+                expr.clone(),
+                node.span,
+            );
+        }
+
+        if is_prim_spatial {
             // Default spatial ports for primitive elements
-            if is_root {
-                ports
-                    .entry("x".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
-                ports
-                    .entry("y".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
-                ports
-                    .entry("z".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Integer(0, node.span)));
-                ports
-                    .entry("width".to_string())
-                    .or_insert_with(|| {
-                        Expr::MemberAccess(MemberAccessExpr {
-                            target: Box::new(Expr::Ident(Ident::new(
-                                NodeId::WINDOW.canonical_name(),
-                                node.span,
-                            ))),
-                            member: Ident::new("width", node.span),
-                            span: node.span,
-                        })
-                    });
-                ports
-                    .entry("height".to_string())
-                    .or_insert_with(|| {
-                        Expr::MemberAccess(MemberAccessExpr {
-                            target: Box::new(Expr::Ident(Ident::new(
-                                NodeId::WINDOW.canonical_name(),
-                                node.span,
-                            ))),
-                            member: Ident::new("height", node.span),
-                            span: node.span,
-                        })
-                    });
-            } else {
-                ports
-                    .entry("x".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
-                ports
-                    .entry("y".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
-                ports
-                    .entry("z".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Integer(0, node.span)));
-                ports
-                    .entry("width".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
-                ports
-                    .entry("height".to_string())
-                    .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)));
+            if !node.ports.contains_key("x") {
+                graph.add_variable(
+                    VarId::new(node.id, "x"),
+                    Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)),
+                    node.span,
+                );
+            }
+            if !node.ports.contains_key("y") {
+                graph.add_variable(
+                    VarId::new(node.id, "y"),
+                    Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span)),
+                    node.span,
+                );
+            }
+            if !node.ports.contains_key("z") {
+                graph.add_variable(
+                    VarId::new(node.id, "z"),
+                    Expr::Literal(Literal::Integer(0, node.span)),
+                    node.span,
+                );
+            }
+            if !node.ports.contains_key("width") {
+                let w_expr = if is_root {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, node.span))),
+                        member: Ident::new("width", node.span),
+                        span: node.span,
+                    })
+                } else {
+                    Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span))
+                };
+                graph.add_variable(VarId::new(node.id, "width"), w_expr, node.span);
+            }
+            if !node.ports.contains_key("height") {
+                let h_expr = if is_root {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, node.span))),
+                        member: Ident::new("height", node.span),
+                        span: node.span,
+                    })
+                } else {
+                    Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, node.span))
+                };
+                graph.add_variable(VarId::new(node.id, "height"), h_expr, node.span);
             }
         }
 
         // Default spatial alias ports only when their input ports are present and no alias is defined
-        let self_ident = Expr::Ident(Ident::new(node.id.canonical_name(), node.span));
-        let has_x = ports.contains_key("x");
-        let has_y = ports.contains_key("y");
-        let has_w = ports.contains_key("width");
-        let has_h = ports.contains_key("height");
+        let self_ident = Expr::Ident(Ident::from_node(node.id, node.span));
+        let has_x = is_prim_spatial || node.ports.contains_key("x");
+        let has_y = is_prim_spatial || node.ports.contains_key("y");
+        let has_w = is_prim_spatial || node.ports.contains_key("width");
+        let has_h = is_prim_spatial || node.ports.contains_key("height");
+        let has_left_port = node.ports.contains_key("left");
+        let has_top_port = node.ports.contains_key("top");
 
-        if has_x {
-            ports.entry("left".to_string()).or_insert_with(|| {
+        if has_x && !has_left_port {
+            graph.add_variable(
+                VarId::new(node.id, "left"),
                 Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(self_ident.clone()),
                     member: Ident::new("x", node.span),
                     span: node.span,
-                })
-            });
+                }),
+                node.span,
+            );
         }
-        if has_y {
-            ports.entry("top".to_string()).or_insert_with(|| {
+        if has_y && !has_top_port {
+            graph.add_variable(
+                VarId::new(node.id, "top"),
                 Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(self_ident.clone()),
                     member: Ident::new("y", node.span),
                     span: node.span,
-                })
-            });
+                }),
+                node.span,
+            );
         }
-        if (has_x || ports.contains_key("left")) && has_w {
+        if (has_x || has_left_port) && has_w && !node.ports.contains_key("right") {
             let left_member = if has_x { "x" } else { "left" };
-            ports.entry("right".to_string()).or_insert_with(|| {
-                let x = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
-                    member: Ident::new(left_member, node.span),
-                    span: node.span,
-                });
-                let w = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
-                    member: Ident::new("width", node.span),
-                    span: node.span,
-                });
+            let x = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(self_ident.clone()),
+                member: Ident::new(left_member, node.span),
+                span: node.span,
+            });
+            let w = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(self_ident.clone()),
+                member: Ident::new("width", node.span),
+                span: node.span,
+            });
+            graph.add_variable(
+                VarId::new(node.id, "right"),
                 Expr::Binary(BinaryExpr {
                     op: BinaryOp::Add,
                     left: Box::new(x),
                     right: Box::new(w),
                     span: node.span,
-                })
-            });
+                }),
+                node.span,
+            );
         }
-        if (has_y || ports.contains_key("top")) && has_h {
+        if (has_y || has_top_port) && has_h && !node.ports.contains_key("bottom") {
             let top_member = if has_y { "y" } else { "top" };
-            ports.entry("bottom".to_string()).or_insert_with(|| {
-                let y = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
-                    member: Ident::new(top_member, node.span),
-                    span: node.span,
-                });
-                let h = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident),
-                    member: Ident::new("height", node.span),
-                    span: node.span,
-                });
+            let y = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(self_ident.clone()),
+                member: Ident::new(top_member, node.span),
+                span: node.span,
+            });
+            let h = Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(self_ident),
+                member: Ident::new("height", node.span),
+                span: node.span,
+            });
+            graph.add_variable(
+                VarId::new(node.id, "bottom"),
                 Expr::Binary(BinaryExpr {
                     op: BinaryOp::Add,
                     left: Box::new(y),
                     right: Box::new(h),
                     span: node.span,
-                })
-            });
-        }
-
-        for (port_name, expr) in ports {
-            if port_name.starts_with("on_")
-                || node.port_types.get(&port_name).map(|s| s.as_str()) == Some("Handler")
-            {
-                continue;
-            }
-            let var_id = VarId::new(node.id, port_name);
-            graph.add_variable(var_id, expr, node.span);
+                }),
+                node.span,
+            );
         }
     }
 
-    // Validate that all referenced VarIds actually exist as defined variables in the graph
-    for (var_id, deps) in &graph.upstream {
-        for dep in deps {
-            if !graph.variables.contains_key(dep) {
-                let node_name = doc
-                    .get_node(dep.node)
-                    .map(|n| n.name.as_str())
-                    .unwrap_or("unknown");
-                return Err(CompileError::Custom {
-                    message: format!(
-                        "Node '{}' has no public property '{}'",
-                        node_name, dep.port
-                    ),
-                    span: graph.variables.get(var_id).map_or(Span::default(), |v| v.span),
-                });
-            }
-            if let Some(target_node) = doc.get_node(dep.node) {
-                if target_node.private_ports.contains(&dep.port) {
-                    let source_node = doc.get_node(var_id.node);
-                    let is_internal = var_id.node == dep.node
-                        || source_node.and_then(|n| n.enclosing_component) == Some(dep.node)
-                        || (target_node.is_span && dep.port == "baseline_shift");
-                    let is_ambient = source_node.map_or(false, |n| n.ambient_ports.contains(&var_id.port));
+    // Validate that all referenced VarIds actually exist as defined variables in the graph,
+    // and populate flat VarIndex edge lists for fast topological sort and evaluation.
+    let num_vars = graph.var_nodes.len();
+    graph.upstream_idx = vec![Vec::new(); num_vars];
+    graph.downstream_idx = vec![Vec::new(); num_vars];
 
-                    if !is_internal && !is_ambient {
-                        return Err(CompileError::Custom {
-                            message: format!(
-                                "Node '{}' has no public property '{}'",
-                                target_node.name, dep.port
-                            ),
-                            span: graph.variables.get(var_id).map_or(Span::default(), |v| v.span),
-                        });
+    for var_idx in 0..num_vars {
+        let u_idx = VarIndex(var_idx as u32);
+        let var_node = &graph.var_nodes[var_idx];
+        let var_span = var_node.span;
+        let var_id_node = var_node.id.node;
+        if let Some(deps) = graph.upstream.get(&var_node.id) {
+            let mut up_indices = Vec::with_capacity(deps.len());
+            for dep in deps {
+                let Some(d_idx) = graph.lookup_var_index(dep.node, &dep.port) else {
+                    let node_name = doc
+                        .get_node(dep.node)
+                        .map(|n| n.name.as_str())
+                        .unwrap_or("unknown");
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Node '{}' has no public property '{}'",
+                            node_name, dep.port
+                        ),
+                        span: var_span,
+                    });
+                };
+                if let Some(target_node) = doc.get_node(dep.node) {
+                    if target_node.private_ports.contains(&dep.port) {
+                        let source_node = doc.get_node(var_id_node);
+                        let is_internal = var_id_node == dep.node
+                            || source_node.and_then(|n| n.enclosing_component) == Some(dep.node)
+                            || (target_node.is_span && dep.port == "baseline_shift");
+                        let is_ambient = source_node
+                            .is_some_and(|n| n.ambient_ports.contains(&var_node.id.port));
+
+                        if !is_internal && !is_ambient {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Node '{}' has no public property '{}'",
+                                    target_node.name, dep.port
+                                ),
+                                span: var_span,
+                            });
+                        }
                     }
                 }
+                up_indices.push(d_idx);
             }
+            for &d_idx in &up_indices {
+                graph.downstream_idx[d_idx.0 as usize].push(u_idx);
+            }
+            graph.upstream_idx[var_idx] = up_indices;
         }
     }
 
@@ -405,7 +508,7 @@ pub fn build_variable_graph_with_window(
 pub fn extract_var_dependencies(expr: &Expr) -> Vec<VarId> {
     let mut deps = Vec::new();
     collect_dependencies(expr, &mut deps);
-    deps.sort_by_key(|a| a.to_string());
+    deps.sort_unstable();
     deps.dedup();
     deps
 }
