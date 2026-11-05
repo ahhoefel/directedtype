@@ -29,7 +29,7 @@ impl TopologicalSchedule {
 /// or return a detailed cycle diagnostic error.
 pub fn sort_graph(graph: &VariableGraph) -> Result<TopologicalSchedule, CompileError> {
     let num_vars = graph.var_nodes.len();
-    if num_vars == graph.variables.len() && graph.upstream_idx.len() == num_vars {
+    if graph.upstream_idx.len() == num_vars {
         let mut in_degrees: Vec<u32> = graph
             .upstream_idx
             .iter()
@@ -68,11 +68,20 @@ pub fn sort_graph(graph: &VariableGraph) -> Result<TopologicalSchedule, CompileE
         }
     }
 
-    let mut in_degrees: HashMap<VarId, usize> = HashMap::new();
+    let mut in_degrees: HashMap<VarId, usize> = HashMap::with_capacity(num_vars);
+    let mut downstream_map: HashMap<VarId, Vec<VarId>> = HashMap::with_capacity(num_vars);
 
-    // 1. Calculate in-degrees
-    for var_id in graph.variables.keys() {
-        in_degrees.insert(var_id.clone(), graph.in_degree(var_id));
+    // 1. Calculate in-degrees and build temporary downstream adjacency list
+    for (idx, vnode) in graph.var_nodes.iter().enumerate() {
+        let deps = &graph.raw_upstream[idx];
+        in_degrees.insert(vnode.id.clone(), deps.len());
+        downstream_map.entry(vnode.id.clone()).or_default();
+        for dep in deps {
+            downstream_map
+                .entry(dep.clone())
+                .or_default()
+                .push(vnode.id.clone());
+        }
     }
 
     // 2. Queue all variables with in-degree 0 in a min-heap ordered by canonical string
@@ -82,11 +91,11 @@ pub fn sort_graph(graph: &VariableGraph) -> Result<TopologicalSchedule, CompileE
         .map(|(v, _)| Reverse((v.to_string(), v.clone())))
         .collect();
 
-    let mut order = Vec::with_capacity(graph.variables.len());
+    let mut order = Vec::with_capacity(num_vars);
 
     // 3. Process ready queue
     while let Some(Reverse((_, current))) = ready.pop() {
-        if let Some(downstream_list) = graph.downstream.get(&current) {
+        if let Some(downstream_list) = downstream_map.get(&current) {
             for downstream in downstream_list {
                 if let Some(deg) = in_degrees.get_mut(downstream) {
                     *deg = deg.saturating_sub(1);
@@ -100,7 +109,7 @@ pub fn sort_graph(graph: &VariableGraph) -> Result<TopologicalSchedule, CompileE
     }
 
     // 4. Check for cycles
-    if order.len() < graph.variables.len() {
+    if order.len() < num_vars {
         // Collect all nodes that were involved in cycles
         let remaining_nodes: HashSet<VarId> = in_degrees
             .iter()
@@ -108,7 +117,7 @@ pub fn sort_graph(graph: &VariableGraph) -> Result<TopologicalSchedule, CompileE
             .map(|(v, _)| v.clone())
             .collect();
 
-        let cycle = find_cycle(graph, &remaining_nodes);
+        let cycle = find_cycle(&downstream_map, &remaining_nodes);
         let span = cycle
             .first()
             .and_then(|v| graph.get_variable(v))
@@ -150,7 +159,10 @@ pub fn sort_graph(graph: &VariableGraph) -> Result<TopologicalSchedule, CompileE
 }
 
 /// Finds a directed cycle among the set of remaining nodes using DFS.
-fn find_cycle(graph: &VariableGraph, remaining_nodes: &HashSet<VarId>) -> Vec<VarId> {
+fn find_cycle(
+    downstream_map: &HashMap<VarId, Vec<VarId>>,
+    remaining_nodes: &HashSet<VarId>,
+) -> Vec<VarId> {
     let mut sorted_candidates: Vec<VarId> = remaining_nodes.iter().cloned().collect();
     sorted_candidates.sort_by_key(|v| v.to_string());
 
@@ -162,7 +174,7 @@ fn find_cycle(graph: &VariableGraph, remaining_nodes: &HashSet<VarId>) -> Vec<Va
         if !visited.contains(&start) {
             if let Some(cycle) = dfs_cycle(
                 &start,
-                graph,
+                downstream_map,
                 remaining_nodes,
                 &mut visited,
                 &mut on_path,
@@ -179,7 +191,7 @@ fn find_cycle(graph: &VariableGraph, remaining_nodes: &HashSet<VarId>) -> Vec<Va
 
 fn dfs_cycle(
     current: &VarId,
-    graph: &VariableGraph,
+    downstream_map: &HashMap<VarId, Vec<VarId>>,
     remaining_nodes: &HashSet<VarId>,
     visited: &mut HashSet<VarId>,
     on_path: &mut HashSet<VarId>,
@@ -189,7 +201,7 @@ fn dfs_cycle(
     on_path.insert(current.clone());
     path.push(current.clone());
 
-    if let Some(downstream_list) = graph.downstream.get(current) {
+    if let Some(downstream_list) = downstream_map.get(current) {
         let mut sorted_downstream: Vec<VarId> = downstream_list
             .iter()
             .filter(|v| remaining_nodes.contains(v))
@@ -208,7 +220,7 @@ fn dfs_cycle(
 
             if !visited.contains(&neighbor) {
                 if let Some(cycle) =
-                    dfs_cycle(&neighbor, graph, remaining_nodes, visited, on_path, path)
+                    dfs_cycle(&neighbor, downstream_map, remaining_nodes, visited, on_path, path)
                 {
                     return Some(cycle);
                 }

@@ -60,16 +60,12 @@ pub struct VarIndex(pub u32);
 /// The flat layout dependency graph.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariableGraph {
-    /// All variables in the DAG keyed by VarId
-    pub variables: HashMap<VarId, VariableNode>,
-    /// Upstream dependencies: VarId -> list of variables it reads from
-    pub upstream: HashMap<VarId, Vec<VarId>>,
-    /// Downstream dependents: VarId -> list of variables that depend on it
-    pub downstream: HashMap<VarId, Vec<VarId>>,
     /// Node metadata (component/element type name and source span) keyed by NodeId
     pub node_info: HashMap<NodeId, GraphNodeInfo>,
     /// Contiguous arena of variable nodes indexed by `VarIndex`
     pub var_nodes: Vec<VariableNode>,
+    /// Raw upstream `VarId` dependencies indexed by `VarIndex`
+    pub raw_upstream: Vec<Vec<VarId>>,
     /// Upstream dependencies indexed by `VarIndex`
     pub upstream_idx: Vec<Vec<VarIndex>>,
     /// Downstream dependents indexed by `VarIndex`
@@ -83,11 +79,9 @@ pub struct VariableGraph {
 impl VariableGraph {
     pub fn new() -> Self {
         Self {
-            variables: HashMap::new(),
-            upstream: HashMap::new(),
-            downstream: HashMap::new(),
             node_info: HashMap::new(),
             var_nodes: Vec::new(),
+            raw_upstream: Vec::new(),
             upstream_idx: Vec::new(),
             downstream_idx: Vec::new(),
             node_port_to_idx: Vec::new(),
@@ -98,16 +92,24 @@ impl VariableGraph {
     pub fn with_node_capacity(num_nodes: usize) -> Self {
         let est_vars = num_nodes.saturating_mul(14).max(32);
         Self {
-            variables: HashMap::with_capacity(est_vars),
-            upstream: HashMap::with_capacity(est_vars),
-            downstream: HashMap::with_capacity(est_vars),
             node_info: HashMap::with_capacity(num_nodes + 1),
             var_nodes: Vec::with_capacity(est_vars),
+            raw_upstream: Vec::with_capacity(est_vars),
             upstream_idx: Vec::new(),
             downstream_idx: Vec::new(),
             node_port_to_idx: vec![HashMap::new(); num_nodes],
             window_port_to_idx: HashMap::with_capacity(16),
         }
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.var_nodes.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.var_nodes.is_empty()
     }
 
     /// Looks up a variable's `VarIndex` by `(NodeId, &str)` without heap allocation.
@@ -134,77 +136,94 @@ impl VariableGraph {
     /// Adds a variable to the graph with its defining equation.
     pub fn add_variable(&mut self, id: VarId, equation: Expr, span: Span) {
         let deps = extract_var_dependencies(&equation);
+        let node_id = id.node;
 
-        let up_entry = self.upstream.entry(id.clone()).or_default();
-        up_entry.clear();
-        up_entry.reserve(deps.len());
-        for dep in &deps {
-            up_entry.push(dep.clone());
-            self.downstream
-                .entry(dep.clone())
-                .or_default()
-                .push(id.clone());
-        }
-
-        self.downstream.entry(id.clone()).or_default();
-
-        let vnode = VariableNode {
-            id: id.clone(),
-            equation,
-            span,
-        };
-
-        if id.node.is_window() {
+        if node_id.is_window() {
             if let Some(&idx) = self.window_port_to_idx.get(&id.port) {
-                self.var_nodes[idx.0 as usize] = vnode.clone();
+                let i = idx.0 as usize;
+                self.var_nodes[i] = VariableNode { id, equation, span };
+                self.raw_upstream[i] = deps;
             } else {
                 let idx = VarIndex(self.var_nodes.len() as u32);
                 self.window_port_to_idx.insert(id.port.clone(), idx);
-                self.var_nodes.push(vnode.clone());
+                self.var_nodes.push(VariableNode { id, equation, span });
+                self.raw_upstream.push(deps);
             }
         } else {
-            if id.node.0 >= self.node_port_to_idx.len() {
-                self.node_port_to_idx.resize_with(id.node.0 + 1, HashMap::new);
+            if node_id.0 >= self.node_port_to_idx.len() {
+                self.node_port_to_idx.resize_with(node_id.0 + 1, HashMap::new);
             }
-            if let Some(&idx) = self.node_port_to_idx[id.node.0].get(&id.port) {
-                self.var_nodes[idx.0 as usize] = vnode.clone();
+            if let Some(&idx) = self.node_port_to_idx[node_id.0].get(&id.port) {
+                let i = idx.0 as usize;
+                self.var_nodes[i] = VariableNode { id, equation, span };
+                self.raw_upstream[i] = deps;
             } else {
                 let idx = VarIndex(self.var_nodes.len() as u32);
-                self.node_port_to_idx[id.node.0].insert(id.port.clone(), idx);
-                self.var_nodes.push(vnode.clone());
+                self.node_port_to_idx[node_id.0].insert(id.port.clone(), idx);
+                self.var_nodes.push(VariableNode { id, equation, span });
+                self.raw_upstream.push(deps);
             }
         }
-
-        self.variables.insert(id, vnode);
     }
 
     pub fn update_variable_equation(&mut self, id: &VarId, equation: Expr) {
         if let Some(idx) = self.lookup_var_index(id.node, &id.port) {
             if let Some(var) = self.var_nodes.get_mut(idx.0 as usize) {
-                var.equation = equation.clone();
+                var.equation = equation;
             }
-        }
-        if let Some(var) = self.variables.get_mut(id) {
-            var.equation = equation;
         }
     }
 
     pub fn get_variable(&self, id: &VarId) -> Option<&VariableNode> {
-        if let Some(idx) = self.lookup_var_index(id.node, &id.port) {
-            self.var_nodes.get(idx.0 as usize)
+        let idx = self.lookup_var_index(id.node, &id.port)?;
+        self.var_nodes.get(idx.0 as usize)
+    }
+
+    /// Returns the slice of upstream `VarId` dependencies for a variable.
+    pub fn upstream_of(&self, id: &VarId) -> Option<&[VarId]> {
+        let idx = self.lookup_var_index(id.node, &id.port)?;
+        self.raw_upstream.get(idx.0 as usize).map(|v| v.as_slice())
+    }
+
+    /// Returns the downstream `VarId` dependents for a variable.
+    pub fn downstream_of(&self, id: &VarId) -> Option<Vec<VarId>> {
+        let idx = self.lookup_var_index(id.node, &id.port)?;
+        if self.downstream_idx.len() == self.var_nodes.len() {
+            let down = self.downstream_idx.get(idx.0 as usize)?;
+            Some(
+                down.iter()
+                    .map(|&d| self.var_nodes[d.0 as usize].id.clone())
+                    .collect(),
+            )
         } else {
-            self.variables.get(id)
+            let mut out = Vec::new();
+            for (other_idx, ups) in self.raw_upstream.iter().enumerate() {
+                if ups.contains(id) {
+                    out.push(self.var_nodes[other_idx].id.clone());
+                }
+            }
+            Some(out)
         }
     }
 
     /// Returns the in-degree (number of upstream dependencies) for a variable.
     pub fn in_degree(&self, id: &VarId) -> usize {
-        self.upstream.get(id).map_or(0, |deps| deps.len())
+        self.upstream_of(id).map_or(0, |deps| deps.len())
     }
 
     /// Returns the out-degree (number of downstream dependents) for a variable.
     pub fn out_degree(&self, id: &VarId) -> usize {
-        self.downstream.get(id).map_or(0, |deps| deps.len())
+        let Some(idx) = self.lookup_var_index(id.node, &id.port) else {
+            return 0;
+        };
+        if let Some(down) = self.downstream_idx.get(idx.0 as usize) {
+            down.len()
+        } else {
+            self.raw_upstream
+                .iter()
+                .filter(|ups| ups.contains(id))
+                .count()
+        }
     }
 }
 
@@ -301,6 +320,9 @@ pub fn build_variable_graph_with_window(
             unmangle_component_name(&node.name),
             node.span,
         );
+        if node.id.0 < graph.node_port_to_idx.len() {
+            graph.node_port_to_idx[node.id.0].reserve(node.ports.len() + 9);
+        }
         let is_root = doc.roots.contains(&node.id) || node.parent.is_none_or(|p| p.is_window());
         let is_prim_spatial = !node.is_component && node.name != "Font";
 
@@ -367,7 +389,6 @@ pub fn build_variable_graph_with_window(
         }
 
         // Default spatial alias ports only when their input ports are present and no alias is defined
-        let self_ident = Expr::Ident(Ident::from_node(node.id, node.span));
         let has_x = is_prim_spatial || node.ports.contains_key("x");
         let has_y = is_prim_spatial || node.ports.contains_key("y");
         let has_w = is_prim_spatial || node.ports.contains_key("width");
@@ -375,73 +396,81 @@ pub fn build_variable_graph_with_window(
         let has_left_port = node.ports.contains_key("left");
         let has_top_port = node.ports.contains_key("top");
 
-        if has_x && !has_left_port {
-            graph.add_variable(
-                VarId::new(node.id, "left"),
-                Expr::MemberAccess(MemberAccessExpr {
+        let need_left = has_x && !has_left_port;
+        let need_top = has_y && !has_top_port;
+        let need_right = (has_x || has_left_port) && has_w && !node.ports.contains_key("right");
+        let need_bottom = (has_y || has_top_port) && has_h && !node.ports.contains_key("bottom");
+
+        if need_left || need_top || need_right || need_bottom {
+            let self_ident = Expr::Ident(Ident::from_node(node.id, node.span));
+            if need_left {
+                graph.add_variable(
+                    VarId::new(node.id, "left"),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(self_ident.clone()),
+                        member: Ident::new("x", node.span),
+                        span: node.span,
+                    }),
+                    node.span,
+                );
+            }
+            if need_top {
+                graph.add_variable(
+                    VarId::new(node.id, "top"),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(self_ident.clone()),
+                        member: Ident::new("y", node.span),
+                        span: node.span,
+                    }),
+                    node.span,
+                );
+            }
+            if need_right {
+                let left_member = if has_x { "x" } else { "left" };
+                let x = Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(self_ident.clone()),
-                    member: Ident::new("x", node.span),
+                    member: Ident::new(left_member, node.span),
                     span: node.span,
-                }),
-                node.span,
-            );
-        }
-        if has_y && !has_top_port {
-            graph.add_variable(
-                VarId::new(node.id, "top"),
-                Expr::MemberAccess(MemberAccessExpr {
+                });
+                let w = Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(self_ident.clone()),
-                    member: Ident::new("y", node.span),
+                    member: Ident::new("width", node.span),
                     span: node.span,
-                }),
-                node.span,
-            );
-        }
-        if (has_x || has_left_port) && has_w && !node.ports.contains_key("right") {
-            let left_member = if has_x { "x" } else { "left" };
-            let x = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
-                member: Ident::new(left_member, node.span),
-                span: node.span,
-            });
-            let w = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
-                member: Ident::new("width", node.span),
-                span: node.span,
-            });
-            graph.add_variable(
-                VarId::new(node.id, "right"),
-                Expr::Binary(BinaryExpr {
-                    op: BinaryOp::Add,
-                    left: Box::new(x),
-                    right: Box::new(w),
+                });
+                graph.add_variable(
+                    VarId::new(node.id, "right"),
+                    Expr::Binary(BinaryExpr {
+                        op: BinaryOp::Add,
+                        left: Box::new(x),
+                        right: Box::new(w),
+                        span: node.span,
+                    }),
+                    node.span,
+                );
+            }
+            if need_bottom {
+                let top_member = if has_y { "y" } else { "top" };
+                let y = Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident.clone()),
+                    member: Ident::new(top_member, node.span),
                     span: node.span,
-                }),
-                node.span,
-            );
-        }
-        if (has_y || has_top_port) && has_h && !node.ports.contains_key("bottom") {
-            let top_member = if has_y { "y" } else { "top" };
-            let y = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
-                member: Ident::new(top_member, node.span),
-                span: node.span,
-            });
-            let h = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident),
-                member: Ident::new("height", node.span),
-                span: node.span,
-            });
-            graph.add_variable(
-                VarId::new(node.id, "bottom"),
-                Expr::Binary(BinaryExpr {
-                    op: BinaryOp::Add,
-                    left: Box::new(y),
-                    right: Box::new(h),
+                });
+                let h = Expr::MemberAccess(MemberAccessExpr {
+                    target: Box::new(self_ident),
+                    member: Ident::new("height", node.span),
                     span: node.span,
-                }),
-                node.span,
-            );
+                });
+                graph.add_variable(
+                    VarId::new(node.id, "bottom"),
+                    Expr::Binary(BinaryExpr {
+                        op: BinaryOp::Add,
+                        left: Box::new(y),
+                        right: Box::new(h),
+                        span: node.span,
+                    }),
+                    node.span,
+                );
+            }
         }
     }
 
@@ -456,7 +485,8 @@ pub fn build_variable_graph_with_window(
         let var_node = &graph.var_nodes[var_idx];
         let var_span = var_node.span;
         let var_id_node = var_node.id.node;
-        if let Some(deps) = graph.upstream.get(&var_node.id) {
+        let deps = &graph.raw_upstream[var_idx];
+        if !deps.is_empty() {
             let mut up_indices = Vec::with_capacity(deps.len());
             for dep in deps {
                 let Some(d_idx) = graph.lookup_var_index(dep.node, &dep.port) else {
@@ -506,10 +536,15 @@ pub fn build_variable_graph_with_window(
 
 /// Extracts all referenced variables (`VarId`) from an expression.
 pub fn extract_var_dependencies(expr: &Expr) -> Vec<VarId> {
+    if matches!(expr, Expr::Literal(_) | Expr::Ident(_)) {
+        return Vec::new();
+    }
     let mut deps = Vec::new();
     collect_dependencies(expr, &mut deps);
-    deps.sort_unstable();
-    deps.dedup();
+    if deps.len() > 1 {
+        deps.sort_unstable();
+        deps.dedup();
+    }
     deps
 }
 
@@ -517,11 +552,12 @@ fn collect_dependencies(expr: &Expr, out: &mut Vec<VarId>) {
     match expr {
         Expr::MemberAccess(m) => {
             if let Expr::Ident(target_id) = m.target.as_ref() {
-                if let Some(node_id) = NodeId::from_canonical_name(target_id.as_str()) {
+                if let Some(node_id) = target_id.node_id() {
                     out.push(VarId::new(node_id, m.member.as_str()));
                 }
+            } else {
+                collect_dependencies(&m.target, out);
             }
-            collect_dependencies(&m.target, out);
         }
         Expr::Binary(b) => {
             collect_dependencies(&b.left, out);
@@ -538,7 +574,7 @@ fn collect_dependencies(expr: &Expr, out: &mut Vec<VarId>) {
         Expr::MethodCall(mc) => {
             if mc.method.as_str() == "append" {
                 if let Expr::Ident(target_id) = mc.target.as_ref() {
-                    if let Some(node_id) = NodeId::from_canonical_name(target_id.as_str()) {
+                    if let Some(node_id) = target_id.node_id() {
                         out.push(VarId::new(node_id, "path"));
                     }
                 }

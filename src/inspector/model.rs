@@ -550,7 +550,7 @@ pub fn build_property_dag_trace(
     let mut upstream_chain = Vec::new();
 
     if let Some(graph) = &layout.graph {
-        if let Some(deps) = graph.upstream.get(&var_id) {
+        if let Some(deps) = graph.upstream_of(&var_id) {
             for dep in deps {
                 let dep_label = layout.node_display_label(dep.node);
                 let dep_val = layout.get_value(dep.node, &dep.port)
@@ -562,7 +562,7 @@ pub fn build_property_dag_trace(
                 } else {
                     String::new()
                 };
-                let is_lit = graph.upstream.get(dep).map_or(true, |u| u.is_empty());
+                let is_lit = graph.upstream_of(dep).is_none_or(|u| u.is_empty());
                 upstream_dependencies.push(DagTraceDependency {
                     node_id: dep.node,
                     port_name: dep.port.clone(),
@@ -586,7 +586,7 @@ pub fn build_property_dag_trace(
             } else {
                 String::new()
             };
-            let is_lit = graph.upstream.get(dep).map_or(true, |u| u.is_empty());
+            let is_lit = graph.upstream_of(dep).is_none_or(|u| u.is_empty());
             skipped_upstream_dependencies.push(DagTraceDependency {
                 node_id: dep.node,
                 port_name: dep.port.clone(),
@@ -597,8 +597,8 @@ pub fn build_property_dag_trace(
             });
         }
 
-        if let Some(deps) = graph.downstream.get(&var_id) {
-            for dep in deps {
+        if let Some(deps) = graph.downstream_of(&var_id) {
+            for dep in &deps {
                 let dep_label = layout.node_display_label(dep.node);
                 let dep_val = layout.get_value(dep.node, &dep.port)
                     .or_else(|| layout.values.get(dep))
@@ -624,7 +624,7 @@ pub fn build_property_dag_trace(
         let mut visited = std::collections::HashSet::new();
         visited.insert(var_id.clone());
         let mut queue = std::collections::VecDeque::new();
-        if let Some(direct) = graph.upstream.get(&var_id) {
+        if let Some(direct) = graph.upstream_of(&var_id) {
             for d in direct {
                 if visited.insert(d.clone()) {
                     queue.push_back(d.clone());
@@ -645,7 +645,7 @@ pub fn build_property_dag_trace(
             } else {
                 String::new()
             };
-            let is_lit = graph.upstream.get(&curr_dep).map_or(true, |u| u.is_empty());
+            let is_lit = graph.upstream_of(&curr_dep).is_none_or(|u| u.is_empty());
             upstream_chain.push(DagTraceDependency {
                 node_id: curr_dep.node,
                 port_name: curr_dep.port.clone(),
@@ -655,7 +655,7 @@ pub fn build_property_dag_trace(
                 is_literal: is_lit,
             });
 
-            if let Some(next_ups) = graph.upstream.get(&curr_dep) {
+            if let Some(next_ups) = graph.upstream_of(&curr_dep) {
                 for next in next_ups {
                     if visited.insert(next.clone()) {
                         queue.push_back(next.clone());

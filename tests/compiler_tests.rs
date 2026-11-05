@@ -143,25 +143,25 @@ fn test_expand_flow_recurrence_and_graph() {
     let var_para_y = VarId::new(para_id, "y");
 
     // Header.x depends on Flow.left
-    assert_eq!(graph.upstream.get(&var_header_x).unwrap(), &vec![var_flow_left.clone()]);
+    assert_eq!(graph.upstream_of(&var_header_x).unwrap(), &[var_flow_left.clone()]);
     // Header.y depends on Flow.top
-    assert_eq!(graph.upstream.get(&var_header_y).unwrap(), &vec![var_flow_top.clone()]);
+    assert_eq!(graph.upstream_of(&var_header_y).unwrap(), &[var_flow_top.clone()]);
 
     // Paragraph.x depends on Flow.left
-    assert_eq!(graph.upstream.get(&var_para_x).unwrap(), &vec![var_flow_left.clone()]);
+    assert_eq!(graph.upstream_of(&var_para_x).unwrap(), &[var_flow_left.clone()]);
 
     // Paragraph.y depends on Flow.gap and Header.bottom
-    let para_y_upstream = graph.upstream.get(&var_para_y).unwrap();
+    let para_y_upstream = graph.upstream_of(&var_para_y).unwrap();
     assert!(para_y_upstream.contains(&var_flow_gap));
     assert!(para_y_upstream.contains(&var_header_bottom));
 
     // Header.bottom depends on Header.y and Header.height
-    let header_bottom_upstream = graph.upstream.get(&var_header_bottom).unwrap();
+    let header_bottom_upstream = graph.upstream_of(&var_header_bottom).unwrap();
     assert!(header_bottom_upstream.contains(&var_header_y));
     assert!(header_bottom_upstream.contains(&var_header_h));
 
     // Downstream check: Flow.gap must have Paragraph.y in its downstream list!
-    let flow_gap_downstream = graph.downstream.get(&var_flow_gap).unwrap();
+    let flow_gap_downstream = graph.downstream_of(&var_flow_gap).unwrap();
     assert!(flow_gap_downstream.contains(&var_para_y));
 }
 
@@ -259,12 +259,12 @@ fn test_expand_shaded_box_intrinsic_children_width() {
     let var_rect_width = VarId::new(rect_id, "width");
 
     // ShadedBox.width depends on Button 1 width and Button 2 width
-    let box_w_upstream = graph.upstream.get(&var_box_width).unwrap();
+    let box_w_upstream = graph.upstream_of(&var_box_width).unwrap();
     assert!(box_w_upstream.contains(&var_btn1_width));
     assert!(box_w_upstream.contains(&var_btn2_width));
 
     // Rect.width depends on ShadedBox.width
-    let rect_w_upstream = graph.upstream.get(&var_rect_width).unwrap();
+    let rect_w_upstream = graph.upstream_of(&var_rect_width).unwrap();
     assert!(rect_w_upstream.contains(&var_box_width));
 }
 
@@ -284,10 +284,10 @@ fn test_text_wrapping_default_height() {
     let var_h = VarId::new(text_node.id, "height");
 
     // height depends on width
-    let h_upstream = graph.upstream.get(&var_h).unwrap();
+    let h_upstream = graph.upstream_of(&var_h).unwrap();
     assert!(h_upstream.contains(&var_w));
 
-    let w_downstream = graph.downstream.get(&var_w).unwrap();
+    let w_downstream = graph.downstream_of(&var_w).unwrap();
     assert!(w_downstream.contains(&var_h));
 }
 
@@ -316,7 +316,7 @@ fn test_topological_sort_acyclic() {
         .expect("Topological sort should succeed for acyclic graph");
 
     // Total variables scheduled must equal total variables in graph
-    assert_eq!(schedule.len(), graph.variables.len());
+    assert_eq!(schedule.len(), graph.len());
 
     // Map each variable to its index in the topological execution order
     let mut order_map = std::collections::HashMap::new();
@@ -328,7 +328,7 @@ fn test_topological_sort_acyclic() {
     // all of its upstream dependencies MUST appear strictly BEFORE it!
     for var_id in &schedule.order {
         let var_idx = order_map[var_id];
-        if let Some(upstream_deps) = graph.upstream.get(var_id) {
+        if let Some(upstream_deps) = graph.upstream_of(var_id) {
             for dep in upstream_deps {
                 let dep_idx = order_map[dep];
                 assert!(
@@ -2331,7 +2331,7 @@ fn test_component_custom_alias_declaration_and_evaluation() {
     let var_right = VarId::new(card_id, "right");
     let var_x = VarId::new(card_id, "x");
     let var_width = VarId::new(card_id, "width");
-    assert_eq!(graph.upstream.get(&var_right).unwrap(), &vec![var_width, var_x]);
+    assert_eq!(graph.upstream_of(&var_right).unwrap(), &[var_width, var_x]);
 }
 
 #[test]

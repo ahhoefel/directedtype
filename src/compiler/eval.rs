@@ -47,7 +47,7 @@ pub fn evaluate_graph_with_state(
     state_overrides: &HashMap<VarId, Value>,
 ) -> Result<HashMap<VarId, Value>, CompileError> {
     let num_vars = graph.var_nodes.len();
-    if schedule.order_indices.len() == num_vars && num_vars == graph.variables.len() {
+    if schedule.order_indices.len() == num_vars {
         let mut slots: Vec<Option<Value>> = vec![None; num_vars];
         let has_overrides = !state_overrides.is_empty();
 
@@ -138,18 +138,24 @@ pub fn find_downstream_dependents(
     dirty_roots: &[VarId],
 ) -> HashSet<VarId> {
     let mut dirty = HashSet::new();
+    let mut visited_idx = HashSet::new();
     let mut queue = Vec::new();
 
     for root in dirty_roots {
         dirty.insert(root.clone());
-        queue.push(root.clone());
+        if let Some(idx) = graph.lookup_var_index(root.node, &root.port) {
+            if visited_idx.insert(idx) {
+                queue.push(idx);
+            }
+        }
     }
 
-    while let Some(current) = queue.pop() {
-        if let Some(downstream) = graph.downstream.get(&current) {
-            for dep in downstream {
-                if dirty.insert(dep.clone()) {
-                    queue.push(dep.clone());
+    while let Some(curr_idx) = queue.pop() {
+        if let Some(downstream) = graph.downstream_idx.get(curr_idx.0 as usize) {
+            for &dep_idx in downstream {
+                if visited_idx.insert(dep_idx) {
+                    dirty.insert(graph.var_nodes[dep_idx.0 as usize].id.clone());
+                    queue.push(dep_idx);
                 }
             }
         }
