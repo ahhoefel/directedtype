@@ -56,7 +56,7 @@ impl HeadlessRenderer {
             device: Arc::new(device),
             queue: Arc::new(queue),
             renderer,
-            font_cx: FontContext::new(),
+            font_cx: crate::compiler::text::create_font_context(),
             layout_cx: LayoutContext::new(),
             text_cache: TextSceneCache::new(),
             clip_cache: ClipSceneCache::new(),

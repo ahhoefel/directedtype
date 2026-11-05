@@ -58,6 +58,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
     base_dir: &std::path::Path,
     resolver: &R,
 ) -> Result<ExpandedDocument, CompileError> {
+    crate::compiler::text::prewarm_font_context();
     let (mut registry, imported_items, all_module_enums) =
         crate::compiler::module::resolve_imports_with_enums(doc, base_dir, resolver)?;
     let mut merged_items = imported_items;

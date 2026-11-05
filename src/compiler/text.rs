@@ -1,9 +1,34 @@
 use parley::style::{FontFamily, FontStyle, FontWeight, StyleProperty};
 use parley::{FontContext, LayoutContext};
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
+
+static SHARED_FONT_CONTEXT: OnceLock<Mutex<FontContext>> = OnceLock::new();
+static PREWARM_STARTED: AtomicBool = AtomicBool::new(false);
+
+/// Spawns a background thread to scan system fonts and initialize the shared `FontContext`
+/// while parsing and AST expansion proceed on the main thread.
+pub fn prewarm_font_context() {
+    if !PREWARM_STARTED.swap(true, Ordering::Relaxed) {
+        std::thread::spawn(|| {
+            let _ = SHARED_FONT_CONTEXT.get_or_init(|| Mutex::new(FontContext::new()));
+        });
+    }
+}
+
+/// Returns a `FontContext` cloned from the process-wide pre-warmed system font collection,
+/// avoiding redundant system font directory scans across threads and renderer instances.
+pub fn create_font_context() -> FontContext {
+    let mutex = SHARED_FONT_CONTEXT.get_or_init(|| Mutex::new(FontContext::new()));
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
 
 thread_local! {
-    static FONT_CONTEXT: RefCell<FontContext> = RefCell::new(FontContext::new());
+    static FONT_CONTEXT: RefCell<FontContext> = RefCell::new(create_font_context());
     static LAYOUT_CONTEXT: RefCell<LayoutContext<()>> = RefCell::new(LayoutContext::new());
     static FONT_METRICS_CACHE: RefCell<std::collections::HashMap<(u64, u64, String), FontMetrics>> =
         RefCell::new(std::collections::HashMap::new());

@@ -75,6 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let file_path = file_path.unwrap_or_else(|| PathBuf::from("examples/demo.dt"));
+    directedtype::compiler::text::prewarm_font_context();
     println!("Loading DirectedType document: {}", file_path.display());
 
     let source = fs::read_to_string(&file_path)
