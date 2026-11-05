@@ -131,6 +131,7 @@ impl BuiltinPrimitive for RectPrimitive {
                 ],
                 body: Vec::new(),
                 span,
+                schema_cache: Default::default(),
             }]
         });
     }

@@ -92,6 +92,7 @@ impl BuiltinPrimitive for TextPrimitive {
                     ],
                     body: Vec::new(),
                     span,
+                    schema_cache: Default::default(),
                 }]
             });
     }

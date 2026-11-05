@@ -119,6 +119,7 @@ pub struct ComponentDef {
     pub params: Vec<ParamDef>,
     pub body: Vec<ComponentBodyItem>,
     pub span: Span,
+    pub schema_cache: crate::compiler::expand::schema::CachedComponentSchema,
 }
 
 impl ComponentDef {

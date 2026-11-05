@@ -106,7 +106,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
 
     for overloads in registry.values() {
         for comp_def in overloads {
-            ComponentSchema::from_def(comp_def)?;
+            ComponentSchema::for_def(comp_def)?;
         }
     }
 
@@ -634,22 +634,28 @@ fn expand_element(
 
     // If it's an invocation of a user-defined component:
     if let Some(overloads) = registry.get(elem.name.as_str()) {
-        for port in &elem.ports {
-            let name = port.name.as_str();
-            let is_accepted_param = overloads.iter().any(|o| o.param_names().contains(name));
-            if !is_accepted_param
-                && (matches!(name, "left" | "top" | "right" | "bottom")
-                    || overloads.iter().any(|o| {
-                        collect_all_component_aliases(o)
-                            .iter()
-                            .any(|a| a.name.as_str() == name)
-                    }))
-            {
-                return Err(CompileError::ImmutableAliasPort {
-                    node: elem.name.as_str().to_string(),
-                    port: name.to_string(),
-                    span: port.name.span,
-                });
+        if overloads.len() > 1 {
+            for port in &elem.ports {
+                let name = port.name.as_str();
+                let mut is_accepted_param = false;
+                let mut is_declared_alias = matches!(name, "left" | "top" | "right" | "bottom");
+                for o in overloads {
+                    let schema = ComponentSchema::for_def(o)?;
+                    if schema.param_names.contains(name) {
+                        is_accepted_param = true;
+                        break;
+                    }
+                    if schema.declared_aliases.contains_key(name) {
+                        is_declared_alias = true;
+                    }
+                }
+                if !is_accepted_param && is_declared_alias {
+                    return Err(CompileError::ImmutableAliasPort {
+                        node: elem.name.as_str().to_string(),
+                        port: name.to_string(),
+                        span: port.name.span,
+                    });
+                }
             }
         }
 

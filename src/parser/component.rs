@@ -133,6 +133,7 @@ pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef
         params,
         body: slot.items,
         span,
+        schema_cache: Default::default(),
     })
 }
 

@@ -21,8 +21,7 @@ use crate::compiler::expand::rewrite::{
 };
 use crate::compiler::expand::schema::ComponentSchema;
 use crate::compiler::expand::text_flow::{
-    component_children_is_single_text, finalize_inline_box_component_ports,
-    finalize_span_component_ports,
+    finalize_inline_box_component_ports, finalize_span_component_ports,
 };
 use crate::compiler::expand::typecheck::{
     coerce_typed_binding_expr, resolve_ident_or_member_to_literal,
@@ -44,7 +43,8 @@ struct ComponentExpander<'a> {
     caller_env_scope: &'a HashMap<String, EnvEntry>,
     node_fonts: &'a mut HashMap<NodeId, NodeId>,
 
-    schema: ComponentSchema,
+    schema: &'a ComponentSchema,
+    comp_scope_ports: Vec<String>,
     is_single_text_context: bool,
     comp_ports: HashMap<String, Expr>,
     explicit_unlowered_ports: HashMap<String, Expr>,
@@ -80,10 +80,9 @@ impl<'a> ComponentExpander<'a> {
         node_fonts: &'a mut HashMap<NodeId, NodeId>,
         instantiated_children_ids: &'a RefCell<Vec<NodeId>>,
     ) -> Result<Self, CompileError> {
-        let schema = ComponentSchema::from_def(comp_def)?;
+        let schema = ComponentSchema::for_def(comp_def)?;
         schema.validate_caller_ports(comp_def, instance)?;
-        let is_single_text_context =
-            !schema.is_span_def && component_children_is_single_text(comp_def, registry);
+        let is_single_text_context = schema.is_single_text_context(comp_def, registry);
         if schema.is_span_def {
             doc.get_node_mut(ctx.comp_node_id).unwrap().is_span = true;
         }
@@ -122,6 +121,7 @@ impl<'a> ComponentExpander<'a> {
             ctx.consumer_children.map_or(0, |c| c.len()),
             registry,
         );
+        let comp_scope_ports = schema.comp_scope_ports.clone();
 
         Ok(Self {
             ctx,
@@ -133,6 +133,7 @@ impl<'a> ComponentExpander<'a> {
             caller_env_scope,
             node_fonts,
             schema,
+            comp_scope_ports,
             is_single_text_context,
             comp_ports,
             explicit_unlowered_ports: HashMap::new(),
@@ -202,12 +203,7 @@ impl<'a> ComponentExpander<'a> {
             let name = port.name.as_str().to_string();
             self.explicit_unlowered_ports
                 .insert(name.clone(), port.expr.clone());
-            let is_handler_param = self.comp_def.params.iter().any(|p| {
-                p.name.as_str() == name
-                    && p.type_annotation
-                        .as_ref()
-                        .is_some_and(|t| t.name.as_str() == "Handler")
-            });
+            let is_handler_param = self.schema.handler_param_names.contains(&name);
             let expr = match &port.expr {
                 Expr::Node(inline_elem)
                     if !super::is_value_node_name(inline_elem.name.as_str()) =>
@@ -419,9 +415,6 @@ impl<'a> ComponentExpander<'a> {
                 });
             }
             let name = param.name.as_str().to_string();
-            if !self.schema.comp_scope_ports.contains(&name) {
-                self.schema.comp_scope_ports.push(name.clone());
-            }
 
             // Tier 4: Explicit caller argument
             if let Some(explicit_expr) = explicit_ports.remove(&name) {
@@ -468,8 +461,8 @@ impl<'a> ComponentExpander<'a> {
                     span: port_span,
                 });
             }
-            if !self.schema.comp_scope_ports.contains(&name) {
-                self.schema.comp_scope_ports.push(name.clone());
+            if !self.comp_scope_ports.contains(&name) {
+                self.comp_scope_ports.push(name.clone());
             }
             self.already_rewritten_ports.insert(name.clone());
             self.comp_ports.insert(name, expr);
@@ -482,23 +475,23 @@ impl<'a> ComponentExpander<'a> {
         let has_port_or_alias = |k: &str| {
             self.comp_ports.contains_key(k) || self.schema.declared_aliases.contains_key(k)
         };
-        if has_port_or_alias("x") && !self.schema.comp_scope_ports.contains(&"left".to_string()) {
-            self.schema.comp_scope_ports.push("left".to_string());
+        if has_port_or_alias("x") && !self.comp_scope_ports.contains(&"left".to_string()) {
+            self.comp_scope_ports.push("left".to_string());
         }
-        if has_port_or_alias("y") && !self.schema.comp_scope_ports.contains(&"top".to_string()) {
-            self.schema.comp_scope_ports.push("top".to_string());
+        if has_port_or_alias("y") && !self.comp_scope_ports.contains(&"top".to_string()) {
+            self.comp_scope_ports.push("top".to_string());
         }
         if (has_port_or_alias("x") || has_port_or_alias("left"))
             && has_port_or_alias("width")
-            && !self.schema.comp_scope_ports.contains(&"right".to_string())
+            && !self.comp_scope_ports.contains(&"right".to_string())
         {
-            self.schema.comp_scope_ports.push("right".to_string());
+            self.comp_scope_ports.push("right".to_string());
         }
         if (has_port_or_alias("y") || has_port_or_alias("top"))
             && has_port_or_alias("height")
-            && !self.schema.comp_scope_ports.contains(&"bottom".to_string())
+            && !self.comp_scope_ports.contains(&"bottom".to_string())
         {
-            self.schema.comp_scope_ports.push("bottom".to_string());
+            self.comp_scope_ports.push("bottom".to_string());
         }
 
         self.record_resolved_component_font();
@@ -515,18 +508,17 @@ impl<'a> ComponentExpander<'a> {
         }
 
         // Validate that all required parameters (parameters without defaults) have been supplied
-        for param in &comp_def.params {
-            let name = param.name.as_str();
-            if param.default_edge.is_none() && !self.comp_ports.contains_key(name) {
+        for req_name in &self.schema.overload_params {
+            if !self.comp_ports.contains_key(req_name) {
                 return Err(CompileError::MissingPort {
                     node: comp_def.name.as_str().to_string(),
-                    port: name.to_string(),
+                    port: req_name.clone(),
                     span: self.instance.span,
                 });
             }
         }
 
-        self.internal_scope_ports = self.schema.comp_scope_ports.clone();
+        self.internal_scope_ports = self.comp_scope_ports.clone();
         for let_name in self.schema.declared_lets.keys() {
             if !self.internal_scope_ports.contains(let_name) {
                 self.internal_scope_ports.push(let_name.clone());
@@ -542,7 +534,7 @@ impl<'a> ComponentExpander<'a> {
             self.ctx,
             self.instance,
             self.comp_def,
-            &self.schema.comp_scope_ports,
+            &self.comp_scope_ports,
             self.schema.is_span_def,
             self.is_single_text_context,
             self.lexical_scope,
@@ -570,10 +562,7 @@ impl<'a> ComponentExpander<'a> {
         for param in &comp_def.params {
             let name = param.name.as_str().to_string();
             populated_comp_ports.insert(name.clone());
-            let is_handler_param = param
-                .type_annotation
-                .as_ref()
-                .is_some_and(|t| t.name.as_str() == "Handler");
+            let is_handler_param = self.schema.handler_param_names.contains(&name);
             if name.starts_with("on_") || is_handler_param {
                 continue;
             }
@@ -611,7 +600,7 @@ impl<'a> ComponentExpander<'a> {
                 );
             }
         }
-        for port_name in &self.schema.comp_scope_ports {
+        for port_name in &self.comp_scope_ports {
             if !populated_comp_ports.contains(port_name) {
                 let member_expr = Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::new(
@@ -631,10 +620,7 @@ impl<'a> ComponentExpander<'a> {
         }
         for param in &comp_def.params {
             let name = param.name.as_str().to_string();
-            let is_handler_param = param
-                .type_annotation
-                .as_ref()
-                .is_some_and(|t| t.name.as_str() == "Handler");
+            let is_handler_param = self.schema.handler_param_names.contains(&name);
             if name.starts_with("on_") || is_handler_param {
                 if let Some(expr) = self.comp_ports.get(&name).cloned() {
                     let event_default_ctx = ScopeContext::from_instance(
@@ -749,10 +735,7 @@ impl<'a> ComponentExpander<'a> {
 
         // Pre-register uninitialized let and env in component body
         for l in &self.schema.all_lets {
-            let is_env_param_shadow = comp_def
-                .params
-                .iter()
-                .any(|p| p.is_env && p.name.as_str() == l.name.as_str());
+            let is_env_param_shadow = self.schema.env_param_names.contains(l.name.as_str());
             if l.value.is_none() || is_env_param_shadow {
                 children_env_scope.insert(l.name.as_str().to_string(), EnvEntry::Tombstone);
                 internal_body_env_scope.insert(l.name.as_str().to_string(), EnvEntry::Tombstone);
@@ -761,35 +744,24 @@ impl<'a> ComponentExpander<'a> {
                 local_scope.insert(l.name.as_str().to_string(), LexicalBinding::Uninitialized);
             }
         }
-        for item in &comp_def.body {
-            if let ComponentBodyItem::Env(e) = item {
-                if e.value.is_none() {
-                    local_scope.insert(e.name.as_str().to_string(), LexicalBinding::Uninitialized);
-                    children_env_scope.insert(e.name.as_str().to_string(), EnvEntry::Tombstone);
-                    internal_body_env_scope
-                        .insert(e.name.as_str().to_string(), EnvEntry::Tombstone);
-                }
+        for e in &self.schema.all_envs {
+            if e.value.is_none() {
+                local_scope.insert(e.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                children_env_scope.insert(e.name.as_str().to_string(), EnvEntry::Tombstone);
+                internal_body_env_scope
+                    .insert(e.name.as_str().to_string(), EnvEntry::Tombstone);
             }
         }
 
         // Pre-resolve let and env expressions in component body so their declaration order does not matter
-        let mut changed = true;
-        let mut passes = 0;
-        while changed && passes < 20 {
-            changed = false;
-            passes += 1;
-            for let_binding in &self.schema.all_lets {
-                if let_binding.value.is_none() {
-                    local_scope.insert(
-                        let_binding.name.as_str().to_string(),
-                        LexicalBinding::Uninitialized,
-                    );
-                } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
-                    if self
-                        .schema
-                        .comp_shadowed_ports
-                        .contains(let_binding.name.as_str())
-                    {
+        if !self.schema.shadowed_expr_lets.is_empty() || !self.schema.all_envs.is_empty() {
+            let mut changed = true;
+            let mut passes = 0;
+            while changed && passes < 20 {
+                changed = false;
+                passes += 1;
+                for let_binding in &self.schema.shadowed_expr_lets {
+                    if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
                         let is_event_let = let_binding.name.as_str().starts_with("on_")
                             || let_binding
                                 .type_annotation
@@ -826,9 +798,7 @@ impl<'a> ComponentExpander<'a> {
                         }
                     }
                 }
-            }
-            for item in &comp_def.body {
-                if let ComponentBodyItem::Env(env_binding) = item {
+                for env_binding in &self.schema.all_envs {
                     if env_binding.value.is_none() {
                         local_scope.insert(
                             env_binding.name.as_str().to_string(),
@@ -886,10 +856,10 @@ impl<'a> ComponentExpander<'a> {
     fn expand_body_let(&mut self, let_binding: &LetBinding) -> Result<(), CompileError> {
         let ctx = self.ctx;
         let comp_def = self.comp_def;
-        let is_env_param_shadow = comp_def
-            .params
-            .iter()
-            .any(|p| p.is_env && p.name.as_str() == let_binding.name.as_str());
+        let is_env_param_shadow = self
+            .schema
+            .env_param_names
+            .contains(let_binding.name.as_str());
 
         if let_binding.value.is_none() || is_env_param_shadow {
             // Shield/Swallower pattern or Firewall Tombstone
@@ -1195,7 +1165,7 @@ impl<'a> ComponentExpander<'a> {
             self.ctx,
             self.instance,
             self.comp_def,
-            &self.schema.comp_scope_ports,
+            &self.comp_scope_ports,
             self.lexical_scope,
             &mut self.children_env_scope,
             self.registry,
@@ -1208,7 +1178,7 @@ impl<'a> ComponentExpander<'a> {
                 self.ctx,
                 self.comp_def,
                 dir,
-                &self.schema.comp_scope_ports,
+                &self.comp_scope_ports,
                 &self.internal_scope_ports,
                 &self.schema.comp_shadowed_ports,
                 &self.comp_ports,
@@ -1251,7 +1221,7 @@ impl<'a> ComponentExpander<'a> {
             let (full_text, spans, ibs) = expand_span_consumer_children(
                 self.ctx,
                 self.comp_def,
-                &self.schema.comp_scope_ports,
+                &self.comp_scope_ports,
                 &self.consumer_child_entries,
                 &self.children_env_scope,
                 self.registry,
@@ -1323,12 +1293,7 @@ impl<'a> ComponentExpander<'a> {
             if self.already_rewritten_ports.contains(port_name) {
                 rewritten_ports.insert(port_name.clone(), port_expr.clone());
             } else {
-                let is_handler_param = comp_def.params.iter().any(|p| {
-                    p.name.as_str() == port_name
-                        && p.type_annotation
-                            .as_ref()
-                            .is_some_and(|t| t.name.as_str() == "Handler")
-                });
+                let is_handler_param = self.schema.handler_param_names.contains(port_name);
                 let mut port_scope_ctx = scope_ctx.clone();
                 port_scope_ctx.is_event_port = port_name.starts_with("on_") || is_handler_param;
                 let mut rw = rewrite_expr(port_expr, &port_scope_ctx)?;
@@ -1491,11 +1456,7 @@ impl<'a> ComponentExpander<'a> {
         )?;
 
         // Validate assertions in component body (only build const_env if the component actually contains \assert)
-        if comp_def
-            .body
-            .iter()
-            .any(|item| matches!(item, ComponentBodyItem::Assert(_)))
-        {
+        if self.schema.has_assertions {
             let mut const_env = HashMap::new();
             const_env.insert(
                 crate::compiler::graph::VarId::new(NodeId::WINDOW, "dpi"),
@@ -1578,8 +1539,7 @@ impl<'a> ComponentExpander<'a> {
         comp_authored_ports: HashMap<String, Expr>,
     ) {
         let comp_def = self.comp_def;
-        let mut node_port_types = HashMap::new();
-        node_port_types.insert("clip".to_string(), "Clip".to_string());
+        let mut node_port_types = self.schema.static_port_types.clone();
         if self.schema.is_span_def || self.schema.is_inline_box_def {
             for sp in [
                 "x",
@@ -1595,86 +1555,49 @@ impl<'a> ComponentExpander<'a> {
                 "size",
             ] {
                 if rewritten_ports.contains_key(sp) {
-                    node_port_types.insert(sp.to_string(), "Distance".to_string());
+                    node_port_types
+                        .entry(sp.to_string())
+                        .or_insert_with(|| "Distance".to_string());
                 }
             }
             if rewritten_ports.contains_key("weight") {
-                node_port_types.insert("weight".to_string(), "Integer".to_string());
+                node_port_types
+                    .entry("weight".to_string())
+                    .or_insert_with(|| "Integer".to_string());
             }
             if rewritten_ports.contains_key("family") {
-                node_port_types.insert("family".to_string(), "String".to_string());
+                node_port_types
+                    .entry("family".to_string())
+                    .or_insert_with(|| "String".to_string());
             }
         }
         for sp in ["left", "top", "right", "bottom"] {
             if rewritten_ports.contains_key(sp) {
-                node_port_types.insert(sp.to_string(), "Distance".to_string());
-            }
-        }
-        for param in &comp_def.params {
-            if let Some(ty) = &param.type_annotation {
-                node_port_types.insert(
-                    param.name.as_str().to_string(),
-                    ty.name.as_str().to_string(),
-                );
-            }
-        }
-        for (state_name, s) in &self.schema.declared_states {
-            if let Some(ty) = &s.type_annotation {
-                node_port_types.insert(state_name.clone(), ty.name.as_str().to_string());
-            }
-        }
-        for (let_name, l) in &self.schema.declared_lets {
-            if !self.schema.comp_shadowed_ports.contains(let_name) {
-                if let Some(ty) = &l.type_annotation {
-                    node_port_types.insert(let_name.clone(), ty.name.as_str().to_string());
-                }
-            }
-        }
-        for (env_name, e) in &self.schema.declared_envs {
-            if !self.schema.comp_shadowed_ports.contains(env_name) {
-                if let Some(ty) = &e.type_annotation {
-                    node_port_types.insert(env_name.clone(), ty.name.as_str().to_string());
-                }
-            }
-        }
-        for (alias_name, a) in &self.schema.declared_aliases {
-            if let Some(ty) = &a.type_annotation {
-                node_port_types.insert(alias_name.clone(), ty.name.as_str().to_string());
+                node_port_types
+                    .entry(sp.to_string())
+                    .or_insert_with(|| "Distance".to_string());
             }
         }
 
         let node = self.doc.get_node_mut(self.ctx.comp_node_id).unwrap();
         node.is_component = true;
         node.component_path = comp_def.span.file_path();
-        node.overload_params = comp_def
-            .params
-            .iter()
-            .filter(|p| p.default_edge.is_none())
-            .map(|p| p.name.as_str().to_string())
-            .collect();
+        node.overload_params = self.schema.overload_params.clone();
         node.children = self.all_children_ids;
         node.authored_ports = comp_authored_ports;
-        node.private_ports = self
-            .schema
-            .declared_lets
-            .keys()
-            .filter(|k| !comp_def.params.iter().any(|p| p.name.as_str() == k.as_str()))
-            .cloned()
-            .collect();
-        for (state_name, s) in &self.schema.declared_states {
-            let type_name = s
-                .type_annotation
-                .as_ref()
-                .map(|t| t.name.as_str().to_string());
-            node.state_vars.insert(state_name.clone(), type_name);
-        }
-        for (env_name, e) in &self.schema.declared_envs {
-            let type_name = e
-                .type_annotation
-                .as_ref()
-                .map(|t| t.name.as_str().to_string());
-            node.env_vars.insert(env_name.clone(), type_name);
-        }
+        node.private_ports = self.schema.private_ports.clone();
+        node.state_vars.extend(
+            self.schema
+                .state_var_types
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone())),
+        );
+        node.env_vars.extend(
+            self.schema
+                .env_var_types
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone())),
+        );
         let local_scope_borrow = self.local_scope.borrow();
         let port_names: Vec<String> = rewritten_ports.keys().cloned().collect();
         for port_name in port_names {

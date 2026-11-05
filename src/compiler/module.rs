@@ -984,6 +984,7 @@ fn collect_from_expr(expr: &Expr, out: &mut HashSet<String>) {
 }
 
 fn rewrite_component_node_names(comp: &mut ComponentDef, renames: &HashMap<String, String>) {
+    comp.schema_cache.invalidate();
     for param in &mut comp.params {
         if let Some(ty) = &mut param.type_annotation {
             if let Some(new_name) = renames.get(ty.name.as_str()) {
@@ -1116,6 +1117,7 @@ fn resolve_component_enum_literals(
     comp: &mut ComponentDef,
     enums: &HashMap<String, crate::ast::EnumDef>,
 ) {
+    comp.schema_cache.invalidate();
     for param in &mut comp.params {
         if let Some(default_edge) = &mut param.default_edge {
             resolve_expr_enum_literals(default_edge, enums);

@@ -4,12 +4,55 @@ use crate::ast::*;
 use crate::compiler::error::{CompileError, NoMatchingOverloadDetails};
 use crate::span::Span;
 use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
+
+/// Lazy per-definition cache for `ComponentSchema`.
+///
+/// Cloning creates an empty cache so that if a `ComponentDef` is cloned and mutated during
+/// module import resolution, it never retains a stale schema. `PartialEq` always returns
+/// `true` so structural equality of `ComponentDef` ignores the cache.
+#[derive(Debug, Default)]
+pub struct CachedComponentSchema(OnceLock<ComponentSchema>);
+
+impl Clone for CachedComponentSchema {
+    fn clone(&self) -> Self {
+        Self(OnceLock::new())
+    }
+}
+
+impl PartialEq for CachedComponentSchema {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl CachedComponentSchema {
+    pub fn get_or_try_init(
+        &self,
+        comp_def: &ComponentDef,
+    ) -> Result<&ComponentSchema, CompileError> {
+        if let Some(schema) = self.0.get() {
+            return Ok(schema);
+        }
+        let schema = ComponentSchema::from_def(comp_def)?;
+        let _ = self.0.set(schema);
+        Ok(self.0.get().expect("OnceLock just initialized"))
+    }
+
+    pub fn invalidate(&mut self) {
+        self.0 = OnceLock::new();
+    }
+}
 
 /// Pre-validated schema of a `ComponentDef`'s ports, aliases, state, let bindings, and env bindings.
 #[derive(Debug, Clone)]
 pub struct ComponentSchema {
     pub is_span_def: bool,
     pub is_inline_box_def: bool,
+    pub param_names: HashSet<String>,
+    pub handler_param_names: HashSet<String>,
+    pub env_param_names: HashSet<String>,
+    pub overload_params: Vec<String>,
     pub comp_scope_ports: Vec<String>,
     pub declared_aliases: HashMap<String, AliasBinding>,
     pub declared_states: HashMap<String, StateBinding>,
@@ -17,15 +60,63 @@ pub struct ComponentSchema {
     pub all_lets: Vec<LetBinding>,
     pub declared_lets: HashMap<String, LetBinding>,
     pub all_let_names: HashSet<String>,
+    pub shadowed_expr_lets: Vec<LetBinding>,
+    pub all_envs: Vec<EnvBinding>,
     pub declared_envs: HashMap<String, EnvBinding>,
     pub comp_shadowed_ports: HashSet<String>,
+    pub private_ports: HashSet<String>,
+    pub static_port_types: HashMap<String, String>,
+    pub state_var_types: HashMap<String, Option<String>>,
+    pub env_var_types: HashMap<String, Option<String>>,
+    pub has_assertions: bool,
+    is_single_text_context: OnceLock<bool>,
 }
 
 impl ComponentSchema {
+    /// Returns the cached `ComponentSchema` for `comp_def`, validating and building it on first access.
+    pub fn for_def(comp_def: &ComponentDef) -> Result<&Self, CompileError> {
+        comp_def.schema_cache.get_or_try_init(comp_def)
+    }
+
+    /// Returns whether this component places its `\Children()` inside a single `\Text` context,
+    /// computing and caching the result once per `ComponentDef`.
+    pub fn is_single_text_context(
+        &self,
+        comp_def: &ComponentDef,
+        registry: &HashMap<String, Vec<ComponentDef>>,
+    ) -> bool {
+        *self.is_single_text_context.get_or_init(|| {
+            !self.is_span_def
+                && super::text_flow::component_children_is_single_text(comp_def, registry)
+        })
+    }
+
     /// Validates and builds the port/binding schema for `comp_def`.
     pub fn from_def(comp_def: &ComponentDef) -> Result<Self, CompileError> {
         let is_span_def = comp_def.kind == ComponentKind::Span;
         let is_inline_box_def = comp_def.kind == ComponentKind::InlineBox;
+
+        let mut param_names = HashSet::with_capacity(comp_def.params.len());
+        let mut handler_param_names = HashSet::new();
+        let mut env_param_names = HashSet::new();
+        let mut overload_params = Vec::new();
+        for param in &comp_def.params {
+            let name = param.name.as_str().to_string();
+            param_names.insert(name.clone());
+            if param
+                .type_annotation
+                .as_ref()
+                .is_some_and(|t| t.name.as_str() == "Handler")
+            {
+                handler_param_names.insert(name.clone());
+            }
+            if param.is_env {
+                env_param_names.insert(name.clone());
+            }
+            if param.default_edge.is_none() {
+                overload_params.push(name);
+            }
+        }
 
         let mut comp_scope_ports = vec!["clip".to_string()];
         if is_span_def || is_inline_box_def {
@@ -47,7 +138,7 @@ impl ComponentSchema {
                     span: a.name.span,
                 });
             }
-            if comp_def.params.iter().any(|p| p.name.as_str() == alias_name) {
+            if param_names.contains(&alias_name) {
                 return Err(CompileError::DuplicatePort {
                     node: comp_def.name.as_str().to_string(),
                     port: alias_name,
@@ -78,7 +169,7 @@ impl ComponentSchema {
                         span: s.name.span,
                     });
                 }
-                if comp_def.params.iter().any(|p| p.name.as_str() == state_name) {
+                if param_names.contains(&state_name) {
                     return Err(CompileError::DuplicatePort {
                         node: comp_def.name.as_str().to_string(),
                         port: state_name,
@@ -147,9 +238,13 @@ impl ComponentSchema {
             }
         }
 
+        let mut all_envs: Vec<EnvBinding> = Vec::new();
         let mut declared_envs: HashMap<String, EnvBinding> = HashMap::new();
+        let mut has_assertions = false;
         for item in &comp_def.body {
-            if let ComponentBodyItem::Env(e) = item {
+            if let ComponentBodyItem::Assert(_) = item {
+                has_assertions = true;
+            } else if let ComponentBodyItem::Env(e) = item {
                 let env_name = e.name.as_str().to_string();
                 if env_name == "parent" {
                     return Err(CompileError::ReservedPort {
@@ -189,7 +284,15 @@ impl ComponentSchema {
                 if !comp_scope_ports.contains(&env_name) {
                     comp_scope_ports.push(env_name.clone());
                 }
+                all_envs.push(e.clone());
                 declared_envs.insert(env_name, e.clone());
+            }
+        }
+
+        for param in &comp_def.params {
+            let name = param.name.as_str();
+            if name != "parent" && !comp_scope_ports.iter().any(|p| p == name) {
+                comp_scope_ports.push(name.to_string());
             }
         }
 
@@ -206,10 +309,87 @@ impl ComponentSchema {
         }
 
         let all_lets: Vec<LetBinding> = all_lets.into_iter().cloned().collect();
+        let shadowed_expr_lets: Vec<LetBinding> = all_lets
+            .iter()
+            .filter(|l| {
+                matches!(l.value, Some(LetValue::Expr(_)))
+                    && comp_shadowed_ports.contains(l.name.as_str())
+            })
+            .cloned()
+            .collect();
+
+        let private_ports: HashSet<String> = declared_lets
+            .keys()
+            .filter(|k| !param_names.contains(*k))
+            .cloned()
+            .collect();
+
+        let mut static_port_types: HashMap<String, String> = HashMap::new();
+        static_port_types.insert("clip".to_string(), "Clip".to_string());
+        for param in &comp_def.params {
+            if let Some(ty) = &param.type_annotation {
+                static_port_types.insert(
+                    param.name.as_str().to_string(),
+                    ty.name.as_str().to_string(),
+                );
+            }
+        }
+        for (state_name, s) in &declared_states {
+            if let Some(ty) = &s.type_annotation {
+                static_port_types.insert(state_name.clone(), ty.name.as_str().to_string());
+            }
+        }
+        for (let_name, l) in &declared_lets {
+            if !comp_shadowed_ports.contains(let_name) {
+                if let Some(ty) = &l.type_annotation {
+                    static_port_types.insert(let_name.clone(), ty.name.as_str().to_string());
+                }
+            }
+        }
+        for (env_name, e) in &declared_envs {
+            if !comp_shadowed_ports.contains(env_name) {
+                if let Some(ty) = &e.type_annotation {
+                    static_port_types.insert(env_name.clone(), ty.name.as_str().to_string());
+                }
+            }
+        }
+        for (alias_name, a) in &declared_aliases {
+            if let Some(ty) = &a.type_annotation {
+                static_port_types.insert(alias_name.clone(), ty.name.as_str().to_string());
+            }
+        }
+
+        let state_var_types: HashMap<String, Option<String>> = declared_states
+            .iter()
+            .map(|(k, s)| {
+                (
+                    k.clone(),
+                    s.type_annotation
+                        .as_ref()
+                        .map(|t| t.name.as_str().to_string()),
+                )
+            })
+            .collect();
+
+        let env_var_types: HashMap<String, Option<String>> = declared_envs
+            .iter()
+            .map(|(k, e)| {
+                (
+                    k.clone(),
+                    e.type_annotation
+                        .as_ref()
+                        .map(|t| t.name.as_str().to_string()),
+                )
+            })
+            .collect();
 
         Ok(Self {
             is_span_def,
             is_inline_box_def,
+            param_names,
+            handler_param_names,
+            env_param_names,
+            overload_params,
             comp_scope_ports,
             declared_aliases,
             declared_states,
@@ -217,8 +397,16 @@ impl ComponentSchema {
             all_lets,
             declared_lets,
             all_let_names,
+            shadowed_expr_lets,
+            all_envs,
             declared_envs,
             comp_shadowed_ports,
+            private_ports,
+            static_port_types,
+            state_var_types,
+            env_var_types,
+            has_assertions,
+            is_single_text_context: OnceLock::new(),
         })
     }
 
@@ -247,9 +435,7 @@ impl ComponentSchema {
                     span: port.name.span,
                 });
             }
-            if self.declared_envs.contains_key(name)
-                && !comp_def.params.iter().any(|p| p.name.as_str() == name)
-            {
+            if self.declared_envs.contains_key(name) && !self.param_names.contains(name) {
                 return Err(CompileError::Custom {
                     message: format!(
                         "Node '{}' environmental property '{}' cannot be set as a parameter",
@@ -259,9 +445,7 @@ impl ComponentSchema {
                     span: port.name.span,
                 });
             }
-            if self.all_let_names.contains(name)
-                && !comp_def.params.iter().any(|p| p.name.as_str() == name)
-            {
+            if self.all_let_names.contains(name) && !self.param_names.contains(name) {
                 return Err(CompileError::Custom {
                     message: format!(
                         "Node '{}' has no public property '{}'",
@@ -513,12 +697,16 @@ pub(super) fn select_component_overload<'a>(
     let matching: Vec<&ComponentDef> = overloads
         .iter()
         .filter(|o| {
-            let all = o.param_names();
+            let has_param = |name: &str| {
+                ComponentSchema::for_def(o)
+                    .map(|s| s.param_names.contains(name))
+                    .unwrap_or_else(|_| o.params.iter().any(|p| p.name.as_str() == name))
+            };
             // 1. All provided ports (caller-authored or container-injected via \Children)
             // must be accepted by this overload.
             for port in &elem.ports {
                 let name = port.name.as_str();
-                if name != "clip" && !all.contains(name) && !name.starts_with("on_") {
+                if name != "clip" && !has_param(name) && !name.starts_with("on_") {
                     return false;
                 }
             }
