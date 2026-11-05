@@ -2,7 +2,362 @@ use crate::ast::*;
 use crate::compiler::error::CompileError;
 use crate::compiler::eval::eval_expr;
 use crate::compiler::expanded::{ExpandedDocument, ExpandedNode, NodeId};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+
+thread_local! {
+    static AGG_EMITTED_COUNTS: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+}
+
+pub(super) fn reset_agg_emitted_count(comp_id: NodeId) {
+    AGG_EMITTED_COUNTS.with(|cell| {
+        let mut counts = cell.borrow_mut();
+        if comp_id.0 >= counts.len() {
+            counts.resize(comp_id.0 + 1, 0);
+        } else {
+            counts[comp_id.0] = 0;
+        }
+    });
+}
+
+pub(super) fn record_agg_emitted(comp_id: NodeId) {
+    AGG_EMITTED_COUNTS.with(|cell| {
+        let mut counts = cell.borrow_mut();
+        if comp_id.0 >= counts.len() {
+            counts.resize(comp_id.0 + 1, 0);
+        }
+        counts[comp_id.0] += 1;
+    });
+}
+
+pub(super) fn get_agg_emitted_count(comp_id: NodeId) -> u32 {
+    AGG_EMITTED_COUNTS.with(|cell| cell.borrow().get(comp_id.0).copied().unwrap_or(0))
+}
+
+fn populate_comp_cond_consts<'a>(
+    expr: &'a Expr,
+    comp_id: NodeId,
+    comp_canon: &str,
+    rewritten_ports: &'a HashMap<String, Expr>,
+    declared_state_names: &HashSet<String>,
+    const_env: &mut HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
+    tried_ports: &mut HashSet<&'a str>,
+    depth: u8,
+) {
+    if depth >= 4 {
+        return;
+    }
+    match expr {
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(id) = m.target.as_ref() {
+                if id.as_str() == comp_canon && !declared_state_names.contains(m.member.as_str()) {
+                    if let Some((key, port_expr)) = rewritten_ports.get_key_value(m.member.as_str())
+                    {
+                        if tried_ports.insert(key.as_str()) {
+                            populate_comp_cond_consts(
+                                port_expr,
+                                comp_id,
+                                comp_canon,
+                                rewritten_ports,
+                                declared_state_names,
+                                const_env,
+                                tried_ports,
+                                depth + 1,
+                            );
+                            if let Ok(val) = eval_expr(port_expr, const_env) {
+                                const_env.insert(
+                                    crate::compiler::graph::VarId::new(comp_id, key.as_str()),
+                                    val,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            populate_comp_cond_consts(
+                &m.target,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                depth,
+            );
+        }
+        Expr::Binary(b) => {
+            populate_comp_cond_consts(
+                &b.left,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                depth,
+            );
+            populate_comp_cond_consts(
+                &b.right,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                depth,
+            );
+        }
+        Expr::Unary(u) => {
+            populate_comp_cond_consts(
+                &u.operand,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                depth,
+            );
+        }
+        Expr::Paren(inner, _) => {
+            populate_comp_cond_consts(
+                inner,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                depth,
+            );
+        }
+        Expr::Call(c) => {
+            for a in &c.args {
+                populate_comp_cond_consts(
+                    a,
+                    comp_id,
+                    comp_canon,
+                    rewritten_ports,
+                    declared_state_names,
+                    const_env,
+                    tried_ports,
+                    depth,
+                );
+            }
+        }
+        Expr::MethodCall(mc) => {
+            populate_comp_cond_consts(
+                &mc.target,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                depth,
+            );
+            for a in &mc.args {
+                populate_comp_cond_consts(
+                    a,
+                    comp_id,
+                    comp_canon,
+                    rewritten_ports,
+                    declared_state_names,
+                    const_env,
+                    tried_ports,
+                    depth,
+                );
+            }
+        }
+        Expr::Ternary(t) => {
+            populate_comp_cond_consts(
+                &t.condition,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                depth,
+            );
+            populate_comp_cond_consts(
+                &t.then_expr,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                depth,
+            );
+            populate_comp_cond_consts(
+                &t.else_expr,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                depth,
+            );
+        }
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => {}
+    }
+}
+
+fn collect_cond_consts_from_expr<'a>(
+    expr: &'a Expr,
+    comp_id: NodeId,
+    comp_canon: &str,
+    rewritten_ports: &'a HashMap<String, Expr>,
+    declared_state_names: &HashSet<String>,
+    const_env: &mut HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
+    tried_ports: &mut HashSet<&'a str>,
+    has_any_ternary: &mut bool,
+) {
+    match expr {
+        Expr::Ternary(t) => {
+            *has_any_ternary = true;
+            populate_comp_cond_consts(
+                &t.condition,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                0,
+            );
+            collect_cond_consts_from_expr(
+                &t.condition,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                has_any_ternary,
+            );
+            collect_cond_consts_from_expr(
+                &t.then_expr,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                has_any_ternary,
+            );
+            collect_cond_consts_from_expr(
+                &t.else_expr,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                has_any_ternary,
+            );
+        }
+        Expr::Binary(b) => {
+            collect_cond_consts_from_expr(
+                &b.left,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                has_any_ternary,
+            );
+            collect_cond_consts_from_expr(
+                &b.right,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                has_any_ternary,
+            );
+        }
+        Expr::Unary(u) => {
+            collect_cond_consts_from_expr(
+                &u.operand,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                has_any_ternary,
+            );
+        }
+        Expr::Paren(inner, _) => {
+            collect_cond_consts_from_expr(
+                inner,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                has_any_ternary,
+            );
+        }
+        Expr::Call(c) => {
+            for a in &c.args {
+                collect_cond_consts_from_expr(
+                    a,
+                    comp_id,
+                    comp_canon,
+                    rewritten_ports,
+                    declared_state_names,
+                    const_env,
+                    tried_ports,
+                    has_any_ternary,
+                );
+            }
+        }
+        Expr::MethodCall(mc) => {
+            collect_cond_consts_from_expr(
+                &mc.target,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                has_any_ternary,
+            );
+            for a in &mc.args {
+                collect_cond_consts_from_expr(
+                    a,
+                    comp_id,
+                    comp_canon,
+                    rewritten_ports,
+                    declared_state_names,
+                    const_env,
+                    tried_ports,
+                    has_any_ternary,
+                );
+            }
+        }
+        Expr::MemberAccess(m) => {
+            collect_cond_consts_from_expr(
+                &m.target,
+                comp_id,
+                comp_canon,
+                rewritten_ports,
+                declared_state_names,
+                const_env,
+                tried_ports,
+                has_any_ternary,
+            );
+        }
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => {}
+    }
+}
 
 fn collect_agg_members_and_parent_refs(
     expr: &Expr,
@@ -52,32 +407,39 @@ fn collect_agg_members_and_parent_refs(
     }
 }
 
-fn scan_expr_for_parent_or_local_deps(
-    expr: &Expr,
+fn scan_expr_for_parent_or_local_deps<'a>(
+    expr: &'a Expr,
+    parent_id: NodeId,
     parent_canon: &str,
     agg_prefix: &str,
     target_member: &str,
     parent_ports_for_member: &HashSet<String>,
     child_id: NodeId,
-    stack: &mut Vec<(NodeId, String)>,
+    stack: &mut Vec<(NodeId, &'a str)>,
 ) -> bool {
     match expr {
         Expr::MemberAccess(ma) => {
             if let Expr::Ident(id) = ma.target.as_ref() {
-                if id.as_str() == parent_canon {
+                if let Some(target_node_id) = id.node_id() {
+                    if target_node_id == parent_id {
+                        if parent_ports_for_member.contains(ma.member.as_str()) {
+                            return true;
+                        }
+                    } else if target_node_id.0 >= child_id.0 {
+                        stack.push((target_node_id, ma.member.as_str()));
+                    }
+                } else if id.as_str() == parent_canon {
                     if parent_ports_for_member.contains(ma.member.as_str()) {
                         return true;
                     }
-                } else if id.as_str().starts_with(agg_prefix) && ma.member.as_str() == target_member {
+                } else if id.as_str().starts_with(agg_prefix) && ma.member.as_str() == target_member
+                {
                     return true;
-                } else if let Some(target_node_id) = NodeId::from_canonical_name(id.as_str()) {
-                    if target_node_id.0 >= child_id.0 {
-                        stack.push((target_node_id, ma.member.as_str().to_string()));
-                    }
                 }
             }
             scan_expr_for_parent_or_local_deps(
                 &ma.target,
+                parent_id,
                 parent_canon,
                 agg_prefix,
                 target_member,
@@ -89,6 +451,7 @@ fn scan_expr_for_parent_or_local_deps(
         Expr::Call(c) => c.args.iter().any(|a| {
             scan_expr_for_parent_or_local_deps(
                 a,
+                parent_id,
                 parent_canon,
                 agg_prefix,
                 target_member,
@@ -100,6 +463,7 @@ fn scan_expr_for_parent_or_local_deps(
         Expr::MethodCall(mc) => {
             scan_expr_for_parent_or_local_deps(
                 &mc.target,
+                parent_id,
                 parent_canon,
                 agg_prefix,
                 target_member,
@@ -109,6 +473,7 @@ fn scan_expr_for_parent_or_local_deps(
             ) || mc.args.iter().any(|a| {
                 scan_expr_for_parent_or_local_deps(
                     a,
+                    parent_id,
                     parent_canon,
                     agg_prefix,
                     target_member,
@@ -121,6 +486,7 @@ fn scan_expr_for_parent_or_local_deps(
         Expr::Binary(b) => {
             scan_expr_for_parent_or_local_deps(
                 &b.left,
+                parent_id,
                 parent_canon,
                 agg_prefix,
                 target_member,
@@ -129,6 +495,7 @@ fn scan_expr_for_parent_or_local_deps(
                 stack,
             ) || scan_expr_for_parent_or_local_deps(
                 &b.right,
+                parent_id,
                 parent_canon,
                 agg_prefix,
                 target_member,
@@ -139,6 +506,7 @@ fn scan_expr_for_parent_or_local_deps(
         }
         Expr::Unary(u) => scan_expr_for_parent_or_local_deps(
             &u.operand,
+            parent_id,
             parent_canon,
             agg_prefix,
             target_member,
@@ -149,6 +517,7 @@ fn scan_expr_for_parent_or_local_deps(
         Expr::Ternary(t) => {
             scan_expr_for_parent_or_local_deps(
                 &t.condition,
+                parent_id,
                 parent_canon,
                 agg_prefix,
                 target_member,
@@ -157,6 +526,7 @@ fn scan_expr_for_parent_or_local_deps(
                 stack,
             ) || scan_expr_for_parent_or_local_deps(
                 &t.then_expr,
+                parent_id,
                 parent_canon,
                 agg_prefix,
                 target_member,
@@ -165,6 +535,7 @@ fn scan_expr_for_parent_or_local_deps(
                 stack,
             ) || scan_expr_for_parent_or_local_deps(
                 &t.else_expr,
+                parent_id,
                 parent_canon,
                 agg_prefix,
                 target_member,
@@ -175,6 +546,7 @@ fn scan_expr_for_parent_or_local_deps(
         }
         Expr::Paren(inner, _) => scan_expr_for_parent_or_local_deps(
             inner,
+            parent_id,
             parent_canon,
             agg_prefix,
             target_member,
@@ -186,31 +558,31 @@ fn scan_expr_for_parent_or_local_deps(
     }
 }
 
-fn child_port_depends_on_parent(
+fn child_port_depends_on_parent<'a>(
     child_id: NodeId,
-    member: &str,
+    member: &'a str,
     parent_id: NodeId,
     agg_prefix: &str,
     parent_ports_for_member: &HashSet<String>,
-    nodes: &[ExpandedNode],
+    nodes: &'a [ExpandedNode],
 ) -> bool {
     let parent_canon = parent_id.canonical_name();
-    let mut visited: HashSet<(NodeId, String)> = HashSet::new();
-    let mut stack: Vec<(NodeId, String)> = Vec::new();
-    stack.push((child_id, member.to_string()));
+    let mut visited: HashSet<(NodeId, &'a str)> = HashSet::new();
+    let mut stack: Vec<(NodeId, &'a str)> = Vec::new();
+    stack.push((child_id, member));
 
     while let Some((curr_id, curr_port)) = stack.pop() {
-        if !visited.insert((curr_id, curr_port.clone())) {
+        if !visited.insert((curr_id, curr_port)) {
             continue;
         }
         let Some(node) = nodes.get(curr_id.0) else {
             continue;
         };
-        if node.aggregated_ports.contains(&curr_port) {
+        if node.aggregated_ports.contains(curr_port) {
             continue;
         }
         let mut exprs_to_scan = Vec::new();
-        if let Some(e) = node.ports.get(&curr_port) {
+        if let Some(e) = node.ports.get(curr_port) {
             exprs_to_scan.push(e);
         } else if curr_port == "right" {
             if let Some(e) = node.ports.get("x") {
@@ -231,6 +603,7 @@ fn child_port_depends_on_parent(
         for expr in exprs_to_scan {
             if scan_expr_for_parent_or_local_deps(
                 expr,
+                parent_id,
                 &parent_canon,
                 agg_prefix,
                 member,
@@ -282,29 +655,22 @@ fn resolve_and_filter_agg_expr(
                                     unfiltered_args.push(resolved_arg.clone());
 
                                     if allow_filter {
-                                        if let Some(base_parent_ports) = parent_ports_by_member.get(member) {
-                                            if !base_parent_ports.is_empty() {
-                                                let mut parent_ports = base_parent_ports.clone();
-                                                if member == "width" && parent_ports.contains("width") {
-                                                    parent_ports.insert("right".to_string());
-                                                } else if member == "height" && parent_ports.contains("height") {
-                                                    parent_ports.insert("bottom".to_string());
-                                                }
-
-                                                if child_port_depends_on_parent(
+                                        if let Some(parent_ports) = parent_ports_by_member.get(member) {
+                                            if !parent_ports.is_empty()
+                                                && child_port_depends_on_parent(
                                                     child_id,
                                                     member,
                                                     comp_id,
                                                     agg_prefix,
-                                                    &parent_ports,
+                                                    parent_ports,
                                                     nodes,
-                                                ) {
-                                                    had_filtered = true;
-                                                    call_skipped.push(crate::compiler::graph::VarId::new(
-                                                        child_id, member,
-                                                    ));
-                                                    continue;
-                                                }
+                                                )
+                                            {
+                                                had_filtered = true;
+                                                call_skipped.push(crate::compiler::graph::VarId::new(
+                                                    child_id, member,
+                                                ));
+                                                continue;
                                             }
                                         }
                                     }
@@ -566,60 +932,54 @@ fn resolve_and_filter_agg_expr(
     }
 }
 
-fn fold_const_ternaries(
-    expr: &Expr,
+fn fold_const_ternaries_in_place(
+    expr: &mut Expr,
     const_env: &HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
-) -> Expr {
+) {
     match expr {
         Expr::Ternary(t) => {
-            let cond = fold_const_ternaries(&t.condition, const_env);
-            let then_e = fold_const_ternaries(&t.then_expr, const_env);
-            let else_e = fold_const_ternaries(&t.else_expr, const_env);
-            if let Ok(val) = eval_expr(&cond, const_env) {
-                if val.is_truthy() {
-                    return then_e;
+            fold_const_ternaries_in_place(&mut t.condition, const_env);
+            if let Ok(val) = eval_expr(&t.condition, const_env) {
+                let chosen = if val.is_truthy() {
+                    &mut *t.then_expr
                 } else {
-                    return else_e;
-                }
+                    &mut *t.else_expr
+                };
+                fold_const_ternaries_in_place(chosen, const_env);
+                *expr = std::mem::replace(
+                    chosen,
+                    Expr::Literal(Literal::Integer(0, crate::span::Span::default())),
+                );
+            } else {
+                fold_const_ternaries_in_place(&mut t.then_expr, const_env);
+                fold_const_ternaries_in_place(&mut t.else_expr, const_env);
             }
-            Expr::Ternary(TernaryExpr {
-                condition: Box::new(cond),
-                then_expr: Box::new(then_e),
-                else_expr: Box::new(else_e),
-                span: t.span,
-            })
         }
-        Expr::Binary(b) => Expr::Binary(BinaryExpr {
-            op: b.op,
-            left: Box::new(fold_const_ternaries(&b.left, const_env)),
-            right: Box::new(fold_const_ternaries(&b.right, const_env)),
-            span: b.span,
-        }),
-        Expr::Unary(u) => Expr::Unary(UnaryExpr {
-            op: u.op,
-            operand: Box::new(fold_const_ternaries(&u.operand, const_env)),
-            span: u.span,
-        }),
-        Expr::Call(c) => Expr::Call(CallExpr {
-            callee: c.callee.clone(),
-            args: c.args.iter().map(|a| fold_const_ternaries(a, const_env)).collect(),
-            span: c.span,
-        }),
-        Expr::MethodCall(mc) => Expr::MethodCall(MethodCallExpr {
-            target: Box::new(fold_const_ternaries(&mc.target, const_env)),
-            method: mc.method.clone(),
-            args: mc.args.iter().map(|a| fold_const_ternaries(a, const_env)).collect(),
-            span: mc.span,
-        }),
-        Expr::MemberAccess(m) => Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(fold_const_ternaries(&m.target, const_env)),
-            member: m.member.clone(),
-            span: m.span,
-        }),
-        Expr::Paren(inner, span) => {
-            Expr::Paren(Box::new(fold_const_ternaries(inner, const_env)), *span)
+        Expr::Binary(b) => {
+            fold_const_ternaries_in_place(&mut b.left, const_env);
+            fold_const_ternaries_in_place(&mut b.right, const_env);
         }
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => expr.clone(),
+        Expr::Unary(u) => {
+            fold_const_ternaries_in_place(&mut u.operand, const_env);
+        }
+        Expr::Call(c) => {
+            for a in &mut c.args {
+                fold_const_ternaries_in_place(a, const_env);
+            }
+        }
+        Expr::MethodCall(mc) => {
+            fold_const_ternaries_in_place(&mut mc.target, const_env);
+            for a in &mut mc.args {
+                fold_const_ternaries_in_place(a, const_env);
+            }
+        }
+        Expr::MemberAccess(m) => {
+            fold_const_ternaries_in_place(&mut m.target, const_env);
+        }
+        Expr::Paren(inner, _) => {
+            fold_const_ternaries_in_place(inner, const_env);
+        }
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => {}
     }
 }
 
@@ -663,25 +1023,39 @@ pub(super) fn resolve_and_filter_component_aggregations(
     doc: &mut ExpandedDocument,
     start_node_idx: usize,
     start_local_bindings_idx: usize,
+    body_agg_count: u32,
+    total_agg_count: u32,
 ) -> Result<(), CompileError> {
-    let parent_canon = comp_id.canonical_name();
-    let agg_prefix = format!("__agg_child_of_{}_", parent_canon);
-
+    let parent_canon = comp_id.canonical_str();
     let mut const_env: HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value> =
         HashMap::new();
-    for _ in 0..3 {
-        for (port_name, port_expr) in rewritten_ports.iter() {
-            if declared_state_names.contains(port_name) {
-                continue;
-            }
-            if let Ok(val) = eval_expr(port_expr, &const_env) {
-                const_env.insert(crate::compiler::graph::VarId::new(comp_id, port_name), val);
-            }
-        }
-        for expr in rewritten_ports.values_mut() {
-            *expr = fold_const_ternaries(expr, &const_env);
+    let mut has_any_ternary = false;
+    {
+        let mut tried_ports: HashSet<&str> = HashSet::new();
+        for expr in rewritten_ports.values() {
+            collect_cond_consts_from_expr(
+                expr,
+                comp_id,
+                parent_canon.as_ref(),
+                rewritten_ports,
+                declared_state_names,
+                &mut const_env,
+                &mut tried_ports,
+                &mut has_any_ternary,
+            );
         }
     }
+    if has_any_ternary {
+        for expr in rewritten_ports.values_mut() {
+            fold_const_ternaries_in_place(expr, &const_env);
+        }
+    }
+
+    if total_agg_count == 0 {
+        return Ok(());
+    }
+
+    let agg_prefix = format!("__agg_child_of_{}_", parent_canon);
 
     let mut parent_ports_by_member: HashMap<String, HashSet<String>> = HashMap::new();
     let mut port_to_parent_refs: Vec<(String, HashSet<String>)> = Vec::new();
@@ -730,6 +1104,17 @@ pub(super) fn resolve_and_filter_component_aggregations(
         }
     }
 
+    if let Some(w_set) = parent_ports_by_member.get_mut("width") {
+        if w_set.contains("width") {
+            w_set.insert("right".to_string());
+        }
+    }
+    if let Some(h_set) = parent_ports_by_member.get_mut("height") {
+        if h_set.contains("height") {
+            h_set.insert("bottom".to_string());
+        }
+    }
+
     let mut comp_unfiltered_ports = HashMap::new();
     let mut comp_skipped_upstream = HashMap::new();
     for (port_name, expr) in rewritten_ports.iter_mut() {
@@ -760,50 +1145,52 @@ pub(super) fn resolve_and_filter_component_aggregations(
         node.skipped_upstream = comp_skipped_upstream;
     }
 
-    let mut node_updates = Vec::new();
-    for node_idx in start_node_idx..doc.nodes.len() {
-        for (port_name, expr) in &doc.nodes[node_idx].ports {
-            if expr_contains_agg_prefix(expr, &agg_prefix) {
-                let mut skipped_vars = Vec::new();
-                let (filt, unfilt) = resolve_and_filter_agg_expr(
-                    expr,
-                    comp_id,
-                    comp_name,
-                    &agg_prefix,
-                    instantiated_children_ids,
-                    &parent_ports_by_member,
-                    &doc.nodes,
-                    &mut skipped_vars,
-                )?;
-                node_updates.push((node_idx, port_name.clone(), filt, unfilt, skipped_vars));
+    if body_agg_count > 0 {
+        let mut node_updates = Vec::new();
+        for node_idx in start_node_idx..doc.nodes.len() {
+            for (port_name, expr) in &doc.nodes[node_idx].ports {
+                if expr_contains_agg_prefix(expr, &agg_prefix) {
+                    let mut skipped_vars = Vec::new();
+                    let (filt, unfilt) = resolve_and_filter_agg_expr(
+                        expr,
+                        comp_id,
+                        comp_name,
+                        &agg_prefix,
+                        instantiated_children_ids,
+                        &parent_ports_by_member,
+                        &doc.nodes,
+                        &mut skipped_vars,
+                    )?;
+                    node_updates.push((node_idx, port_name.clone(), filt, unfilt, skipped_vars));
+                }
             }
         }
-    }
-    for (node_idx, port_name, filt, unfilt, skipped_vars) in node_updates {
-        let node = &mut doc.nodes[node_idx];
-        node.ports.insert(port_name.clone(), filt);
-        if !skipped_vars.is_empty() {
-            node.unfiltered_ports.insert(port_name.clone(), unfilt);
-            node.skipped_upstream.insert(port_name, skipped_vars);
+        for (node_idx, port_name, filt, unfilt, skipped_vars) in node_updates {
+            let node = &mut doc.nodes[node_idx];
+            node.ports.insert(port_name.clone(), filt);
+            if !skipped_vars.is_empty() {
+                node.unfiltered_ports.insert(port_name.clone(), unfilt);
+                node.skipped_upstream.insert(port_name, skipped_vars);
+            }
         }
-    }
 
-    for binding_idx in start_local_bindings_idx..doc.local_bindings.len() {
-        if !expr_contains_agg_prefix(&doc.local_bindings[binding_idx].0, &agg_prefix) {
-            continue;
+        for binding_idx in start_local_bindings_idx..doc.local_bindings.len() {
+            if !expr_contains_agg_prefix(&doc.local_bindings[binding_idx].0, &agg_prefix) {
+                continue;
+            }
+            let mut skipped_vars = Vec::new();
+            let (filt, _) = resolve_and_filter_agg_expr(
+                &doc.local_bindings[binding_idx].0,
+                comp_id,
+                comp_name,
+                &agg_prefix,
+                instantiated_children_ids,
+                &parent_ports_by_member,
+                &doc.nodes,
+                &mut skipped_vars,
+            )?;
+            doc.local_bindings[binding_idx].0 = filt;
         }
-        let mut skipped_vars = Vec::new();
-        let (filt, _) = resolve_and_filter_agg_expr(
-            &doc.local_bindings[binding_idx].0,
-            comp_id,
-            comp_name,
-            &agg_prefix,
-            instantiated_children_ids,
-            &parent_ports_by_member,
-            &doc.nodes,
-            &mut skipped_vars,
-        )?;
-        doc.local_bindings[binding_idx].0 = filt;
     }
 
     Ok(())

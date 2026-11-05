@@ -99,9 +99,12 @@ pub(super) fn resolve_forward_scope_refs(
     }
 }
 
-fn expr_has_scope_ref(expr: &Expr, scope: &HashMap<String, LexicalBinding>) -> bool {
+pub(super) fn expr_has_scope_ref(expr: &Expr, scope: &HashMap<String, LexicalBinding>) -> bool {
     match expr {
-        Expr::Ident(id) => scope.contains_key(id.as_str()),
+        Expr::Ident(id) => {
+            let s = id.as_str();
+            !s.starts_with("__node_") && s != "window" && scope.contains_key(s)
+        }
         Expr::MemberAccess(m) => expr_has_scope_ref(&m.target, scope),
         Expr::Binary(b) => expr_has_scope_ref(&b.left, scope) || expr_has_scope_ref(&b.right, scope),
         Expr::Unary(u) => expr_has_scope_ref(&u.operand, scope),
@@ -165,7 +168,7 @@ pub(super) fn try_preresolve_expr_binding(
 }
 
 /// Evaluates sibling existence conditions (`prev`, `next`, `!prev`, `!next`, `&&`, `||`) at expansion time.
-fn populate_const_env_for_cond(
+pub(super) fn populate_const_env_for_cond(
     expr: &Expr,
     cond_ctx: &ScopeContext<'_>,
     const_env: &mut HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
@@ -586,12 +589,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
 
             let target_ident_name = match m.target.as_ref() {
-                Expr::Ident(id) => Some(id.as_str().to_string()),
+                Expr::Ident(id) => Some(id.as_str()),
                 _ => None,
             };
 
             // Enum variant access and children.len
-            if let Some(target_name) = &target_ident_name {
+            if let Some(target_name) = target_ident_name {
                 if target_name == "children" {
                     if m.member.as_str() == "len" {
                         return Ok(Expr::Literal(Literal::Integer(
@@ -612,13 +615,13 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     let variant_name = m.member.as_str();
                     if enum_def.has_variant(variant_name) {
                         return Ok(Expr::Literal(Literal::Enum(
-                            target_name.clone(),
+                            target_name.to_string(),
                             variant_name.to_string(),
                             m.span,
                         )));
                     } else {
                         return Err(CompileError::UnknownEnumVariant {
-                            enum_name: target_name.clone(),
+                            enum_name: target_name.to_string(),
                             variant: variant_name.to_string(),
                             span: m.member.span,
                         });
@@ -626,7 +629,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
             }
 
-            if target_ident_name.as_deref() == Some("env") {
+            if target_ident_name == Some("env") {
                 let member_name = m.member.as_str();
                 return match ctx.env_scope.get(member_name) {
                     Some(EnvEntry::Bound(expr)) => Ok(expr.clone()),
@@ -642,7 +645,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
 
             // Resolve target (parent, window, prev, next, self, child, or named node in lexical scope)
-            let resolved_target = if let Some(target_name) = &target_ident_name {
+            let resolved_target = if let Some(target_name) = target_ident_name {
                 if target_name == "self" {
                     if ctx.is_event_port {
                         if let Some(shadowed) = ctx.shadowed_ports {
@@ -655,15 +658,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             }
                         }
                         let target_node_id = ctx.enclosing_component.unwrap_or(ctx.current_node);
-                        Expr::Ident(Ident::new(
-                            target_node_id.canonical_name(),
-                            m.target.span(),
-                        ))
+                        Expr::Ident(Ident::from_node(target_node_id, m.target.span()))
                     } else if let (Some(comp_id), Some(shadowed)) =
                         (ctx.enclosing_component, ctx.shadowed_ports)
                     {
                         if shadowed.contains(m.member.as_str()) {
-                            Expr::Ident(Ident::new(comp_id.canonical_name(), m.target.span()))
+                            Expr::Ident(Ident::from_node(comp_id, m.target.span()))
                         } else {
                             return Err(CompileError::Custom {
                                 message: format!(
@@ -684,7 +684,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     }
                 } else if target_name == "child" {
                     if let Some(cid) = ctx.child_node {
-                        Expr::Ident(Ident::new(cid.canonical_name(), m.target.span()))
+                        Expr::Ident(Ident::from_node(cid, m.target.span()))
                     } else {
                         return Err(CompileError::Custom {
                             message: "'child' can only be used inside a '\\Children(...)' block"
@@ -695,12 +695,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 } else if let Some(LexicalBinding::Node(node_id)) =
                     ctx.lexical_scope.get(target_name)
                 {
-                    Expr::Ident(Ident::new(node_id.canonical_name(), m.target.span()))
+                    Expr::Ident(Ident::from_node(*node_id, m.target.span()))
                 } else if target_name == "parent" {
                     if let Some(parent) = ctx.parent_node {
                         if m.member.as_str() != "parent"
                             && !ctx.parent_ports.is_empty()
-                            && !ctx.parent_ports.contains(&m.member.as_str().to_string())
+                            && !ctx.parent_ports.iter().any(|p| p == m.member.as_str())
                         {
                             let parent_name = ctx.parent_name.unwrap_or("unknown");
                             return Err(CompileError::Custom {
@@ -711,18 +711,15 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                                 span: m.span,
                             });
                         }
-                        Expr::Ident(Ident::new(parent.canonical_name(), m.target.span()))
+                        Expr::Ident(Ident::from_node(parent, m.target.span()))
                     } else {
                         rewrite_expr(&m.target, ctx)?
                     }
                 } else if target_name == "window" {
-                    Expr::Ident(Ident::new(
-                        NodeId::WINDOW.canonical_name(),
-                        m.target.span(),
-                    ))
+                    Expr::Ident(Ident::from_node(NodeId::WINDOW, m.target.span()))
                 } else if target_name == "prev" {
                     if let Some(prev) = ctx.prev_sibling {
-                        Expr::Ident(Ident::new(prev.canonical_name(), m.target.span()))
+                        Expr::Ident(Ident::from_node(prev, m.target.span()))
                     } else {
                         rewrite_expr(&m.target, ctx)?
                     }
@@ -858,6 +855,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             had_children = true;
                             children_member = Some(m.member.as_str().to_string());
                             if let Some(comp_id) = ctx.enclosing_component {
+                                if ctx.num_children > 0 {
+                                    super::aggregation::record_agg_emitted(comp_id);
+                                }
                                 for idx in 0..ctx.num_children {
                                     let target_name = format!(
                                         "__agg_child_of_{}_{}",

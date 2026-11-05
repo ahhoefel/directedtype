@@ -92,6 +92,70 @@ impl PortTable {
     }
 }
 
+/// Bitset tracking port presence over a `PortTable`, with a small overflow list for dynamic ports (`on_*`).
+#[derive(Debug, Clone, Default)]
+pub struct PortMask {
+    bits_lo: u64,
+    bits_hi: u64,
+    overflow: Vec<String>,
+}
+
+impl PortMask {
+    #[inline]
+    pub fn insert(&mut self, table: &PortTable, name: &str) {
+        if let Some(slot) = table.slot_of(name) {
+            let idx = slot.0 as u32;
+            if idx < 64 {
+                self.bits_lo |= 1u64 << idx;
+                return;
+            } else if idx < 128 {
+                self.bits_hi |= 1u64 << (idx - 64);
+                return;
+            }
+        }
+        if !self.overflow.iter().any(|s| s == name) {
+            self.overflow.push(name.to_string());
+        }
+    }
+
+    #[inline]
+    pub fn contains(&self, table: &PortTable, name: &str) -> bool {
+        if let Some(slot) = table.slot_of(name) {
+            let idx = slot.0 as u32;
+            if idx < 64 {
+                return (self.bits_lo & (1u64 << idx)) != 0;
+            } else if idx < 128 {
+                return (self.bits_hi & (1u64 << (idx - 64))) != 0;
+            }
+        }
+        self.overflow.iter().any(|s| s == name)
+    }
+}
+
+fn expr_references_any_name(expr: &Expr, names: &HashSet<String>) -> bool {
+    match expr {
+        Expr::Ident(id) => names.contains(id.as_str()),
+        Expr::MemberAccess(m) => expr_references_any_name(&m.target, names),
+        Expr::Binary(b) => {
+            expr_references_any_name(&b.left, names) || expr_references_any_name(&b.right, names)
+        }
+        Expr::Unary(u) => expr_references_any_name(&u.operand, names),
+        Expr::Ternary(t) => {
+            expr_references_any_name(&t.condition, names)
+                || expr_references_any_name(&t.then_expr, names)
+                || expr_references_any_name(&t.else_expr, names)
+        }
+        Expr::Paren(inner, _) => expr_references_any_name(inner, names),
+        Expr::Call(c) => c.args.iter().any(|a| expr_references_any_name(a, names)),
+        Expr::MethodCall(mc) => {
+            expr_references_any_name(&mc.target, names)
+                || mc.args.iter().any(|a| expr_references_any_name(a, names))
+        }
+        Expr::Node(n) => n.ports.iter().any(|p| expr_references_any_name(&p.expr, names)),
+        Expr::Literal(_) => false,
+    }
+}
+
 /// Pre-validated schema of a `ComponentDef`'s ports, aliases, state, let bindings, and env bindings.
 #[derive(Debug, Clone)]
 pub struct ComponentSchema {
@@ -103,9 +167,11 @@ pub struct ComponentSchema {
     pub env_param_names: HashSet<String>,
     pub overload_params: Vec<String>,
     pub comp_scope_ports: Vec<String>,
+    pub internal_scope_ports: Vec<String>,
     pub declared_aliases: HashMap<String, AliasBinding>,
     pub declared_states: HashMap<String, StateBinding>,
     pub declared_state_names: HashSet<String>,
+    pub enum_state_bindings: Vec<(String, StateBinding)>,
     pub all_lets: Vec<LetBinding>,
     pub declared_lets: HashMap<String, LetBinding>,
     pub all_let_names: HashSet<String>,
@@ -117,6 +183,10 @@ pub struct ComponentSchema {
     pub static_port_types: HashMap<String, String>,
     pub state_var_types: HashMap<String, Option<String>>,
     pub env_var_types: HashMap<String, Option<String>>,
+    pub base_comp_ports: HashMap<String, Expr>,
+    pub base_already_rewritten_ports: PortMask,
+    pub base_authored_ports: HashMap<String, Expr>,
+    pub has_interdependent_lets_or_envs: bool,
     pub has_assertions: bool,
     is_single_text_context: OnceLock<bool>,
 }
@@ -432,18 +502,211 @@ impl ComponentSchema {
             })
             .collect();
 
-        let mut port_table = PortTable::new();
-        for p in &comp_scope_ports {
-            port_table.get_or_insert(p);
+        let has_static_port = |k: &str| {
+            param_names.contains(k)
+                || declared_states.contains_key(k)
+                || declared_lets.contains_key(k)
+                || declared_envs.contains_key(k)
+                || declared_aliases.contains_key(k)
+        };
+        if has_static_port("x") && !comp_scope_ports.iter().any(|p| p == "left") {
+            comp_scope_ports.push("left".to_string());
+            static_port_types
+                .entry("left".to_string())
+                .or_insert_with(|| "Distance".to_string());
         }
+        if has_static_port("y") && !comp_scope_ports.iter().any(|p| p == "top") {
+            comp_scope_ports.push("top".to_string());
+            static_port_types
+                .entry("top".to_string())
+                .or_insert_with(|| "Distance".to_string());
+        }
+        if (has_static_port("x") || has_static_port("left"))
+            && has_static_port("width")
+            && !comp_scope_ports.iter().any(|p| p == "right")
+        {
+            comp_scope_ports.push("right".to_string());
+            static_port_types
+                .entry("right".to_string())
+                .or_insert_with(|| "Distance".to_string());
+        }
+        if (has_static_port("y") || has_static_port("top"))
+            && has_static_port("height")
+            && !comp_scope_ports.iter().any(|p| p == "bottom")
+        {
+            comp_scope_ports.push("bottom".to_string());
+            static_port_types
+                .entry("bottom".to_string())
+                .or_insert_with(|| "Distance".to_string());
+        }
+
+        let mut internal_scope_ports = comp_scope_ports.clone();
         for let_name in declared_lets.keys() {
-            if !comp_shadowed_ports.contains(let_name) {
-                port_table.get_or_insert(let_name);
+            if !internal_scope_ports.contains(let_name) {
+                internal_scope_ports.push(let_name.clone());
             }
+        }
+
+        let mut port_table = PortTable::new();
+        for p in &internal_scope_ports {
+            port_table.get_or_insert(p);
         }
         for sp in ["left", "top", "right", "bottom"] {
             port_table.get_or_insert(sp);
         }
+
+        let is_non_unit_literal = |expr: &Expr| -> bool {
+            matches!(
+                expr,
+                Expr::Literal(lit)
+                    if !matches!(
+                        lit,
+                        Literal::Distance(_, DistanceUnit::Pt | DistanceUnit::Em, _)
+                    )
+            )
+        };
+
+        let empty_enums = HashMap::new();
+        let mut base_comp_ports = HashMap::with_capacity(
+            declared_states.len() + declared_lets.len() + declared_envs.len() + comp_def.params.len() + 4,
+        );
+        let mut base_already_rewritten_ports = PortMask::default();
+        let mut enum_state_bindings = Vec::new();
+        for (state_name, s) in &declared_states {
+            let needs_enum_lookup = s.default.is_none()
+                && s.type_annotation.as_ref().is_some_and(|t| {
+                    !matches!(
+                        t.name.as_str(),
+                        "Boolean"
+                            | "String"
+                            | "Color"
+                            | "Float"
+                            | "Integer"
+                            | "Distance"
+                            | "Area"
+                            | "Duration"
+                            | "Handler"
+                            | "Timer"
+                            | "IndefiniteTimer"
+                    )
+                });
+            if needs_enum_lookup {
+                enum_state_bindings.push((state_name.clone(), s.clone()));
+            } else {
+                let mut default_expr =
+                    super::rewrite::default_expr_for_state_with_enums(s, &empty_enums);
+                let is_handler = state_name.starts_with("on_")
+                    || handler_param_names.contains(state_name)
+                    || s.type_annotation
+                        .as_ref()
+                        .is_some_and(|t| t.name.as_str() == "Handler");
+                if !is_handler && is_non_unit_literal(&default_expr) {
+                    default_expr = super::typecheck::coerce_typed_binding_expr(
+                        default_expr,
+                        s.type_annotation.as_ref(),
+                    );
+                    base_already_rewritten_ports.insert(&port_table, state_name);
+                }
+                base_comp_ports.insert(state_name.clone(), default_expr);
+            }
+        }
+        for (let_name, l) in &declared_lets {
+            if !comp_shadowed_ports.contains(let_name) {
+                if let Some(LetValue::Expr(raw_expr)) = &l.value {
+                    let mut expr = raw_expr.clone();
+                    let is_handler = let_name.starts_with("on_")
+                        || handler_param_names.contains(let_name)
+                        || l.type_annotation
+                            .as_ref()
+                            .is_some_and(|t| t.name.as_str() == "Handler");
+                    if !is_handler && is_non_unit_literal(&expr) {
+                        expr = super::typecheck::coerce_typed_binding_expr(
+                            expr,
+                            l.type_annotation.as_ref(),
+                        );
+                        base_already_rewritten_ports.insert(&port_table, let_name);
+                    }
+                    base_comp_ports.insert(let_name.clone(), expr);
+                }
+            }
+        }
+        for (env_name, e) in &declared_envs {
+            if !comp_shadowed_ports.contains(env_name) {
+                if let Some(raw_expr) = &e.value {
+                    if !matches!(
+                        raw_expr,
+                        Expr::Node(elem) if !super::is_value_node_name(elem.name.as_str())
+                    ) {
+                        let mut expr = raw_expr.clone();
+                        let is_handler = env_name.starts_with("on_")
+                            || handler_param_names.contains(env_name)
+                            || e.type_annotation
+                                .as_ref()
+                                .is_some_and(|t| t.name.as_str() == "Handler");
+                        if !is_handler && is_non_unit_literal(&expr) {
+                            expr = super::typecheck::coerce_typed_binding_expr(
+                                expr,
+                                e.type_annotation.as_ref(),
+                            );
+                            base_already_rewritten_ports.insert(&port_table, env_name);
+                        }
+                        base_comp_ports.insert(env_name.clone(), expr);
+                    }
+                }
+            }
+        }
+
+        let mut base_authored_ports = HashMap::with_capacity(
+            comp_def.params.len()
+                + declared_states.len()
+                + declared_lets.len()
+                + declared_envs.len()
+                + declared_aliases.len()
+                + 4,
+        );
+        for param in &comp_def.params {
+            if let Some(default_expr) = &param.default_edge {
+                base_authored_ports
+                    .entry(param.name.as_str().to_string())
+                    .or_insert_with(|| default_expr.clone());
+            }
+        }
+        for (state_name, s) in &declared_states {
+            let default_expr = super::rewrite::default_expr_for_state_with_enums(s, &empty_enums);
+            base_authored_ports.insert(state_name.clone(), default_expr);
+        }
+        for (let_name, l) in &declared_lets {
+            if !comp_shadowed_ports.contains(let_name) {
+                if let Some(LetValue::Expr(raw_expr)) = &l.value {
+                    base_authored_ports.insert(let_name.clone(), raw_expr.clone());
+                }
+            }
+        }
+        for (env_name, e) in &declared_envs {
+            if let Some(raw_expr) = &e.value {
+                base_authored_ports.insert(env_name.clone(), raw_expr.clone());
+            }
+        }
+        for (alias_name, alias_binding) in &declared_aliases {
+            base_authored_ports.insert(alias_name.clone(), alias_binding.value.clone());
+        }
+
+        let mut preresolve_names: HashSet<String> = HashSet::new();
+        for l in &shadowed_expr_lets {
+            preresolve_names.insert(l.name.as_str().to_string());
+        }
+        for e in &all_envs {
+            preresolve_names.insert(e.name.as_str().to_string());
+        }
+        let has_interdependent_lets_or_envs = if preresolve_names.len() <= 1 {
+            false
+        } else {
+            shadowed_expr_lets.iter().any(|l| {
+                matches!(&l.value, Some(LetValue::Expr(expr)) if expr_references_any_name(expr, &preresolve_names))
+            }) || all_envs.iter().any(|e| {
+                matches!(&e.value, Some(expr) if expr_references_any_name(expr, &preresolve_names))
+            })
+        };
 
         Ok(Self {
             is_span_def,
@@ -454,9 +717,11 @@ impl ComponentSchema {
             env_param_names,
             overload_params,
             comp_scope_ports,
+            internal_scope_ports,
             declared_aliases,
             declared_states,
             declared_state_names,
+            enum_state_bindings,
             all_lets,
             declared_lets,
             all_let_names,
@@ -468,6 +733,10 @@ impl ComponentSchema {
             static_port_types,
             state_var_types,
             env_var_types,
+            base_comp_ports,
+            base_already_rewritten_ports,
+            base_authored_ports,
+            has_interdependent_lets_or_envs,
             has_assertions,
             is_single_text_context: OnceLock::new(),
         })

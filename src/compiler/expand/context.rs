@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 /// A lexical binding in the component or document scope.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LexicalBinding {
     Expr(Expr),
     State(Expr),

@@ -4,7 +4,9 @@ use crate::ast::{
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::eval::eval_expr;
-use crate::compiler::expand::aggregation::resolve_and_filter_component_aggregations;
+use crate::compiler::expand::aggregation::{
+    get_agg_emitted_count, reset_agg_emitted_count, resolve_and_filter_component_aggregations,
+};
 use crate::compiler::expand::builtins::clip::default_inherited_clip_expr;
 use crate::compiler::expand::builtins::{eval_assert_directive, insert_default_spatial_aliases};
 use crate::compiler::expand::children::{
@@ -16,10 +18,11 @@ use crate::compiler::expand::context::{
 };
 use crate::compiler::expand::expand_element;
 use crate::compiler::expand::rewrite::{
-    default_expr_for_state_with_enums, extract_event_binding, resolve_forward_refs_in_range,
-    resolve_forward_scope_refs, rewrite_expr, try_preresolve_expr_binding,
+    default_expr_for_state_with_enums, expr_has_scope_ref, extract_event_binding,
+    populate_const_env_for_cond, resolve_forward_refs_in_range, resolve_forward_scope_refs,
+    rewrite_expr, try_preresolve_expr_binding,
 };
-use crate::compiler::expand::schema::ComponentSchema;
+use crate::compiler::expand::schema::{ComponentSchema, PortMask};
 use crate::compiler::expand::text_flow::{
     finalize_inline_box_component_ports, finalize_span_component_ports,
 };
@@ -30,7 +33,7 @@ use crate::compiler::expand::typecheck::{
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::text::{InlineBoxSpan, TextSpan};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Stateful orchestrator for expanding a single user-defined component instance.
 struct ComponentExpander<'a> {
@@ -44,18 +47,21 @@ struct ComponentExpander<'a> {
     node_fonts: &'a mut HashMap<NodeId, NodeId>,
 
     schema: &'a ComponentSchema,
-    comp_scope_ports: Vec<String>,
+    comp_scope_ports: std::borrow::Cow<'a, [String]>,
     is_single_text_context: bool,
     comp_ports: HashMap<String, Expr>,
     explicit_unlowered_ports: HashMap<String, Expr>,
-    already_rewritten_ports: HashSet<String>,
+    already_rewritten_ports: PortMask,
     default_self_handlers: HashMap<String, crate::component::EventHandlerBinding>,
     instantiated_children_ids: &'a RefCell<Vec<NodeId>>,
     num_consumer_children: usize,
-    internal_scope_ports: Vec<String>,
+    internal_scope_ports: std::borrow::Cow<'a, [String]>,
 
     consumer_child_entries: Vec<ConsumerChildEntry<'a>>,
     local_scope: RefCell<HashMap<String, LexicalBinding>>,
+    init_scope_len: usize,
+    scope_mutated_in_body: bool,
+    body_agg_count: u32,
     internal_body_env_scope: HashMap<String, EnvEntry>,
     children_env_scope: HashMap<String, EnvEntry>,
     all_children_ids: Vec<NodeId>,
@@ -82,6 +88,7 @@ impl<'a> ComponentExpander<'a> {
     ) -> Result<Self, CompileError> {
         let schema = ComponentSchema::for_def(comp_def)?;
         schema.validate_caller_ports(comp_def, instance)?;
+        reset_agg_emitted_count(ctx.comp_node_id);
         let is_single_text_context = schema.is_single_text_context(comp_def, registry);
         if schema.is_span_def {
             doc.get_node_mut(ctx.comp_node_id).unwrap().is_span = true;
@@ -90,29 +97,12 @@ impl<'a> ComponentExpander<'a> {
             doc.get_node_mut(ctx.comp_node_id).unwrap().is_inline_box = true;
         }
 
-        let mut comp_ports = HashMap::new();
-        for (state_name, s) in &schema.declared_states {
+        let mut comp_ports = schema.base_comp_ports.clone();
+        let mut already_rewritten_ports = schema.base_already_rewritten_ports.clone();
+        for (state_name, s) in &schema.enum_state_bindings {
             let default_expr = default_expr_for_state_with_enums(s, ctx.enums);
+            already_rewritten_ports.insert(&schema.port_table, state_name);
             comp_ports.insert(state_name.clone(), default_expr);
-        }
-        for (let_name, l) in &schema.declared_lets {
-            if !schema.comp_shadowed_ports.contains(let_name) {
-                if let Some(LetValue::Expr(raw_expr)) = &l.value {
-                    comp_ports.insert(let_name.clone(), raw_expr.clone());
-                }
-            }
-        }
-        for (env_name, e) in &schema.declared_envs {
-            if !schema.comp_shadowed_ports.contains(env_name) {
-                if let Some(raw_expr) = &e.value {
-                    if !matches!(
-                        raw_expr,
-                        Expr::Node(elem) if !super::is_value_node_name(elem.name.as_str())
-                    ) {
-                        comp_ports.insert(env_name.clone(), raw_expr.clone());
-                    }
-                }
-            }
         }
 
         let num_consumer_children = count_consumer_children(
@@ -121,7 +111,6 @@ impl<'a> ComponentExpander<'a> {
             ctx.consumer_children.map_or(0, |c| c.len()),
             registry,
         );
-        let comp_scope_ports = schema.comp_scope_ports.clone();
 
         Ok(Self {
             ctx,
@@ -133,17 +122,20 @@ impl<'a> ComponentExpander<'a> {
             caller_env_scope,
             node_fonts,
             schema,
-            comp_scope_ports,
+            comp_scope_ports: std::borrow::Cow::Borrowed(&schema.comp_scope_ports),
             is_single_text_context,
             comp_ports,
-            explicit_unlowered_ports: HashMap::new(),
-            already_rewritten_ports: HashSet::new(),
+            explicit_unlowered_ports: HashMap::with_capacity(instance.ports.len()),
+            already_rewritten_ports,
             default_self_handlers: HashMap::new(),
             instantiated_children_ids,
             num_consumer_children,
-            internal_scope_ports: Vec::new(),
+            internal_scope_ports: std::borrow::Cow::Borrowed(&schema.internal_scope_ports),
             consumer_child_entries: Vec::new(),
             local_scope: RefCell::new(HashMap::new()),
+            init_scope_len: 0,
+            scope_mutated_in_body: false,
+            body_agg_count: 0,
             internal_body_env_scope: HashMap::new(),
             children_env_scope: HashMap::new(),
             all_children_ids: Vec::new(),
@@ -348,7 +340,8 @@ impl<'a> ComponentExpander<'a> {
                 } else {
                     Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span))
                 };
-                self.already_rewritten_ports.insert(port_name.to_string());
+                self.already_rewritten_ports
+                    .insert(&self.schema.port_table, port_name);
                 self.comp_ports.insert(port_name.to_string(), default_expr);
             }
         }
@@ -418,13 +411,15 @@ impl<'a> ComponentExpander<'a> {
 
             // Tier 4: Explicit caller argument
             if let Some(explicit_expr) = explicit_ports.remove(&name) {
-                self.already_rewritten_ports.insert(name.clone());
+                self.already_rewritten_ports
+                    .insert(&self.schema.port_table, &name);
                 self.comp_ports.insert(name, explicit_expr);
             }
             // Tier 2: Lexical Environment (caller_env_scope) - only for env parameters
             else if param.is_env {
                 if let Some(EnvEntry::Bound(env_expr)) = self.caller_env_scope.get(&name) {
-                    self.already_rewritten_ports.insert(name.clone());
+                    self.already_rewritten_ports
+                        .insert(&self.schema.port_table, &name);
                     self.comp_ports.insert(name, env_expr.clone());
                 } else if let Some(default_expr) = &param.default_edge {
                     let resolved = self.resolve_param_default_expr(&name, default_expr)?;
@@ -462,9 +457,10 @@ impl<'a> ComponentExpander<'a> {
                 });
             }
             if !self.comp_scope_ports.contains(&name) {
-                self.comp_scope_ports.push(name.clone());
+                self.comp_scope_ports.to_mut().push(name.clone());
             }
-            self.already_rewritten_ports.insert(name.clone());
+            self.already_rewritten_ports
+                .insert(&self.schema.port_table, &name);
             self.comp_ports.insert(name, expr);
         }
 
@@ -472,26 +468,28 @@ impl<'a> ComponentExpander<'a> {
             self.apply_inline_box_origin_defaults(parent_is_text_or_span);
         }
 
-        let has_port_or_alias = |k: &str| {
-            self.comp_ports.contains_key(k) || self.schema.declared_aliases.contains_key(k)
-        };
-        if has_port_or_alias("x") && !self.comp_scope_ports.contains(&"left".to_string()) {
-            self.comp_scope_ports.push("left".to_string());
-        }
-        if has_port_or_alias("y") && !self.comp_scope_ports.contains(&"top".to_string()) {
-            self.comp_scope_ports.push("top".to_string());
-        }
-        if (has_port_or_alias("x") || has_port_or_alias("left"))
-            && has_port_or_alias("width")
-            && !self.comp_scope_ports.contains(&"right".to_string())
-        {
-            self.comp_scope_ports.push("right".to_string());
-        }
-        if (has_port_or_alias("y") || has_port_or_alias("top"))
-            && has_port_or_alias("height")
-            && !self.comp_scope_ports.contains(&"bottom".to_string())
-        {
-            self.comp_scope_ports.push("bottom".to_string());
+        if matches!(self.comp_scope_ports, std::borrow::Cow::Owned(_)) {
+            let has_port_or_alias = |k: &str| {
+                self.comp_ports.contains_key(k) || self.schema.declared_aliases.contains_key(k)
+            };
+            if has_port_or_alias("x") && !self.comp_scope_ports.iter().any(|p| p == "left") {
+                self.comp_scope_ports.to_mut().push("left".to_string());
+            }
+            if has_port_or_alias("y") && !self.comp_scope_ports.iter().any(|p| p == "top") {
+                self.comp_scope_ports.to_mut().push("top".to_string());
+            }
+            if (has_port_or_alias("x") || has_port_or_alias("left"))
+                && has_port_or_alias("width")
+                && !self.comp_scope_ports.iter().any(|p| p == "right")
+            {
+                self.comp_scope_ports.to_mut().push("right".to_string());
+            }
+            if (has_port_or_alias("y") || has_port_or_alias("top"))
+                && has_port_or_alias("height")
+                && !self.comp_scope_ports.iter().any(|p| p == "bottom")
+            {
+                self.comp_scope_ports.to_mut().push("bottom".to_string());
+            }
         }
 
         self.record_resolved_component_font();
@@ -503,7 +501,8 @@ impl<'a> ComponentExpander<'a> {
                 self.caller_env_scope,
                 self.instance.span,
             );
-            self.already_rewritten_ports.insert("clip".to_string());
+            self.already_rewritten_ports
+                .insert(&self.schema.port_table, "clip");
             self.comp_ports.insert("clip".to_string(), default_clip);
         }
 
@@ -518,11 +517,14 @@ impl<'a> ComponentExpander<'a> {
             }
         }
 
-        self.internal_scope_ports = self.comp_scope_ports.clone();
-        for let_name in self.schema.declared_lets.keys() {
-            if !self.internal_scope_ports.contains(let_name) {
-                self.internal_scope_ports.push(let_name.clone());
+        if let std::borrow::Cow::Owned(ref scope_ports) = self.comp_scope_ports {
+            let mut internal = scope_ports.clone();
+            for let_name in self.schema.declared_lets.keys() {
+                if !internal.contains(let_name) {
+                    internal.push(let_name.clone());
+                }
             }
+            self.internal_scope_ports = std::borrow::Cow::Owned(internal);
         }
 
         Ok(())
@@ -558,22 +560,25 @@ impl<'a> ComponentExpander<'a> {
         let empty_children: [NodeId; 0] = [];
 
         let mut local_scope: HashMap<String, LexicalBinding> = self.lexical_scope.borrow().clone();
-        let mut populated_comp_ports: HashSet<String> = HashSet::new();
+        local_scope.reserve(
+            self.comp_scope_ports.len() + self.schema.all_lets.len() + self.schema.all_envs.len(),
+        );
+        let mut populated_mask = PortMask::default();
         for param in &comp_def.params {
-            let name = param.name.as_str().to_string();
-            populated_comp_ports.insert(name.clone());
-            let is_handler_param = self.schema.handler_param_names.contains(&name);
+            let name = param.name.as_str();
+            populated_mask.insert(&self.schema.port_table, name);
+            let is_handler_param = self.schema.handler_param_names.contains(name);
             if name.starts_with("on_") || is_handler_param {
                 continue;
             }
-            if let Some(Expr::Ident(id)) = self.comp_ports.get(&name) {
+            if let Some(Expr::Ident(id)) = self.comp_ports.get(name) {
                 if let Some(node_id) = NodeId::from_canonical_name(id.as_str()) {
-                    local_scope.insert(name.clone(), LexicalBinding::Node(node_id));
+                    local_scope.insert(name.to_string(), LexicalBinding::Node(node_id));
                     continue;
                 }
             }
             local_scope.insert(
-                name.clone(),
+                name.to_string(),
                 LexicalBinding::Expr(Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::from_node(
                         ctx.comp_node_id,
@@ -586,7 +591,7 @@ impl<'a> ComponentExpander<'a> {
         }
         for (let_name, let_binding) in &self.schema.declared_lets {
             if !self.schema.comp_shadowed_ports.contains(let_name) {
-                populated_comp_ports.insert(let_name.clone());
+                populated_mask.insert(&self.schema.port_table, let_name);
                 local_scope.insert(
                     let_name.clone(),
                     LexicalBinding::Expr(Expr::MemberAccess(MemberAccessExpr {
@@ -600,8 +605,8 @@ impl<'a> ComponentExpander<'a> {
                 );
             }
         }
-        for port_name in &self.comp_scope_ports {
-            if !populated_comp_ports.contains(port_name) {
+        for port_name in self.comp_scope_ports.iter() {
+            if !populated_mask.contains(&self.schema.port_table, port_name) {
                 let member_expr = Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::from_node(
                         ctx.comp_node_id,
@@ -619,10 +624,10 @@ impl<'a> ComponentExpander<'a> {
             }
         }
         for param in &comp_def.params {
-            let name = param.name.as_str().to_string();
-            let is_handler_param = self.schema.handler_param_names.contains(&name);
+            let name = param.name.as_str();
+            let is_handler_param = self.schema.handler_param_names.contains(name);
             if name.starts_with("on_") || is_handler_param {
-                if let Some(expr) = self.comp_ports.get(&name).cloned() {
+                if let Some(expr) = self.comp_ports.get(name).cloned() {
                     let event_default_ctx = ScopeContext::from_instance(
                         ctx,
                         &self.doc.nodes,
@@ -639,18 +644,22 @@ impl<'a> ComponentExpander<'a> {
                         Some(&self.schema.declared_state_names),
                     )
                     .as_event_port(true);
-                    if !self.already_rewritten_ports.contains(&name) {
+                    if !self
+                        .already_rewritten_ports
+                        .contains(&self.schema.port_table, name)
+                    {
                         let rewritten = rewrite_expr(&expr, &event_default_ctx)?;
-                        self.already_rewritten_ports.insert(name.clone());
-                        self.comp_ports.insert(name.clone(), rewritten.clone());
-                        local_scope.insert(name, LexicalBinding::Expr(rewritten));
+                        self.already_rewritten_ports
+                            .insert(&self.schema.port_table, name);
+                        self.comp_ports.insert(name.to_string(), rewritten.clone());
+                        local_scope.insert(name.to_string(), LexicalBinding::Expr(rewritten));
                     } else {
                         if let Some(default_expr) = &param.default_edge {
                             if let Ok(rewritten_default) =
                                 rewrite_expr(default_expr, &event_default_ctx)
                             {
                                 if let Some(default_binding) =
-                                    extract_event_binding(&name, &rewritten_default)
+                                    extract_event_binding(name, &rewritten_default)
                                 {
                                     if default_binding.target
                                         == crate::component::EventHandlerTarget::Component(
@@ -658,12 +667,12 @@ impl<'a> ComponentExpander<'a> {
                                         )
                                     {
                                         self.default_self_handlers
-                                            .insert(name.clone(), default_binding);
+                                            .insert(name.to_string(), default_binding);
                                     }
                                 }
                             }
                         }
-                        local_scope.insert(name, LexicalBinding::Expr(expr));
+                        local_scope.insert(name.to_string(), LexicalBinding::Expr(expr));
                     }
                 }
             }
@@ -755,9 +764,14 @@ impl<'a> ComponentExpander<'a> {
 
         // Pre-resolve let and env expressions in component body so their declaration order does not matter
         if !self.schema.shadowed_expr_lets.is_empty() || !self.schema.all_envs.is_empty() {
+            let max_passes = if self.schema.has_interdependent_lets_or_envs {
+                20
+            } else {
+                1
+            };
             let mut changed = true;
             let mut passes = 0;
-            while changed && passes < 20 {
+            while changed && passes < max_passes {
                 changed = false;
                 passes += 1;
                 for let_binding in &self.schema.shadowed_expr_lets {
@@ -839,6 +853,7 @@ impl<'a> ComponentExpander<'a> {
             }
         }
 
+        self.init_scope_len = local_scope.len();
         self.local_scope = RefCell::new(local_scope);
         self.internal_body_env_scope = internal_body_env_scope;
         self.children_env_scope = children_env_scope;
@@ -882,6 +897,7 @@ impl<'a> ComponentExpander<'a> {
                 let_binding.name.as_str().to_string(),
                 LexicalBinding::Node(node_id),
             );
+            self.scope_mutated_in_body = true;
             self.sync_consumer_children_env_scope();
             let elem_ctx = ElementContext {
                 parent_id: Some(ctx.comp_node_id),
@@ -957,10 +973,12 @@ impl<'a> ComponentExpander<'a> {
                         .map(|t| t.name.as_str().to_string()),
                     raw_expr.span(),
                 ));
-                self.local_scope.borrow_mut().insert(
-                    let_binding.name.as_str().to_string(),
-                    LexicalBinding::Expr(rewritten),
-                );
+                let new_binding = LexicalBinding::Expr(rewritten);
+                let mut scope_mut = self.local_scope.borrow_mut();
+                if scope_mut.get(let_binding.name.as_str()) != Some(&new_binding) {
+                    scope_mut.insert(let_binding.name.as_str().to_string(), new_binding);
+                    self.scope_mutated_in_body = true;
+                }
             } else if !is_env_param_shadow {
                 let member_expr = Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::from_node(
@@ -1029,7 +1047,8 @@ impl<'a> ComponentExpander<'a> {
                         env_binding.name.as_str().to_string(),
                         LexicalBinding::Node(node_id),
                     );
-                    let bound_expr = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
+                    self.scope_mutated_in_body = true;
+                    let bound_expr = Expr::Ident(Ident::from_node(node_id, elem.span));
                     self.children_env_scope.insert(
                         env_binding.name.as_str().to_string(),
                         EnvEntry::Bound(bound_expr.clone()),
@@ -1046,7 +1065,7 @@ impl<'a> ComponentExpander<'a> {
                         self.comp_ports
                             .insert(env_binding.name.as_str().to_string(), bound_expr);
                         self.already_rewritten_ports
-                            .insert(env_binding.name.as_str().to_string());
+                            .insert(&self.schema.port_table, env_binding.name.as_str());
                     }
                     if elem.name.as_str() == "Font" {
                         self.node_fonts.insert(node_id, node_id);
@@ -1091,10 +1110,14 @@ impl<'a> ComponentExpander<'a> {
                             raw_expr.span(),
                         ));
                     }
-                    self.local_scope.borrow_mut().insert(
-                        env_binding.name.as_str().to_string(),
-                        LexicalBinding::Expr(rewritten.clone()),
-                    );
+                    let new_binding = LexicalBinding::Expr(rewritten.clone());
+                    {
+                        let mut scope_mut = self.local_scope.borrow_mut();
+                        if scope_mut.get(env_binding.name.as_str()) != Some(&new_binding) {
+                            scope_mut.insert(env_binding.name.as_str().to_string(), new_binding);
+                            self.scope_mutated_in_body = true;
+                        }
+                    }
                     self.children_env_scope.insert(
                         env_binding.name.as_str().to_string(),
                         EnvEntry::Bound(rewritten.clone()),
@@ -1234,28 +1257,20 @@ impl<'a> ComponentExpander<'a> {
             self.span_inline_boxes = ibs;
         }
 
-        {
-            let mut local_scope_mut = self.local_scope.borrow_mut();
-            let inst_ids = self.instantiated_children_ids.borrow();
-            for (idx, &child_id) in inst_ids.iter().enumerate() {
-                local_scope_mut.insert(
-                    format!(
-                        "__child_of_{}_{}",
-                        self.ctx.comp_node_id.canonical_name(),
-                        idx
-                    ),
-                    LexicalBinding::Node(child_id),
-                );
-            }
-        }
-
         let local_scope_borrow = self.local_scope.borrow();
-        resolve_forward_refs_in_range(
-            self.doc,
-            self.start_node_idx,
-            self.start_local_bindings_idx,
-            &local_scope_borrow,
-        );
+        if self.scope_mutated_in_body
+            || self.schema.has_interdependent_lets_or_envs
+            || local_scope_borrow.len() != self.init_scope_len
+        {
+            resolve_forward_refs_in_range(
+                self.doc,
+                self.start_node_idx,
+                self.start_local_bindings_idx,
+                &local_scope_borrow,
+            );
+        }
+        drop(local_scope_borrow);
+        self.body_agg_count = get_agg_emitted_count(self.ctx.comp_node_id);
 
         Ok(())
     }
@@ -1264,80 +1279,90 @@ impl<'a> ComponentExpander<'a> {
     /// returning `(rewritten_ports, comp_authored_ports)`.
     #[allow(clippy::type_complexity)]
     fn rewrite_and_alias_ports(
-        &self,
+        &mut self,
     ) -> Result<(HashMap<String, Expr>, HashMap<String, Expr>), CompileError> {
         let ctx = self.ctx;
         let instance = self.instance;
-        let comp_def = self.comp_def;
-        let final_local_scope = self.local_scope.borrow();
-        let inst_ids = self.instantiated_children_ids.borrow();
+        let check_fwd_scope_refs = self.scope_mutated_in_body
+            || !self.schema.shadowed_expr_lets.is_empty()
+            || !self.schema.all_envs.is_empty()
+            || self.local_scope.borrow().len() != self.init_scope_len;
 
-        let scope_ctx = ScopeContext::from_instance(
-            ctx,
-            &self.doc.nodes,
-            &final_local_scope,
-            &self.internal_body_env_scope,
-            self.node_fonts,
-            &inst_ids,
-        )
-        .with_children(&inst_ids, self.num_consumer_children)
-        .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
-        .with_enclosing_component(Some(ctx.comp_node_id))
-        .with_comp_state(
-            Some(&self.comp_ports),
-            Some(&self.schema.declared_state_names),
+        let mut newly_rewritten = Vec::with_capacity(
+            self.schema.declared_lets.len() + self.schema.declared_aliases.len() + 2,
         );
+        {
+            let final_local_scope = self.local_scope.borrow();
+            let inst_ids = self.instantiated_children_ids.borrow();
 
-        let mut rewritten_ports = HashMap::new();
-        for (port_name, port_expr) in &self.comp_ports {
-            if self.already_rewritten_ports.contains(port_name) {
-                rewritten_ports.insert(port_name.clone(), port_expr.clone());
-            } else {
-                let is_handler_param = self.schema.handler_param_names.contains(port_name);
-                let mut port_scope_ctx = scope_ctx.clone();
-                port_scope_ctx.is_event_port = port_name.starts_with("on_") || is_handler_param;
-                let mut rw = rewrite_expr(port_expr, &port_scope_ctx)?;
-                rw = resolve_forward_scope_refs(&rw, &final_local_scope);
-                if let Some(l) = self.schema.declared_lets.get(port_name) {
-                    rw = coerce_typed_binding_expr(rw, l.type_annotation.as_ref());
-                } else if let Some(e) = self.schema.declared_envs.get(port_name) {
-                    rw = coerce_typed_binding_expr(rw, e.type_annotation.as_ref());
-                } else if let Some(s) = self.schema.declared_states.get(port_name) {
-                    rw = coerce_typed_binding_expr(rw, s.type_annotation.as_ref());
+            let scope_ctx = ScopeContext::from_instance(
+                ctx,
+                &self.doc.nodes,
+                &final_local_scope,
+                &self.internal_body_env_scope,
+                self.node_fonts,
+                &inst_ids,
+            )
+            .with_children(&inst_ids, self.num_consumer_children)
+            .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
+            .with_enclosing_component(Some(ctx.comp_node_id))
+            .with_comp_state(
+                Some(&self.comp_ports),
+                Some(&self.schema.declared_state_names),
+            );
+
+            for (port_name, port_expr) in &self.comp_ports {
+                if !self
+                    .already_rewritten_ports
+                    .contains(&self.schema.port_table, port_name)
+                {
+                    let is_handler_param = self.schema.handler_param_names.contains(port_name);
+                    let mut port_scope_ctx = scope_ctx.clone();
+                    port_scope_ctx.is_event_port = port_name.starts_with("on_") || is_handler_param;
+                    let mut rw = rewrite_expr(port_expr, &port_scope_ctx)?;
+                    if check_fwd_scope_refs && expr_has_scope_ref(&rw, &final_local_scope) {
+                        rw = resolve_forward_scope_refs(&rw, &final_local_scope);
+                    }
+                    if let Some(l) = self.schema.declared_lets.get(port_name) {
+                        rw = coerce_typed_binding_expr(rw, l.type_annotation.as_ref());
+                    } else if let Some(e) = self.schema.declared_envs.get(port_name) {
+                        rw = coerce_typed_binding_expr(rw, e.type_annotation.as_ref());
+                    } else if let Some(s) = self.schema.declared_states.get(port_name) {
+                        rw = coerce_typed_binding_expr(rw, s.type_annotation.as_ref());
+                    }
+                    newly_rewritten.push((port_name.clone(), rw));
                 }
-                rewritten_ports.insert(port_name.clone(), rw);
+            }
+
+            for (alias_name, alias_binding) in &self.schema.declared_aliases {
+                let mut rewritten_alias = rewrite_expr(&alias_binding.value, &scope_ctx)?;
+                if check_fwd_scope_refs && expr_has_scope_ref(&rewritten_alias, &final_local_scope)
+                {
+                    rewritten_alias =
+                        resolve_forward_scope_refs(&rewritten_alias, &final_local_scope);
+                }
+                rewritten_alias = coerce_typed_binding_expr(
+                    rewritten_alias,
+                    alias_binding.type_annotation.as_ref(),
+                );
+                newly_rewritten.push((alias_name.clone(), rewritten_alias));
             }
         }
 
-        let mut comp_authored_ports = HashMap::new();
+        let mut rewritten_ports = std::mem::take(&mut self.comp_ports);
+        for (port_name, rw) in newly_rewritten {
+            rewritten_ports.insert(port_name, rw);
+        }
+
+        let mut comp_authored_ports = self.schema.base_authored_ports.clone();
         if let Some(ambient_map) = ctx.ambient_authored_ports {
             for (k, v) in ambient_map {
                 comp_authored_ports.insert(k.clone(), v.clone());
             }
         }
-        for param in &comp_def.params {
-            let name = param.name.as_str().to_string();
-            if let Some(default_expr) = &param.default_edge {
-                comp_authored_ports
-                    .entry(name)
-                    .or_insert_with(|| default_expr.clone());
-            }
-        }
-        for (state_name, s) in &self.schema.declared_states {
+        for (state_name, s) in &self.schema.enum_state_bindings {
             let default_expr = default_expr_for_state_with_enums(s, ctx.enums);
             comp_authored_ports.insert(state_name.clone(), default_expr);
-        }
-        for (let_name, l) in &self.schema.declared_lets {
-            if !self.schema.comp_shadowed_ports.contains(let_name) {
-                if let Some(LetValue::Expr(raw_expr)) = &l.value {
-                    comp_authored_ports.insert(let_name.clone(), raw_expr.clone());
-                }
-            }
-        }
-        for (env_name, e) in &self.schema.declared_envs {
-            if let Some(raw_expr) = &e.value {
-                comp_authored_ports.insert(env_name.clone(), raw_expr.clone());
-            }
         }
         for port in &instance.ports {
             if let Some(ambient_expr) = ctx
@@ -1348,15 +1373,6 @@ impl<'a> ComponentExpander<'a> {
             } else {
                 comp_authored_ports.insert(port.name.as_str().to_string(), port.expr.clone());
             }
-        }
-
-        for (alias_name, alias_binding) in &self.schema.declared_aliases {
-            let mut rewritten_alias = rewrite_expr(&alias_binding.value, &scope_ctx)?;
-            rewritten_alias = resolve_forward_scope_refs(&rewritten_alias, &final_local_scope);
-            rewritten_alias =
-                coerce_typed_binding_expr(rewritten_alias, alias_binding.type_annotation.as_ref());
-            rewritten_ports.insert(alias_name.clone(), rewritten_alias);
-            comp_authored_ports.insert(alias_name.clone(), alias_binding.value.clone());
         }
 
         Ok((rewritten_ports, comp_authored_ports))
@@ -1409,6 +1425,7 @@ impl<'a> ComponentExpander<'a> {
         let ctx = self.ctx;
         let comp_def = self.comp_def;
         let inst_ids = self.instantiated_children_ids.borrow().clone();
+        let total_agg_count = get_agg_emitted_count(ctx.comp_node_id);
 
         resolve_and_filter_component_aggregations(
             ctx.comp_node_id,
@@ -1419,9 +1436,11 @@ impl<'a> ComponentExpander<'a> {
             self.doc,
             self.start_node_idx,
             self.start_local_bindings_idx,
+            self.body_agg_count,
+            total_agg_count,
         )?;
 
-        {
+        if total_agg_count > 0 || self.schema.has_assertions {
             let mut local_scope_mut = self.local_scope.borrow_mut();
             for (idx, &child_id) in inst_ids.iter().enumerate() {
                 local_scope_mut.insert(
@@ -1443,10 +1462,7 @@ impl<'a> ComponentExpander<'a> {
         .with_children(&inst_ids, self.num_consumer_children)
         .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
         .with_enclosing_component(Some(ctx.comp_node_id))
-        .with_comp_state(
-            Some(&self.comp_ports),
-            Some(&self.schema.declared_state_names),
-        );
+        .with_comp_state(None, Some(&self.schema.declared_state_names));
 
         validate_and_coerce_component_param_types(
             comp_def,
@@ -1457,71 +1473,126 @@ impl<'a> ComponentExpander<'a> {
 
         // Validate assertions in component body (only build const_env if the component actually contains \assert)
         if self.schema.has_assertions {
-            let mut const_env = HashMap::new();
-            const_env.insert(
-                crate::compiler::graph::VarId::new(NodeId::WINDOW, "dpi"),
-                self.doc
-                    .window_ports
-                    .get("dpi")
-                    .and_then(|e| eval_expr(e, &HashMap::new()).ok())
-                    .unwrap_or(crate::compiler::value::Value::Float(96.0)),
+            let assert_scope_ctx = scope_ctx.clone().with_comp_state(
+                Some(rewritten_ports),
+                Some(&self.schema.declared_state_names),
             );
-            for n in &self.doc.nodes {
-                if n.name == "Font" {
-                    for fp in ["size", "weight", "family", "italic"] {
-                        if let Some(fp_expr) = n.ports.get(fp) {
-                            if let Ok(val) = eval_expr(fp_expr, &const_env) {
-                                const_env.insert(crate::compiler::graph::VarId::new(n.id, fp), val);
-                            }
-                        }
-                    }
-                }
-            }
-            for (port_name, port_expr) in rewritten_ports.iter() {
-                if self.schema.declared_state_names.contains(port_name) {
-                    continue;
-                }
-                if let Some(lit) = resolve_ident_or_member_to_literal(port_expr, &scope_ctx) {
-                    let val = match lit {
-                        Literal::Integer(i, _) => crate::compiler::value::Value::Integer(i),
-                        Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
-                        Literal::Distance(d, _, _) => crate::compiler::value::Value::Distance(d),
-                        Literal::Area(a, _, _) => crate::compiler::value::Value::Area(a),
-                        Literal::Duration(d, _, _) => {
-                            crate::compiler::value::Value::Duration(d)
-                        }
-                        Literal::String(s, _) => crate::compiler::value::Value::String(s),
-                        Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
-                        Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
-                        Literal::Enum(e, v, _) => crate::compiler::value::Value::Enum {
-                            enum_name: e,
-                            variant: v,
-                        },
-                    };
-                    const_env.insert(
-                        crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name),
-                        val.clone(),
-                    );
-                    if let Some(parent) = ctx.parent_id {
-                        const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
-                    }
-                } else if let Ok(val) = eval_expr(port_expr, &const_env) {
-                    const_env.insert(
-                        crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name),
-                        val.clone(),
-                    );
-                    if let Some(parent) = ctx.parent_id {
-                        const_env.insert(crate::compiler::graph::VarId::new(parent, port_name), val);
-                    }
-                }
-            }
+            let mut targeted_env = HashMap::new();
+            let mut full_env: Option<
+                HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
+            > = None;
 
             for item in &comp_def.body {
                 if let ComponentBodyItem::Assert(assert_dir) = item {
+                    let mut rewritten_cond = rewrite_expr(&assert_dir.condition, &scope_ctx)?;
+                    if expr_has_scope_ref(&rewritten_cond, &final_local_scope) {
+                        rewritten_cond =
+                            resolve_forward_scope_refs(&rewritten_cond, &final_local_scope);
+                    }
+                    populate_const_env_for_cond(
+                        &rewritten_cond,
+                        &assert_scope_ctx,
+                        &mut targeted_env,
+                    );
+                    if let Ok(val) = eval_expr(&rewritten_cond, &targeted_env) {
+                        if !val.is_truthy() {
+                            let msg = assert_dir
+                                .message
+                                .clone()
+                                .unwrap_or_else(|| format!("Assertion failed: {}", assert_dir.condition));
+                            return Err(CompileError::AssertionFailed {
+                                message: msg,
+                                span: assert_dir.span,
+                            });
+                        }
+                        continue;
+                    }
+
+                    let const_env = full_env.get_or_insert_with(|| {
+                        let mut env = HashMap::new();
+                        env.insert(
+                            crate::compiler::graph::VarId::new(NodeId::WINDOW, "dpi"),
+                            self.doc
+                                .window_ports
+                                .get("dpi")
+                                .and_then(|e| eval_expr(e, &HashMap::new()).ok())
+                                .unwrap_or(crate::compiler::value::Value::Float(96.0)),
+                        );
+                        for n in &self.doc.nodes {
+                            if n.name == "Font" {
+                                for fp in ["size", "weight", "family", "italic"] {
+                                    if let Some(fp_expr) = n.ports.get(fp) {
+                                        if let Ok(val) = eval_expr(fp_expr, &env) {
+                                            env.insert(
+                                                crate::compiler::graph::VarId::new(n.id, fp),
+                                                val,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        for (port_name, port_expr) in rewritten_ports.iter() {
+                            if self.schema.declared_state_names.contains(port_name) {
+                                continue;
+                            }
+                            if let Some(lit) =
+                                resolve_ident_or_member_to_literal(port_expr, &scope_ctx)
+                            {
+                                let val = match lit {
+                                    Literal::Integer(i, _) => {
+                                        crate::compiler::value::Value::Integer(i)
+                                    }
+                                    Literal::Float(n, _) => crate::compiler::value::Value::Float(n),
+                                    Literal::Distance(d, _, _) => {
+                                        crate::compiler::value::Value::Distance(d)
+                                    }
+                                    Literal::Area(a, _, _) => {
+                                        crate::compiler::value::Value::Area(a)
+                                    }
+                                    Literal::Duration(d, _, _) => {
+                                        crate::compiler::value::Value::Duration(d)
+                                    }
+                                    Literal::String(s, _) => {
+                                        crate::compiler::value::Value::String(s)
+                                    }
+                                    Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
+                                    Literal::Color(c, _) => crate::compiler::value::Value::Color(c),
+                                    Literal::Enum(e, v, _) => crate::compiler::value::Value::Enum {
+                                        enum_name: e,
+                                        variant: v,
+                                    },
+                                };
+                                env.insert(
+                                    crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name),
+                                    val.clone(),
+                                );
+                                if let Some(parent) = ctx.parent_id {
+                                    env.insert(
+                                        crate::compiler::graph::VarId::new(parent, port_name),
+                                        val,
+                                    );
+                                }
+                            } else if let Ok(val) = eval_expr(port_expr, &env) {
+                                env.insert(
+                                    crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name),
+                                    val.clone(),
+                                );
+                                if let Some(parent) = ctx.parent_id {
+                                    env.insert(
+                                        crate::compiler::graph::VarId::new(parent, port_name),
+                                        val,
+                                    );
+                                }
+                            }
+                        }
+                        env
+                    });
+
                     eval_assert_directive(
                         assert_dir,
                         &scope_ctx,
-                        &const_env,
+                        const_env,
                         Some(&final_local_scope),
                     )?;
                 }
@@ -1586,39 +1657,26 @@ impl<'a> ComponentExpander<'a> {
         node.children = self.all_children_ids;
         node.authored_ports = comp_authored_ports;
         node.private_ports = self.schema.private_ports.clone();
-        node.state_vars.extend(
-            self.schema
-                .state_var_types
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone())),
-        );
-        node.env_vars.extend(
-            self.schema
-                .env_var_types
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone())),
-        );
+        node.state_vars = self.schema.state_var_types.clone();
+        node.env_vars = self.schema.env_var_types.clone();
         let local_scope_borrow = self.local_scope.borrow();
-        let port_names: Vec<String> = rewritten_ports.keys().cloned().collect();
-        for port_name in port_names {
+        for (port_name, port_expr) in rewritten_ports.iter_mut() {
             if port_name.starts_with("on_")
                 || node_port_types
-                    .get(&port_name)
+                    .get(port_name.as_str())
                     .is_some_and(|t| t == "Handler")
             {
-                if self.schema.comp_shadowed_ports.contains(&port_name) {
+                if self.schema.comp_shadowed_ports.contains(port_name.as_str()) {
                     if let Some(LexicalBinding::Expr(shadowed_expr)) =
-                        local_scope_borrow.get(&port_name)
+                        local_scope_borrow.get(port_name.as_str())
                     {
-                        rewritten_ports.insert(port_name.clone(), shadowed_expr.clone());
+                        *port_expr = shadowed_expr.clone();
                     }
                 }
-                if let Some(expr) = rewritten_ports.get(&port_name) {
-                    if let Some(binding) = extract_event_binding(&port_name, expr) {
-                        node.event_handlers.insert(port_name.clone(), binding);
-                    }
+                if let Some(binding) = extract_event_binding(port_name, port_expr) {
+                    node.event_handlers.insert(port_name.clone(), binding);
                 }
-                if let Some(default_binding) = self.default_self_handlers.get(&port_name) {
+                if let Some(default_binding) = self.default_self_handlers.get(port_name.as_str()) {
                     node.default_event_handlers
                         .insert(port_name.clone(), default_binding.clone());
                 }
@@ -1663,7 +1721,9 @@ pub(super) fn expand_component_instance(
     expander.collect_consumer_children()?;
     expander.init_scopes_and_preresolve()?;
     expander.expand_body()?;
+
     let (mut rewritten_ports, mut comp_authored_ports) = expander.rewrite_and_alias_ports()?;
+
     expander.apply_post_processing_and_spatial_aliases(
         &mut rewritten_ports,
         &mut comp_authored_ports,
