@@ -237,7 +237,7 @@ impl BuiltinPrimitive for TextPrimitive {
 
         let elem = state.elem;
         let node_id = state.node_id;
-        let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
+        let self_ident = Expr::Ident(Ident::from_node(node_id, elem.span));
         let (size_expr, weight_expr, font_expr, start_at_expr) =
             build_text_font_metric_refs(state, &self_ident);
 
@@ -421,7 +421,7 @@ fn build_text_font_metric_refs(
     let font_target = state
         .font_node_id
         .or_else(|| state.node_fonts.get(&state.node_id).copied())
-        .map(|fid| Expr::Ident(Ident::new(fid.canonical_name(), span)))
+        .map(|fid| Expr::Ident(Ident::from_node(fid, span)))
         .or_else(|| state.ports.get("font").cloned());
 
     let (size_expr, weight_expr, font_expr) = if let Some(target) = font_target {
@@ -478,7 +478,7 @@ fn build_text_line_height_arg(state: &PrimitiveExpandState<'_, '_>) -> Expr {
             .get_node(fid)
             .is_some_and(|fn_node| fn_node.authored_ports.contains_key("line_height"))
         {
-            let font_ident = Expr::Ident(Ident::new(fid.canonical_name(), span));
+            let font_ident = Expr::Ident(Ident::from_node(fid, span));
             return Expr::MemberAccess(MemberAccessExpr {
                 target: Box::new(font_ident),
                 member: Ident::new("line_height", span),
@@ -596,7 +596,7 @@ fn collect_span_and_inline_box_style_args(
                         .or(state.doc.nodes[nid.0].font)
                 });
             let (ts_size, ts_weight, ts_family, ts_italic) = if let Some(fid) = fid_opt {
-                let f_ident = Expr::Ident(Ident::new(fid.canonical_name(), elem.span));
+                let f_ident = Expr::Ident(Ident::from_node(fid, elem.span));
                 let sz = Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(f_ident.clone()),
                     member: Ident::new("size", elem.span),
@@ -638,8 +638,8 @@ fn collect_span_and_inline_box_style_args(
                 .find_map(|nid| {
                     if state.doc.nodes[nid.0].ports.contains_key("baseline_shift") {
                         Some(Expr::MemberAccess(MemberAccessExpr {
-                            target: Box::new(Expr::Ident(Ident::new(
-                                nid.canonical_name(),
+                            target: Box::new(Expr::Ident(Ident::from_node(
+                                nid,
                                 elem.span,
                             ))),
                             member: Ident::new("baseline_shift", elem.span),
@@ -663,7 +663,7 @@ fn collect_span_and_inline_box_style_args(
 
     let ib_list = state.doc.nodes[node_id.0].inline_boxes.clone();
     for ib in &ib_list {
-        let ib_ident = Expr::Ident(Ident::new(ib.node_id.canonical_name(), elem.span));
+        let ib_ident = Expr::Ident(Ident::from_node(ib.node_id, elem.span));
         let ib_first = Expr::Literal(Literal::Integer(-(ib.node_id.0 as i64 + 1), elem.span));
         let ib_index = Expr::Literal(Literal::Integer(ib.index as i64, elem.span));
         let ib_width = Expr::MemberAccess(MemberAccessExpr {
@@ -769,8 +769,8 @@ fn synthesize_span_and_inline_box_metrics(
             .contains_key("baseline_shift")
         {
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::new(
-                    span_nid.canonical_name(),
+                target: Box::new(Expr::Ident(Ident::from_node(
+                    span_nid,
                     elem.span,
                 ))),
                 member: Ident::new("baseline_shift", elem.span),
@@ -853,7 +853,7 @@ fn insert_inline_child_spatial_aliases(
     nid: NodeId,
     span: Span,
 ) {
-    let self_ident = Expr::Ident(Ident::new(nid.canonical_name(), span));
+    let self_ident = Expr::Ident(Ident::from_node(nid, span));
     let x_expr = Expr::MemberAccess(MemberAccessExpr {
         target: Box::new(self_ident.clone()),
         member: Ident::new("x", span),
@@ -927,7 +927,7 @@ fn resolve_text_dimensions(
         || has_inline_boxes
         || has_children_placeholder;
 
-    let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
+    let self_ident = Expr::Ident(Ident::from_node(node_id, elem.span));
     let (size_expr, weight_expr, font_expr, start_at_expr) =
         build_text_font_metric_refs(state, &self_ident);
 

@@ -10,7 +10,7 @@ pub mod window;
 use crate::ast::{
     AssertDirective, BinaryExpr, BinaryOp, ChildrenDirective, ComponentDef, ContentItem,
     DistanceUnit, ElementNode, EnumDef, Expr, Ident, LetBinding, LetValue, Literal,
-    MemberAccessExpr, PortBinding,
+    MemberAccessExpr, PortBinding, Symbol,
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::eval::eval_expr;
@@ -253,7 +253,7 @@ pub(in crate::compiler::expand) fn eval_assert_directive(
     assert_dir: &AssertDirective,
     scope_ctx: &ScopeContext<'_>,
     const_env: &HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
-    forward_scope: Option<&HashMap<String, LexicalBinding>>,
+    forward_scope: Option<&HashMap<Symbol, LexicalBinding>>,
 ) -> Result<(), CompileError> {
     let mut rewritten = rewrite_expr(&assert_dir.condition, scope_ctx)?;
     if let Some(scope) = forward_scope {
@@ -332,25 +332,25 @@ pub fn insert_default_spatial_aliases(
     ports: &mut HashMap<String, Expr>,
     authored_ports: &mut HashMap<String, Expr>,
 ) {
-    let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), span));
+    let self_ident = Expr::Ident(Ident::from_node(node_id, span));
     let self_x = Expr::MemberAccess(MemberAccessExpr {
         target: Box::new(self_ident.clone()),
-        member: Ident::new("x", span),
+        member: Ident::from_symbol(Symbol::X, span),
         span,
     });
     let self_y = Expr::MemberAccess(MemberAccessExpr {
         target: Box::new(self_ident.clone()),
-        member: Ident::new("y", span),
+        member: Ident::from_symbol(Symbol::Y, span),
         span,
     });
     let self_width = Expr::MemberAccess(MemberAccessExpr {
         target: Box::new(self_ident.clone()),
-        member: Ident::new("width", span),
+        member: Ident::from_symbol(Symbol::WIDTH, span),
         span,
     });
     let self_height = Expr::MemberAccess(MemberAccessExpr {
         target: Box::new(self_ident.clone()),
-        member: Ident::new("height", span),
+        member: Ident::from_symbol(Symbol::HEIGHT, span),
         span,
     });
 
@@ -454,18 +454,18 @@ pub(super) fn apply_inline_origin_defaults(state: &mut PrimitiveExpandState<'_, 
             .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)));
     } else if parent_is_inline_box {
         if let Some(pid) = ctx.parent_id {
-            let p_ident = Expr::Ident(Ident::new(pid.canonical_name(), elem.span));
+            let p_ident = Expr::Ident(Ident::from_node(pid, elem.span));
             state.ports.entry("x".to_string()).or_insert_with(|| {
                 Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(p_ident.clone()),
-                    member: Ident::new("x", elem.span),
+                    member: Ident::from_symbol(Symbol::X, elem.span),
                     span: elem.span,
                 })
             });
             state.ports.entry("y".to_string()).or_insert_with(|| {
                 Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(p_ident),
-                    member: Ident::new("y", elem.span),
+                    member: Ident::from_symbol(Symbol::Y, elem.span),
                     span: elem.span,
                 })
             });
@@ -587,8 +587,8 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     let mut env_clone = self.ctx.env_scope.clone();
                     env_clone.insert(
                         "font".to_string(),
-                        EnvEntry::Bound(Expr::Ident(Ident::new(
-                            fid.canonical_name(),
+                        EnvEntry::Bound(Expr::Ident(Ident::from_node(
+                            fid,
                             self.elem.span,
                         ))),
                     );
@@ -752,7 +752,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             self.doc.get_node_mut(child_id).unwrap().var_name =
                 Some(let_binding.name.as_str().to_string());
             self.ctx.lexical_scope.borrow_mut().insert(
-                let_binding.name.as_str().to_string(),
+                let_binding.name.name,
                 LexicalBinding::Node(child_id),
             );
             self.child_ids.push(child_id);
@@ -814,7 +814,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 .ctx
                 .lexical_scope
                 .borrow()
-                .contains_key(let_binding.name.as_str())
+                .contains_key(&let_binding.name.name)
             {
                 self.doc.local_bindings.push((
                     rewritten.clone(),
@@ -825,7 +825,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     raw_expr.span(),
                 ));
                 self.ctx.lexical_scope.borrow_mut().insert(
-                    let_binding.name.as_str().to_string(),
+                    let_binding.name.name,
                     LexicalBinding::Expr(rewritten),
                 );
             }
@@ -936,11 +936,11 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     merged_ports.insert(
                         "x".to_string(),
                         Expr::MemberAccess(MemberAccessExpr {
-                            target: Box::new(Expr::Ident(Ident::new(
-                                self.node_id.canonical_name(),
+                            target: Box::new(Expr::Ident(Ident::from_node(
+                                self.node_id,
                                 child_elem.span,
                             ))),
-                            member: Ident::new("left", child_elem.span),
+                            member: Ident::from_symbol(Symbol::LEFT, child_elem.span),
                             span: child_elem.span,
                         }),
                     );
@@ -949,11 +949,11 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     merged_ports.insert(
                         "y".to_string(),
                         Expr::MemberAccess(MemberAccessExpr {
-                            target: Box::new(Expr::Ident(Ident::new(
-                                self.node_id.canonical_name(),
+                            target: Box::new(Expr::Ident(Ident::from_node(
+                                self.node_id,
                                 child_elem.span,
                             ))),
-                            member: Ident::new("top", child_elem.span),
+                            member: Ident::from_symbol(Symbol::TOP, child_elem.span),
                             span: child_elem.span,
                         }),
                     );
@@ -1011,7 +1011,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             )?;
             if let Some(prev_id) = self.last_child_id {
                 self.ctx.lexical_scope.borrow_mut().insert(
-                    format!("__next_of_{}", prev_id.canonical_name()),
+                    Symbol::next_of(prev_id),
                     LexicalBinding::Node(child_id),
                 );
             }
@@ -1020,7 +1020,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 entry
                     .caller_lexical_scope
                     .borrow_mut()
-                    .insert(v_name.clone(), LexicalBinding::Node(child_id));
+                    .insert(Symbol::new(v_name), LexicalBinding::Node(child_id));
             }
             if child_elem.name.as_str() == "Font" {
                 self.node_fonts.insert(child_id, child_id);
@@ -1098,7 +1098,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     }
                     resolved_port_exprs.push((
                         port.name.as_str().to_string(),
-                        Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span)),
+                        Expr::Ident(Ident::from_node(child_id, inline_elem.span)),
                     ));
                 }
                 other => {
@@ -1149,7 +1149,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     enclosing_child_ids,
                 );
                 if let Ok(Expr::Ident(id)) = rewrite_expr(raw_font_expr, &temp_scope_ctx) {
-                    if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                    if let Some(fid) = id.node_id() {
                         self.font_node_id = Some(fid);
                     }
                 }

@@ -1,6 +1,6 @@
 use crate::ast::{
     ChildrenDirective, ComponentBodyItem, ComponentDef, DistanceUnit, ElementNode, EnvBinding,
-    Expr, Ident, LetBinding, LetValue, Literal, MemberAccessExpr, ParamDef,
+    Expr, Ident, LetBinding, LetValue, Literal, MemberAccessExpr, ParamDef, Symbol,
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::eval::eval_expr;
@@ -42,7 +42,7 @@ struct ComponentExpander<'a> {
     comp_def: &'a ComponentDef,
     registry: &'a HashMap<String, Vec<ComponentDef>>,
     doc: &'a mut ExpandedDocument,
-    lexical_scope: &'a RefCell<HashMap<String, LexicalBinding>>,
+    lexical_scope: &'a RefCell<HashMap<Symbol, LexicalBinding>>,
     caller_env_scope: &'a HashMap<String, EnvEntry>,
     node_fonts: &'a mut HashMap<NodeId, NodeId>,
 
@@ -58,7 +58,7 @@ struct ComponentExpander<'a> {
     internal_scope_ports: std::borrow::Cow<'a, [String]>,
 
     consumer_child_entries: Vec<ConsumerChildEntry<'a>>,
-    local_scope: RefCell<HashMap<String, LexicalBinding>>,
+    local_scope: RefCell<HashMap<Symbol, LexicalBinding>>,
     init_scope_len: usize,
     scope_mutated_in_body: bool,
     body_agg_count: u32,
@@ -81,7 +81,7 @@ impl<'a> ComponentExpander<'a> {
         comp_def: &'a ComponentDef,
         registry: &'a HashMap<String, Vec<ComponentDef>>,
         doc: &'a mut ExpandedDocument,
-        lexical_scope: &'a RefCell<HashMap<String, LexicalBinding>>,
+        lexical_scope: &'a RefCell<HashMap<Symbol, LexicalBinding>>,
         caller_env_scope: &'a HashMap<String, EnvEntry>,
         node_fonts: &'a mut HashMap<NodeId, NodeId>,
         instantiated_children_ids: &'a RefCell<Vec<NodeId>>,
@@ -179,7 +179,7 @@ impl<'a> ComponentExpander<'a> {
             caller_child_ids,
         );
         if let Ok(Expr::Ident(id)) = rewrite_expr(&font_port.expr, &caller_scope_ctx) {
-            if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+            if let Some(fid) = id.node_id() {
                 self.node_fonts.insert(self.ctx.comp_node_id, fid);
                 self.doc.get_node_mut(self.ctx.comp_node_id).unwrap().font = Some(fid);
             }
@@ -229,7 +229,7 @@ impl<'a> ComponentExpander<'a> {
                         self.node_fonts.insert(ctx.comp_node_id, child_id);
                         self.doc.get_node_mut(ctx.comp_node_id).unwrap().font = Some(child_id);
                     }
-                    Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span))
+                    Expr::Ident(Ident::from_node(child_id, inline_elem.span))
                 }
                 other => {
                     let caller_scope_borrow = self.lexical_scope.borrow();
@@ -296,10 +296,7 @@ impl<'a> ComponentExpander<'a> {
                     self.node_fonts.insert(ctx.comp_node_id, child_id);
                     self.doc.get_node_mut(ctx.comp_node_id).unwrap().font = Some(child_id);
                 }
-                Ok(Expr::Ident(Ident::new(
-                    child_id.canonical_name(),
-                    inline_elem.span,
-                )))
+                Ok(Expr::Ident(Ident::from_node(child_id, inline_elem.span)))
             }
             other => Ok(other.clone()),
         }
@@ -324,10 +321,7 @@ impl<'a> ComponentExpander<'a> {
                                 port_name
                             };
                             Expr::MemberAccess(MemberAccessExpr {
-                                target: Box::new(Expr::Ident(Ident::new(
-                                    pid.canonical_name(),
-                                    span,
-                                ))),
+                                target: Box::new(Expr::Ident(Ident::from_node(pid, span))),
                                 member: Ident::new(member, span),
                                 span,
                             })
@@ -353,7 +347,7 @@ impl<'a> ComponentExpander<'a> {
         };
         let empty_children: [NodeId; 0] = [];
         let resolved_font_expr = if let Expr::Ident(id) = &font_expr {
-            if NodeId::from_canonical_name(id.as_str()).is_some() {
+            if id.node_id().is_some() {
                 Some(font_expr)
             } else {
                 let caller_scope_borrow = self.lexical_scope.borrow();
@@ -384,7 +378,7 @@ impl<'a> ComponentExpander<'a> {
             rewrite_expr(&font_expr, &temp_ctx).ok()
         };
         if let Some(Expr::Ident(id)) = resolved_font_expr {
-            if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+            if let Some(fid) = id.node_id() {
                 self.comp_ports.insert("font".to_string(), Expr::Ident(id));
                 self.node_fonts.insert(self.ctx.comp_node_id, fid);
                 self.doc.get_node_mut(self.ctx.comp_node_id).unwrap().font = Some(fid);
@@ -553,38 +547,39 @@ impl<'a> ComponentExpander<'a> {
 
     fn init_local_lexical_scope(
         &mut self,
-    ) -> Result<HashMap<String, LexicalBinding>, CompileError> {
+    ) -> Result<HashMap<Symbol, LexicalBinding>, CompileError> {
         let ctx = self.ctx;
         let instance = self.instance;
         let comp_def = self.comp_def;
         let empty_children: [NodeId; 0] = [];
 
-        let mut local_scope: HashMap<String, LexicalBinding> = self.lexical_scope.borrow().clone();
+        let mut local_scope: HashMap<Symbol, LexicalBinding> = self.lexical_scope.borrow().clone();
         local_scope.reserve(
             self.comp_scope_ports.len() + self.schema.all_lets.len() + self.schema.all_envs.len(),
         );
         let mut populated_mask = PortMask::default();
         for param in &comp_def.params {
             let name = param.name.as_str();
+            let name_sym = param.name.name;
             populated_mask.insert(&self.schema.port_table, name);
             let is_handler_param = self.schema.handler_param_names.contains(name);
             if name.starts_with("on_") || is_handler_param {
                 continue;
             }
             if let Some(Expr::Ident(id)) = self.comp_ports.get(name) {
-                if let Some(node_id) = NodeId::from_canonical_name(id.as_str()) {
-                    local_scope.insert(name.to_string(), LexicalBinding::Node(node_id));
+                if let Some(node_id) = id.node_id() {
+                    local_scope.insert(name_sym, LexicalBinding::Node(node_id));
                     continue;
                 }
             }
             local_scope.insert(
-                name.to_string(),
+                name_sym,
                 LexicalBinding::Expr(Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::from_node(
                         ctx.comp_node_id,
                         param.name.span,
                     ))),
-                    member: param.name.clone(),
+                    member: param.name,
                     span: param.name.span,
                 })),
             );
@@ -593,13 +588,13 @@ impl<'a> ComponentExpander<'a> {
             if !self.schema.comp_shadowed_ports.contains(let_name) {
                 populated_mask.insert(&self.schema.port_table, let_name);
                 local_scope.insert(
-                    let_name.clone(),
+                    let_binding.name.name,
                     LexicalBinding::Expr(Expr::MemberAccess(MemberAccessExpr {
                         target: Box::new(Expr::Ident(Ident::from_node(
                             ctx.comp_node_id,
                             let_binding.name.span,
                         ))),
-                        member: let_binding.name.clone(),
+                        member: let_binding.name,
                         span: let_binding.name.span,
                     })),
                 );
@@ -607,12 +602,13 @@ impl<'a> ComponentExpander<'a> {
         }
         for port_name in self.comp_scope_ports.iter() {
             if !populated_mask.contains(&self.schema.port_table, port_name) {
+                let port_sym = Symbol::new(port_name);
                 let member_expr = Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(Expr::Ident(Ident::from_node(
                         ctx.comp_node_id,
                         instance.span,
                     ))),
-                    member: Ident::new(port_name.clone(), instance.span),
+                    member: Ident::from_symbol(port_sym, instance.span),
                     span: instance.span,
                 });
                 let binding = if self.schema.declared_state_names.contains(port_name) {
@@ -620,11 +616,12 @@ impl<'a> ComponentExpander<'a> {
                 } else {
                     LexicalBinding::Expr(member_expr)
                 };
-                local_scope.insert(port_name.clone(), binding);
+                local_scope.insert(port_sym, binding);
             }
         }
         for param in &comp_def.params {
             let name = param.name.as_str();
+            let name_sym = param.name.name;
             let is_handler_param = self.schema.handler_param_names.contains(name);
             if name.starts_with("on_") || is_handler_param {
                 if let Some(expr) = self.comp_ports.get(name).cloned() {
@@ -652,7 +649,7 @@ impl<'a> ComponentExpander<'a> {
                         self.already_rewritten_ports
                             .insert(&self.schema.port_table, name);
                         self.comp_ports.insert(name.to_string(), rewritten.clone());
-                        local_scope.insert(name.to_string(), LexicalBinding::Expr(rewritten));
+                        local_scope.insert(name_sym, LexicalBinding::Expr(rewritten));
                     } else {
                         if let Some(default_expr) = &param.default_edge {
                             if let Ok(rewritten_default) =
@@ -672,7 +669,7 @@ impl<'a> ComponentExpander<'a> {
                                 }
                             }
                         }
-                        local_scope.insert(name.to_string(), LexicalBinding::Expr(expr));
+                        local_scope.insert(name_sym, LexicalBinding::Expr(expr));
                     }
                 }
             }
@@ -683,18 +680,18 @@ impl<'a> ComponentExpander<'a> {
     fn resolve_env_param_bound_expr(&self, param: &ParamDef) -> Expr {
         let span = self.instance.span;
         let comp_node_id = self.ctx.comp_node_id;
-        if param.name.as_str() == "font" {
+        if param.name.name == Symbol::FONT {
             if let Some(&fid) = self.node_fonts.get(&comp_node_id) {
                 return Expr::Ident(Ident::from_node(fid, span));
             }
         } else if let Some(Expr::Ident(id)) = self.comp_ports.get(param.name.as_str()) {
-            if NodeId::from_canonical_name(id.as_str()).is_some() {
-                return Expr::Ident(id.clone());
+            if id.node_id().is_some() {
+                return Expr::Ident(*id);
             }
         }
         Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(Expr::Ident(Ident::from_node(comp_node_id, span))),
-            member: param.name.clone(),
+            member: param.name,
             span,
         })
     }
@@ -750,12 +747,12 @@ impl<'a> ComponentExpander<'a> {
                 internal_body_env_scope.insert(l.name.as_str().to_string(), EnvEntry::Tombstone);
             }
             if l.value.is_none() {
-                local_scope.insert(l.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                local_scope.insert(l.name.name, LexicalBinding::Uninitialized);
             }
         }
         for e in &self.schema.all_envs {
             if e.value.is_none() {
-                local_scope.insert(e.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                local_scope.insert(e.name.name, LexicalBinding::Uninitialized);
                 children_env_scope.insert(e.name.as_str().to_string(), EnvEntry::Tombstone);
                 internal_body_env_scope
                     .insert(e.name.as_str().to_string(), EnvEntry::Tombstone);
@@ -780,7 +777,7 @@ impl<'a> ComponentExpander<'a> {
                             || let_binding
                                 .type_annotation
                                 .as_ref()
-                                .is_some_and(|t| t.name.as_str() == "Handler");
+                                .is_some_and(|t| t.name.name == Symbol::TYPE_HANDLER);
                         let rewritten_res = {
                             let scope_ctx = ScopeContext::from_instance(
                                 ctx,
@@ -802,7 +799,7 @@ impl<'a> ComponentExpander<'a> {
                         };
                         if try_preresolve_expr_binding(
                             &mut local_scope,
-                            let_binding.name.as_str(),
+                            let_binding.name.name,
                             rewritten_res,
                             let_binding.type_annotation.as_ref(),
                         )
@@ -815,7 +812,7 @@ impl<'a> ComponentExpander<'a> {
                 for env_binding in &self.schema.all_envs {
                     if env_binding.value.is_none() {
                         local_scope.insert(
-                            env_binding.name.as_str().to_string(),
+                            env_binding.name.name,
                             LexicalBinding::Uninitialized,
                         );
                     } else if let Some(raw_expr) = &env_binding.value {
@@ -839,7 +836,7 @@ impl<'a> ComponentExpander<'a> {
                             };
                             if try_preresolve_expr_binding(
                                 &mut local_scope,
-                                env_binding.name.as_str(),
+                                env_binding.name.name,
                                 rewritten_res,
                                 env_binding.type_annotation.as_ref(),
                             )
@@ -894,7 +891,7 @@ impl<'a> ComponentExpander<'a> {
             )?;
             let node_id = NodeId(self.doc.nodes.len());
             self.local_scope.borrow_mut().insert(
-                let_binding.name.as_str().to_string(),
+                let_binding.name.name,
                 LexicalBinding::Node(node_id),
             );
             self.scope_mutated_in_body = true;
@@ -975,8 +972,8 @@ impl<'a> ComponentExpander<'a> {
                 ));
                 let new_binding = LexicalBinding::Expr(rewritten);
                 let mut scope_mut = self.local_scope.borrow_mut();
-                if scope_mut.get(let_binding.name.as_str()) != Some(&new_binding) {
-                    scope_mut.insert(let_binding.name.as_str().to_string(), new_binding);
+                if scope_mut.get(&let_binding.name.name) != Some(&new_binding) {
+                    scope_mut.insert(let_binding.name.name, new_binding);
                     self.scope_mutated_in_body = true;
                 }
             } else if !is_env_param_shadow {
@@ -1044,7 +1041,7 @@ impl<'a> ComponentExpander<'a> {
                         Some(env_binding.name.as_str().to_string());
                     self.all_children_ids.push(node_id);
                     self.local_scope.borrow_mut().insert(
-                        env_binding.name.as_str().to_string(),
+                        env_binding.name.name,
                         LexicalBinding::Node(node_id),
                     );
                     self.scope_mutated_in_body = true;
@@ -1113,8 +1110,8 @@ impl<'a> ComponentExpander<'a> {
                     let new_binding = LexicalBinding::Expr(rewritten.clone());
                     {
                         let mut scope_mut = self.local_scope.borrow_mut();
-                        if scope_mut.get(env_binding.name.as_str()) != Some(&new_binding) {
-                            scope_mut.insert(env_binding.name.as_str().to_string(), new_binding);
+                        if scope_mut.get(&env_binding.name.name) != Some(&new_binding) {
+                            scope_mut.insert(env_binding.name.name, new_binding);
                             self.scope_mutated_in_body = true;
                         }
                     }
@@ -1131,7 +1128,7 @@ impl<'a> ComponentExpander<'a> {
         } else {
             // Environmental Hole Tombstone
             self.local_scope.borrow_mut().insert(
-                env_binding.name.as_str().to_string(),
+                env_binding.name.name,
                 LexicalBinding::Uninitialized,
             );
             self.children_env_scope
@@ -1444,7 +1441,7 @@ impl<'a> ComponentExpander<'a> {
             let mut local_scope_mut = self.local_scope.borrow_mut();
             for (idx, &child_id) in inst_ids.iter().enumerate() {
                 local_scope_mut.insert(
-                    format!("__agg_child_of_{}_{}", ctx.comp_node_id.canonical_name(), idx),
+                    Symbol::agg_child_of(ctx.comp_node_id, idx),
                     LexicalBinding::Node(child_id),
                 );
             }
@@ -1668,7 +1665,7 @@ impl<'a> ComponentExpander<'a> {
             {
                 if self.schema.comp_shadowed_ports.contains(port_name.as_str()) {
                     if let Some(LexicalBinding::Expr(shadowed_expr)) =
-                        local_scope_borrow.get(port_name.as_str())
+                        local_scope_borrow.get(&Symbol::new(port_name))
                     {
                         *port_expr = shadowed_expr.clone();
                     }
@@ -1700,7 +1697,7 @@ pub(super) fn expand_component_instance(
     comp_def: &ComponentDef,
     registry: &HashMap<String, Vec<ComponentDef>>,
     doc: &mut ExpandedDocument,
-    lexical_scope: &RefCell<HashMap<String, LexicalBinding>>,
+    lexical_scope: &RefCell<HashMap<Symbol, LexicalBinding>>,
     caller_env_scope: &HashMap<String, EnvEntry>,
     node_fonts: &mut HashMap<NodeId, NodeId>,
 ) -> Result<(), CompileError> {

@@ -37,7 +37,7 @@ impl NodeId {
     pub const WINDOW: NodeId = NodeId(usize::MAX);
 
     #[inline]
-    pub fn is_window(&self) -> bool {
+    pub const fn is_window(&self) -> bool {
         self.0 == usize::MAX
     }
 

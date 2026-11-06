@@ -37,7 +37,6 @@ pub(super) fn get_agg_emitted_count(comp_id: NodeId) -> u32 {
 fn populate_comp_cond_consts<'a>(
     expr: &'a Expr,
     comp_id: NodeId,
-    comp_canon: &str,
     rewritten_ports: &'a HashMap<String, Expr>,
     declared_state_names: &HashSet<String>,
     const_env: &mut HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
@@ -50,14 +49,13 @@ fn populate_comp_cond_consts<'a>(
     match expr {
         Expr::MemberAccess(m) => {
             if let Expr::Ident(id) = m.target.as_ref() {
-                if id.as_str() == comp_canon && !declared_state_names.contains(m.member.as_str()) {
+                if id.node_id() == Some(comp_id) && !declared_state_names.contains(m.member.as_str()) {
                     if let Some((key, port_expr)) = rewritten_ports.get_key_value(m.member.as_str())
                     {
                         if tried_ports.insert(key.as_str()) {
                             populate_comp_cond_consts(
                                 port_expr,
                                 comp_id,
-                                comp_canon,
                                 rewritten_ports,
                                 declared_state_names,
                                 const_env,
@@ -77,7 +75,6 @@ fn populate_comp_cond_consts<'a>(
             populate_comp_cond_consts(
                 &m.target,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -89,7 +86,6 @@ fn populate_comp_cond_consts<'a>(
             populate_comp_cond_consts(
                 &b.left,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -99,7 +95,6 @@ fn populate_comp_cond_consts<'a>(
             populate_comp_cond_consts(
                 &b.right,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -111,7 +106,6 @@ fn populate_comp_cond_consts<'a>(
             populate_comp_cond_consts(
                 &u.operand,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -123,7 +117,6 @@ fn populate_comp_cond_consts<'a>(
             populate_comp_cond_consts(
                 inner,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -136,7 +129,6 @@ fn populate_comp_cond_consts<'a>(
                 populate_comp_cond_consts(
                     a,
                     comp_id,
-                    comp_canon,
                     rewritten_ports,
                     declared_state_names,
                     const_env,
@@ -149,7 +141,6 @@ fn populate_comp_cond_consts<'a>(
             populate_comp_cond_consts(
                 &mc.target,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -160,7 +151,6 @@ fn populate_comp_cond_consts<'a>(
                 populate_comp_cond_consts(
                     a,
                     comp_id,
-                    comp_canon,
                     rewritten_ports,
                     declared_state_names,
                     const_env,
@@ -173,7 +163,6 @@ fn populate_comp_cond_consts<'a>(
             populate_comp_cond_consts(
                 &t.condition,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -183,7 +172,6 @@ fn populate_comp_cond_consts<'a>(
             populate_comp_cond_consts(
                 &t.then_expr,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -193,7 +181,6 @@ fn populate_comp_cond_consts<'a>(
             populate_comp_cond_consts(
                 &t.else_expr,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -208,7 +195,6 @@ fn populate_comp_cond_consts<'a>(
 fn collect_cond_consts_from_expr<'a>(
     expr: &'a Expr,
     comp_id: NodeId,
-    comp_canon: &str,
     rewritten_ports: &'a HashMap<String, Expr>,
     declared_state_names: &HashSet<String>,
     const_env: &mut HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
@@ -221,7 +207,6 @@ fn collect_cond_consts_from_expr<'a>(
             populate_comp_cond_consts(
                 &t.condition,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -231,7 +216,6 @@ fn collect_cond_consts_from_expr<'a>(
             collect_cond_consts_from_expr(
                 &t.condition,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -241,7 +225,6 @@ fn collect_cond_consts_from_expr<'a>(
             collect_cond_consts_from_expr(
                 &t.then_expr,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -251,7 +234,6 @@ fn collect_cond_consts_from_expr<'a>(
             collect_cond_consts_from_expr(
                 &t.else_expr,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -263,7 +245,6 @@ fn collect_cond_consts_from_expr<'a>(
             collect_cond_consts_from_expr(
                 &b.left,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -273,7 +254,6 @@ fn collect_cond_consts_from_expr<'a>(
             collect_cond_consts_from_expr(
                 &b.right,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -285,7 +265,6 @@ fn collect_cond_consts_from_expr<'a>(
             collect_cond_consts_from_expr(
                 &u.operand,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -297,7 +276,6 @@ fn collect_cond_consts_from_expr<'a>(
             collect_cond_consts_from_expr(
                 inner,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -310,7 +288,6 @@ fn collect_cond_consts_from_expr<'a>(
                 collect_cond_consts_from_expr(
                     a,
                     comp_id,
-                    comp_canon,
                     rewritten_ports,
                     declared_state_names,
                     const_env,
@@ -323,7 +300,6 @@ fn collect_cond_consts_from_expr<'a>(
             collect_cond_consts_from_expr(
                 &mc.target,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -334,7 +310,6 @@ fn collect_cond_consts_from_expr<'a>(
                 collect_cond_consts_from_expr(
                     a,
                     comp_id,
-                    comp_canon,
                     rewritten_ports,
                     declared_state_names,
                     const_env,
@@ -347,7 +322,6 @@ fn collect_cond_consts_from_expr<'a>(
             collect_cond_consts_from_expr(
                 &m.target,
                 comp_id,
-                comp_canon,
                 rewritten_ports,
                 declared_state_names,
                 const_env,
@@ -361,47 +335,46 @@ fn collect_cond_consts_from_expr<'a>(
 
 fn collect_agg_members_and_parent_refs(
     expr: &Expr,
-    agg_prefix: &str,
-    parent_canon: &str,
+    parent_id: NodeId,
     agg_members: &mut HashSet<String>,
     parent_refs: &mut HashSet<String>,
 ) {
     match expr {
         Expr::MemberAccess(m) => {
             if let Expr::Ident(id) = m.target.as_ref() {
-                if id.as_str().starts_with(agg_prefix) {
+                if id.agg_child_of_node().is_some_and(|(p, _)| p == parent_id) {
                     agg_members.insert(m.member.as_str().to_string());
-                } else if id.as_str() == parent_canon {
+                } else if id.node_id() == Some(parent_id) {
                     parent_refs.insert(m.member.as_str().to_string());
                 }
             }
-            collect_agg_members_and_parent_refs(&m.target, agg_prefix, parent_canon, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&m.target, parent_id, agg_members, parent_refs);
         }
         Expr::Call(c) => {
             for a in &c.args {
-                collect_agg_members_and_parent_refs(a, agg_prefix, parent_canon, agg_members, parent_refs);
+                collect_agg_members_and_parent_refs(a, parent_id, agg_members, parent_refs);
             }
         }
         Expr::MethodCall(mc) => {
-            collect_agg_members_and_parent_refs(&mc.target, agg_prefix, parent_canon, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&mc.target, parent_id, agg_members, parent_refs);
             for a in &mc.args {
-                collect_agg_members_and_parent_refs(a, agg_prefix, parent_canon, agg_members, parent_refs);
+                collect_agg_members_and_parent_refs(a, parent_id, agg_members, parent_refs);
             }
         }
         Expr::Binary(b) => {
-            collect_agg_members_and_parent_refs(&b.left, agg_prefix, parent_canon, agg_members, parent_refs);
-            collect_agg_members_and_parent_refs(&b.right, agg_prefix, parent_canon, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&b.left, parent_id, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&b.right, parent_id, agg_members, parent_refs);
         }
         Expr::Unary(u) => {
-            collect_agg_members_and_parent_refs(&u.operand, agg_prefix, parent_canon, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&u.operand, parent_id, agg_members, parent_refs);
         }
         Expr::Ternary(t) => {
-            collect_agg_members_and_parent_refs(&t.condition, agg_prefix, parent_canon, agg_members, parent_refs);
-            collect_agg_members_and_parent_refs(&t.then_expr, agg_prefix, parent_canon, agg_members, parent_refs);
-            collect_agg_members_and_parent_refs(&t.else_expr, agg_prefix, parent_canon, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&t.condition, parent_id, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&t.then_expr, parent_id, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&t.else_expr, parent_id, agg_members, parent_refs);
         }
         Expr::Paren(inner, _) => {
-            collect_agg_members_and_parent_refs(inner, agg_prefix, parent_canon, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(inner, parent_id, agg_members, parent_refs);
         }
         Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => {}
     }
@@ -410,8 +383,6 @@ fn collect_agg_members_and_parent_refs(
 fn scan_expr_for_parent_or_local_deps<'a>(
     expr: &'a Expr,
     parent_id: NodeId,
-    parent_canon: &str,
-    agg_prefix: &str,
     target_member: &str,
     parent_ports_for_member: &HashSet<String>,
     child_id: NodeId,
@@ -428,11 +399,8 @@ fn scan_expr_for_parent_or_local_deps<'a>(
                     } else if target_node_id.0 >= child_id.0 {
                         stack.push((target_node_id, ma.member.as_str()));
                     }
-                } else if id.as_str() == parent_canon {
-                    if parent_ports_for_member.contains(ma.member.as_str()) {
-                        return true;
-                    }
-                } else if id.as_str().starts_with(agg_prefix) && ma.member.as_str() == target_member
+                } else if id.agg_child_of_node().is_some_and(|(p, _)| p == parent_id)
+                    && ma.member.as_str() == target_member
                 {
                     return true;
                 }
@@ -440,8 +408,6 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             scan_expr_for_parent_or_local_deps(
                 &ma.target,
                 parent_id,
-                parent_canon,
-                agg_prefix,
                 target_member,
                 parent_ports_for_member,
                 child_id,
@@ -452,8 +418,6 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             scan_expr_for_parent_or_local_deps(
                 a,
                 parent_id,
-                parent_canon,
-                agg_prefix,
                 target_member,
                 parent_ports_for_member,
                 child_id,
@@ -464,8 +428,6 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             scan_expr_for_parent_or_local_deps(
                 &mc.target,
                 parent_id,
-                parent_canon,
-                agg_prefix,
                 target_member,
                 parent_ports_for_member,
                 child_id,
@@ -474,8 +436,6 @@ fn scan_expr_for_parent_or_local_deps<'a>(
                 scan_expr_for_parent_or_local_deps(
                     a,
                     parent_id,
-                    parent_canon,
-                    agg_prefix,
                     target_member,
                     parent_ports_for_member,
                     child_id,
@@ -487,8 +447,6 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             scan_expr_for_parent_or_local_deps(
                 &b.left,
                 parent_id,
-                parent_canon,
-                agg_prefix,
                 target_member,
                 parent_ports_for_member,
                 child_id,
@@ -496,8 +454,6 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             ) || scan_expr_for_parent_or_local_deps(
                 &b.right,
                 parent_id,
-                parent_canon,
-                agg_prefix,
                 target_member,
                 parent_ports_for_member,
                 child_id,
@@ -507,8 +463,6 @@ fn scan_expr_for_parent_or_local_deps<'a>(
         Expr::Unary(u) => scan_expr_for_parent_or_local_deps(
             &u.operand,
             parent_id,
-            parent_canon,
-            agg_prefix,
             target_member,
             parent_ports_for_member,
             child_id,
@@ -518,8 +472,6 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             scan_expr_for_parent_or_local_deps(
                 &t.condition,
                 parent_id,
-                parent_canon,
-                agg_prefix,
                 target_member,
                 parent_ports_for_member,
                 child_id,
@@ -527,8 +479,6 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             ) || scan_expr_for_parent_or_local_deps(
                 &t.then_expr,
                 parent_id,
-                parent_canon,
-                agg_prefix,
                 target_member,
                 parent_ports_for_member,
                 child_id,
@@ -536,8 +486,6 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             ) || scan_expr_for_parent_or_local_deps(
                 &t.else_expr,
                 parent_id,
-                parent_canon,
-                agg_prefix,
                 target_member,
                 parent_ports_for_member,
                 child_id,
@@ -547,8 +495,6 @@ fn scan_expr_for_parent_or_local_deps<'a>(
         Expr::Paren(inner, _) => scan_expr_for_parent_or_local_deps(
             inner,
             parent_id,
-            parent_canon,
-            agg_prefix,
             target_member,
             parent_ports_for_member,
             child_id,
@@ -562,11 +508,9 @@ fn child_port_depends_on_parent<'a>(
     child_id: NodeId,
     member: &'a str,
     parent_id: NodeId,
-    agg_prefix: &str,
     parent_ports_for_member: &HashSet<String>,
     nodes: &'a [ExpandedNode],
 ) -> bool {
-    let parent_canon = parent_id.canonical_name();
     let mut visited: HashSet<(NodeId, &'a str)> = HashSet::new();
     let mut stack: Vec<(NodeId, &'a str)> = Vec::new();
     stack.push((child_id, member));
@@ -604,8 +548,6 @@ fn child_port_depends_on_parent<'a>(
             if scan_expr_for_parent_or_local_deps(
                 expr,
                 parent_id,
-                &parent_canon,
-                agg_prefix,
                 member,
                 parent_ports_for_member,
                 child_id,
@@ -623,7 +565,6 @@ fn resolve_and_filter_agg_expr(
     expr: &Expr,
     comp_id: NodeId,
     comp_name: &str,
-    agg_prefix: &str,
     instantiated_children_ids: &[NodeId],
     parent_ports_by_member: &HashMap<String, HashSet<String>>,
     nodes: &[ExpandedNode],
@@ -631,7 +572,7 @@ fn resolve_and_filter_agg_expr(
 ) -> Result<(Expr, Expr), CompileError> {
     match expr {
         Expr::Call(call) => {
-            let allow_filter = call.callee.as_str() != "only" || instantiated_children_ids.len() == 1;
+            let allow_filter = call.callee.name != Symbol::ONLY || instantiated_children_ids.len() == 1;
             let mut new_args = Vec::with_capacity(call.args.len());
             let mut unfiltered_args = Vec::with_capacity(call.args.len());
             let mut call_skipped = Vec::new();
@@ -640,16 +581,16 @@ fn resolve_and_filter_agg_expr(
             for arg in &call.args {
                 if let Expr::MemberAccess(m) = arg {
                     if let Expr::Ident(id) = m.target.as_ref() {
-                        if let Some(idx_str) = id.as_str().strip_prefix(agg_prefix) {
-                            if let Ok(idx) = idx_str.parse::<usize>() {
+                        if let Some((agg_parent, idx)) = id.agg_child_of_node() {
+                            if agg_parent == comp_id {
                                 if let Some(&child_id) = instantiated_children_ids.get(idx) {
                                     let member = m.member.as_str();
                                     let resolved_arg = Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::new(
-                                            child_id.canonical_name(),
+                                        target: Box::new(Expr::Ident(Ident::from_node(
+                                            child_id,
                                             id.span,
                                         ))),
-                                        member: m.member.clone(),
+                                        member: m.member,
                                         span: m.span,
                                     });
                                     unfiltered_args.push(resolved_arg.clone());
@@ -661,14 +602,13 @@ fn resolve_and_filter_agg_expr(
                                                     child_id,
                                                     member,
                                                     comp_id,
-                                                    agg_prefix,
                                                     parent_ports,
                                                     nodes,
                                                 )
                                             {
                                                 had_filtered = true;
-                                                call_skipped.push(crate::compiler::graph::VarId::new(
-                                                    child_id, member,
+                                                call_skipped.push(crate::compiler::graph::VarId::from_symbol(
+                                                    child_id, m.member.name,
                                                 ));
                                                 continue;
                                             }
@@ -686,7 +626,6 @@ fn resolve_and_filter_agg_expr(
                     arg,
                     comp_id,
                     comp_name,
-                    agg_prefix,
                     instantiated_children_ids,
                     parent_ports_by_member,
                     nodes,
@@ -709,12 +648,12 @@ fn resolve_and_filter_agg_expr(
 
             Ok((
                 Expr::Call(CallExpr {
-                    callee: call.callee.clone(),
+                    callee: call.callee,
                     args: final_args,
                     span: call.span,
                 }),
                 Expr::Call(CallExpr {
-                    callee: call.callee.clone(),
+                    callee: call.callee,
                     args: unfiltered_args,
                     span: call.span,
                 }),
@@ -722,10 +661,10 @@ fn resolve_and_filter_agg_expr(
         }
         Expr::MemberAccess(m) => {
             let (new_target, unfilt_target) = if let Expr::Ident(id) = m.target.as_ref() {
-                if let Some(idx_str) = id.as_str().strip_prefix(agg_prefix) {
-                    if let Ok(idx) = idx_str.parse::<usize>() {
+                if let Some((agg_parent, idx)) = id.agg_child_of_node() {
+                    if agg_parent == comp_id {
                         if let Some(&child_id) = instantiated_children_ids.get(idx) {
-                            let resolved = Expr::Ident(Ident::new(child_id.canonical_name(), id.span));
+                            let resolved = Expr::Ident(Ident::from_node(child_id, id.span));
                             (resolved.clone(), resolved)
                         } else {
                             let orig = m.target.as_ref().clone();
@@ -744,7 +683,6 @@ fn resolve_and_filter_agg_expr(
                     &m.target,
                     comp_id,
                     comp_name,
-                    agg_prefix,
                     instantiated_children_ids,
                     parent_ports_by_member,
                     nodes,
@@ -754,12 +692,12 @@ fn resolve_and_filter_agg_expr(
             Ok((
                 Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(new_target),
-                    member: m.member.clone(),
+                    member: m.member,
                     span: m.span,
                 }),
                 Expr::MemberAccess(MemberAccessExpr {
                     target: Box::new(unfilt_target),
-                    member: m.member.clone(),
+                    member: m.member,
                     span: m.span,
                 }),
             ))
@@ -769,7 +707,6 @@ fn resolve_and_filter_agg_expr(
                 &mc.target,
                 comp_id,
                 comp_name,
-                agg_prefix,
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
@@ -782,7 +719,6 @@ fn resolve_and_filter_agg_expr(
                     a,
                     comp_id,
                     comp_name,
-                    agg_prefix,
                     instantiated_children_ids,
                     parent_ports_by_member,
                     nodes,
@@ -794,13 +730,13 @@ fn resolve_and_filter_agg_expr(
             Ok((
                 Expr::MethodCall(MethodCallExpr {
                     target: Box::new(new_target),
-                    method: mc.method.clone(),
+                    method: mc.method,
                     args: new_args,
                     span: mc.span,
                 }),
                 Expr::MethodCall(MethodCallExpr {
                     target: Box::new(unfilt_target),
-                    method: mc.method.clone(),
+                    method: mc.method,
                     args: unfilt_args,
                     span: mc.span,
                 }),
@@ -811,7 +747,6 @@ fn resolve_and_filter_agg_expr(
                 &b.left,
                 comp_id,
                 comp_name,
-                agg_prefix,
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
@@ -821,7 +756,6 @@ fn resolve_and_filter_agg_expr(
                 &b.right,
                 comp_id,
                 comp_name,
-                agg_prefix,
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
@@ -847,7 +781,6 @@ fn resolve_and_filter_agg_expr(
                 &u.operand,
                 comp_id,
                 comp_name,
-                agg_prefix,
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
@@ -871,7 +804,6 @@ fn resolve_and_filter_agg_expr(
                 &t.condition,
                 comp_id,
                 comp_name,
-                agg_prefix,
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
@@ -881,7 +813,6 @@ fn resolve_and_filter_agg_expr(
                 &t.then_expr,
                 comp_id,
                 comp_name,
-                agg_prefix,
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
@@ -891,7 +822,6 @@ fn resolve_and_filter_agg_expr(
                 &t.else_expr,
                 comp_id,
                 comp_name,
-                agg_prefix,
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
@@ -917,7 +847,6 @@ fn resolve_and_filter_agg_expr(
                 inner,
                 comp_id,
                 comp_name,
-                agg_prefix,
                 instantiated_children_ids,
                 parent_ports_by_member,
                 nodes,
@@ -983,32 +912,32 @@ fn fold_const_ternaries_in_place(
     }
 }
 
-fn expr_contains_agg_prefix(expr: &Expr, agg_prefix: &str) -> bool {
+fn expr_contains_agg_child_of(expr: &Expr, comp_id: NodeId) -> bool {
     match expr {
-        Expr::Ident(id) => id.as_str().starts_with(agg_prefix),
-        Expr::MemberAccess(m) => expr_contains_agg_prefix(&m.target, agg_prefix),
+        Expr::Ident(id) => id.agg_child_of_node().is_some_and(|(p, _)| p == comp_id),
+        Expr::MemberAccess(m) => expr_contains_agg_child_of(&m.target, comp_id),
         Expr::Call(c) => c
             .args
             .iter()
-            .any(|a| expr_contains_agg_prefix(a, agg_prefix)),
+            .any(|a| expr_contains_agg_child_of(a, comp_id)),
         Expr::MethodCall(mc) => {
-            expr_contains_agg_prefix(&mc.target, agg_prefix)
+            expr_contains_agg_child_of(&mc.target, comp_id)
                 || mc
                     .args
                     .iter()
-                    .any(|a| expr_contains_agg_prefix(a, agg_prefix))
+                    .any(|a| expr_contains_agg_child_of(a, comp_id))
         }
         Expr::Binary(b) => {
-            expr_contains_agg_prefix(&b.left, agg_prefix)
-                || expr_contains_agg_prefix(&b.right, agg_prefix)
+            expr_contains_agg_child_of(&b.left, comp_id)
+                || expr_contains_agg_child_of(&b.right, comp_id)
         }
-        Expr::Unary(u) => expr_contains_agg_prefix(&u.operand, agg_prefix),
+        Expr::Unary(u) => expr_contains_agg_child_of(&u.operand, comp_id),
         Expr::Ternary(t) => {
-            expr_contains_agg_prefix(&t.condition, agg_prefix)
-                || expr_contains_agg_prefix(&t.then_expr, agg_prefix)
-                || expr_contains_agg_prefix(&t.else_expr, agg_prefix)
+            expr_contains_agg_child_of(&t.condition, comp_id)
+                || expr_contains_agg_child_of(&t.then_expr, comp_id)
+                || expr_contains_agg_child_of(&t.else_expr, comp_id)
         }
-        Expr::Paren(inner, _) => expr_contains_agg_prefix(inner, agg_prefix),
+        Expr::Paren(inner, _) => expr_contains_agg_child_of(inner, comp_id),
         Expr::Literal(_) | Expr::Node(_) => false,
     }
 }
@@ -1026,7 +955,6 @@ pub(super) fn resolve_and_filter_component_aggregations(
     body_agg_count: u32,
     total_agg_count: u32,
 ) -> Result<(), CompileError> {
-    let parent_canon = comp_id.canonical_str();
     let mut const_env: HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value> =
         HashMap::new();
     let mut has_any_ternary = false;
@@ -1036,7 +964,6 @@ pub(super) fn resolve_and_filter_component_aggregations(
             collect_cond_consts_from_expr(
                 expr,
                 comp_id,
-                parent_canon.as_ref(),
                 rewritten_ports,
                 declared_state_names,
                 &mut const_env,
@@ -1055,8 +982,6 @@ pub(super) fn resolve_and_filter_component_aggregations(
         return Ok(());
     }
 
-    let agg_prefix = format!("__agg_child_of_{}_", parent_canon);
-
     let mut parent_ports_by_member: HashMap<String, HashSet<String>> = HashMap::new();
     let mut port_to_parent_refs: Vec<(String, HashSet<String>)> = Vec::new();
 
@@ -1065,8 +990,7 @@ pub(super) fn resolve_and_filter_component_aggregations(
         let mut parent_refs = HashSet::new();
         collect_agg_members_and_parent_refs(
             expr,
-            &agg_prefix,
-            &parent_canon,
+            comp_id,
             &mut agg_members,
             &mut parent_refs,
         );
@@ -1118,7 +1042,7 @@ pub(super) fn resolve_and_filter_component_aggregations(
     let mut comp_unfiltered_ports = HashMap::new();
     let mut comp_skipped_upstream = HashMap::new();
     for (port_name, expr) in rewritten_ports.iter_mut() {
-        if !expr_contains_agg_prefix(expr, &agg_prefix) {
+        if !expr_contains_agg_child_of(expr, comp_id) {
             continue;
         }
         let mut skipped_vars = Vec::new();
@@ -1126,7 +1050,6 @@ pub(super) fn resolve_and_filter_component_aggregations(
             expr,
             comp_id,
             comp_name,
-            &agg_prefix,
             instantiated_children_ids,
             &parent_ports_by_member,
             &doc.nodes,
@@ -1149,13 +1072,12 @@ pub(super) fn resolve_and_filter_component_aggregations(
         let mut node_updates = Vec::new();
         for node_idx in start_node_idx..doc.nodes.len() {
             for (port_name, expr) in &doc.nodes[node_idx].ports {
-                if expr_contains_agg_prefix(expr, &agg_prefix) {
+                if expr_contains_agg_child_of(expr, comp_id) {
                     let mut skipped_vars = Vec::new();
                     let (filt, unfilt) = resolve_and_filter_agg_expr(
                         expr,
                         comp_id,
                         comp_name,
-                        &agg_prefix,
                         instantiated_children_ids,
                         &parent_ports_by_member,
                         &doc.nodes,
@@ -1175,7 +1097,7 @@ pub(super) fn resolve_and_filter_component_aggregations(
         }
 
         for binding_idx in start_local_bindings_idx..doc.local_bindings.len() {
-            if !expr_contains_agg_prefix(&doc.local_bindings[binding_idx].0, &agg_prefix) {
+            if !expr_contains_agg_child_of(&doc.local_bindings[binding_idx].0, comp_id) {
                 continue;
             }
             let mut skipped_vars = Vec::new();
@@ -1183,7 +1105,6 @@ pub(super) fn resolve_and_filter_component_aggregations(
                 &doc.local_bindings[binding_idx].0,
                 comp_id,
                 comp_name,
-                &agg_prefix,
                 instantiated_children_ids,
                 &parent_ports_by_member,
                 &doc.nodes,

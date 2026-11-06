@@ -304,7 +304,7 @@ fn format_dag_expr_into_spans(
         Expr::Ident(id) => {
             let s = if id.as_str() == "__window" || id.as_str() == "window" {
                 "window".to_string()
-            } else if let Some(nid) = NodeId::from_canonical_name(id.as_str()) {
+            } else if let Some(nid) = id.node_id() {
                 layout.node_display_label(nid)
             } else {
                 id.to_string()
@@ -313,8 +313,8 @@ fn format_dag_expr_into_spans(
         }
         Expr::MemberAccess(m) => {
             if let Expr::Ident(id) = m.target.as_ref() {
-                if let Some(nid) = NodeId::from_canonical_name(id.as_str()) {
-                    let vid = VarId::new(nid, m.member.as_str());
+                if let Some(nid) = id.node_id() {
+                    let vid = VarId::from_symbol(nid, m.member.name);
                     let is_skipped = skipped_set.contains(&vid);
                     let s = format!("{}.{}", layout.node_display_label(nid), m.member);
                     push_equation_span(spans, s, is_skipped, false);
@@ -380,7 +380,7 @@ pub fn format_dag_expr(expr: &Expr, layout: &ResolvedLayout) -> String {
         Expr::Ident(id) => {
             if id.as_str() == "__window" || id.as_str() == "window" {
                 "window".to_string()
-            } else if let Some(nid) = NodeId::from_canonical_name(id.as_str()) {
+            } else if let Some(nid) = id.node_id() {
                 layout.node_display_label(nid)
             } else {
                 id.to_string()
@@ -565,7 +565,7 @@ pub fn build_property_dag_trace(
                 let is_lit = graph.upstream_of(dep).is_none_or(|u| u.is_empty());
                 upstream_dependencies.push(DagTraceDependency {
                     node_id: dep.node,
-                    port_name: dep.port.clone(),
+                    port_name: dep.port.to_string(),
                     node_label: dep_label,
                     value_str: dep_val,
                     equation_str: dep_eq,
@@ -589,7 +589,7 @@ pub fn build_property_dag_trace(
             let is_lit = graph.upstream_of(dep).is_none_or(|u| u.is_empty());
             skipped_upstream_dependencies.push(DagTraceDependency {
                 node_id: dep.node,
-                port_name: dep.port.clone(),
+                port_name: dep.port.to_string(),
                 node_label: dep_label,
                 value_str: dep_val,
                 equation_str: dep_eq,
@@ -611,7 +611,7 @@ pub fn build_property_dag_trace(
                 };
                 downstream_dependents.push(DagTraceDependency {
                     node_id: dep.node,
-                    port_name: dep.port.clone(),
+                    port_name: dep.port.to_string(),
                     node_label: dep_label,
                     value_str: dep_val,
                     equation_str: dep_eq,
@@ -622,12 +622,12 @@ pub fn build_property_dag_trace(
 
         // Multi-hop upstream origin chain (breadth-first traversal up to 8 nodes)
         let mut visited = std::collections::HashSet::new();
-        visited.insert(var_id.clone());
+        visited.insert(var_id);
         let mut queue = std::collections::VecDeque::new();
         if let Some(direct) = graph.upstream_of(&var_id) {
             for d in direct {
-                if visited.insert(d.clone()) {
-                    queue.push_back(d.clone());
+                if visited.insert(*d) {
+                    queue.push_back(*d);
                 }
             }
         }
@@ -648,7 +648,7 @@ pub fn build_property_dag_trace(
             let is_lit = graph.upstream_of(&curr_dep).is_none_or(|u| u.is_empty());
             upstream_chain.push(DagTraceDependency {
                 node_id: curr_dep.node,
-                port_name: curr_dep.port.clone(),
+                port_name: curr_dep.port.to_string(),
                 node_label: label,
                 value_str: val,
                 equation_str: eq,

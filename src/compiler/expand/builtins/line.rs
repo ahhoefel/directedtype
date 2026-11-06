@@ -96,7 +96,7 @@ impl BuiltinPrimitive for LinePrimitive {
             ))
         });
 
-        let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
+        let self_ident = Expr::Ident(Ident::from_node(node_id, elem.span));
         let x1_ref = Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident.clone()),
             member: Ident::new("x1", elem.span),

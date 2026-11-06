@@ -17,8 +17,8 @@ pub(super) fn wire_wrapper_child_origin(node_id: NodeId, child_elem: &ElementNod
         child.ports.push(PortBinding {
             name: Ident::new("x", child.span),
             expr: Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::new(
-                    node_id.canonical_name(),
+                target: Box::new(Expr::Ident(Ident::from_node(
+                    node_id,
                     child.span,
                 ))),
                 member: Ident::new("left", child.span),
@@ -31,8 +31,8 @@ pub(super) fn wire_wrapper_child_origin(node_id: NodeId, child_elem: &ElementNod
         child.ports.push(PortBinding {
             name: Ident::new("y", child.span),
             expr: Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::new(
-                    node_id.canonical_name(),
+                target: Box::new(Expr::Ident(Ident::from_node(
+                    node_id,
                     child.span,
                 ))),
                 member: Ident::new("top", child.span),
@@ -47,11 +47,11 @@ pub(super) fn wire_wrapper_child_origin(node_id: NodeId, child_elem: &ElementNod
 fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
     let elem = state.elem;
     let node_id = state.node_id;
-    let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
+    let self_ident = Expr::Ident(Ident::from_node(node_id, elem.span));
 
     if state.child_ids.len() == 1 {
         let cid = state.child_ids[0];
-        let cid_ident = Expr::Ident(Ident::new(cid.canonical_name(), elem.span));
+        let cid_ident = Expr::Ident(Ident::from_node(cid, elem.span));
 
         // Child origin defaults to Anchor origin
         state.doc.nodes[cid.0]
@@ -164,8 +164,8 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
             state.ports.insert(
                 "width".to_string(),
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(
-                        first_cid.canonical_name(),
+                    target: Box::new(Expr::Ident(Ident::from_node(
+                        first_cid,
                         elem.span,
                     ))),
                     member: Ident::new("width", elem.span),
@@ -178,8 +178,8 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
             state.ports.insert(
                 "height".to_string(),
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(
-                        first_cid.canonical_name(),
+                    target: Box::new(Expr::Ident(Ident::from_node(
+                        first_cid,
                         elem.span,
                     ))),
                     member: Ident::new("height", elem.span),

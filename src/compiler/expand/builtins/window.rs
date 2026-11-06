@@ -1,4 +1,4 @@
-use crate::ast::{ElementNode, EnumDef, Expr, Ident, Item, MemberAccessExpr};
+use crate::ast::{ElementNode, EnumDef, Expr, Ident, Item, MemberAccessExpr, Symbol};
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::context::{EnvEntry, LexicalBinding};
 use crate::compiler::expand::rewrite::default_expr_for_state_with_enums;
@@ -14,18 +14,18 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
     doc: &crate::ast::Document,
     enums: &HashMap<String, EnumDef>,
     expanded_doc: &mut ExpandedDocument,
-    global_scope: &mut HashMap<String, LexicalBinding>,
+    global_scope: &mut HashMap<Symbol, LexicalBinding>,
     global_env_scope: &mut HashMap<String, EnvEntry>,
 ) -> Result<Vec<String>, CompileError> {
     // Default universal clip: window.clip
     global_env_scope.insert(
         "clip".to_string(),
         EnvEntry::Bound(Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(Expr::Ident(Ident::new(
-                NodeId::WINDOW.canonical_name(),
+            target: Box::new(Expr::Ident(Ident::from_node(
+                NodeId::WINDOW,
                 doc.span,
             ))),
-            member: Ident::new("clip", doc.span),
+            member: Ident::from_symbol(Symbol::CLIP, doc.span),
             span: doc.span,
         })),
     );
@@ -146,14 +146,14 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
             }
             let default_expr = default_expr_for_state_with_enums(s, enums);
             let window_ref = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::new(
-                    NodeId::WINDOW.canonical_name(),
+                target: Box::new(Expr::Ident(Ident::from_node(
+                    NodeId::WINDOW,
                     s.span,
                 ))),
-                member: s.name.clone(),
+                member: s.name,
                 span: s.span,
             });
-            global_scope.insert(name.clone(), LexicalBinding::State(window_ref));
+            global_scope.insert(s.name.name, LexicalBinding::State(window_ref));
             let type_name = s
                 .type_annotation
                 .as_ref()
@@ -193,7 +193,7 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
     // Pre-register uninitialized let and env items, and promote document-level timer lets to window ports
     for l in &all_doc_lets {
         if l.value.is_none() {
-            global_scope.insert(l.name.as_str().to_string(), LexicalBinding::Uninitialized);
+            global_scope.insert(l.name.name, LexicalBinding::Uninitialized);
             global_env_scope.insert(l.name.as_str().to_string(), EnvEntry::Tombstone);
         } else if let Some(crate::ast::LetValue::Expr(raw_expr)) = &l.value {
             let is_timer_type = l
@@ -214,13 +214,13 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
                     .window_ports
                     .insert(let_name.clone(), raw_expr.clone());
                 global_scope.insert(
-                    let_name.clone(),
+                    l.name.name,
                     LexicalBinding::Expr(Expr::MemberAccess(crate::ast::MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::new(
-                            NodeId::WINDOW.canonical_name(),
+                        target: Box::new(Expr::Ident(Ident::from_node(
+                            NodeId::WINDOW,
                             l.name.span,
                         ))),
-                        member: l.name.clone(),
+                        member: l.name,
                         span: l.name.span,
                     })),
                 );
@@ -230,7 +230,7 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
     for item in &doc.items {
         if let Item::Env(e) = item {
             if e.value.is_none() {
-                global_scope.insert(e.name.as_str().to_string(), LexicalBinding::Uninitialized);
+                global_scope.insert(e.name.name, LexicalBinding::Uninitialized);
                 global_env_scope.insert(e.name.as_str().to_string(), EnvEntry::Tombstone);
             }
         }

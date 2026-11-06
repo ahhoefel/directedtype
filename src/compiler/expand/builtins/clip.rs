@@ -20,20 +20,20 @@ pub(in crate::compiler::expand) fn default_inherited_clip_expr(
     if let Some(EnvEntry::Bound(clip_expr)) = env_scope.get("clip") {
         clip_expr.clone()
     } else if let Some(parent) = parent_id {
-        let target_name = if parent.is_window() {
-            NodeId::WINDOW.canonical_name()
+        let target_node = if parent.is_window() {
+            NodeId::WINDOW
         } else {
-            parent.canonical_name()
+            parent
         };
         Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(Expr::Ident(Ident::new(target_name, span))),
+            target: Box::new(Expr::Ident(Ident::from_node(target_node, span))),
             member: Ident::new("clip", span),
             span,
         })
     } else {
         Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(Expr::Ident(Ident::new(
-                NodeId::WINDOW.canonical_name(),
+            target: Box::new(Expr::Ident(Ident::from_node(
+                NodeId::WINDOW,
                 span,
             ))),
             member: Ident::new("clip", span),
@@ -79,7 +79,7 @@ impl BuiltinPrimitive for ClipPrimitive {
         }
         state.ports.insert(
             "clip".to_string(),
-            Expr::Ident(Ident::new(node_id.canonical_name(), elem.span)),
+            Expr::Ident(Ident::from_node(node_id, elem.span)),
         );
         if let Some(box_expr) = state.ports.get("box").cloned() {
             state.ports.entry("x".to_string()).or_insert_with(|| {

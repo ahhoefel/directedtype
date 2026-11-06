@@ -10,6 +10,7 @@ pub mod lexer;
 pub mod parser;
 pub mod render;
 pub mod span;
+pub mod symbol;
 pub mod token;
 
 extern crate self as directedtype;

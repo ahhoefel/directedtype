@@ -5,25 +5,31 @@ use crate::span::Span;
 use std::collections::HashMap;
 use std::fmt;
 
-/// Unique identifier for a variable / port in the layout graph: `(NodeId, PortName)`.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// Unique identifier for a variable / port in the layout graph: `(NodeId, Symbol)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VarId {
     pub node: NodeId,
-    pub port: String,
+    pub port: Symbol,
 }
 
 impl VarId {
-    pub fn new(node: NodeId, port: impl Into<String>) -> Self {
+    #[inline]
+    pub fn new(node: NodeId, port: impl Into<Symbol>) -> Self {
         Self {
             node,
             port: port.into(),
         }
     }
+
+    #[inline]
+    pub const fn from_symbol(node: NodeId, port: Symbol) -> Self {
+        Self { node, port }
+    }
 }
 
 impl fmt::Display for VarId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}", self.node.canonical_name(), self.port)
+        write!(f, "{}.{}", self.node.canonical_str(), self.port)
     }
 }
 
@@ -70,10 +76,10 @@ pub struct VariableGraph {
     pub upstream_idx: Vec<Vec<VarIndex>>,
     /// Downstream dependents indexed by `VarIndex`
     pub downstream_idx: Vec<Vec<VarIndex>>,
-    /// Per-node lookup from port name to `VarIndex` (indexed by `NodeId.0`)
-    pub node_port_to_idx: Vec<HashMap<String, VarIndex>>,
-    /// Window port lookup from port name to `VarIndex`
-    pub window_port_to_idx: HashMap<String, VarIndex>,
+    /// Per-node lookup from port symbol to `VarIndex` (indexed by `NodeId.0`)
+    pub node_port_to_idx: Vec<HashMap<Symbol, VarIndex>>,
+    /// Window port lookup from port symbol to `VarIndex`
+    pub window_port_to_idx: HashMap<Symbol, VarIndex>,
 }
 
 impl VariableGraph {
@@ -112,13 +118,19 @@ impl VariableGraph {
         self.var_nodes.is_empty()
     }
 
-    /// Looks up a variable's `VarIndex` by `(NodeId, &str)` without heap allocation.
+    /// Looks up a variable's `VarIndex` by `(NodeId, Symbol)` without heap allocation.
     #[inline]
-    pub fn lookup_var_index(&self, node: NodeId, port: &str) -> Option<VarIndex> {
+    pub fn lookup_var_index(&self, node: NodeId, port: impl Into<Symbol>) -> Option<VarIndex> {
+        self.lookup_var_index_sym(node, port.into())
+    }
+
+    /// Looks up a variable's `VarIndex` by `(NodeId, Symbol)`.
+    #[inline]
+    pub fn lookup_var_index_sym(&self, node: NodeId, port: Symbol) -> Option<VarIndex> {
         if node.is_window() {
-            self.window_port_to_idx.get(port).copied()
+            self.window_port_to_idx.get(&port).copied()
         } else {
-            self.node_port_to_idx.get(node.0)?.get(port).copied()
+            self.node_port_to_idx.get(node.0)?.get(&port).copied()
         }
     }
 
@@ -145,7 +157,7 @@ impl VariableGraph {
                 self.raw_upstream[i] = deps;
             } else {
                 let idx = VarIndex(self.var_nodes.len() as u32);
-                self.window_port_to_idx.insert(id.port.clone(), idx);
+                self.window_port_to_idx.insert(id.port, idx);
                 self.var_nodes.push(VariableNode { id, equation, span });
                 self.raw_upstream.push(deps);
             }
@@ -159,7 +171,7 @@ impl VariableGraph {
                 self.raw_upstream[i] = deps;
             } else {
                 let idx = VarIndex(self.var_nodes.len() as u32);
-                self.node_port_to_idx[node_id.0].insert(id.port.clone(), idx);
+                self.node_port_to_idx[node_id.0].insert(id.port, idx);
                 self.var_nodes.push(VariableNode { id, equation, span });
                 self.raw_upstream.push(deps);
             }
@@ -167,7 +179,7 @@ impl VariableGraph {
     }
 
     pub fn update_variable_equation(&mut self, id: &VarId, equation: Expr) {
-        if let Some(idx) = self.lookup_var_index(id.node, &id.port) {
+        if let Some(idx) = self.lookup_var_index_sym(id.node, id.port) {
             if let Some(var) = self.var_nodes.get_mut(idx.0 as usize) {
                 var.equation = equation;
             }
@@ -175,31 +187,31 @@ impl VariableGraph {
     }
 
     pub fn get_variable(&self, id: &VarId) -> Option<&VariableNode> {
-        let idx = self.lookup_var_index(id.node, &id.port)?;
+        let idx = self.lookup_var_index_sym(id.node, id.port)?;
         self.var_nodes.get(idx.0 as usize)
     }
 
     /// Returns the slice of upstream `VarId` dependencies for a variable.
     pub fn upstream_of(&self, id: &VarId) -> Option<&[VarId]> {
-        let idx = self.lookup_var_index(id.node, &id.port)?;
+        let idx = self.lookup_var_index_sym(id.node, id.port)?;
         self.raw_upstream.get(idx.0 as usize).map(|v| v.as_slice())
     }
 
     /// Returns the downstream `VarId` dependents for a variable.
     pub fn downstream_of(&self, id: &VarId) -> Option<Vec<VarId>> {
-        let idx = self.lookup_var_index(id.node, &id.port)?;
+        let idx = self.lookup_var_index_sym(id.node, id.port)?;
         if self.downstream_idx.len() == self.var_nodes.len() {
             let down = self.downstream_idx.get(idx.0 as usize)?;
             Some(
                 down.iter()
-                    .map(|&d| self.var_nodes[d.0 as usize].id.clone())
+                    .map(|&d| self.var_nodes[d.0 as usize].id)
                     .collect(),
             )
         } else {
             let mut out = Vec::new();
             for (other_idx, ups) in self.raw_upstream.iter().enumerate() {
                 if ups.contains(id) {
-                    out.push(self.var_nodes[other_idx].id.clone());
+                    out.push(self.var_nodes[other_idx].id);
                 }
             }
             Some(out)
@@ -213,7 +225,7 @@ impl VariableGraph {
 
     /// Returns the out-degree (number of downstream dependents) for a variable.
     pub fn out_degree(&self, id: &VarId) -> usize {
-        let Some(idx) = self.lookup_var_index(id.node, &id.port) else {
+        let Some(idx) = self.lookup_var_index_sym(id.node, id.port) else {
             return 0;
         };
         if let Some(down) = self.downstream_idx.get(idx.0 as usize) {
@@ -489,7 +501,7 @@ pub fn build_variable_graph_with_window(
         if !deps.is_empty() {
             let mut up_indices = Vec::with_capacity(deps.len());
             for dep in deps {
-                let Some(d_idx) = graph.lookup_var_index(dep.node, &dep.port) else {
+                let Some(d_idx) = graph.lookup_var_index_sym(dep.node, dep.port) else {
                     let node_name = doc
                         .get_node(dep.node)
                         .map(|n| n.name.as_str())
@@ -503,13 +515,13 @@ pub fn build_variable_graph_with_window(
                     });
                 };
                 if let Some(target_node) = doc.get_node(dep.node) {
-                    if target_node.private_ports.contains(&dep.port) {
+                    if target_node.private_ports.contains(dep.port.as_str()) {
                         let source_node = doc.get_node(var_id_node);
                         let is_internal = var_id_node == dep.node
                             || source_node.and_then(|n| n.enclosing_component) == Some(dep.node)
-                            || (target_node.is_span && dep.port == "baseline_shift");
+                            || (target_node.is_span && dep.port == Symbol::BASELINE_SHIFT);
                         let is_ambient = source_node
-                            .is_some_and(|n| n.ambient_ports.contains(&var_node.id.port));
+                            .is_some_and(|n| n.ambient_ports.contains(var_node.id.port.as_str()));
 
                         if !is_internal && !is_ambient {
                             return Err(CompileError::Custom {
@@ -553,7 +565,7 @@ fn collect_dependencies(expr: &Expr, out: &mut Vec<VarId>) {
         Expr::MemberAccess(m) => {
             if let Expr::Ident(target_id) = m.target.as_ref() {
                 if let Some(node_id) = target_id.node_id() {
-                    out.push(VarId::new(node_id, m.member.as_str()));
+                    out.push(VarId::from_symbol(node_id, m.member.name));
                 }
             } else {
                 collect_dependencies(&m.target, out);
@@ -572,10 +584,10 @@ fn collect_dependencies(expr: &Expr, out: &mut Vec<VarId>) {
             }
         }
         Expr::MethodCall(mc) => {
-            if mc.method.as_str() == "append" {
+            if mc.method.name == Symbol::APPEND {
                 if let Expr::Ident(target_id) = mc.target.as_ref() {
                     if let Some(node_id) = target_id.node_id() {
-                        out.push(VarId::new(node_id, "path"));
+                        out.push(VarId::from_symbol(node_id, Symbol::PATH));
                     }
                 }
             }

@@ -836,7 +836,7 @@ pub fn resolve_layout_with_graph(
         .collect();
     for (var_id, val) in &values {
         if let Some(map) = props_by_node.get_mut(var_id.node.0) {
-            map.insert(var_id.port.clone(), val.clone());
+            map.insert(var_id.port.to_string(), val.clone());
         }
     }
 
@@ -1035,7 +1035,7 @@ pub fn update_resolved_layout(
 
         for &var_id in node_vars {
             if let Some(val) = layout.values.get(var_id) {
-                node.properties.insert(var_id.port.clone(), val.clone());
+                node.properties.insert(var_id.port.to_string(), val.clone());
             }
         }
 

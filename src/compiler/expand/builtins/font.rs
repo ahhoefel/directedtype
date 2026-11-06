@@ -78,7 +78,7 @@ pub(super) fn pre_resolve_primitive_font(
                     *last_child_id = Some(child_id);
                 }
                 let ident_expr =
-                    Expr::Ident(Ident::new(child_id.canonical_name(), inline_elem.span));
+                    Expr::Ident(Ident::from_node(child_id, inline_elem.span));
                 font_node_id = Some(child_id);
                 pre_expanded_font_expr = Some(ident_expr.clone());
                 pre_rewritten_font_expr = Some(ident_expr);
@@ -102,7 +102,7 @@ pub(super) fn pre_resolve_primitive_font(
                 );
                 if let Ok(rewritten) = rewrite_expr(other, &temp_scope_ctx) {
                     if let Expr::Ident(id) = &rewritten {
-                        if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                        if let Some(fid) = id.node_id() {
                             font_node_id = Some(fid);
                         }
                     }
@@ -128,13 +128,13 @@ pub(super) fn pre_resolve_primitive_font(
         );
         if let Ok(rewritten) = rewrite_expr(env_expr, &temp_scope_ctx) {
             if let Expr::Ident(id) = &rewritten {
-                if let Some(fid) = NodeId::from_canonical_name(id.as_str()) {
+                if let Some(fid) = id.node_id() {
                     if fid != node_id {
                         font_node_id = Some(fid);
                     }
                     if elem.name.as_str() != "Font" {
                         ambient_font_port_expr =
-                            Some(Expr::Ident(Ident::new(fid.canonical_name(), elem.span)));
+                            Some(Expr::Ident(Ident::from_node(fid, elem.span)));
                     }
                 }
             } else if elem.name.as_str() == "Text" {
@@ -261,7 +261,7 @@ impl BuiltinPrimitive for FontPrimitive {
         }
 
         let base_font_target = base_font_id
-            .map(|fid| Expr::Ident(Ident::new(fid.canonical_name(), elem.span)))
+            .map(|fid| Expr::Ident(Ident::from_node(fid, elem.span)))
             .or_else(|| state.ports.get("font").cloned());
 
         if let Some(Expr::Literal(Literal::String(ref family, span))) =
@@ -363,7 +363,7 @@ impl BuiltinPrimitive for FontPrimitive {
             }
         }
 
-        let self_ident = Expr::Ident(Ident::new(node_id.canonical_name(), elem.span));
+        let self_ident = Expr::Ident(Ident::from_node(node_id, elem.span));
         let size_ref = Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident.clone()),
             member: Ident::new("size", elem.span),

@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOp, Expr, Literal, UnaryOp};
+use crate::ast::{BinaryOp, Expr, Literal, Symbol, UnaryOp};
 use crate::compiler::error::CompileError;
 use crate::compiler::expanded::NodeId;
 use crate::compiler::graph::{VarId, VariableGraph};
@@ -7,13 +7,18 @@ use crate::compiler::value::Value;
 use std::collections::{HashMap, HashSet};
 
 pub trait EvalEnv {
-    fn get_var(&self, node: NodeId, port: &str) -> Option<&Value>;
+    fn get_var_sym(&self, node: NodeId, port: Symbol) -> Option<&Value>;
+
+    #[inline]
+    fn get_var(&self, node: NodeId, port: &str) -> Option<&Value> {
+        self.get_var_sym(node, Symbol::new(port))
+    }
 }
 
 impl EvalEnv for HashMap<VarId, Value> {
     #[inline]
-    fn get_var(&self, node: NodeId, port: &str) -> Option<&Value> {
-        self.get(&VarId::new(node, port))
+    fn get_var_sym(&self, node: NodeId, port: Symbol) -> Option<&Value> {
+        self.get(&VarId::from_symbol(node, port))
     }
 }
 
@@ -24,8 +29,8 @@ struct IndexedEvalEnv<'a> {
 
 impl<'a> EvalEnv for IndexedEvalEnv<'a> {
     #[inline]
-    fn get_var(&self, node: NodeId, port: &str) -> Option<&Value> {
-        let idx = self.graph.lookup_var_index(node, port)?;
+    fn get_var_sym(&self, node: NodeId, port: Symbol) -> Option<&Value> {
+        let idx = self.graph.lookup_var_index_sym(node, port)?;
         self.slots.get(idx.0 as usize)?.as_ref()
     }
 }
@@ -56,7 +61,7 @@ pub fn evaluate_graph_with_state(
             let node = &graph.var_nodes[idx];
             if has_overrides {
                 if let Some(override_val) = state_overrides.get(&node.id) {
-                    if node.id.port == "family" {
+                    if node.id.port == Symbol::FAMILY {
                         if let Value::String(ref s) = override_val {
                             if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
                                 return Err(CompileError::FontFamilyNotFound {
@@ -71,7 +76,7 @@ pub fn evaluate_graph_with_state(
                 }
             }
             let val = eval_expr_with_env(&node.equation, &IndexedEvalEnv { graph, slots: &slots })?;
-            if node.id.port == "family" {
+            if node.id.port == Symbol::FAMILY {
                 if let Value::String(ref s) = val {
                     if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
                         return Err(CompileError::FontFamilyNotFound {
@@ -87,7 +92,7 @@ pub fn evaluate_graph_with_state(
         let mut env = HashMap::with_capacity(num_vars);
         for (node, slot) in graph.var_nodes.iter().zip(slots.into_iter()) {
             if let Some(val) = slot {
-                env.insert(node.id.clone(), val);
+                env.insert(node.id, val);
             }
         }
         return Ok(env);
@@ -97,7 +102,7 @@ pub fn evaluate_graph_with_state(
 
     for var_id in schedule.iter() {
         if let Some(override_val) = state_overrides.get(var_id) {
-            if var_id.port == "family" {
+            if var_id.port == Symbol::FAMILY {
                 if let Value::String(ref s) = override_val {
                     if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
                         let span = graph
@@ -111,10 +116,10 @@ pub fn evaluate_graph_with_state(
                     }
                 }
             }
-            env.insert(var_id.clone(), override_val.clone());
+            env.insert(*var_id, override_val.clone());
         } else if let Some(node) = graph.get_variable(var_id) {
             let val = eval_expr(&node.equation, &env)?;
-            if var_id.port == "family" {
+            if var_id.port == Symbol::FAMILY {
                 if let Value::String(ref s) = val {
                     if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
                         return Err(CompileError::FontFamilyNotFound {
@@ -124,7 +129,7 @@ pub fn evaluate_graph_with_state(
                     }
                 }
             }
-            env.insert(var_id.clone(), val);
+            env.insert(*var_id, val);
         }
     }
 
@@ -142,8 +147,8 @@ pub fn find_downstream_dependents(
     let mut queue = Vec::new();
 
     for root in dirty_roots {
-        dirty.insert(root.clone());
-        if let Some(idx) = graph.lookup_var_index(root.node, &root.port) {
+        dirty.insert(*root);
+        if let Some(idx) = graph.lookup_var_index_sym(root.node, root.port) {
             if visited_idx.insert(idx) {
                 queue.push(idx);
             }
@@ -154,7 +159,7 @@ pub fn find_downstream_dependents(
         if let Some(downstream) = graph.downstream_idx.get(curr_idx.0 as usize) {
             for &dep_idx in downstream {
                 if visited_idx.insert(dep_idx) {
-                    dirty.insert(graph.var_nodes[dep_idx.0 as usize].id.clone());
+                    dirty.insert(graph.var_nodes[dep_idx.0 as usize].id);
                     queue.push(dep_idx);
                 }
             }
@@ -183,7 +188,7 @@ pub fn invalidate_and_reevaluate(
         let mut dirty_mask = vec![false; num_vars];
         let mut any_dirty = false;
         for root in dirty_roots {
-            if let Some(idx) = graph.lookup_var_index(root.node, &root.port) {
+            if let Some(idx) = graph.lookup_var_index_sym(root.node, root.port) {
                 dirty_mask[idx.0 as usize] = true;
                 any_dirty = true;
             }
@@ -205,7 +210,7 @@ pub fn invalidate_and_reevaluate(
                 eval_expr(&node.equation, current_values)?
             };
 
-            if node.id.port == "family" {
+            if node.id.port == Symbol::FAMILY {
                 if let Value::String(ref s) = new_val {
                     if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
                         return Err(CompileError::FontFamilyNotFound {
@@ -217,8 +222,8 @@ pub fn invalidate_and_reevaluate(
             }
 
             if current_values.get(&node.id) != Some(&new_val) {
-                current_values.insert(node.id.clone(), new_val);
-                changed.insert(node.id.clone());
+                current_values.insert(node.id, new_val);
+                changed.insert(node.id);
                 for &down_idx in &graph.downstream_idx[idx] {
                     dirty_mask[down_idx.0 as usize] = true;
                 }
@@ -241,7 +246,7 @@ pub fn invalidate_and_reevaluate(
                 continue;
             };
 
-            if var_id.port == "family" {
+            if var_id.port == Symbol::FAMILY {
                 if let Value::String(ref s) = new_val {
                     if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
                         let span = graph
@@ -256,9 +261,9 @@ pub fn invalidate_and_reevaluate(
                 }
             }
 
-            let prev_val = current_values.insert(var_id.clone(), new_val.clone());
+            let prev_val = current_values.insert(*var_id, new_val.clone());
             if prev_val.as_ref() != Some(&new_val) {
-                changed.insert(var_id.clone());
+                changed.insert(*var_id);
             }
         }
     }
@@ -269,7 +274,7 @@ pub fn invalidate_and_reevaluate(
 fn get_family_from_val<'a, E: EvalEnv>(val: Option<&'a Value>, env: &'a E) -> Option<&'a str> {
     match val {
         Some(Value::String(s)) => Some(s.as_str()),
-        Some(Value::Node(id)) => env.get_var(*id, "family").and_then(|v| v.as_str()),
+        Some(Value::Node(id)) => env.get_var_sym(*id, Symbol::FAMILY).and_then(|v| v.as_str()),
         _ => None,
     }
 }
@@ -301,7 +306,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                 crate::ast::DistanceUnit::Px => Ok(Value::Distance(*d)),
                 crate::ast::DistanceUnit::Pt => {
                     let dpi = env
-                        .get_var(NodeId::WINDOW, "dpi")
+                        .get_var_sym(NodeId::WINDOW, Symbol::DPI)
                         .and_then(|v| v.as_f64())
                         .unwrap_or(96.0);
                     Ok(Value::Distance(*d * (dpi / 72.0)))
@@ -315,7 +320,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                 crate::ast::DistanceUnit::Px => Ok(Value::Area(*a)),
                 crate::ast::DistanceUnit::Pt => {
                     let dpi = env
-                        .get_var(NodeId::WINDOW, "dpi")
+                        .get_var_sym(NodeId::WINDOW, Symbol::DPI)
                         .and_then(|v| v.as_f64())
                         .unwrap_or(96.0);
                     let factor = dpi / 72.0;
@@ -336,16 +341,16 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
             }),
         },
 
-        Expr::Ident(id) => match id.as_str() {
-            "true" => Ok(Value::Bool(true)),
-            "false" => Ok(Value::Bool(false)),
-            "unset" | "None" => Ok(Value::Unset),
-            other => {
-                if let Some(node_id) = NodeId::from_canonical_name(other) {
+        Expr::Ident(id) => match id.name {
+            Symbol::TRUE => Ok(Value::Bool(true)),
+            Symbol::FALSE => Ok(Value::Bool(false)),
+            Symbol::UNSET | Symbol::NONE => Ok(Value::Unset),
+            sym => {
+                if let Some(node_id) = sym.node_id() {
                     return Ok(Value::Node(node_id));
                 }
                 Err(CompileError::UnresolvedIdentifier {
-                    name: other.to_string(),
+                    name: sym.as_str().to_string(),
                     span: id.span,
                 })
             }
@@ -353,8 +358,8 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
 
         Expr::MemberAccess(m) => {
             if let Expr::Ident(target_id) = m.target.as_ref() {
-                if let Some(node_id) = NodeId::from_canonical_name(target_id.as_str()) {
-                    if let Some(val) = env.get_var(node_id, m.member.as_str()) {
+                if let Some(node_id) = target_id.node_id() {
+                    if let Some(val) = env.get_var_sym(node_id, m.member.name) {
                         return Ok(val.clone());
                     } else {
                         return Err(CompileError::Custom {
@@ -372,7 +377,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
             let target_val = eval_expr_with_env(&m.target, env)?;
             match target_val {
                 Value::Node(node_id) => {
-                    if let Some(val) = env.get_var(node_id, m.member.as_str()) {
+                    if let Some(val) = env.get_var_sym(node_id, m.member.name) {
                         Ok(val.clone())
                     } else {
                         Err(CompileError::Custom {

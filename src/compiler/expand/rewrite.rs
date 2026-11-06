@@ -10,14 +10,14 @@ use std::collections::HashMap;
 
 pub(super) fn resolve_forward_scope_refs(
     expr: &Expr,
-    scope: &HashMap<String, LexicalBinding>,
+    scope: &HashMap<Symbol, LexicalBinding>,
 ) -> Expr {
     match expr {
         Expr::Ident(id) => {
-            if let Some(binding) = scope.get(id.as_str()) {
+            if let Some(binding) = scope.get(&id.name) {
                 match binding {
                     LexicalBinding::Node(node_id) => {
-                        Expr::Ident(Ident::new(node_id.canonical_name(), id.span))
+                        Expr::Ident(Ident::from_node(*node_id, id.span))
                     }
                     LexicalBinding::Expr(e) | LexicalBinding::State(e) => e.clone(),
                     LexicalBinding::Uninitialized => expr.clone(),
@@ -27,25 +27,25 @@ pub(super) fn resolve_forward_scope_refs(
             }
         }
         Expr::MemberAccess(m) => {
-            let target_ident_name = match m.target.as_ref() {
-                Expr::Ident(id) => Some(id.as_str()),
+            let target_sym = match m.target.as_ref() {
+                Expr::Ident(id) => Some(id.name),
                 _ => None,
             };
-            if let Some(target_name) = target_ident_name {
-                if let Some(LexicalBinding::Node(node_id)) = scope.get(target_name) {
+            if let Some(target_name) = target_sym {
+                if let Some(LexicalBinding::Node(node_id)) = scope.get(&target_name) {
                     return Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::new(
-                            node_id.canonical_name(),
+                        target: Box::new(Expr::Ident(Ident::from_node(
+                            *node_id,
                             m.target.span(),
                         ))),
-                        member: m.member.clone(),
+                        member: m.member,
                         span: m.span,
                     });
                 }
             }
             Expr::MemberAccess(MemberAccessExpr {
                 target: Box::new(resolve_forward_scope_refs(&m.target, scope)),
-                member: m.member.clone(),
+                member: m.member,
                 span: m.span,
             })
         }
@@ -99,11 +99,10 @@ pub(super) fn resolve_forward_scope_refs(
     }
 }
 
-pub(super) fn expr_has_scope_ref(expr: &Expr, scope: &HashMap<String, LexicalBinding>) -> bool {
+pub(super) fn expr_has_scope_ref(expr: &Expr, scope: &HashMap<Symbol, LexicalBinding>) -> bool {
     match expr {
         Expr::Ident(id) => {
-            let s = id.as_str();
-            !s.starts_with("__node_") && s != "window" && scope.contains_key(s)
+            !id.is_canonical_node_ref() && id.name != Symbol::WINDOW && scope.contains_key(&id.name)
         }
         Expr::MemberAccess(m) => expr_has_scope_ref(&m.target, scope),
         Expr::Binary(b) => expr_has_scope_ref(&b.left, scope) || expr_has_scope_ref(&b.right, scope),
@@ -129,7 +128,7 @@ pub(super) fn resolve_forward_refs_in_range(
     doc: &mut crate::compiler::expanded::ExpandedDocument,
     start_node_idx: usize,
     start_binding_idx: usize,
-    scope: &HashMap<String, LexicalBinding>,
+    scope: &HashMap<Symbol, LexicalBinding>,
 ) {
     if scope.is_empty() {
         return;
@@ -151,19 +150,20 @@ pub(super) fn resolve_forward_refs_in_range(
 /// Applies optional `type_annotation` coercion to `rewritten_res` and updates `scope[name]`.
 /// Returns `Some(rewritten)` if the binding changed.
 pub(super) fn try_preresolve_expr_binding(
-    scope: &mut HashMap<String, LexicalBinding>,
-    name: &str,
+    scope: &mut HashMap<Symbol, LexicalBinding>,
+    name: impl Into<Symbol>,
     rewritten_res: Result<Expr, CompileError>,
     type_annotation: Option<&TypeRef>,
 ) -> Option<Expr> {
+    let name_sym = name.into();
     let rewritten = rewritten_res.ok()?;
     let rewritten = super::typecheck::coerce_typed_binding_expr(rewritten, type_annotation);
-    if let Some(LexicalBinding::Expr(existing)) = scope.get(name) {
+    if let Some(LexicalBinding::Expr(existing)) = scope.get(&name_sym) {
         if existing == &rewritten {
             return None;
         }
     }
-    scope.insert(name.to_string(), LexicalBinding::Expr(rewritten.clone()));
+    scope.insert(name_sym, LexicalBinding::Expr(rewritten.clone()));
     Some(rewritten)
 }
 
@@ -319,8 +319,8 @@ fn resolve_active_font_size_expr(
     if let Some(&fid) = ctx.node_fonts.get(&ctx.current_node) {
         if fid != ctx.current_node {
             return Ok(Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::new(fid.canonical_name(), span))),
-                member: Ident::new("size", span),
+                target: Box::new(Expr::Ident(Ident::from_node(fid, span))),
+                member: Ident::from_symbol(Symbol::SIZE, span),
                 span,
             }));
         }
@@ -330,7 +330,7 @@ fn resolve_active_font_size_expr(
             let rewritten_font = rewrite_expr(font_expr, ctx)?;
             Ok(Expr::MemberAccess(MemberAccessExpr {
                 target: Box::new(rewritten_font),
-                member: Ident::new("size", span),
+                member: Ident::from_symbol(Symbol::SIZE, span),
                 span,
             }))
         }
@@ -349,10 +349,10 @@ fn resolve_active_font_size_expr(
 pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, CompileError> {
     match expr {
         Expr::Ident(id) => {
-            if id.as_str() == "env" {
+            if id.name == Symbol::ENV {
                 return Err(CompileError::BareEnvUse { span: id.span });
             }
-            if ctx.enums.contains_key(id.as_str()) {
+            if !id.is_canonical_node_ref() && ctx.enums.contains_key(id.as_str()) {
                 return Err(CompileError::BareEnumUse {
                     name: id.as_str().to_string(),
                     span: id.span,
@@ -360,18 +360,18 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
 
             // Check lexical scope first (let bindings, component ports, named nodes)
-            if id.as_str() != "self"
-                && id.as_str() != "parent"
-                && id.as_str() != "window"
-                && id.as_str() != "prev"
-                && id.as_str() != "next"
-                && id.as_str() != "child"
+            if id.name != Symbol::SELF
+                && id.name != Symbol::PARENT
+                && id.name != Symbol::WINDOW
+                && id.name != Symbol::PREV
+                && id.name != Symbol::NEXT
+                && id.name != Symbol::CHILD
             {
-                if let Some(binding) = ctx.lexical_scope.get(id.as_str()) {
+                if let Some(binding) = ctx.lexical_scope.get(&id.name) {
                     match binding {
                         LexicalBinding::Expr(e) | LexicalBinding::State(e) => return Ok(e.clone()),
                         LexicalBinding::Node(node_id) => {
-                            return Ok(Expr::Ident(Ident::new(node_id.canonical_name(), id.span)));
+                            return Ok(Expr::Ident(Ident::from_node(*node_id, id.span)));
                         }
                         LexicalBinding::Uninitialized => {
                             return Err(CompileError::UninitializedVariableUse {
@@ -386,39 +386,36 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             // In an event port (on_*), a bare method name that wasn't in lexical_scope
             // resolves to the enclosing component's method (or current_node if in signature default).
             if ctx.is_event_port
-                && id.as_str() != "unset"
-                && id.as_str() != "None"
-                && id.as_str() != "self"
-                && id.as_str() != "parent"
-                && id.as_str() != "window"
-                && id.as_str() != "prev"
-                && id.as_str() != "next"
-                && id.as_str() != "child"
-                && NodeId::from_canonical_name(id.as_str()).is_none()
+                && id.name != Symbol::UNSET
+                && id.name != Symbol::NONE
+                && id.name != Symbol::SELF
+                && id.name != Symbol::PARENT
+                && id.name != Symbol::WINDOW
+                && id.name != Symbol::PREV
+                && id.name != Symbol::NEXT
+                && id.name != Symbol::CHILD
+                && id.node_id().is_none()
             {
                 let target_id = ctx.enclosing_component.unwrap_or(ctx.current_node);
                 return Ok(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::new(target_id.canonical_name(), id.span))),
-                    member: id.clone(),
+                    target: Box::new(Expr::Ident(Ident::from_node(target_id, id.span))),
+                    member: *id,
                     span: id.span,
                 }));
             }
 
-            if id.as_str() == "window" {
-                return Ok(Expr::Ident(Ident::new(
-                    NodeId::WINDOW.canonical_name(),
-                    id.span,
-                )));
+            if id.name == Symbol::WINDOW {
+                return Ok(Expr::Ident(Ident::from_node(NodeId::WINDOW, id.span)));
             }
-            if id.as_str() == "self" {
+            if id.name == Symbol::SELF {
                 return Err(CompileError::Custom {
                     message: "Bare 'self' is not allowed; use 'self.<method>' in an event handler or 'self.<property>' to access a shadowed component property".to_string(),
                     span: id.span,
                 });
             }
-            if id.as_str() == "child" {
+            if id.name == Symbol::CHILD {
                 if let Some(cid) = ctx.child_node {
-                    return Ok(Expr::Ident(Ident::new(cid.canonical_name(), id.span)));
+                    return Ok(Expr::Ident(Ident::from_node(cid, id.span)));
                 } else {
                     return Err(CompileError::Custom {
                         message: "'child' can only be used inside a '\\Children(...)' block"
@@ -427,27 +424,24 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     });
                 }
             }
-            if id.as_str() == "parent" {
+            if id.name == Symbol::PARENT {
                 if let Some(parent) = ctx.parent_node {
-                    return Ok(Expr::Ident(Ident::new(parent.canonical_name(), id.span)));
+                    return Ok(Expr::Ident(Ident::from_node(parent, id.span)));
                 }
             }
-            if id.as_str() == "prev" {
+            if id.name == Symbol::PREV {
                 if let Some(prev) = ctx.prev_sibling {
-                    return Ok(Expr::Ident(Ident::new(prev.canonical_name(), id.span)));
+                    return Ok(Expr::Ident(Ident::from_node(prev, id.span)));
                 }
             }
-            if id.as_str() == "next" {
+            if id.name == Symbol::NEXT {
                 if ctx.has_next_sibling {
                     if let Some(cid) = ctx.child_node {
-                        return Ok(Expr::Ident(Ident::new(
-                            format!("__next_of_{}", cid.canonical_name()),
-                            id.span,
-                        )));
+                        return Ok(Expr::Ident(Ident::next_of(cid, id.span)));
                     }
                 }
             }
-            if id.as_str() == "num_children" {
+            if id.name == Symbol::NUM_CHILDREN {
                 return Err(CompileError::Custom {
                     message: "'num_children' is no longer supported; use 'children.len' instead"
                         .to_string(),
@@ -588,15 +582,15 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
             }
 
-            let target_ident_name = match m.target.as_ref() {
-                Expr::Ident(id) => Some(id.as_str()),
+            let target_ident = match m.target.as_ref() {
+                Expr::Ident(id) => Some(*id),
                 _ => None,
             };
 
             // Enum variant access and children.len
-            if let Some(target_name) = target_ident_name {
-                if target_name == "children" {
-                    if m.member.as_str() == "len" {
+            if let Some(target_id) = target_ident {
+                if target_id.name == Symbol::CHILDREN {
+                    if m.member.name == Symbol::LEN {
                         return Ok(Expr::Literal(Literal::Integer(
                             ctx.num_children as i64,
                             m.span,
@@ -611,25 +605,27 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         });
                     }
                 }
-                if let Some(enum_def) = ctx.enums.get(target_name) {
-                    let variant_name = m.member.as_str();
-                    if enum_def.has_variant(variant_name) {
-                        return Ok(Expr::Literal(Literal::Enum(
-                            target_name.to_string(),
-                            variant_name.to_string(),
-                            m.span,
-                        )));
-                    } else {
-                        return Err(CompileError::UnknownEnumVariant {
-                            enum_name: target_name.to_string(),
-                            variant: variant_name.to_string(),
-                            span: m.member.span,
-                        });
+                if !target_id.is_canonical_node_ref() {
+                    if let Some(enum_def) = ctx.enums.get(target_id.as_str()) {
+                        let variant_name = m.member.as_str();
+                        if enum_def.has_variant(variant_name) {
+                            return Ok(Expr::Literal(Literal::Enum(
+                                target_id.as_str().to_string(),
+                                variant_name.to_string(),
+                                m.span,
+                            )));
+                        } else {
+                            return Err(CompileError::UnknownEnumVariant {
+                                enum_name: target_id.as_str().to_string(),
+                                variant: variant_name.to_string(),
+                                span: m.member.span,
+                            });
+                        }
                     }
                 }
             }
 
-            if target_ident_name == Some("env") {
+            if target_ident.is_some_and(|id| id.name == Symbol::ENV) {
                 let member_name = m.member.as_str();
                 return match ctx.env_scope.get(member_name) {
                     Some(EnvEntry::Bound(expr)) => Ok(expr.clone()),
@@ -645,8 +641,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
 
             // Resolve target (parent, window, prev, next, self, child, or named node in lexical scope)
-            let resolved_target = if let Some(target_name) = target_ident_name {
-                if target_name == "self" {
+            let resolved_target = if let Some(target_id) = target_ident {
+                let target_sym = target_id.name;
+                if target_sym == Symbol::SELF {
                     if ctx.is_event_port {
                         if let Some(shadowed) = ctx.shadowed_ports {
                             if shadowed.contains(m.member.as_str()) {
@@ -682,7 +679,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             span: m.span,
                         });
                     }
-                } else if target_name == "child" {
+                } else if target_sym == Symbol::CHILD {
                     if let Some(cid) = ctx.child_node {
                         Expr::Ident(Ident::from_node(cid, m.target.span()))
                     } else {
@@ -693,12 +690,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         });
                     }
                 } else if let Some(LexicalBinding::Node(node_id)) =
-                    ctx.lexical_scope.get(target_name)
+                    ctx.lexical_scope.get(&target_sym)
                 {
                     Expr::Ident(Ident::from_node(*node_id, m.target.span()))
-                } else if target_name == "parent" {
+                } else if target_sym == Symbol::PARENT {
                     if let Some(parent) = ctx.parent_node {
-                        if m.member.as_str() != "parent"
+                        if m.member.name != Symbol::PARENT
                             && !ctx.parent_ports.is_empty()
                             && !ctx.parent_ports.iter().any(|p| p == m.member.as_str())
                         {
@@ -715,21 +712,18 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     } else {
                         rewrite_expr(&m.target, ctx)?
                     }
-                } else if target_name == "window" {
+                } else if target_sym == Symbol::WINDOW {
                     Expr::Ident(Ident::from_node(NodeId::WINDOW, m.target.span()))
-                } else if target_name == "prev" {
+                } else if target_sym == Symbol::PREV {
                     if let Some(prev) = ctx.prev_sibling {
                         Expr::Ident(Ident::from_node(prev, m.target.span()))
                     } else {
                         rewrite_expr(&m.target, ctx)?
                     }
-                } else if target_name == "next" {
+                } else if target_sym == Symbol::NEXT {
                     if ctx.has_next_sibling {
                         if let Some(cid) = ctx.child_node {
-                            Expr::Ident(Ident::new(
-                                format!("__next_of_{}", cid.canonical_name()),
-                                m.target.span(),
-                            ))
+                            Expr::Ident(Ident::next_of(cid, m.target.span()))
                         } else {
                             rewrite_expr(&m.target, ctx)?
                         }
@@ -744,12 +738,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             };
 
             let target_node_id = match &resolved_target {
-                Expr::Ident(id) => NodeId::from_canonical_name(id.as_str()),
+                Expr::Ident(id) => id.node_id(),
                 _ => None,
             };
 
             // Chained parent access: e.g. parent.parent -> parent_id of target_node_id
-            if m.member.as_str() == "parent" {
+            if m.member.name == Symbol::PARENT {
                 if let Some(tid) = target_node_id {
                     let parent_id = if Some(tid) == ctx.child_node {
                         ctx.parent_node
@@ -757,7 +751,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         ctx.nodes.get(tid.0).and_then(|n| n.parent)
                     };
                     if let Some(pid) = parent_id {
-                        return Ok(Expr::Ident(Ident::new(pid.canonical_name(), m.span)));
+                        return Ok(Expr::Ident(Ident::from_node(pid, m.span)));
                     } else {
                         return Err(CompileError::Custom {
                             message: "Node has no parent".to_string(),
@@ -768,10 +762,10 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
 
             // Font node reference access: e.g. label.font -> font_node_id
-            if m.member.as_str() == "font" {
+            if m.member.name == Symbol::FONT {
                 if let Some(tid) = target_node_id {
                     if let Some(&fid) = ctx.node_fonts.get(&tid) {
-                        return Ok(Expr::Ident(Ident::new(fid.canonical_name(), m.span)));
+                        return Ok(Expr::Ident(Ident::from_node(fid, m.span)));
                     }
                 }
             }
@@ -781,7 +775,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     if target_node.private_ports.contains(m.member.as_str())
                         && ctx.current_node != tid
                         && ctx.enclosing_component != Some(tid)
-                        && target_ident_name.as_deref() != Some("parent")
+                        && !target_ident.is_some_and(|id| id.name == Symbol::PARENT)
                     {
                         return Err(CompileError::Custom {
                             message: format!(
@@ -796,7 +790,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
 
             Ok(Expr::MemberAccess(MemberAccessExpr {
                 target: Box::new(resolved_target),
-                member: m.member.clone(),
+                member: m.member,
                 span: m.span,
             }))
         }
@@ -851,25 +845,21 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             for arg in &call.args {
                 if let Expr::MemberAccess(m) = arg {
                     if let Expr::Ident(target_id) = m.target.as_ref() {
-                        if target_id.as_str() == "children" && m.member.as_str() != "len" {
+                        if target_id.name == Symbol::CHILDREN && m.member.name != Symbol::LEN {
                             had_children = true;
-                            children_member = Some(m.member.as_str().to_string());
+                            children_member = Some(m.member.as_str());
                             if let Some(comp_id) = ctx.enclosing_component {
                                 if ctx.num_children > 0 {
                                     super::aggregation::record_agg_emitted(comp_id);
                                 }
                                 for idx in 0..ctx.num_children {
-                                    let target_name = format!(
-                                        "__agg_child_of_{}_{}",
-                                        comp_id.canonical_name(),
-                                        idx
-                                    );
                                     let child_access = Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::new(
-                                            target_name,
+                                        target: Box::new(Expr::Ident(Ident::agg_child_of(
+                                            comp_id,
+                                            idx,
                                             target_id.span,
                                         ))),
-                                        member: m.member.clone(),
+                                        member: m.member,
                                         span: m.span,
                                     });
                                     rewritten_args.push(child_access);
@@ -877,11 +867,11 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             } else if ctx.child_ids.len() == ctx.num_children {
                                 for &child_id in ctx.child_ids {
                                     let child_access = Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::new(
-                                            child_id.canonical_name(),
+                                        target: Box::new(Expr::Ident(Ident::from_node(
+                                            child_id,
                                             target_id.span,
                                         ))),
-                                        member: m.member.clone(),
+                                        member: m.member,
                                         span: m.span,
                                     });
                                     rewritten_args.push(child_access);
@@ -894,9 +884,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 rewritten_args.push(rewrite_expr(arg, ctx)?);
             }
 
-            if had_children && rewritten_args.is_empty() && call.callee.as_str() != "only" {
+            if had_children && rewritten_args.is_empty() && call.callee.name != Symbol::ONLY {
                 let is_int_member = matches!(
-                    children_member.as_deref(),
+                    children_member,
                     Some("z" | "weight" | "index" | "len")
                 );
                 if is_int_member {
@@ -957,11 +947,8 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 right: Box::new(Expr::Binary(BinaryExpr {
                     op: BinaryOp::Div,
                     left: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::new(
-                            NodeId::WINDOW.canonical_name(),
-                            *span,
-                        ))),
-                        member: Ident::new("dpi", *span),
+                        target: Box::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, *span))),
+                        member: Ident::from_symbol(Symbol::DPI, *span),
                         span: *span,
                     })),
                     right: Box::new(Expr::Literal(Literal::Float(72.0, *span))),
@@ -1085,9 +1072,9 @@ pub(crate) fn extract_event_binding_with_values(
         Expr::MemberAccess(m) => {
             let target = match m.target.as_ref() {
                 Expr::Ident(id) => {
-                    if let Some(node_id) = NodeId::from_canonical_name(id.as_str()) {
+                    if let Some(node_id) = id.node_id() {
                         EventHandlerTarget::Component(node_id)
-                    } else if id.as_str().starts_with("env.") || id.as_str() == "env" {
+                    } else if id.as_str().starts_with("env.") || id.name == Symbol::ENV {
                         EventHandlerTarget::Env(m.member.as_str().to_string())
                     } else {
                         return None;

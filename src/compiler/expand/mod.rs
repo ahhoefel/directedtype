@@ -211,7 +211,7 @@ fn preresolve_top_level_lets_and_envs(
     doc: &Document,
     enums: &HashMap<String, EnumDef>,
     expanded_doc: &mut ExpandedDocument,
-    global_scope: &mut HashMap<String, LexicalBinding>,
+    global_scope: &mut HashMap<Symbol, LexicalBinding>,
     global_env_scope: &mut HashMap<String, EnvEntry>,
     node_fonts: &HashMap<NodeId, NodeId>,
 ) {
@@ -225,7 +225,7 @@ fn preresolve_top_level_lets_and_envs(
                 Item::Let(let_binding) => {
                     if let_binding.value.is_none() {
                         global_scope.insert(
-                            let_binding.name.as_str().to_string(),
+                            let_binding.name.name,
                             LexicalBinding::Uninitialized,
                         );
                     } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
@@ -247,7 +247,7 @@ fn preresolve_top_level_lets_and_envs(
                         };
                         if try_preresolve_expr_binding(
                             global_scope,
-                            let_binding.name.as_str(),
+                            let_binding.name.name,
                             rewritten_res,
                             let_binding.type_annotation.as_ref(),
                         )
@@ -260,7 +260,7 @@ fn preresolve_top_level_lets_and_envs(
                 Item::Env(env_binding) => {
                     if env_binding.value.is_none() {
                         global_scope.insert(
-                            env_binding.name.as_str().to_string(),
+                            env_binding.name.name,
                             LexicalBinding::Uninitialized,
                         );
                         global_env_scope
@@ -279,7 +279,7 @@ fn preresolve_top_level_lets_and_envs(
                             };
                             if let Some(rewritten) = try_preresolve_expr_binding(
                                 global_scope,
-                                env_binding.name.as_str(),
+                                env_binding.name.name,
                                 rewritten_res,
                                 env_binding.type_annotation.as_ref(),
                             ) {
@@ -317,7 +317,7 @@ fn expand_top_level_items(
     window_scope_ports: &[String],
     enums: &HashMap<String, EnumDef>,
     registry: &HashMap<String, Vec<ComponentDef>>,
-    global_scope: &RefCell<HashMap<String, LexicalBinding>>,
+    global_scope: &RefCell<HashMap<Symbol, LexicalBinding>>,
     global_env_scope: &mut HashMap<String, EnvEntry>,
     expanded_doc: &mut ExpandedDocument,
     node_fonts: &mut HashMap<NodeId, NodeId>,
@@ -361,11 +361,11 @@ fn expand_top_level_items(
                         expanded_doc.roots.push(root_id);
                         last_root_id = Some(root_id);
                         global_scope.borrow_mut().insert(
-                            env_binding.name.as_str().to_string(),
+                            env_binding.name.name,
                             LexicalBinding::Node(root_id),
                         );
                         let bound_expr =
-                            Expr::Ident(Ident::new(root_id.canonical_name(), elem.span));
+                            Expr::Ident(Ident::from_node(root_id, elem.span));
                         global_env_scope.insert(
                             env_binding.name.as_str().to_string(),
                             EnvEntry::Bound(bound_expr),
@@ -401,7 +401,7 @@ fn expand_top_level_items(
                         raw_expr.span(),
                     ));
                     global_scope.borrow_mut().insert(
-                        env_binding.name.as_str().to_string(),
+                        env_binding.name.name,
                         LexicalBinding::Expr(rewritten.clone()),
                     );
                     global_env_scope.insert(
@@ -471,7 +471,7 @@ fn expand_top_level_items(
                             raw_expr.span(),
                         ));
                         global_scope.borrow_mut().insert(
-                            let_binding.name.as_str().to_string(),
+                            let_binding.name.name,
                             LexicalBinding::Expr(rewritten),
                         );
                     }
@@ -486,7 +486,7 @@ fn expand_top_level_items(
                     )?;
                     let root_id = NodeId(expanded_doc.nodes.len());
                     global_scope.borrow_mut().insert(
-                        let_binding.name.as_str().to_string(),
+                        let_binding.name.name,
                         LexicalBinding::Node(root_id),
                     );
                     let elem_ctx = ElementContext {
@@ -527,7 +527,7 @@ fn expand_top_level_items(
 
 fn finalize_window_and_forward_refs(
     expanded_doc: &mut ExpandedDocument,
-    final_global_scope: &HashMap<String, LexicalBinding>,
+    final_global_scope: &HashMap<Symbol, LexicalBinding>,
     global_env_scope: &HashMap<String, EnvEntry>,
     node_fonts: &HashMap<NodeId, NodeId>,
     enums: &HashMap<String, EnumDef>,

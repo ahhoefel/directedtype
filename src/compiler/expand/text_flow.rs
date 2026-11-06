@@ -253,19 +253,19 @@ pub(super) fn finalize_span_component_ports(
     comp_node_id: NodeId,
     span: Span,
     doc: &mut ExpandedDocument,
-    final_local_scope: &HashMap<String, LexicalBinding>,
+    final_local_scope: &HashMap<Symbol, LexicalBinding>,
     node_fonts: &mut HashMap<NodeId, NodeId>,
     rewritten_ports: &mut HashMap<String, Expr>,
     span_full_text: &Option<String>,
     span_text_spans: &mut [TextSpan],
 ) {
-    if let Some(&LexicalBinding::Node(inner_font_id)) = final_local_scope.get("font") {
+    if let Some(&LexicalBinding::Node(inner_font_id)) = final_local_scope.get(&Symbol::FONT) {
         if doc.get_node(inner_font_id).is_some_and(|n| n.name == "Font") {
             node_fonts.insert(comp_node_id, inner_font_id);
             doc.get_node_mut(comp_node_id).unwrap().font = Some(inner_font_id);
             rewritten_ports.insert(
                 "font".to_string(),
-                Expr::Ident(Ident::new(inner_font_id.canonical_name(), span)),
+                Expr::Ident(Ident::from_node(inner_font_id, span)),
             );
         }
     }
@@ -368,9 +368,9 @@ pub(super) fn finalize_span_component_ports(
         }
     }
 
-    let self_ident_span = Expr::Ident(Ident::new(comp_node_id.canonical_name(), span));
+    let self_ident_span = Expr::Ident(Ident::from_node(comp_node_id, span));
     let (size_expr, weight_expr, family_expr) = if let Some(&fid) = node_fonts.get(&comp_node_id) {
-        let f_ident = Expr::Ident(Ident::new(fid.canonical_name(), span));
+        let f_ident = Expr::Ident(Ident::from_node(fid, span));
         (
             Expr::MemberAccess(MemberAccessExpr {
                 target: Box::new(f_ident.clone()),
@@ -489,15 +489,15 @@ pub(super) fn finalize_inline_box_component_ports(
         );
         rewritten_ports.insert("__baseline_offset".to_string(), offset_expr);
     } else {
-        let self_ident = Expr::Ident(Ident::new(comp_node_id.canonical_name(), span));
+        let self_ident = Expr::Ident(Ident::from_node(comp_node_id, span));
         let self_y = Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident.clone()),
-            member: Ident::new("y", span),
+            member: Ident::from_symbol(Symbol::Y, span),
             span,
         });
         let self_height = Expr::MemberAccess(MemberAccessExpr {
             target: Box::new(self_ident),
-            member: Ident::new("height", span),
+            member: Ident::from_symbol(Symbol::HEIGHT, span),
             span,
         });
         let default_baseline = Expr::Binary(BinaryExpr {
@@ -529,7 +529,7 @@ pub(super) fn extract_inline_box_baseline_offset(
     match expr {
         Expr::MemberAccess(m) => {
             if let Expr::Ident(id) = m.target.as_ref() {
-                if let Some(target_nid) = NodeId::from_canonical_name(id.as_str()) {
+                if let Some(target_nid) = id.node_id() {
                     let member = m.member.as_str();
                     if target_nid == comp_node_id {
                         if member == "y" || member == "top" {

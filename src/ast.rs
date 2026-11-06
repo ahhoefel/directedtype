@@ -3,36 +3,99 @@ use std::fmt;
 
 use crate::dom::NodeHandle;
 use crate::span::Span;
+pub use crate::symbol::Symbol;
 
 /// An identifier with its source span.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ident {
-    pub name: String,
+    pub name: Symbol,
     pub span: Span,
 }
 
 impl Ident {
-    pub fn new(name: impl Into<String>, span: Span) -> Self {
+    #[inline]
+    pub fn new(name: impl Into<Symbol>, span: Span) -> Self {
         Self {
             name: name.into(),
             span,
         }
     }
 
-    pub fn from_node(id: crate::compiler::expanded::NodeId, span: Span) -> Self {
+    #[inline]
+    pub const fn from_symbol(name: Symbol, span: Span) -> Self {
+        Self { name, span }
+    }
+
+    #[inline]
+    pub const fn from_node(id: crate::compiler::expanded::NodeId, span: Span) -> Self {
         Self {
-            name: id.canonical_str().to_string(),
+            name: Symbol::from_node(id),
             span,
         }
     }
 
     #[inline]
-    pub fn node_id(&self) -> Option<crate::compiler::expanded::NodeId> {
-        crate::compiler::expanded::NodeId::from_canonical_name(&self.name)
+    pub const fn next_of(id: crate::compiler::expanded::NodeId, span: Span) -> Self {
+        Self {
+            name: Symbol::next_of(id),
+            span,
+        }
     }
 
-    pub fn as_str(&self) -> &str {
-        &self.name
+    #[inline]
+    pub const fn agg_child_of(
+        parent: crate::compiler::expanded::NodeId,
+        idx: usize,
+        span: Span,
+    ) -> Self {
+        Self {
+            name: Symbol::agg_child_of(parent, idx),
+            span,
+        }
+    }
+
+    #[inline]
+    pub const fn node_id(&self) -> Option<crate::compiler::expanded::NodeId> {
+        self.name.node_id()
+    }
+
+    #[inline]
+    pub const fn is_canonical_node_ref(&self) -> bool {
+        self.name.is_canonical_node_ref()
+    }
+
+    #[inline]
+    pub const fn next_of_node(&self) -> Option<crate::compiler::expanded::NodeId> {
+        self.name.next_of_node()
+    }
+
+    #[inline]
+    pub const fn agg_child_of_node(&self) -> Option<(crate::compiler::expanded::NodeId, usize)> {
+        self.name.agg_child_of_node()
+    }
+
+    #[inline]
+    pub fn as_str(&self) -> &'static str {
+        self.name.as_str()
+    }
+
+    #[inline]
+    pub const fn symbol(&self) -> Symbol {
+        self.name
+    }
+}
+
+impl From<Ident> for Symbol {
+    #[inline]
+    fn from(id: Ident) -> Self {
+        id.name
+    }
+}
+
+impl From<&Ident> for Symbol {
+    #[inline]
+    fn from(id: &Ident) -> Self {
+        id.name
     }
 }
 

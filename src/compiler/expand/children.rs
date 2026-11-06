@@ -128,7 +128,7 @@ pub(super) fn collect_consumer_children<'a>(
     comp_scope_ports: &[String],
     is_span_def: bool,
     is_single_text_context: bool,
-    lexical_scope: &'a RefCell<HashMap<String, LexicalBinding>>,
+    lexical_scope: &'a RefCell<HashMap<Symbol, LexicalBinding>>,
     caller_env_scope: &HashMap<String, EnvEntry>,
     instantiated_children_ids: &'a RefCell<Vec<NodeId>>,
     registry: &HashMap<String, Vec<ComponentDef>>,
@@ -633,7 +633,7 @@ pub(super) fn expand_caller_slot_envs(
     instance: &ElementNode,
     comp_def: &ComponentDef,
     comp_scope_ports: &[String],
-    lexical_scope: &RefCell<HashMap<String, LexicalBinding>>,
+    lexical_scope: &RefCell<HashMap<Symbol, LexicalBinding>>,
     children_env_scope: &mut HashMap<String, EnvEntry>,
     registry: &HashMap<String, Vec<ComponentDef>>,
     doc: &mut ExpandedDocument,
@@ -679,11 +679,11 @@ pub(super) fn expand_caller_slot_envs(
                             Some(env_binding.name.as_str().to_string());
                         all_children_ids.push(env_node_id);
                         lexical_scope.borrow_mut().insert(
-                            env_binding.name.as_str().to_string(),
+                            env_binding.name.name,
                             LexicalBinding::Node(env_node_id),
                         );
                         let bound_expr =
-                            Expr::Ident(Ident::new(env_node_id.canonical_name(), elem.span));
+                            Expr::Ident(Ident::from_node(env_node_id, elem.span));
                         children_env_scope.insert(
                             env_binding.name.as_str().to_string(),
                             EnvEntry::Bound(bound_expr),
@@ -725,7 +725,7 @@ pub(super) fn expand_caller_slot_envs(
                             raw_expr.span(),
                         ));
                         lexical_scope.borrow_mut().insert(
-                            env_binding.name.as_str().to_string(),
+                            env_binding.name.name,
                             LexicalBinding::Expr(rewritten.clone()),
                         );
                         children_env_scope.insert(
@@ -736,7 +736,7 @@ pub(super) fn expand_caller_slot_envs(
                 }
             } else {
                 lexical_scope.borrow_mut().insert(
-                    env_binding.name.as_str().to_string(),
+                    env_binding.name.name,
                     LexicalBinding::Uninitialized,
                 );
                 children_env_scope
@@ -760,7 +760,7 @@ pub(super) fn expand_block_consumer_children(
     declared_state_names: &HashSet<String>,
     num_consumer_children: usize,
     instantiated_children_ids: &RefCell<Vec<NodeId>>,
-    local_scope: &RefCell<HashMap<String, LexicalBinding>>,
+    local_scope: &RefCell<HashMap<Symbol, LexicalBinding>>,
     children_env_scope: &HashMap<String, EnvEntry>,
     consumer_child_entries: &[ConsumerChildEntry<'_>],
     registry: &HashMap<String, Vec<ComponentDef>>,
@@ -871,7 +871,7 @@ pub(super) fn expand_block_consumer_children(
             entry
                 .caller_lexical_scope
                 .borrow_mut()
-                .insert(v_name.clone(), LexicalBinding::Node(child_id));
+                .insert(Symbol::new(v_name), LexicalBinding::Node(child_id));
         }
 
         for inst_list in &entry.instantiated_ids {
@@ -883,7 +883,7 @@ pub(super) fn expand_block_consumer_children(
     }
     for pair in dir_children_ids.windows(2) {
         local_scope.borrow_mut().insert(
-            format!("__next_of_{}", pair[0].canonical_name()),
+            Symbol::next_of(pair[0]),
             LexicalBinding::Node(pair[1]),
         );
     }
@@ -967,7 +967,7 @@ pub(super) fn expand_span_consumer_children(
             entry
                 .caller_lexical_scope
                 .borrow_mut()
-                .insert(v_name.clone(), LexicalBinding::Node(child_id));
+                .insert(Symbol::new(v_name), LexicalBinding::Node(child_id));
         }
         if child_elem.name.as_str() == "Font" {
             node_fonts.insert(child_id, child_id);

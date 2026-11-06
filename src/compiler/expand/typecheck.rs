@@ -684,8 +684,8 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
                                 if ctx.enums.contains_key(target_id.as_str()) {
                                     return None;
                                 }
-                                let is_self = target_id.as_str() == "self"
-                                    || ctx.current_node.matches_str(target_id.as_str());
+                                let is_self = target_id.name == Symbol::SELF
+                                    || target_id.node_id() == Some(ctx.current_node);
                                 Some(is_self)
                             } else {
                                 None
@@ -695,7 +695,7 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
                     };
                 }
             }
-            if let Some(LexicalBinding::Expr(e)) = ctx.lexical_scope.get(id.as_str()) {
+            if let Some(LexicalBinding::Expr(e)) = ctx.lexical_scope.get(&id.name) {
                 return is_handler_expr_unset(e, ctx);
             }
             None
@@ -705,10 +705,10 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
                 if ctx.enums.contains_key(target_id.as_str()) {
                     return None;
                 }
-                let is_target = target_id.as_str() == "parent"
-                    || target_id.as_str() == "self"
-                    || ctx.parent_node.is_some_and(|p| p.matches_str(target_id.as_str()))
-                    || ctx.current_node.matches_str(target_id.as_str());
+                let is_target = target_id.name == Symbol::PARENT
+                    || target_id.name == Symbol::SELF
+                    || (ctx.parent_node.is_some() && target_id.node_id() == ctx.parent_node)
+                    || target_id.node_id() == Some(ctx.current_node);
                 if is_target {
                     if ctx
                         .declared_state_names
@@ -720,7 +720,7 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
                         if let Some(port_expr) = comp_ports.get(m.member.as_str()) {
                             return match port_expr {
                                 Expr::Ident(pid)
-                                    if pid.as_str() == "unset" || pid.as_str() == "None" =>
+                                    if pid.name == Symbol::UNSET || pid.name == Symbol::NONE =>
                                 {
                                     Some(true)
                                 }
@@ -729,10 +729,8 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
                                         if ctx.enums.contains_key(sub_target_id.as_str()) {
                                             return None;
                                         }
-                                        let is_self = sub_target_id.as_str() == "self"
-                                            || ctx
-                                                .current_node
-                                                .matches_str(sub_target_id.as_str());
+                                        let is_self = sub_target_id.name == Symbol::SELF
+                                            || sub_target_id.node_id() == Some(ctx.current_node);
                                         Some(is_self)
                                     } else {
                                         None
@@ -797,7 +795,7 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                     }
                 }
             }
-            if let Some(LexicalBinding::Expr(e)) = ctx.lexical_scope.get(id.as_str()) {
+            if let Some(LexicalBinding::Expr(e)) = ctx.lexical_scope.get(&id.name) {
                 return resolve_ident_or_member_to_literal(e, ctx);
             }
             None
@@ -816,10 +814,10 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                         ));
                     }
                 }
-                let is_target = target_id.as_str() == "parent"
-                    || target_id.as_str() == "self"
-                    || ctx.parent_node.is_some_and(|p| p.matches_str(target_id.as_str()))
-                    || ctx.current_node.matches_str(target_id.as_str());
+                let is_target = target_id.name == Symbol::PARENT
+                    || target_id.name == Symbol::SELF
+                    || (ctx.parent_node.is_some() && target_id.node_id() == ctx.parent_node)
+                    || target_id.node_id() == Some(ctx.current_node);
                 if is_target {
                     if ctx
                         .declared_state_names
@@ -1228,13 +1226,13 @@ fn infer_expr_type(
         }),
         Expr::Paren(inner, _) => infer_expr_type(inner, doc, enums, registry, cache),
         Expr::Ident(id) => {
-            if id.as_str() == "unset" || id.as_str() == "None" {
+            if id.name == Symbol::UNSET || id.name == Symbol::NONE {
                 return Ok(StaticType::Unset);
             }
-            if id.as_str() == "window" {
+            if id.name == Symbol::WINDOW {
                 return Ok(StaticType::Node("Window".to_string()));
             }
-            if let Some(node_id) = NodeId::from_canonical_name(id.as_str()) {
+            if let Some(node_id) = id.node_id() {
                 if node_id.is_window() {
                     return Ok(StaticType::Node("Window".to_string()));
                 }
@@ -1254,7 +1252,7 @@ fn infer_expr_type(
                         return Ok(StaticType::Enum(target_id.as_str().to_string()));
                     }
                 }
-                if let Some(node_id) = NodeId::from_canonical_name(target_id.as_str()) {
+                if let Some(node_id) = target_id.node_id() {
                     let has_port = if node_id.is_window() {
                         doc.window_ports.contains_key(m.member.as_str())
                             || known_builtin_port_type("Window", m.member.as_str()).is_some()

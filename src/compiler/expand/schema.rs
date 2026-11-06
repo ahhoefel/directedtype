@@ -1090,7 +1090,7 @@ pub(super) fn select_component_overload<'a>(
 pub fn validate_component_key(
     node_name: &str,
     key: &ComponentKey,
-    lexical_scope: &HashMap<String, LexicalBinding>,
+    lexical_scope: &HashMap<Symbol, LexicalBinding>,
 ) -> Result<(), CompileError> {
     for part in &key.parts {
         validate_key_expr(node_name, part, lexical_scope)?;
@@ -1101,7 +1101,7 @@ pub fn validate_component_key(
 fn validate_key_expr(
     node_name: &str,
     expr: &Expr,
-    lexical_scope: &HashMap<String, LexicalBinding>,
+    lexical_scope: &HashMap<Symbol, LexicalBinding>,
 ) -> Result<(), CompileError> {
     const SPATIAL_PORTS: &[&str] = &[
         "x", "y", "z", "width", "height", "clip", "left", "top", "right", "bottom",
@@ -1129,7 +1129,7 @@ fn validate_key_expr(
                 });
             }
             if matches!(
-                lexical_scope.get(name),
+                lexical_scope.get(&id.name),
                 Some(LexicalBinding::Expr(_) | LexicalBinding::Node(_) | LexicalBinding::Uninitialized)
             ) {
                 return Err(CompileError::InvalidComponentKeyDependency {
@@ -1150,7 +1150,7 @@ fn validate_key_expr(
                 });
             }
             if matches!(
-                lexical_scope.get(member_name),
+                lexical_scope.get(&m.member.name),
                 Some(LexicalBinding::Expr(_) | LexicalBinding::Node(_) | LexicalBinding::Uninitialized)
             ) {
                 return Err(CompileError::InvalidComponentKeyDependency {

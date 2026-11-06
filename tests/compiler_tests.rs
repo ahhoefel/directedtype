@@ -4039,9 +4039,17 @@ fn test_self_requires_shadowed_port_or_event_handler() {
             method: "act".to_string(),
         })
     );
-    // Second Inner had `on_click: self.act` -> bound to Second Inner's NodeId
+    // Second Inner had `on_click: self.act` inside Outer -> bound to Outer's NodeId, with Inner's `self.act` default preserved
     assert_eq!(
         inners[1].event_handlers.get("on_click"),
+        Some(&directedtype::component::EventHandlerBinding {
+            name: "on_click".to_string(),
+            target: directedtype::component::EventHandlerTarget::Component(outer.id),
+            method: "act".to_string(),
+        })
+    );
+    assert_eq!(
+        inners[1].default_event_handlers.get("on_click"),
         Some(&directedtype::component::EventHandlerBinding {
             name: "on_click".to_string(),
             target: directedtype::component::EventHandlerTarget::Component(inners[1].id),
