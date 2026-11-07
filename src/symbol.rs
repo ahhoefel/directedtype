@@ -11,6 +11,7 @@ const TAG_NEXT_OF: u64 = 2 << TAG_SHIFT;
 const TAG_AGG_CHILD: u64 = 3 << TAG_SHIFT;
 
 const NODE_WINDOW_RAW: u64 = u32::MAX as u64;
+const NODE_TEMPLATE_SELF_RAW: u64 = (u32::MAX - 1) as u64;
 
 /// Pre-interned static strings for zero-lock, compile-time constant `Symbol` lookup.
 const PREINTERNED: &[&str] = &[
@@ -232,12 +233,16 @@ impl Symbol {
 
     /// Canonical node symbol for `NodeId::WINDOW` (`"__window"`).
     pub const WINDOW_NODE: Self = Self(TAG_NODE | NODE_WINDOW_RAW);
+    /// Canonical node symbol for `NodeId::TEMPLATE_SELF` (`"__template_self"`).
+    pub const TEMPLATE_SELF_NODE: Self = Self(TAG_NODE | NODE_TEMPLATE_SELF_RAW);
 
     /// Creates a `Symbol` directly representing a concrete `NodeId` in O(1) with zero allocation.
     #[inline]
     pub const fn from_node(id: NodeId) -> Self {
         if id.is_window() {
             Self::WINDOW_NODE
+        } else if id.is_template_self() {
+            Self::TEMPLATE_SELF_NODE
         } else {
             Self(TAG_NODE | (id.0 as u64))
         }
@@ -273,6 +278,8 @@ impl Symbol {
             let raw = self.0 & 0xFFFF_FFFF;
             if raw == NODE_WINDOW_RAW {
                 Some(NodeId::WINDOW)
+            } else if raw == NODE_TEMPLATE_SELF_RAW {
+                Some(NodeId::TEMPLATE_SELF)
             } else {
                 Some(NodeId(raw as usize))
             }
@@ -456,6 +463,8 @@ impl Symbol {
                 let raw = self.0 & 0xFFFF_FFFF;
                 if raw == NODE_WINDOW_RAW {
                     "__window"
+                } else if raw == NODE_TEMPLATE_SELF_RAW {
+                    "__template_self"
                 } else {
                     NodeId(raw as usize).canonical_str()
                 }

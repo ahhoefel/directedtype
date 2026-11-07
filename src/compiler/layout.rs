@@ -187,7 +187,7 @@ pub fn rounded_rect_contains(rect: &Rect, radius: f64, point: Point) -> bool {
 /// Lazily formats authored port AST expressions (`Expr`) into display strings (`String`) on first access.
 #[derive(Clone, Default)]
 pub struct FormulaMap {
-    authored_ports: std::sync::Arc<HashMap<String, Expr>>,
+    authored_ports: crate::compiler::expanded::AuthoredPorts,
     formatted: std::sync::OnceLock<HashMap<String, String>>,
 }
 
@@ -196,9 +196,16 @@ impl FormulaMap {
         Self::default()
     }
 
-    pub fn from_arc(authored_ports: std::sync::Arc<HashMap<String, Expr>>) -> Self {
+    pub fn from_authored(authored_ports: crate::compiler::expanded::AuthoredPorts) -> Self {
         Self {
             authored_ports,
+            formatted: std::sync::OnceLock::new(),
+        }
+    }
+
+    pub fn from_arc(authored_ports: std::sync::Arc<HashMap<String, Expr>>) -> Self {
+        Self {
+            authored_ports: crate::compiler::expanded::AuthoredPorts::from_arc(authored_ports),
             formatted: std::sync::OnceLock::new(),
         }
     }
@@ -226,7 +233,14 @@ impl FormulaMap {
         if let Some(m) = self.formatted.get() {
             m.contains_key(k)
         } else {
-            self.authored_ports.contains_key(k)
+            self.authored_ports
+                .overrides
+                .contains_key(k)
+                || self
+                    .authored_ports
+                    .base
+                    .as_ref()
+                    .is_some_and(|b| b.contains_key(k))
         }
     }
 
@@ -245,8 +259,17 @@ impl FormulaMap {
 
     fn ensure_formatted(&self) -> &HashMap<String, String> {
         self.formatted.get_or_init(|| {
-            let mut map = HashMap::with_capacity(self.authored_ports.len());
-            for (port, expr) in self.authored_ports.iter() {
+            let cap = self.authored_ports.base.as_ref().map_or(0, |b| b.len())
+                + self.authored_ports.overrides.len();
+            let mut map = HashMap::with_capacity(cap);
+            if let Some(base) = &self.authored_ports.base {
+                for (port, expr) in base.iter() {
+                    if !self.authored_ports.overrides.contains_key(port) {
+                        map.insert(port.clone(), expr.to_string());
+                    }
+                }
+            }
+            for (port, expr) in self.authored_ports.overrides.iter() {
                 map.insert(port.clone(), expr.to_string());
             }
             map
@@ -271,7 +294,13 @@ impl std::fmt::Debug for FormulaMap {
 
 impl PartialEq for FormulaMap {
     fn eq(&self, other: &Self) -> bool {
-        if std::sync::Arc::ptr_eq(&self.authored_ports, &other.authored_ports)
+        let base_eq = match (&self.authored_ports.base, &other.authored_ports.base) {
+            (None, None) => true,
+            (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
+            _ => false,
+        };
+        if base_eq
+            && std::sync::Arc::ptr_eq(&self.authored_ports.overrides, &other.authored_ports.overrides)
             && self.formatted.get().is_none()
             && other.formatted.get().is_none()
         {
@@ -311,8 +340,8 @@ pub struct ResolvedNode {
     pub anchor_name: Option<String>,
     pub scope_id: Option<ScopeId>,
     pub properties: HashMap<String, Value>,
-    pub state_vars: HashMap<String, Option<String>>,
-    pub env_vars: HashMap<String, Option<String>>,
+    pub state_vars: std::sync::Arc<HashMap<String, Option<String>>>,
+    pub env_vars: std::sync::Arc<HashMap<String, Option<String>>>,
     pub event_handlers: HashMap<String, crate::component::EventHandlerBinding>,
     pub default_event_handlers: HashMap<String, crate::component::EventHandlerBinding>,
     pub formulas: FormulaMap,
@@ -320,7 +349,7 @@ pub struct ResolvedNode {
     pub handle: Option<NodeHandle>,
     pub font: Option<NodeId>,
     pub var_name: Option<String>,
-    pub overload_params: Vec<String>,
+    pub overload_params: std::sync::Arc<Vec<String>>,
     pub unfiltered_ports: HashMap<String, Expr>,
     pub skipped_upstream: HashMap<String, Vec<VarId>>,
 }
@@ -859,7 +888,7 @@ pub fn resolve_layout_with_graph(
             .and_then(|v| v.as_node())
             .filter(|id| !id.is_window());
 
-        let formulas = FormulaMap::from_arc(std::sync::Arc::clone(&node.authored_ports));
+        let formulas = FormulaMap::from_authored(node.authored_ports.clone());
 
         let font = node
             .font
@@ -969,8 +998,8 @@ pub fn resolve_layout_with_graph(
             anchor_name: node.anchor_name.clone(),
             scope_id: node.scope_id,
             properties,
-            state_vars: node.state_vars.clone(),
-            env_vars: node.env_vars.clone(),
+            state_vars: std::sync::Arc::clone(&node.state_vars),
+            env_vars: std::sync::Arc::clone(&node.env_vars),
             event_handlers,
             default_event_handlers: node.default_event_handlers.clone(),
             formulas,
@@ -978,7 +1007,7 @@ pub fn resolve_layout_with_graph(
             handle: node.handle,
             font,
             var_name: node.var_name.clone(),
-            overload_params: node.overload_params.clone(),
+            overload_params: std::sync::Arc::clone(&node.overload_params),
             unfiltered_ports: node.unfiltered_ports.clone(),
             skipped_upstream: node.skipped_upstream.clone(),
         });

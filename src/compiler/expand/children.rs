@@ -716,14 +716,14 @@ pub(super) fn expand_caller_slot_envs(
                             rewritten,
                             env_binding.type_annotation.as_ref(),
                         );
-                        doc.local_bindings.push((
+                        doc.push_local_binding(
                             rewritten.clone(),
                             env_binding
                                 .type_annotation
                                 .as_ref()
                                 .map(|t| t.name.as_str().to_string()),
                             raw_expr.span(),
-                        ));
+                        );
                         lexical_scope.borrow_mut().insert(
                             env_binding.name.name,
                             LexicalBinding::Expr(rewritten.clone()),
@@ -881,11 +881,13 @@ pub(super) fn expand_block_consumer_children(
         dir_children_ids.push(child_id);
         last_consumer_child_id = Some(child_id);
     }
-    for pair in dir_children_ids.windows(2) {
-        local_scope.borrow_mut().insert(
-            Symbol::next_of(pair[0]),
-            LexicalBinding::Node(pair[1]),
-        );
+    if super::rewrite::has_any_pending_fwd_refs() {
+        for pair in dir_children_ids.windows(2) {
+            local_scope.borrow_mut().insert(
+                Symbol::next_of(pair[0]),
+                LexicalBinding::Node(pair[1]),
+            );
+        }
     }
     Ok(())
 }

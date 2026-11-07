@@ -487,6 +487,11 @@ pub(super) fn finalize_inline_box_component_ports(
             declared_state_names,
             0,
         );
+        if super::rewrite::has_any_pending_fwd_refs()
+            && super::rewrite::expr_has_unresolved_ident(&offset_expr)
+        {
+            super::rewrite::record_pending_fwd_node(comp_node_id);
+        }
         rewritten_ports.insert("__baseline_offset".to_string(), offset_expr);
     } else {
         let self_ident = Expr::Ident(Ident::from_node(comp_node_id, span));

@@ -62,11 +62,16 @@ fn populate_comp_cond_consts<'a>(
                                 tried_ports,
                                 depth + 1,
                             );
-                            if let Ok(val) = eval_expr(port_expr, const_env) {
-                                const_env.insert(
-                                    crate::compiler::graph::VarId::new(comp_id, key.as_str()),
-                                    val,
-                                );
+                            if super::rewrite::expr_vars_in_env(port_expr, const_env) {
+                                if let Ok(val) = eval_expr(port_expr, const_env) {
+                                    const_env.insert(
+                                        crate::compiler::graph::VarId::from_symbol(
+                                            comp_id,
+                                            m.member.name,
+                                        ),
+                                        val,
+                                    );
+                                }
                             }
                         }
                     }
@@ -525,26 +530,18 @@ fn child_port_depends_on_parent<'a>(
         if node.aggregated_ports.contains(curr_port) {
             continue;
         }
-        let mut exprs_to_scan = Vec::new();
+        let mut exprs_to_scan: [Option<&Expr>; 2] = [None, None];
         if let Some(e) = node.ports.get(curr_port) {
-            exprs_to_scan.push(e);
+            exprs_to_scan[0] = Some(e);
         } else if curr_port == "right" {
-            if let Some(e) = node.ports.get("x") {
-                exprs_to_scan.push(e);
-            }
-            if let Some(e) = node.ports.get("width") {
-                exprs_to_scan.push(e);
-            }
+            exprs_to_scan[0] = node.ports.get("x");
+            exprs_to_scan[1] = node.ports.get("width");
         } else if curr_port == "bottom" {
-            if let Some(e) = node.ports.get("y") {
-                exprs_to_scan.push(e);
-            }
-            if let Some(e) = node.ports.get("height") {
-                exprs_to_scan.push(e);
-            }
+            exprs_to_scan[0] = node.ports.get("y");
+            exprs_to_scan[1] = node.ports.get("height");
         }
 
-        for expr in exprs_to_scan {
+        for expr in exprs_to_scan.into_iter().flatten() {
             if scan_expr_for_parent_or_local_deps(
                 expr,
                 parent_id,
@@ -868,7 +865,12 @@ fn fold_const_ternaries_in_place(
     match expr {
         Expr::Ternary(t) => {
             fold_const_ternaries_in_place(&mut t.condition, const_env);
-            if let Ok(val) = eval_expr(&t.condition, const_env) {
+            let cond_val = if super::rewrite::expr_vars_in_env(&t.condition, const_env) {
+                eval_expr(&t.condition, const_env).ok()
+            } else {
+                None
+            };
+            if let Some(val) = cond_val {
                 let chosen = if val.is_truthy() {
                     &mut *t.then_expr
                 } else {
@@ -954,27 +956,30 @@ pub(super) fn resolve_and_filter_component_aggregations(
     start_local_bindings_idx: usize,
     body_agg_count: u32,
     total_agg_count: u32,
+    has_unfolded_port_ternary: bool,
 ) -> Result<(), CompileError> {
-    let mut const_env: HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value> =
-        HashMap::new();
-    let mut has_any_ternary = false;
-    {
-        let mut tried_ports: HashSet<&str> = HashSet::new();
-        for expr in rewritten_ports.values() {
-            collect_cond_consts_from_expr(
-                expr,
-                comp_id,
-                rewritten_ports,
-                declared_state_names,
-                &mut const_env,
-                &mut tried_ports,
-                &mut has_any_ternary,
-            );
+    if has_unfolded_port_ternary {
+        let mut const_env: HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value> =
+            HashMap::new();
+        let mut has_any_ternary = false;
+        {
+            let mut tried_ports: HashSet<&str> = HashSet::new();
+            for expr in rewritten_ports.values() {
+                collect_cond_consts_from_expr(
+                    expr,
+                    comp_id,
+                    rewritten_ports,
+                    declared_state_names,
+                    &mut const_env,
+                    &mut tried_ports,
+                    &mut has_any_ternary,
+                );
+            }
         }
-    }
-    if has_any_ternary {
-        for expr in rewritten_ports.values_mut() {
-            fold_const_ternaries_in_place(expr, &const_env);
+        if has_any_ternary {
+            for expr in rewritten_ports.values_mut() {
+                fold_const_ternaries_in_place(expr, &const_env);
+            }
         }
     }
 
@@ -984,6 +989,7 @@ pub(super) fn resolve_and_filter_component_aggregations(
 
     let mut parent_ports_by_member: HashMap<String, HashSet<String>> = HashMap::new();
     let mut port_to_parent_refs: Vec<(String, HashSet<String>)> = Vec::new();
+    let mut agg_port_names: Vec<String> = Vec::new();
 
     for (port_name, expr) in rewritten_ports.iter() {
         let mut agg_members = HashSet::new();
@@ -994,11 +1000,16 @@ pub(super) fn resolve_and_filter_component_aggregations(
             &mut agg_members,
             &mut parent_refs,
         );
-        for m in agg_members {
-            let entry = parent_ports_by_member.entry(m).or_default();
-            entry.insert(port_name.clone());
+        if !agg_members.is_empty() {
+            agg_port_names.push(port_name.clone());
+            for m in agg_members {
+                let entry = parent_ports_by_member.entry(m).or_default();
+                entry.insert(port_name.clone());
+            }
         }
-        port_to_parent_refs.push((port_name.clone(), parent_refs));
+        if !parent_refs.is_empty() {
+            port_to_parent_refs.push((port_name.clone(), parent_refs));
+        }
     }
 
     let mut changed = true;
@@ -1041,10 +1052,10 @@ pub(super) fn resolve_and_filter_component_aggregations(
 
     let mut comp_unfiltered_ports = HashMap::new();
     let mut comp_skipped_upstream = HashMap::new();
-    for (port_name, expr) in rewritten_ports.iter_mut() {
-        if !expr_contains_agg_child_of(expr, comp_id) {
+    for port_name in agg_port_names {
+        let Some(expr) = rewritten_ports.get_mut(&port_name) else {
             continue;
-        }
+        };
         let mut skipped_vars = Vec::new();
         let (filt, unfilt) = resolve_and_filter_agg_expr(
             expr,
@@ -1058,7 +1069,7 @@ pub(super) fn resolve_and_filter_component_aggregations(
         *expr = filt;
         if !skipped_vars.is_empty() {
             comp_unfiltered_ports.insert(port_name.clone(), unfilt);
-            comp_skipped_upstream.insert(port_name.clone(), skipped_vars);
+            comp_skipped_upstream.insert(port_name, skipped_vars);
         }
     }
 

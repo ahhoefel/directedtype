@@ -58,6 +58,7 @@ pub fn expand_document_with_resolver<R: crate::compiler::module::FileResolver>(
     base_dir: &std::path::Path,
     resolver: &R,
 ) -> Result<ExpandedDocument, CompileError> {
+    rewrite::reset_rewrite_tracking();
     crate::compiler::text::prewarm_font_context();
     let (mut registry, imported_items, all_module_enums) =
         crate::compiler::module::resolve_imports_with_enums(doc, base_dir, resolver)?;
@@ -462,14 +463,14 @@ fn expand_top_level_items(
                             .window_ports
                             .insert(let_binding.name.as_str().to_string(), rewritten);
                     } else {
-                        expanded_doc.local_bindings.push((
+                        expanded_doc.push_local_binding(
                             rewritten.clone(),
                             let_binding
                                 .type_annotation
                                 .as_ref()
                                 .map(|t| t.name.as_str().to_string()),
                             raw_expr.span(),
-                        ));
+                        );
                         global_scope.borrow_mut().insert(
                             let_binding.name.name,
                             LexicalBinding::Expr(rewritten),

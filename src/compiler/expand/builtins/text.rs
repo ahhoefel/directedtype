@@ -763,7 +763,22 @@ fn synthesize_span_and_inline_box_metrics(
         Expr::Literal(Literal::String(String::new(), elem.span))
     };
 
+    let shared_has_unresolved = crate::compiler::expand::rewrite::has_any_pending_fwd_refs()
+        && (crate::compiler::expand::rewrite::expr_has_unresolved_ident(size_expr)
+            || crate::compiler::expand::rewrite::expr_has_unresolved_ident(weight_expr)
+            || crate::compiler::expand::rewrite::expr_has_unresolved_ident(font_expr)
+            || crate::compiler::expand::rewrite::expr_has_unresolved_ident(start_at_expr)
+            || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&text_arg_expr)
+            || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&line_height_arg)
+            || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&align_arg)
+            || span_style_args
+                .iter()
+                .any(crate::compiler::expand::rewrite::expr_has_unresolved_ident));
+
     for (span_nid, s_start, s_end) in unique_span_nodes {
+        if shared_has_unresolved {
+            crate::compiler::expand::rewrite::record_pending_fwd_node(span_nid);
+        }
         let own_shift = if state.doc.nodes[span_nid.0]
             .ports
             .contains_key("baseline_shift")
@@ -805,15 +820,22 @@ fn synthesize_span_and_inline_box_metrics(
             state.doc.nodes[span_nid.0]
                 .ports
                 .insert(metric_name.to_string(), call);
-            state.doc.nodes[span_nid.0]
+            if !state.doc.nodes[span_nid.0]
                 .port_types
-                .insert(metric_name.to_string(), "Distance".to_string());
+                .contains_key(metric_name)
+            {
+                std::sync::Arc::make_mut(&mut state.doc.nodes[span_nid.0].port_types)
+                    .insert(metric_name.to_string(), "Distance".to_string());
+            }
         }
         insert_inline_child_spatial_aliases(&mut state.doc.nodes[span_nid.0], span_nid, elem.span);
     }
 
     for ib in state.doc.nodes[node_id.0].inline_boxes.clone() {
         let ib_nid = ib.node_id;
+        if shared_has_unresolved {
+            crate::compiler::expand::rewrite::record_pending_fwd_node(ib_nid);
+        }
         for metric_name in ["x", "y"] {
             let mut m_args = vec![
                 Expr::Literal(Literal::String(metric_name.to_string(), elem.span)),
@@ -840,9 +862,13 @@ fn synthesize_span_and_inline_box_metrics(
             state.doc.nodes[ib_nid.0]
                 .ports
                 .insert(metric_name.to_string(), call);
-            state.doc.nodes[ib_nid.0]
+            if !state.doc.nodes[ib_nid.0]
                 .port_types
-                .insert(metric_name.to_string(), "Distance".to_string());
+                .contains_key(metric_name)
+            {
+                std::sync::Arc::make_mut(&mut state.doc.nodes[ib_nid.0].port_types)
+                    .insert(metric_name.to_string(), "Distance".to_string());
+            }
         }
         insert_inline_child_spatial_aliases(&mut state.doc.nodes[ib_nid.0], ib_nid, elem.span);
     }
@@ -895,8 +921,10 @@ fn insert_inline_child_spatial_aliases(
         }),
     );
     for sp in ["left", "top", "right", "bottom"] {
-        node.port_types
-            .insert(sp.to_string(), "Distance".to_string());
+        if !node.port_types.contains_key(sp) {
+            std::sync::Arc::make_mut(&mut node.port_types)
+                .insert(sp.to_string(), "Distance".to_string());
+        }
     }
 }
 

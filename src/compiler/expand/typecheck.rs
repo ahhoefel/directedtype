@@ -695,8 +695,47 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
                     };
                 }
             }
-            if let Some(LexicalBinding::Expr(e)) = ctx.lexical_scope.get(&id.name) {
-                return is_handler_expr_unset(e, ctx);
+            match ctx.lexical_scope.get(&id.name) {
+                Some(LexicalBinding::Expr(e)) => return is_handler_expr_unset(e, ctx),
+                Some(LexicalBinding::Member {
+                    node_id,
+                    member,
+                    is_state,
+                }) => {
+                    if *is_state {
+                        return None;
+                    }
+                    let is_target =
+                        Some(*node_id) == ctx.parent_node || *node_id == ctx.current_node;
+                    if is_target {
+                        if let Some(comp_ports) = ctx.comp_ports {
+                            if let Some(port_expr) = comp_ports.get(member.as_str()) {
+                                return match port_expr {
+                                    Expr::Ident(pid)
+                                        if pid.name == Symbol::UNSET || pid.name == Symbol::NONE =>
+                                    {
+                                        Some(true)
+                                    }
+                                    Expr::MemberAccess(sub_m) => {
+                                        if let Expr::Ident(sub_target_id) = sub_m.target.as_ref() {
+                                            if ctx.enums.contains_key(sub_target_id.as_str()) {
+                                                return None;
+                                            }
+                                            let is_self = sub_target_id.name == Symbol::SELF
+                                                || sub_target_id.node_id()
+                                                    == Some(ctx.current_node);
+                                            Some(is_self)
+                                        } else {
+                                            None
+                                        }
+                                    }
+                                    _ => None,
+                                };
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
             None
         }
@@ -795,8 +834,55 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                     }
                 }
             }
-            if let Some(LexicalBinding::Expr(e)) = ctx.lexical_scope.get(&id.name) {
-                return resolve_ident_or_member_to_literal(e, ctx);
+            match ctx.lexical_scope.get(&id.name) {
+                Some(LexicalBinding::Expr(e)) => return resolve_ident_or_member_to_literal(e, ctx),
+                Some(LexicalBinding::Member {
+                    node_id,
+                    member,
+                    is_state,
+                }) => {
+                    if *is_state {
+                        return None;
+                    }
+                    let is_target =
+                        Some(*node_id) == ctx.parent_node || *node_id == ctx.current_node;
+                    if is_target {
+                        if let Some(comp_ports) = ctx.comp_ports {
+                            if let Some(port_expr) = comp_ports.get(member.as_str()) {
+                                match port_expr {
+                                    Expr::Literal(lit) => return Some(lit.clone()),
+                                    Expr::Call(call)
+                                        if call.callee.as_str() == "to_integer"
+                                            && call.args.len() == 1 =>
+                                    {
+                                        if let Expr::Literal(Literal::Integer(i, span)) =
+                                            &call.args[0]
+                                        {
+                                            return Some(Literal::Integer(*i, *span));
+                                        }
+                                    }
+                                    Expr::MemberAccess(sub_m) => {
+                                        if let Expr::Ident(sub_target_id) = sub_m.target.as_ref() {
+                                            if let Some(enum_def) =
+                                                ctx.enums.get(sub_target_id.as_str())
+                                            {
+                                                if enum_def.has_variant(sub_m.member.as_str()) {
+                                                    return Some(Literal::Enum(
+                                                        sub_target_id.as_str().to_string(),
+                                                        sub_m.member.as_str().to_string(),
+                                                        sub_m.span,
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
             None
         }
@@ -982,38 +1068,60 @@ pub(super) fn known_builtin_port_type(node_name: &str, port_name: &str) -> Optio
     super::builtins::default_builtin_port_type(port_name)
 }
 
-struct TypecheckCache {
-    node_caches: Vec<HashMap<String, StaticType>>,
-    window_cache: HashMap<String, StaticType>,
-    visiting: HashSet<(NodeId, String)>,
+struct TypecheckCache<'a> {
+    node_caches: Vec<HashMap<Symbol, StaticType>>,
+    window_cache: HashMap<Symbol, StaticType>,
+    visiting: HashSet<(NodeId, Symbol)>,
+    template_types: Option<&'a HashMap<Symbol, StaticType>>,
 }
 
-impl TypecheckCache {
+impl<'a> TypecheckCache<'a> {
     fn new(num_nodes: usize) -> Self {
         Self {
             node_caches: vec![HashMap::new(); num_nodes],
             window_cache: HashMap::new(),
             visiting: HashSet::new(),
+            template_types: None,
+        }
+    }
+
+    fn with_template_types(template_types: &'a HashMap<Symbol, StaticType>) -> Self {
+        Self {
+            node_caches: Vec::new(),
+            window_cache: HashMap::new(),
+            visiting: HashSet::new(),
+            template_types: Some(template_types),
         }
     }
 
     #[inline]
-    fn get(&self, node_id: NodeId, port_name: &str) -> Option<&StaticType> {
+    fn get(&self, node_id: NodeId, port_sym: Symbol) -> Option<&StaticType> {
         if node_id.is_window() {
-            self.window_cache.get(port_name)
+            self.window_cache.get(&port_sym)
         } else {
-            self.node_caches.get(node_id.0)?.get(port_name)
+            self.node_caches.get(node_id.0)?.get(&port_sym)
         }
     }
 
     #[inline]
-    fn insert(&mut self, node_id: NodeId, port_name: String, ty: StaticType) {
+    fn insert(&mut self, node_id: NodeId, port_sym: Symbol, ty: StaticType) {
         if node_id.is_window() {
-            self.window_cache.insert(port_name, ty);
+            self.window_cache.insert(port_sym, ty);
         } else if let Some(map) = self.node_caches.get_mut(node_id.0) {
-            map.insert(port_name, ty);
+            map.insert(port_sym, ty);
         }
     }
+}
+
+pub(super) fn infer_template_expr_type(
+    expr: &Expr,
+    template_types: &HashMap<Symbol, StaticType>,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> Result<StaticType, CompileError> {
+    let empty_doc = ExpandedDocument::new();
+    let mut cache = TypecheckCache::with_template_types(template_types);
+    infer_expr_type(expr, &empty_doc, enums, registry, &mut cache)
 }
 
 /// Strictly type-checks all expanded node ports, window ports, and local bindings at compile time.
@@ -1027,8 +1135,10 @@ pub fn typecheck_expanded_document(
     // 1. Validate and infer all window ports
     let window_port_names: Vec<String> = doc.window_ports.keys().cloned().collect();
     for port_name in window_port_names {
+        let port_sym = Symbol::new(&port_name);
         let inferred = infer_port_type(
             NodeId::WINDOW,
+            port_sym,
             &port_name,
             doc,
             enums,
@@ -1041,22 +1151,33 @@ pub fn typecheck_expanded_document(
     }
 
     // 2. Validate and infer all node ports
+    let mut non_preverified_ports: Vec<(String, Symbol)> = Vec::with_capacity(16);
     for idx in 0..doc.nodes.len() {
         let node_id = NodeId(idx);
-        let port_names: Vec<String> = doc.nodes[idx].ports.keys().cloned().collect();
-        for port_name in port_names {
+        non_preverified_ports.clear();
+        {
+            let node = &doc.nodes[idx];
+            for port_name in node.ports.keys() {
+                if !node.is_port_preverified(port_name) {
+                    non_preverified_ports.push((port_name.clone(), Symbol::new(port_name)));
+                }
+            }
+        }
+        for &(ref port_name, port_sym) in &non_preverified_ports {
             let inferred = infer_port_type(
                 node_id,
-                &port_name,
+                port_sym,
+                port_name,
                 doc,
                 enums,
                 registry,
                 &mut cache,
             )?;
-            doc.nodes[idx]
-                .port_types
-                .entry(port_name)
-                .or_insert_with(|| inferred.type_name());
+            if inferred == StaticType::Handler && !doc.nodes[idx].port_types.contains_key(port_name)
+            {
+                std::sync::Arc::make_mut(&mut doc.nodes[idx].port_types)
+                    .insert(port_name.clone(), "Handler".to_string());
+            }
         }
     }
 
@@ -1087,36 +1208,60 @@ pub fn typecheck_expanded_document(
 
 fn infer_port_type(
     node_id: NodeId,
+    port_sym: Symbol,
     port_name: &str,
     doc: &ExpandedDocument,
     enums: &HashMap<String, EnumDef>,
     registry: &HashMap<String, Vec<ComponentDef>>,
-    cache: &mut TypecheckCache,
+    cache: &mut TypecheckCache<'_>,
 ) -> Result<StaticType, CompileError> {
-    if let Some(cached) = cache.get(node_id, port_name) {
+    if !node_id.is_window() {
+        if let Some(node) = doc.get_node(node_id) {
+            if let Some(ty) = node.get_preverified_port_type(port_sym, port_name) {
+                return Ok(ty.clone());
+            }
+        }
+    }
+    if let Some(cached) = cache.get(node_id, port_sym) {
         return Ok(cached.clone());
     }
 
-    let explicit_type_name = if node_id.is_window() {
-        doc.window_port_types.get(port_name).map(|s| s.as_str())
-    } else {
-        doc.get_node(node_id)
-            .and_then(|n| n.port_types.get(port_name).map(|s| s.as_str()))
-    };
-
-    let explicit_ty = if let Some(name) = explicit_type_name {
-        Some(StaticType::from_type_name(
-            name,
-            Span::default(),
-            enums,
-            registry,
-        )?)
+    let explicit_ty = if node_id.is_window() {
+        if let Some(name) = doc.window_port_types.get(port_name) {
+            Some(StaticType::from_type_name(
+                name,
+                Span::default(),
+                enums,
+                registry,
+            )?)
+        } else {
+            None
+        }
+    } else if let Some(node) = doc.get_node(node_id) {
+        if let Some(name) = node.port_types.get(port_name) {
+            if let Some(ty) = node
+                .preverified_port_types
+                .as_ref()
+                .and_then(|m| m.get(&port_sym))
+            {
+                Some(ty.clone())
+            } else {
+                Some(StaticType::from_type_name(
+                    name,
+                    Span::default(),
+                    enums,
+                    registry,
+                )?)
+            }
+        } else {
+            None
+        }
     } else {
         None
     };
 
-    let key = (node_id, port_name.to_string());
-    if !cache.visiting.insert(key.clone()) {
+    let key = (node_id, port_sym);
+    if !cache.visiting.insert(key) {
         // Cycle detected: if there is an explicit or builtin type, return it; otherwise let graph cycle checker report it
         if let Some(ty) = explicit_ty {
             return Ok(ty);
@@ -1209,7 +1354,7 @@ fn infer_expr_type(
     doc: &ExpandedDocument,
     enums: &HashMap<String, EnumDef>,
     registry: &HashMap<String, Vec<ComponentDef>>,
-    cache: &mut TypecheckCache,
+    cache: &mut TypecheckCache<'_>,
 ) -> Result<StaticType, CompileError> {
     match expr {
         Expr::Literal(lit) => Ok(match lit {
@@ -1253,6 +1398,20 @@ fn infer_expr_type(
                     }
                 }
                 if let Some(node_id) = target_id.node_id() {
+                    if node_id.is_template_self() {
+                        if let Some(template_types) = cache.template_types {
+                            if let Some(ty) = template_types.get(&m.member.name) {
+                                return Ok(ty.clone());
+                            }
+                        }
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Template port '{}' has no known static type",
+                                m.member.as_str()
+                            ),
+                            span: m.span,
+                        });
+                    }
                     let has_port = if node_id.is_window() {
                         doc.window_ports.contains_key(m.member.as_str())
                             || known_builtin_port_type("Window", m.member.as_str()).is_some()
@@ -1267,6 +1426,7 @@ fn infer_expr_type(
                     if has_port {
                         return infer_port_type(
                             node_id,
+                            m.member.name,
                             m.member.as_str(),
                             doc,
                             enums,

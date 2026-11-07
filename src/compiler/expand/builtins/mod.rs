@@ -816,14 +816,14 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 .borrow()
                 .contains_key(&let_binding.name.name)
             {
-                self.doc.local_bindings.push((
+                self.doc.push_local_binding(
                     rewritten.clone(),
                     let_binding
                         .type_annotation
                         .as_ref()
                         .map(|t| t.name.as_str().to_string()),
                     raw_expr.span(),
-                ));
+                );
                 self.ctx.lexical_scope.borrow_mut().insert(
                     let_binding.name.name,
                     LexicalBinding::Expr(rewritten),
@@ -1010,10 +1010,12 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 self.node_fonts,
             )?;
             if let Some(prev_id) = self.last_child_id {
-                self.ctx.lexical_scope.borrow_mut().insert(
-                    Symbol::next_of(prev_id),
-                    LexicalBinding::Node(child_id),
-                );
+                if crate::compiler::expand::rewrite::has_any_pending_fwd_refs() {
+                    self.ctx.lexical_scope.borrow_mut().insert(
+                        Symbol::next_of(prev_id),
+                        LexicalBinding::Node(child_id),
+                    );
+                }
             }
             if let Some(v_name) = &entry.var_name {
                 self.doc.get_node_mut(child_id).unwrap().var_name = Some(v_name.clone());
@@ -1262,12 +1264,13 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
 
         if self.primitive.is_non_spatial() {
             self.primitive.finalize_ports(&mut state)?;
-            let overload_params = self.primitive.overload_params(&state);
+            let overload_params = std::sync::Arc::new(self.primitive.overload_params(&state));
             let node = state.doc.get_node_mut(self.node_id).unwrap();
             node.overload_params = overload_params;
             node.children = state.child_ids;
             node.ports = state.ports;
-            node.authored_ports = std::sync::Arc::new(state.authored_ports);
+            node.authored_ports =
+                crate::compiler::expanded::AuthoredPorts::from_map(state.authored_ports);
             node.font = Some(self.node_id);
             state.node_fonts.insert(self.node_id, self.node_id);
             return Ok(());
@@ -1275,6 +1278,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
 
         if self.primitive.name() != "Clip" && !state.ports.contains_key("clip") {
             let default_clip = default_inherited_clip_expr(
+                self.node_id,
                 self.ctx.parent_id,
                 self.ctx.env_scope,
                 self.elem.span,
@@ -1295,12 +1299,13 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             &mut state.authored_ports,
         );
 
-        let overload_params = self.primitive.overload_params(&state);
+        let overload_params = std::sync::Arc::new(self.primitive.overload_params(&state));
         let node = state.doc.get_node_mut(self.node_id).unwrap();
         node.overload_params = overload_params;
         node.children = state.child_ids;
         node.ports = state.ports;
-        node.authored_ports = std::sync::Arc::new(state.authored_ports);
+        node.authored_ports =
+            crate::compiler::expanded::AuthoredPorts::from_map(state.authored_ports);
         node.event_handlers = state.event_handlers;
 
         Ok(())

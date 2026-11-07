@@ -47,6 +47,11 @@ struct ComponentExpander<'a> {
     node_fonts: &'a mut HashMap<NodeId, NodeId>,
 
     schema: &'a ComponentSchema,
+    templates: &'a super::schema::CompiledComponentTemplates,
+    slot_consts: Vec<Option<crate::compiler::value::Value>>,
+    preverified_ports: PortMask,
+    has_node_arg_on_value_param: bool,
+    has_unfolded_port_ternary: bool,
     comp_scope_ports: std::borrow::Cow<'a, [String]>,
     is_single_text_context: bool,
     comp_ports: HashMap<String, Expr>,
@@ -64,6 +69,7 @@ struct ComponentExpander<'a> {
     body_agg_count: u32,
     internal_body_env_scope: HashMap<String, EnvEntry>,
     children_env_scope: HashMap<String, EnvEntry>,
+    children_env_scope_dirty: bool,
     all_children_ids: Vec<NodeId>,
     last_child_id: Option<NodeId>,
     start_node_idx: usize,
@@ -88,6 +94,7 @@ impl<'a> ComponentExpander<'a> {
     ) -> Result<Self, CompileError> {
         let schema = ComponentSchema::for_def(comp_def)?;
         schema.validate_caller_ports(comp_def, instance)?;
+        let templates = schema.ensure_templates(comp_def, ctx.enums, registry);
         reset_agg_emitted_count(ctx.comp_node_id);
         let is_single_text_context = schema.is_single_text_context(comp_def, registry);
         if schema.is_span_def {
@@ -97,13 +104,10 @@ impl<'a> ComponentExpander<'a> {
             doc.get_node_mut(ctx.comp_node_id).unwrap().is_inline_box = true;
         }
 
-        let mut comp_ports = schema.base_comp_ports.clone();
-        let mut already_rewritten_ports = schema.base_already_rewritten_ports.clone();
-        for (state_name, s) in &schema.enum_state_bindings {
-            let default_expr = default_expr_for_state_with_enums(s, ctx.enums);
-            already_rewritten_ports.insert(&schema.port_table, state_name);
-            comp_ports.insert(state_name.clone(), default_expr);
-        }
+        let slot_consts = vec![None; schema.port_table.len()];
+        let preverified_ports = templates.preverified_template_mask.clone();
+        let comp_ports = HashMap::with_capacity(schema.port_table.len());
+        let already_rewritten_ports = PortMask::default();
 
         let num_consumer_children = count_consumer_children(
             instance.content.as_ref(),
@@ -122,6 +126,11 @@ impl<'a> ComponentExpander<'a> {
             caller_env_scope,
             node_fonts,
             schema,
+            templates,
+            slot_consts,
+            preverified_ports,
+            has_node_arg_on_value_param: false,
+            has_unfolded_port_ternary: false,
             comp_scope_ports: std::borrow::Cow::Borrowed(&schema.comp_scope_ports),
             is_single_text_context,
             comp_ports,
@@ -138,6 +147,7 @@ impl<'a> ComponentExpander<'a> {
             body_agg_count: 0,
             internal_body_env_scope: HashMap::new(),
             children_env_scope: HashMap::new(),
+            children_env_scope_dirty: true,
             all_children_ids: Vec::new(),
             last_child_id: None,
             start_node_idx: 0,
@@ -248,7 +258,12 @@ impl<'a> ComponentExpander<'a> {
                         caller_child_ids,
                     )
                     .as_event_port(name.starts_with("on_") || is_handler_param);
-                    rewrite_expr(other, &caller_scope_ctx)?
+                    let tern_before = super::rewrite::get_unfolded_ternary_count();
+                    let rw = rewrite_expr(other, &caller_scope_ctx)?;
+                    if super::rewrite::get_unfolded_ternary_count() != tern_before {
+                        self.has_unfolded_port_ternary = true;
+                    }
+                    rw
                 }
             };
             explicit_ports.insert(name, expr);
@@ -405,25 +420,70 @@ impl<'a> ComponentExpander<'a> {
 
             // Tier 4: Explicit caller argument
             if let Some(explicit_expr) = explicit_ports.remove(&name) {
+                let explicit_expr =
+                    coerce_typed_binding_expr(explicit_expr, param.type_annotation.as_ref());
                 self.already_rewritten_ports
                     .insert(&self.schema.port_table, &name);
+                self.preverified_ports
+                    .remove(&self.schema.port_table, &name);
+                if !self.schema.declared_state_names.contains(&name) {
+                    if let Some(val) = super::schema::expr_to_const_value(&explicit_expr) {
+                        if let Some(slot) = self.schema.port_table.slot_of_sym(param.name.name) {
+                            self.slot_consts[slot.0 as usize] = Some(val);
+                        }
+                    }
+                }
+                if let Expr::Ident(id) = &explicit_expr {
+                    if id.node_id().is_some()
+                        && self.schema.template_self_ports.contains(&param.name.name)
+                    {
+                        self.has_node_arg_on_value_param = true;
+                    }
+                }
                 self.comp_ports.insert(name, explicit_expr);
             }
             // Tier 2: Lexical Environment (caller_env_scope) - only for env parameters
             else if param.is_env {
                 if let Some(EnvEntry::Bound(env_expr)) = self.caller_env_scope.get(&name) {
+                    if super::rewrite::has_any_pending_fwd_refs()
+                        && super::rewrite::expr_has_unresolved_ident(env_expr)
+                    {
+                        super::rewrite::record_pending_fwd_node(self.ctx.comp_node_id);
+                    }
+                    if super::rewrite::expr_has_ternary(env_expr) {
+                        self.has_unfolded_port_ternary = true;
+                    }
+                    let env_expr = coerce_typed_binding_expr(
+                        env_expr.clone(),
+                        param.type_annotation.as_ref(),
+                    );
                     self.already_rewritten_ports
                         .insert(&self.schema.port_table, &name);
-                    self.comp_ports.insert(name, env_expr.clone());
+                    self.preverified_ports
+                        .remove(&self.schema.port_table, &name);
+                    if !self.schema.declared_state_names.contains(&name) {
+                        if let Some(val) = super::schema::expr_to_const_value(&env_expr) {
+                            if let Some(slot) = self.schema.port_table.slot_of_sym(param.name.name)
+                            {
+                                self.slot_consts[slot.0 as usize] = Some(val);
+                            }
+                        }
+                    }
+                    if let Expr::Ident(id) = &env_expr {
+                        if id.node_id().is_some()
+                            && self.schema.template_self_ports.contains(&param.name.name)
+                        {
+                            self.has_node_arg_on_value_param = true;
+                        }
+                    }
+                    self.comp_ports.insert(name, env_expr);
                 } else if let Some(default_expr) = &param.default_edge {
-                    let resolved = self.resolve_param_default_expr(&name, default_expr)?;
-                    self.comp_ports.insert(name, resolved);
+                    self.resolve_and_insert_param_default(param, name, default_expr)?;
                 }
             }
             // Tier 1: Component Signature Default (for non-env parameters)
             else if let Some(default_expr) = &param.default_edge {
-                let resolved = self.resolve_param_default_expr(&name, default_expr)?;
-                self.comp_ports.insert(name, resolved);
+                self.resolve_and_insert_param_default(param, name, default_expr)?;
             }
         }
 
@@ -455,6 +515,8 @@ impl<'a> ComponentExpander<'a> {
             }
             self.already_rewritten_ports
                 .insert(&self.schema.port_table, &name);
+            self.preverified_ports
+                .remove(&self.schema.port_table, &name);
             self.comp_ports.insert(name, expr);
         }
 
@@ -464,7 +526,11 @@ impl<'a> ComponentExpander<'a> {
 
         if matches!(self.comp_scope_ports, std::borrow::Cow::Owned(_)) {
             let has_port_or_alias = |k: &str| {
-                self.comp_ports.contains_key(k) || self.schema.declared_aliases.contains_key(k)
+                self.comp_ports.contains_key(k)
+                    || self.schema.declared_aliases.contains_key(k)
+                    || self.schema.declared_lets.contains_key(k)
+                    || self.schema.declared_states.contains_key(k)
+                    || self.schema.declared_envs.contains_key(k)
             };
             if has_port_or_alias("x") && !self.comp_scope_ports.iter().any(|p| p == "left") {
                 self.comp_scope_ports.to_mut().push("left".to_string());
@@ -491,6 +557,7 @@ impl<'a> ComponentExpander<'a> {
         // Default clip port if not explicitly declared
         if !self.comp_ports.contains_key("clip") {
             let default_clip = default_inherited_clip_expr(
+                self.ctx.comp_node_id,
                 self.ctx.parent_id,
                 self.caller_env_scope,
                 self.instance.span,
@@ -501,7 +568,7 @@ impl<'a> ComponentExpander<'a> {
         }
 
         // Validate that all required parameters (parameters without defaults) have been supplied
-        for req_name in &self.schema.overload_params {
+        for req_name in self.schema.overload_params.iter() {
             if !self.comp_ports.contains_key(req_name) {
                 return Err(CompileError::MissingPort {
                     node: comp_def.name.as_str().to_string(),
@@ -521,7 +588,209 @@ impl<'a> ComponentExpander<'a> {
             self.internal_scope_ports = std::borrow::Cow::Owned(internal);
         }
 
+        self.instantiate_pre_body_templates();
+
         Ok(())
+    }
+
+    fn resolve_and_insert_param_default(
+        &mut self,
+        param: &ParamDef,
+        name: String,
+        default_expr: &Expr,
+    ) -> Result<(), CompileError> {
+        match self.templates.param_defaults.get(&param.name.name) {
+            Some(super::schema::CompiledParamDefault::Constant { expr, const_val }) => {
+                self.already_rewritten_ports
+                    .insert(&self.schema.port_table, &name);
+                if !self.schema.declared_state_names.contains(&name) {
+                    if let Some(slot) = self.schema.port_table.slot_of_sym(param.name.name) {
+                        self.slot_consts[slot.0 as usize] = const_val.clone();
+                    }
+                }
+                self.comp_ports.insert(name, expr.clone());
+                Ok(())
+            }
+            Some(super::schema::CompiledParamDefault::Template(_)) => {
+                self.comp_ports.insert(name, default_expr.clone());
+                Ok(())
+            }
+            None => {
+                self.preverified_ports
+                    .remove(&self.schema.port_table, &name);
+                let resolved = self.resolve_param_default_expr(&name, default_expr)?;
+                if matches!(
+                    default_expr,
+                    Expr::Node(elem) if !super::is_value_node_name(elem.name.as_str())
+                ) {
+                    self.already_rewritten_ports
+                        .insert(&self.schema.port_table, &name);
+                }
+                self.comp_ports.insert(name, resolved);
+                Ok(())
+            }
+        }
+    }
+
+    fn instantiate_pre_body_templates(&mut self) {
+        let comp_node_id = self.ctx.comp_node_id;
+        let port_table = &self.schema.port_table;
+        let tern_before = super::rewrite::get_unfolded_ternary_count();
+
+        // 1. Non-constant parameter default templates
+        if !self.has_node_arg_on_value_param {
+            for param in &self.comp_def.params {
+                if let Some(super::schema::CompiledParamDefault::Template(tmpl)) =
+                    self.templates.param_defaults.get(&param.name.name)
+                {
+                    if !self
+                        .already_rewritten_ports
+                        .contains_sym(port_table, tmpl.sym, &tmpl.name)
+                    {
+                        let inst = if tmpl.is_const_no_self {
+                            if tmpl.has_ternary {
+                                super::rewrite::record_unfolded_ternary_emitted();
+                            }
+                            tmpl.expr.clone()
+                        } else {
+                            super::rewrite::instantiate_template_expr(
+                                &tmpl.expr,
+                                comp_node_id,
+                                port_table,
+                                &self.slot_consts,
+                            )
+                        };
+                        if let Some(slot) = tmpl.slot {
+                            self.slot_consts[slot.0 as usize] = if tmpl.is_const_no_self {
+                                tmpl.const_val.clone()
+                            } else {
+                                super::rewrite::eval_template_expr(
+                                    &tmpl.expr,
+                                    port_table,
+                                    &self.slot_consts,
+                                )
+                            };
+                            self.already_rewritten_ports.insert_slot(slot);
+                        } else {
+                            self.already_rewritten_ports.insert(port_table, &tmpl.name);
+                        }
+                        self.comp_ports.insert(tmpl.name.clone(), inst);
+                    }
+                }
+            }
+        }
+
+        // 2. State templates & fallback state expressions
+        if !self.has_node_arg_on_value_param {
+            for tmpl in &self.templates.state_templates {
+                let inst = if tmpl.is_const_no_self {
+                    if tmpl.has_ternary {
+                        super::rewrite::record_unfolded_ternary_emitted();
+                    }
+                    tmpl.expr.clone()
+                } else {
+                    super::rewrite::instantiate_template_expr(
+                        &tmpl.expr,
+                        comp_node_id,
+                        port_table,
+                        &self.slot_consts,
+                    )
+                };
+                if let Some(slot) = tmpl.slot {
+                    self.already_rewritten_ports.insert_slot(slot);
+                } else {
+                    self.already_rewritten_ports.insert(port_table, &tmpl.name);
+                }
+                self.comp_ports.insert(tmpl.name.clone(), inst);
+            }
+        }
+        if self.templates.state_templates.len() < self.schema.declared_states.len()
+            || self.has_node_arg_on_value_param
+        {
+            for (state_name, s) in &self.schema.declared_states {
+                if !self.comp_ports.contains_key(state_name) {
+                    let default_expr = default_expr_for_state_with_enums(s, self.ctx.enums);
+                    self.comp_ports.insert(state_name.clone(), default_expr);
+                }
+            }
+        }
+
+        // 3. Topologically ordered let templates & fallback let expressions
+        if !self.has_node_arg_on_value_param {
+            for tmpl in &self.templates.let_templates {
+                let inst = if tmpl.is_const_no_self {
+                    if tmpl.has_ternary {
+                        super::rewrite::record_unfolded_ternary_emitted();
+                    }
+                    if let Some(slot) = tmpl.slot {
+                        self.slot_consts[slot.0 as usize] = tmpl.const_val.clone();
+                        self.already_rewritten_ports.insert_slot(slot);
+                    } else {
+                        self.already_rewritten_ports.insert(port_table, &tmpl.name);
+                    }
+                    tmpl.expr.clone()
+                } else {
+                    let inst = super::rewrite::instantiate_template_expr(
+                        &tmpl.expr,
+                        comp_node_id,
+                        port_table,
+                        &self.slot_consts,
+                    );
+                    if let Some(slot) = tmpl.slot {
+                        self.slot_consts[slot.0 as usize] = super::rewrite::eval_template_expr(
+                            &tmpl.expr,
+                            port_table,
+                            &self.slot_consts,
+                        );
+                        self.already_rewritten_ports.insert_slot(slot);
+                    } else {
+                        self.already_rewritten_ports.insert(port_table, &tmpl.name);
+                    }
+                    inst
+                };
+                self.comp_ports.insert(tmpl.name.clone(), inst);
+            }
+        }
+        if super::rewrite::get_unfolded_ternary_count() != tern_before {
+            self.has_unfolded_port_ternary = true;
+        }
+        if self.templates.let_templates.len() < self.schema.declared_lets.len()
+            || self.has_node_arg_on_value_param
+        {
+            for (let_name, l) in &self.schema.declared_lets {
+                if !self.schema.comp_shadowed_ports.contains(let_name)
+                    && !self.comp_ports.contains_key(let_name)
+                {
+                    if let Some(LetValue::Expr(raw_expr)) = &l.value {
+                        self.comp_ports.insert(let_name.clone(), raw_expr.clone());
+                    }
+                }
+            }
+        }
+
+        // 4. Fallback env expressions (env_templates are instantiated in rewrite_and_alias_ports)
+        if self.templates.env_templates.len() < self.schema.declared_envs.len()
+            || self.has_node_arg_on_value_param
+        {
+            for (env_name, e) in &self.schema.declared_envs {
+                if !self.schema.comp_shadowed_ports.contains(env_name)
+                    && !self
+                        .templates
+                        .env_templates
+                        .iter()
+                        .any(|t| t.name == *env_name)
+                {
+                    if let Some(raw_expr) = &e.value {
+                        if !matches!(
+                            raw_expr,
+                            Expr::Node(elem) if !super::is_value_node_name(elem.name.as_str())
+                        ) {
+                            self.comp_ports.insert(env_name.clone(), raw_expr.clone());
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Collects and normalizes consumer children passed to this component instance.
@@ -574,14 +843,11 @@ impl<'a> ComponentExpander<'a> {
             }
             local_scope.insert(
                 name_sym,
-                LexicalBinding::Expr(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::from_node(
-                        ctx.comp_node_id,
-                        param.name.span,
-                    ))),
+                LexicalBinding::Member {
+                    node_id: ctx.comp_node_id,
                     member: param.name,
-                    span: param.name.span,
-                })),
+                    is_state: false,
+                },
             );
         }
         for (let_name, let_binding) in &self.schema.declared_lets {
@@ -589,34 +855,26 @@ impl<'a> ComponentExpander<'a> {
                 populated_mask.insert(&self.schema.port_table, let_name);
                 local_scope.insert(
                     let_binding.name.name,
-                    LexicalBinding::Expr(Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::from_node(
-                            ctx.comp_node_id,
-                            let_binding.name.span,
-                        ))),
+                    LexicalBinding::Member {
+                        node_id: ctx.comp_node_id,
                         member: let_binding.name,
-                        span: let_binding.name.span,
-                    })),
+                        is_state: false,
+                    },
                 );
             }
         }
         for port_name in self.comp_scope_ports.iter() {
             if !populated_mask.contains(&self.schema.port_table, port_name) {
                 let port_sym = Symbol::new(port_name);
-                let member_expr = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::from_node(
-                        ctx.comp_node_id,
-                        instance.span,
-                    ))),
-                    member: Ident::from_symbol(port_sym, instance.span),
-                    span: instance.span,
-                });
-                let binding = if self.schema.declared_state_names.contains(port_name) {
-                    LexicalBinding::State(member_expr)
-                } else {
-                    LexicalBinding::Expr(member_expr)
-                };
-                local_scope.insert(port_sym, binding);
+                let is_state = self.schema.declared_state_names.contains(port_name);
+                local_scope.insert(
+                    port_sym,
+                    LexicalBinding::Member {
+                        node_id: ctx.comp_node_id,
+                        member: Ident::from_symbol(port_sym, instance.span),
+                        is_state,
+                    },
+                );
             }
         }
         for param in &comp_def.params {
@@ -645,7 +903,11 @@ impl<'a> ComponentExpander<'a> {
                         .already_rewritten_ports
                         .contains(&self.schema.port_table, name)
                     {
+                        let tern_before = super::rewrite::get_unfolded_ternary_count();
                         let rewritten = rewrite_expr(&expr, &event_default_ctx)?;
+                        if super::rewrite::get_unfolded_ternary_count() != tern_before {
+                            self.has_unfolded_port_ternary = true;
+                        }
                         self.already_rewritten_ports
                             .insert(&self.schema.port_table, name);
                         self.comp_ports.insert(name.to_string(), rewritten.clone());
@@ -854,10 +1116,15 @@ impl<'a> ComponentExpander<'a> {
         self.local_scope = RefCell::new(local_scope);
         self.internal_body_env_scope = internal_body_env_scope;
         self.children_env_scope = children_env_scope;
+        self.children_env_scope_dirty = true;
         Ok(())
     }
 
     fn sync_consumer_children_env_scope(&mut self) {
+        if !self.children_env_scope_dirty || self.consumer_child_entries.is_empty() {
+            return;
+        }
+        self.children_env_scope_dirty = false;
         for entry in &mut self.consumer_child_entries {
             for (k, v) in &self.children_env_scope {
                 entry.caller_env_scope.insert(k.clone(), v.clone());
@@ -877,6 +1144,7 @@ impl<'a> ComponentExpander<'a> {
             // Shield/Swallower pattern or Firewall Tombstone
             self.children_env_scope
                 .insert(let_binding.name.as_str().to_string(), EnvEntry::Tombstone);
+            self.children_env_scope_dirty = true;
             self.internal_body_env_scope
                 .insert(let_binding.name.as_str().to_string(), EnvEntry::Tombstone);
         }
@@ -962,14 +1230,14 @@ impl<'a> ComponentExpander<'a> {
                 };
                 let rewritten =
                     coerce_typed_binding_expr(rewritten, let_binding.type_annotation.as_ref());
-                self.doc.local_bindings.push((
+                self.doc.push_local_binding(
                     rewritten.clone(),
                     let_binding
                         .type_annotation
                         .as_ref()
                         .map(|t| t.name.as_str().to_string()),
                     raw_expr.span(),
-                ));
+                );
                 let new_binding = LexicalBinding::Expr(rewritten);
                 let mut scope_mut = self.local_scope.borrow_mut();
                 if scope_mut.get(&let_binding.name.name) != Some(&new_binding) {
@@ -982,13 +1250,14 @@ impl<'a> ComponentExpander<'a> {
                         ctx.comp_node_id,
                         let_binding.name.span,
                     ))),
-                    member: let_binding.name.clone(),
+                    member: let_binding.name,
                     span: let_binding.name.span,
                 });
                 self.children_env_scope.insert(
                     let_binding.name.as_str().to_string(),
                     EnvEntry::Bound(member_expr.clone()),
                 );
+                self.children_env_scope_dirty = true;
                 self.internal_body_env_scope.insert(
                     let_binding.name.as_str().to_string(),
                     EnvEntry::Bound(member_expr),
@@ -1050,6 +1319,7 @@ impl<'a> ComponentExpander<'a> {
                         env_binding.name.as_str().to_string(),
                         EnvEntry::Bound(bound_expr.clone()),
                     );
+                    self.children_env_scope_dirty = true;
                     self.internal_body_env_scope.insert(
                         env_binding.name.as_str().to_string(),
                         EnvEntry::Bound(bound_expr.clone()),
@@ -1098,14 +1368,14 @@ impl<'a> ComponentExpander<'a> {
                         .comp_shadowed_ports
                         .contains(env_binding.name.as_str())
                     {
-                        self.doc.local_bindings.push((
+                        self.doc.push_local_binding(
                             rewritten.clone(),
                             env_binding
                                 .type_annotation
                                 .as_ref()
                                 .map(|t| t.name.as_str().to_string()),
                             raw_expr.span(),
-                        ));
+                        );
                     }
                     let new_binding = LexicalBinding::Expr(rewritten.clone());
                     {
@@ -1119,6 +1389,7 @@ impl<'a> ComponentExpander<'a> {
                         env_binding.name.as_str().to_string(),
                         EnvEntry::Bound(rewritten.clone()),
                     );
+                    self.children_env_scope_dirty = true;
                     self.internal_body_env_scope.insert(
                         env_binding.name.as_str().to_string(),
                         EnvEntry::Bound(rewritten),
@@ -1133,6 +1404,7 @@ impl<'a> ComponentExpander<'a> {
             );
             self.children_env_scope
                 .insert(env_binding.name.as_str().to_string(), EnvEntry::Tombstone);
+            self.children_env_scope_dirty = true;
             self.internal_body_env_scope
                 .insert(env_binding.name.as_str().to_string(), EnvEntry::Tombstone);
         }
@@ -1193,6 +1465,7 @@ impl<'a> ComponentExpander<'a> {
             self.node_fonts,
             &mut self.all_children_ids,
         )?;
+        self.children_env_scope_dirty = true;
         if !self.schema.is_span_def {
             expand_block_consumer_children(
                 self.ctx,
@@ -1273,113 +1546,228 @@ impl<'a> ComponentExpander<'a> {
     }
 
     /// Rewrites component ports and explicitly declared aliases in the finalized component scope,
-    /// returning `(rewritten_ports, comp_authored_ports)`.
+    /// returning `(rewritten_ports, authored_port_overrides)`.
     #[allow(clippy::type_complexity)]
     fn rewrite_and_alias_ports(
         &mut self,
     ) -> Result<(HashMap<String, Expr>, HashMap<String, Expr>), CompileError> {
         let ctx = self.ctx;
         let instance = self.instance;
-        let check_fwd_scope_refs = self.scope_mutated_in_body
-            || !self.schema.shadowed_expr_lets.is_empty()
-            || !self.schema.all_envs.is_empty()
-            || self.local_scope.borrow().len() != self.init_scope_len;
+        let comp_node_id = ctx.comp_node_id;
+        let port_table = &self.schema.port_table;
+        let tern_before = super::rewrite::get_unfolded_ternary_count();
 
-        let mut newly_rewritten = Vec::with_capacity(
-            self.schema.declared_lets.len() + self.schema.declared_aliases.len() + 2,
-        );
-        {
-            let final_local_scope = self.local_scope.borrow();
-            let inst_ids = self.instantiated_children_ids.borrow();
-
-            let scope_ctx = ScopeContext::from_instance(
-                ctx,
-                &self.doc.nodes,
-                &final_local_scope,
-                &self.internal_body_env_scope,
-                self.node_fonts,
-                &inst_ids,
-            )
-            .with_children(&inst_ids, self.num_consumer_children)
-            .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
-            .with_enclosing_component(Some(ctx.comp_node_id))
-            .with_comp_state(
-                Some(&self.comp_ports),
-                Some(&self.schema.declared_state_names),
-            );
-
-            for (port_name, port_expr) in &self.comp_ports {
+        if !self.has_node_arg_on_value_param {
+            for tmpl in &self.templates.env_templates {
                 if !self
                     .already_rewritten_ports
-                    .contains(&self.schema.port_table, port_name)
+                    .contains_sym(port_table, tmpl.sym, &tmpl.name)
                 {
-                    let is_handler_param = self.schema.handler_param_names.contains(port_name);
-                    let mut port_scope_ctx = scope_ctx.clone();
-                    port_scope_ctx.is_event_port = port_name.starts_with("on_") || is_handler_param;
-                    let mut rw = rewrite_expr(port_expr, &port_scope_ctx)?;
-                    if check_fwd_scope_refs && expr_has_scope_ref(&rw, &final_local_scope) {
-                        rw = resolve_forward_scope_refs(&rw, &final_local_scope);
+                    let inst = if tmpl.is_const_no_self {
+                        if tmpl.has_ternary {
+                            super::rewrite::record_unfolded_ternary_emitted();
+                        }
+                        tmpl.expr.clone()
+                    } else {
+                        super::rewrite::instantiate_template_expr(
+                            &tmpl.expr,
+                            comp_node_id,
+                            port_table,
+                            &self.slot_consts,
+                        )
+                    };
+                    if let Some(slot) = tmpl.slot {
+                        self.slot_consts[slot.0 as usize] = if tmpl.is_const_no_self {
+                            tmpl.const_val.clone()
+                        } else {
+                            super::rewrite::eval_template_expr(
+                                &tmpl.expr,
+                                port_table,
+                                &self.slot_consts,
+                            )
+                        };
+                        self.already_rewritten_ports.insert_slot(slot);
+                    } else {
+                        self.already_rewritten_ports.insert(port_table, &tmpl.name);
                     }
-                    if let Some(l) = self.schema.declared_lets.get(port_name) {
-                        rw = coerce_typed_binding_expr(rw, l.type_annotation.as_ref());
-                    } else if let Some(e) = self.schema.declared_envs.get(port_name) {
-                        rw = coerce_typed_binding_expr(rw, e.type_annotation.as_ref());
-                    } else if let Some(s) = self.schema.declared_states.get(port_name) {
-                        rw = coerce_typed_binding_expr(rw, s.type_annotation.as_ref());
-                    }
-                    newly_rewritten.push((port_name.clone(), rw));
+                    self.comp_ports.insert(tmpl.name.clone(), inst);
                 }
             }
 
-            for (alias_name, alias_binding) in &self.schema.declared_aliases {
-                let mut rewritten_alias = rewrite_expr(&alias_binding.value, &scope_ctx)?;
-                if check_fwd_scope_refs && expr_has_scope_ref(&rewritten_alias, &final_local_scope)
+            for tmpl in &self.templates.alias_templates {
+                if matches!(tmpl.name.as_str(), "left" | "top" | "right" | "bottom")
+                    && !self.schema.declared_aliases.contains_key(&tmpl.name)
+                    && self.comp_ports.contains_key(&tmpl.name)
                 {
-                    rewritten_alias =
-                        resolve_forward_scope_refs(&rewritten_alias, &final_local_scope);
+                    continue;
                 }
-                rewritten_alias = coerce_typed_binding_expr(
-                    rewritten_alias,
-                    alias_binding.type_annotation.as_ref(),
+                let inst = if tmpl.is_const_no_self {
+                    if tmpl.has_ternary {
+                        super::rewrite::record_unfolded_ternary_emitted();
+                    }
+                    tmpl.expr.clone()
+                } else {
+                    super::rewrite::instantiate_template_expr(
+                        &tmpl.expr,
+                        comp_node_id,
+                        port_table,
+                        &self.slot_consts,
+                    )
+                };
+                if let Some(slot) = tmpl.slot {
+                    self.slot_consts[slot.0 as usize] = if tmpl.is_const_no_self {
+                        tmpl.const_val.clone()
+                    } else {
+                        super::rewrite::eval_template_expr(
+                            &tmpl.expr,
+                            port_table,
+                            &self.slot_consts,
+                        )
+                    };
+                    self.already_rewritten_ports.insert_slot(slot);
+                } else {
+                    self.already_rewritten_ports.insert(port_table, &tmpl.name);
+                }
+                self.comp_ports.insert(tmpl.name.clone(), inst);
+            }
+        }
+
+        let has_unrewritten_ports = self.comp_ports.keys().any(|k| {
+            !self
+                .already_rewritten_ports
+                .contains(&self.schema.port_table, k)
+        });
+        let has_unrewritten_aliases = self
+            .schema
+            .declared_aliases
+            .keys()
+            .any(|k| !self.comp_ports.contains_key(k));
+
+        if has_unrewritten_ports || has_unrewritten_aliases {
+            let check_fwd_scope_refs = self.scope_mutated_in_body
+                || !self.schema.shadowed_expr_lets.is_empty()
+                || !self.schema.all_envs.is_empty()
+                || self.local_scope.borrow().len() != self.init_scope_len;
+
+            let mut newly_rewritten = Vec::with_capacity(
+                self.schema.declared_lets.len() + self.schema.declared_aliases.len() + 2,
+            );
+            {
+                let final_local_scope = self.local_scope.borrow();
+                let inst_ids = self.instantiated_children_ids.borrow();
+
+                let scope_ctx = ScopeContext::from_instance(
+                    ctx,
+                    &self.doc.nodes,
+                    &final_local_scope,
+                    &self.internal_body_env_scope,
+                    self.node_fonts,
+                    &inst_ids,
+                )
+                .with_children(&inst_ids, self.num_consumer_children)
+                .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
+                .with_enclosing_component(Some(ctx.comp_node_id))
+                .with_comp_state(
+                    Some(&self.comp_ports),
+                    Some(&self.schema.declared_state_names),
                 );
-                newly_rewritten.push((alias_name.clone(), rewritten_alias));
+
+                for (port_name, port_expr) in &self.comp_ports {
+                    if !self
+                        .already_rewritten_ports
+                        .contains(&self.schema.port_table, port_name)
+                    {
+                        let is_handler_param = self.schema.handler_param_names.contains(port_name);
+                        let mut port_scope_ctx = scope_ctx.clone();
+                        port_scope_ctx.is_event_port =
+                            port_name.starts_with("on_") || is_handler_param;
+                        let mut rw = rewrite_expr(port_expr, &port_scope_ctx)?;
+                        if check_fwd_scope_refs
+                            && super::rewrite::has_any_pending_fwd_refs()
+                            && expr_has_scope_ref(&rw, &final_local_scope)
+                        {
+                            rw = resolve_forward_scope_refs(&rw, &final_local_scope);
+                        }
+                        if let Some(l) = self.schema.declared_lets.get(port_name) {
+                            rw = coerce_typed_binding_expr(rw, l.type_annotation.as_ref());
+                        } else if let Some(e) = self.schema.declared_envs.get(port_name) {
+                            rw = coerce_typed_binding_expr(rw, e.type_annotation.as_ref());
+                        } else if let Some(s) = self.schema.declared_states.get(port_name) {
+                            rw = coerce_typed_binding_expr(rw, s.type_annotation.as_ref());
+                        }
+                        self.preverified_ports
+                            .remove(&self.schema.port_table, port_name);
+                        newly_rewritten.push((port_name.clone(), rw));
+                    }
+                }
+
+                for (alias_name, alias_binding) in &self.schema.declared_aliases {
+                    if self.comp_ports.contains_key(alias_name)
+                        && !self.has_node_arg_on_value_param
+                    {
+                        continue;
+                    }
+                    let mut rewritten_alias = rewrite_expr(&alias_binding.value, &scope_ctx)?;
+                    if check_fwd_scope_refs
+                        && super::rewrite::has_any_pending_fwd_refs()
+                        && expr_has_scope_ref(&rewritten_alias, &final_local_scope)
+                    {
+                        rewritten_alias =
+                            resolve_forward_scope_refs(&rewritten_alias, &final_local_scope);
+                    }
+                    rewritten_alias = coerce_typed_binding_expr(
+                        rewritten_alias,
+                        alias_binding.type_annotation.as_ref(),
+                    );
+                    self.preverified_ports
+                        .remove(&self.schema.port_table, alias_name);
+                    newly_rewritten.push((alias_name.clone(), rewritten_alias));
+                }
+            }
+
+            for (port_name, rw) in newly_rewritten {
+                self.comp_ports.insert(port_name, rw);
             }
         }
-
-        let mut rewritten_ports = std::mem::take(&mut self.comp_ports);
-        for (port_name, rw) in newly_rewritten {
-            rewritten_ports.insert(port_name, rw);
+        if super::rewrite::get_unfolded_ternary_count() != tern_before {
+            self.has_unfolded_port_ternary = true;
         }
 
-        let mut comp_authored_ports = self.schema.base_authored_ports.clone();
+        let rewritten_ports = std::mem::take(&mut self.comp_ports);
+
+        let override_cap = instance.ports.len()
+            + self.schema.enum_state_bindings.len()
+            + ctx.ambient_authored_ports.map_or(0, |m| m.len());
+        let mut authored_port_overrides = HashMap::with_capacity(override_cap);
         if let Some(ambient_map) = ctx.ambient_authored_ports {
             for (k, v) in ambient_map {
-                comp_authored_ports.insert(k.clone(), v.clone());
+                authored_port_overrides.insert(k.clone(), v.clone());
             }
         }
         for (state_name, s) in &self.schema.enum_state_bindings {
             let default_expr = default_expr_for_state_with_enums(s, ctx.enums);
-            comp_authored_ports.insert(state_name.clone(), default_expr);
+            authored_port_overrides.insert(state_name.clone(), default_expr);
         }
         for port in &instance.ports {
             if let Some(ambient_expr) = ctx
                 .ambient_authored_ports
                 .and_then(|m| m.get(port.name.as_str()))
             {
-                comp_authored_ports.insert(port.name.as_str().to_string(), ambient_expr.clone());
+                authored_port_overrides
+                    .insert(port.name.as_str().to_string(), ambient_expr.clone());
             } else {
-                comp_authored_ports.insert(port.name.as_str().to_string(), port.expr.clone());
+                authored_port_overrides.insert(port.name.as_str().to_string(), port.expr.clone());
             }
         }
 
-        Ok((rewritten_ports, comp_authored_ports))
+        Ok((rewritten_ports, authored_port_overrides))
     }
 
     /// Applies `\Span` and `\InlineBox` post-processing and synthesizes default `left`, `top`, `right`, `bottom` aliases.
     fn apply_post_processing_and_spatial_aliases(
         &mut self,
         rewritten_ports: &mut HashMap<String, Expr>,
-        comp_authored_ports: &mut HashMap<String, Expr>,
+        authored_port_overrides: &mut HashMap<String, Expr>,
     ) {
         if self.schema.is_span_def {
             let local_scope_borrow = self.local_scope.borrow();
@@ -1395,12 +1783,18 @@ impl<'a> ComponentExpander<'a> {
             );
         }
 
-        insert_default_spatial_aliases(
-            self.ctx.comp_node_id,
-            self.instance.span,
-            rewritten_ports,
-            comp_authored_ports,
-        );
+        let needs_spatial_aliases = !rewritten_ports.contains_key("left")
+            || !rewritten_ports.contains_key("top")
+            || !rewritten_ports.contains_key("right")
+            || !rewritten_ports.contains_key("bottom");
+        if needs_spatial_aliases {
+            insert_default_spatial_aliases(
+                self.ctx.comp_node_id,
+                self.instance.span,
+                rewritten_ports,
+                authored_port_overrides,
+            );
+        }
 
         if self.schema.is_inline_box_def {
             finalize_inline_box_component_ports(
@@ -1411,6 +1805,12 @@ impl<'a> ComponentExpander<'a> {
                 &self.schema.declared_state_names,
                 rewritten_ports,
             );
+            if rewritten_ports
+                .get("__baseline_offset")
+                .is_some_and(super::rewrite::expr_has_ternary)
+            {
+                self.has_unfolded_port_ternary = true;
+            }
         }
     }
 
@@ -1424,18 +1824,21 @@ impl<'a> ComponentExpander<'a> {
         let inst_ids = self.instantiated_children_ids.borrow().clone();
         let total_agg_count = get_agg_emitted_count(ctx.comp_node_id);
 
-        resolve_and_filter_component_aggregations(
-            ctx.comp_node_id,
-            comp_def.name.as_str(),
-            &inst_ids,
-            &self.schema.declared_state_names,
-            rewritten_ports,
-            self.doc,
-            self.start_node_idx,
-            self.start_local_bindings_idx,
-            self.body_agg_count,
-            total_agg_count,
-        )?;
+        if self.has_unfolded_port_ternary || total_agg_count > 0 {
+            resolve_and_filter_component_aggregations(
+                ctx.comp_node_id,
+                comp_def.name.as_str(),
+                &inst_ids,
+                &self.schema.declared_state_names,
+                rewritten_ports,
+                self.doc,
+                self.start_node_idx,
+                self.start_local_bindings_idx,
+                self.body_agg_count,
+                total_agg_count,
+                self.has_unfolded_port_ternary,
+            )?;
+        }
 
         if total_agg_count > 0 || self.schema.has_assertions {
             let mut local_scope_mut = self.local_scope.borrow_mut();
@@ -1604,58 +2007,49 @@ impl<'a> ComponentExpander<'a> {
     fn finish(
         self,
         mut rewritten_ports: HashMap<String, Expr>,
-        comp_authored_ports: HashMap<String, Expr>,
+        authored_port_overrides: HashMap<String, Expr>,
     ) {
         let comp_def = self.comp_def;
-        let mut node_port_types = self.schema.static_port_types.clone();
+        let mut node_port_types = std::sync::Arc::clone(&self.schema.static_port_types);
         if self.schema.is_span_def || self.schema.is_inline_box_def {
-            for sp in [
-                "x",
-                "y",
-                "width",
-                "height",
-                "baseline",
-                "__baseline_offset",
-                "left",
-                "top",
-                "right",
-                "bottom",
-                "size",
+            for (sp, ty) in [
+                ("__baseline_offset", "Distance"),
+                ("size", "Distance"),
+                ("weight", "Integer"),
+                ("family", "String"),
             ] {
-                if rewritten_ports.contains_key(sp) {
-                    node_port_types
-                        .entry(sp.to_string())
-                        .or_insert_with(|| "Distance".to_string());
+                if rewritten_ports.contains_key(sp) && !node_port_types.contains_key(sp) {
+                    std::sync::Arc::make_mut(&mut node_port_types)
+                        .insert(sp.to_string(), ty.to_string());
                 }
-            }
-            if rewritten_ports.contains_key("weight") {
-                node_port_types
-                    .entry("weight".to_string())
-                    .or_insert_with(|| "Integer".to_string());
-            }
-            if rewritten_ports.contains_key("family") {
-                node_port_types
-                    .entry("family".to_string())
-                    .or_insert_with(|| "String".to_string());
             }
         }
         for sp in ["left", "top", "right", "bottom"] {
-            if rewritten_ports.contains_key(sp) {
-                node_port_types
-                    .entry(sp.to_string())
-                    .or_insert_with(|| "Distance".to_string());
+            if rewritten_ports.contains_key(sp) && !node_port_types.contains_key(sp) {
+                std::sync::Arc::make_mut(&mut node_port_types)
+                    .insert(sp.to_string(), "Distance".to_string());
             }
         }
 
         let node = self.doc.get_node_mut(self.ctx.comp_node_id).unwrap();
         node.is_component = true;
         node.component_path = comp_def.span.file_path();
-        node.overload_params = self.schema.overload_params.clone();
+        node.overload_params = std::sync::Arc::clone(&self.schema.overload_params);
         node.children = self.all_children_ids;
-        node.authored_ports = std::sync::Arc::new(comp_authored_ports);
-        node.private_ports = self.schema.private_ports.clone();
-        node.state_vars = self.schema.state_var_types.clone();
-        node.env_vars = self.schema.env_var_types.clone();
+        node.authored_ports =
+            crate::compiler::expanded::AuthoredPorts::from_base_and_overrides(
+                std::sync::Arc::clone(&self.schema.base_authored_ports),
+                authored_port_overrides,
+            );
+        node.private_ports = std::sync::Arc::clone(&self.schema.private_ports);
+        node.state_vars = std::sync::Arc::clone(&self.schema.state_var_types);
+        node.env_vars = std::sync::Arc::clone(&self.schema.env_var_types);
+        node.preverified_port_types = Some(std::sync::Arc::clone(
+            &self.templates.preverified_port_types,
+        ));
+        node.preverified_ports = self.preverified_ports;
+        node.port_table = Some(std::sync::Arc::clone(&self.schema.port_table));
+
         let local_scope_borrow = self.local_scope.borrow();
         for (port_name, port_expr) in rewritten_ports.iter_mut() {
             if port_name.starts_with("on_")
@@ -1667,6 +2061,11 @@ impl<'a> ComponentExpander<'a> {
                     if let Some(LexicalBinding::Expr(shadowed_expr)) =
                         local_scope_borrow.get(&Symbol::new(port_name))
                     {
+                        if super::rewrite::has_any_pending_fwd_refs()
+                            && super::rewrite::expr_has_unresolved_ident(shadowed_expr)
+                        {
+                            super::rewrite::record_pending_fwd_node(self.ctx.comp_node_id);
+                        }
                         *port_expr = shadowed_expr.clone();
                     }
                 }
@@ -1719,14 +2118,14 @@ pub(super) fn expand_component_instance(
     expander.init_scopes_and_preresolve()?;
     expander.expand_body()?;
 
-    let (mut rewritten_ports, mut comp_authored_ports) = expander.rewrite_and_alias_ports()?;
+    let (mut rewritten_ports, mut authored_port_overrides) = expander.rewrite_and_alias_ports()?;
 
     expander.apply_post_processing_and_spatial_aliases(
         &mut rewritten_ports,
-        &mut comp_authored_ports,
+        &mut authored_port_overrides,
     );
     expander.resolve_aggregations_and_assertions(&mut rewritten_ports)?;
-    expander.finish(rewritten_ports, comp_authored_ports);
+    expander.finish(rewritten_ports, authored_port_overrides);
 
     Ok(())
 }

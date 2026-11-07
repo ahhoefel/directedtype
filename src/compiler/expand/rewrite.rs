@@ -20,6 +20,13 @@ pub(super) fn resolve_forward_scope_refs(
                         Expr::Ident(Ident::from_node(*node_id, id.span))
                     }
                     LexicalBinding::Expr(e) | LexicalBinding::State(e) => e.clone(),
+                    LexicalBinding::Member {
+                        node_id, member, ..
+                    } => Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::from_node(*node_id, id.span))),
+                        member: Ident::from_symbol(member.name, id.span),
+                        span: id.span,
+                    }),
                     LexicalBinding::Uninitialized => expr.clone(),
                 }
             } else {
@@ -123,6 +130,109 @@ pub(super) fn expr_has_scope_ref(expr: &Expr, scope: &HashMap<Symbol, LexicalBin
     }
 }
 
+/// Returns `true` if `expr` contains any non-canonical identifier (`TAG_NEXT_OF` or unresolved `TAG_STR`)
+/// that could potentially be resolved by a later `resolve_forward_refs_in_range` pass.
+pub(in crate::compiler::expand) fn expr_has_unresolved_ident(expr: &Expr) -> bool {
+    match expr {
+        Expr::Ident(id) => {
+            !id.is_canonical_node_ref()
+                && id.name.agg_child_of_node().is_none()
+                && id.name != Symbol::WINDOW
+                && id.name != Symbol::UNSET
+                && id.name != Symbol::NONE
+        }
+        Expr::MemberAccess(m) => expr_has_unresolved_ident(&m.target),
+        Expr::Binary(b) => {
+            expr_has_unresolved_ident(&b.left) || expr_has_unresolved_ident(&b.right)
+        }
+        Expr::Unary(u) => expr_has_unresolved_ident(&u.operand),
+        Expr::Ternary(t) => {
+            expr_has_unresolved_ident(&t.condition)
+                || expr_has_unresolved_ident(&t.then_expr)
+                || expr_has_unresolved_ident(&t.else_expr)
+        }
+        Expr::Paren(inner, _) => expr_has_unresolved_ident(inner),
+        Expr::Call(c) => c.args.iter().any(expr_has_unresolved_ident),
+        Expr::MethodCall(m) => {
+            expr_has_unresolved_ident(&m.target) || m.args.iter().any(expr_has_unresolved_ident)
+        }
+        Expr::Node(n) => n.ports.iter().any(|p| expr_has_unresolved_ident(&p.expr)),
+        _ => false,
+    }
+}
+
+/// Returns `true` if `expr` contains any `Expr::Ternary` sub-expression.
+pub(in crate::compiler::expand) fn expr_has_ternary(expr: &Expr) -> bool {
+    match expr {
+        Expr::Ternary(_) => true,
+        Expr::MemberAccess(m) => expr_has_ternary(&m.target),
+        Expr::Binary(b) => expr_has_ternary(&b.left) || expr_has_ternary(&b.right),
+        Expr::Unary(u) => expr_has_ternary(&u.operand),
+        Expr::Paren(inner, _) => expr_has_ternary(inner),
+        Expr::Call(c) => c.args.iter().any(expr_has_ternary),
+        Expr::MethodCall(m) => {
+            expr_has_ternary(&m.target) || m.args.iter().any(expr_has_ternary)
+        }
+        Expr::Node(n) => n.ports.iter().any(|p| expr_has_ternary(&p.expr)),
+        _ => false,
+    }
+}
+
+thread_local! {
+    static PENDING_FWD_NODES: std::cell::RefCell<Vec<NodeId>> = const { std::cell::RefCell::new(Vec::new()) };
+    static PENDING_FWD_BINDINGS: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+    static FWD_REF_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    static UNFOLDED_TERNARY_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+pub(in crate::compiler::expand) fn reset_rewrite_tracking() {
+    PENDING_FWD_NODES.with(|c| c.borrow_mut().clear());
+    PENDING_FWD_BINDINGS.with(|c| c.borrow_mut().clear());
+    FWD_REF_COUNT.with(|c| c.set(0));
+    UNFOLDED_TERNARY_COUNT.with(|c| c.set(0));
+}
+
+#[inline]
+pub(in crate::compiler::expand) fn has_any_pending_fwd_refs() -> bool {
+    FWD_REF_COUNT.with(|c| c.get() > 0)
+}
+
+#[inline]
+pub(in crate::compiler::expand) fn get_unfolded_ternary_count() -> u32 {
+    UNFOLDED_TERNARY_COUNT.with(|c| c.get())
+}
+
+#[inline]
+pub(in crate::compiler::expand) fn record_unfolded_ternary_emitted() {
+    UNFOLDED_TERNARY_COUNT.with(|c| c.set(c.get().wrapping_add(1)));
+}
+
+#[inline]
+pub(in crate::compiler::expand) fn record_pending_fwd_node(node_id: NodeId) {
+    FWD_REF_COUNT.with(|c| c.set(c.get().wrapping_add(1)));
+    if node_id.is_window() || node_id.is_template_self() {
+        return;
+    }
+    PENDING_FWD_NODES.with(|cell| {
+        let mut nodes = cell.borrow_mut();
+        if nodes.last() != Some(&node_id) {
+            nodes.push(node_id);
+        }
+    });
+}
+
+#[inline]
+pub(crate) fn check_and_record_pending_fwd_binding(idx: usize, expr: &Expr) {
+    if has_any_pending_fwd_refs() && expr_has_unresolved_ident(expr) {
+        PENDING_FWD_BINDINGS.with(|cell| {
+            let mut list = cell.borrow_mut();
+            if list.last() != Some(&idx) {
+                list.push(idx);
+            }
+        });
+    }
+}
+
 /// Resolves forward lexical scope references in node ports and local bindings starting from the given indices.
 pub(super) fn resolve_forward_refs_in_range(
     doc: &mut crate::compiler::expanded::ExpandedDocument,
@@ -130,21 +240,54 @@ pub(super) fn resolve_forward_refs_in_range(
     start_binding_idx: usize,
     scope: &HashMap<Symbol, LexicalBinding>,
 ) {
-    if scope.is_empty() {
+    if scope.is_empty() || !has_any_pending_fwd_refs() {
         return;
     }
-    for node in &mut doc.nodes[start_node_idx..] {
-        for expr in node.ports.values_mut() {
+    PENDING_FWD_NODES.with(|cell| {
+        let mut pending = cell.borrow_mut();
+        if pending.is_empty() {
+            return;
+        }
+        pending.retain(|&node_id| {
+            if node_id.0 < start_node_idx {
+                return true;
+            }
+            let Some(node) = doc.nodes.get_mut(node_id.0) else {
+                return false;
+            };
+            if node.ports.is_empty() {
+                return true;
+            }
+            let mut still_has_unresolved = false;
+            for expr in node.ports.values_mut() {
+                if expr_has_scope_ref(expr, scope) {
+                    *expr = resolve_forward_scope_refs(expr, scope);
+                }
+                if !still_has_unresolved && expr_has_unresolved_ident(expr) {
+                    still_has_unresolved = true;
+                }
+            }
+            still_has_unresolved
+        });
+    });
+    PENDING_FWD_BINDINGS.with(|cell| {
+        let mut pending = cell.borrow_mut();
+        if pending.is_empty() {
+            return;
+        }
+        pending.retain(|&binding_idx| {
+            if binding_idx < start_binding_idx {
+                return true;
+            }
+            let Some((expr, _, _)) = doc.local_bindings.get_mut(binding_idx) else {
+                return false;
+            };
             if expr_has_scope_ref(expr, scope) {
                 *expr = resolve_forward_scope_refs(expr, scope);
             }
-        }
-    }
-    for (expr, _, _) in &mut doc.local_bindings[start_binding_idx..] {
-        if expr_has_scope_ref(expr, scope) {
-            *expr = resolve_forward_scope_refs(expr, scope);
-        }
-    }
+            expr_has_unresolved_ident(expr)
+        });
+    });
 }
 
 /// Applies optional `type_annotation` coercion to `rewritten_res` and updates `scope[name]`.
@@ -167,6 +310,42 @@ pub(super) fn try_preresolve_expr_binding(
     Some(rewritten)
 }
 
+/// Checks whether `expr` only references variables present in `env` (or no variables at all),
+/// avoiding heap string formatting inside `eval_expr` when variables are missing.
+pub(super) fn expr_vars_in_env(
+    expr: &Expr,
+    env: &HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
+) -> bool {
+    match expr {
+        Expr::Literal(_) => true,
+        Expr::Ident(id) => id.name == Symbol::TRUE || id.name == Symbol::FALSE,
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(target_id) = m.target.as_ref() {
+                if let Some(nid) = target_id.node_id() {
+                    return env.contains_key(&crate::compiler::graph::VarId::from_symbol(
+                        nid,
+                        m.member.name,
+                    ));
+                }
+            }
+            false
+        }
+        Expr::Binary(b) => expr_vars_in_env(&b.left, env) && expr_vars_in_env(&b.right, env),
+        Expr::Unary(u) => expr_vars_in_env(&u.operand, env),
+        Expr::Paren(inner, _) => expr_vars_in_env(inner, env),
+        Expr::Ternary(t) => {
+            expr_vars_in_env(&t.condition, env)
+                && expr_vars_in_env(&t.then_expr, env)
+                && expr_vars_in_env(&t.else_expr, env)
+        }
+        Expr::Call(c) => c.args.iter().all(|a| expr_vars_in_env(a, env)),
+        Expr::MethodCall(m) => {
+            expr_vars_in_env(&m.target, env) && m.args.iter().all(|a| expr_vars_in_env(a, env))
+        }
+        Expr::Node(_) => false,
+    }
+}
+
 /// Evaluates sibling existence conditions (`prev`, `next`, `!prev`, `!next`, `&&`, `||`) at expansion time.
 pub(super) fn populate_const_env_for_cond(
     expr: &Expr,
@@ -182,14 +361,17 @@ pub(super) fn populate_const_env_for_cond(
                 if let Some(nid) = target_id.node_id() {
                     if nid == cond_ctx.current_node || Some(nid) == cond_ctx.parent_node {
                         let port_name = m.member.as_str();
-                        let var_id =
-                            crate::compiler::graph::VarId::new(cond_ctx.current_node, port_name);
+                        let var_id = crate::compiler::graph::VarId::from_symbol(
+                            cond_ctx.current_node,
+                            m.member.name,
+                        );
                         if !const_env.contains_key(&var_id)
                             && !cond_ctx
                                 .declared_state_names
                                 .is_some_and(|s| s.contains(port_name))
                         {
                             if let Some(port_expr) = comp_ports.get(port_name) {
+                                let empty_env = HashMap::new();
                                 let resolved_val = if let Some(lit) =
                                     resolve_ident_or_member_to_literal(port_expr, cond_ctx)
                                 {
@@ -225,16 +407,20 @@ pub(super) fn populate_const_env_for_cond(
                                             }
                                         }
                                     })
-                                } else if let Ok(val) =
-                                    crate::compiler::eval::eval_expr(port_expr, &HashMap::new())
-                                {
-                                    if !matches!(
-                                        val,
-                                        crate::compiler::value::Value::Timer { .. }
-                                            | crate::compiler::value::Value::IndefiniteTimer { .. }
-                                            | crate::compiler::value::Value::Unset
-                                    ) {
-                                        Some(val)
+                                } else if expr_vars_in_env(port_expr, &empty_env) {
+                                    if let Ok(val) =
+                                        crate::compiler::eval::eval_expr(port_expr, &empty_env)
+                                    {
+                                        if !matches!(
+                                            val,
+                                            crate::compiler::value::Value::Timer { .. }
+                                                | crate::compiler::value::Value::IndefiniteTimer { .. }
+                                                | crate::compiler::value::Value::Unset
+                                        ) {
+                                            Some(val)
+                                        } else {
+                                            None
+                                        }
                                     } else {
                                         None
                                     }
@@ -245,7 +431,10 @@ pub(super) fn populate_const_env_for_cond(
                                     const_env.insert(var_id, val.clone());
                                     if let Some(parent) = cond_ctx.parent_node {
                                         const_env.insert(
-                                            crate::compiler::graph::VarId::new(parent, port_name),
+                                            crate::compiler::graph::VarId::from_symbol(
+                                                parent,
+                                                m.member.name,
+                                            ),
                                             val,
                                         );
                                     }
@@ -369,7 +558,24 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             {
                 if let Some(binding) = ctx.lexical_scope.get(&id.name) {
                     match binding {
-                        LexicalBinding::Expr(e) | LexicalBinding::State(e) => return Ok(e.clone()),
+                        LexicalBinding::Expr(e) | LexicalBinding::State(e) => {
+                            if has_any_pending_fwd_refs() && expr_has_unresolved_ident(e) {
+                                record_pending_fwd_node(ctx.current_node);
+                            }
+                            if expr_has_ternary(e) {
+                                record_unfolded_ternary_emitted();
+                            }
+                            return Ok(e.clone());
+                        }
+                        LexicalBinding::Member {
+                            node_id, member, ..
+                        } => {
+                            return Ok(Expr::MemberAccess(MemberAccessExpr {
+                                target: Box::new(Expr::Ident(Ident::from_node(*node_id, id.span))),
+                                member: Ident::from_symbol(member.name, id.span),
+                                span: id.span,
+                            }));
+                        }
                         LexicalBinding::Node(node_id) => {
                             return Ok(Expr::Ident(Ident::from_node(*node_id, id.span)));
                         }
@@ -437,6 +643,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             if id.name == Symbol::NEXT {
                 if ctx.has_next_sibling {
                     if let Some(cid) = ctx.child_node {
+                        record_pending_fwd_node(ctx.current_node);
                         return Ok(Expr::Ident(Ident::next_of(cid, id.span)));
                     }
                 }
@@ -447,6 +654,14 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         .to_string(),
                     span: id.span,
                 });
+            }
+            if !id.is_canonical_node_ref()
+                && id.name.agg_child_of_node().is_none()
+                && id.name != Symbol::WINDOW
+                && id.name != Symbol::UNSET
+                && id.name != Symbol::NONE
+            {
+                record_pending_fwd_node(ctx.current_node);
             }
             Ok(expr.clone())
         }
@@ -485,15 +700,24 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             let rewritten_cond = rewrite_expr(&tern.condition, &cond_ctx)?;
             let mut const_env = HashMap::new();
             populate_const_env_for_cond(&rewritten_cond, &cond_ctx, &mut const_env);
-            let cond_bool = match crate::compiler::eval::eval_expr(&rewritten_cond, &const_env) {
-                Ok(crate::compiler::value::Value::Bool(b)) => Some(b),
-                _ if ctx.is_event_port => {
-                    match resolve_ident_or_member_to_literal(&tern.condition, &cond_ctx) {
-                        Some(Literal::Bool(b, _)) => Some(b),
-                        _ => None,
+            let cond_bool = if expr_vars_in_env(&rewritten_cond, &const_env) {
+                match crate::compiler::eval::eval_expr(&rewritten_cond, &const_env) {
+                    Ok(crate::compiler::value::Value::Bool(b)) => Some(b),
+                    _ if ctx.is_event_port => {
+                        match resolve_ident_or_member_to_literal(&tern.condition, &cond_ctx) {
+                            Some(Literal::Bool(b, _)) => Some(b),
+                            _ => None,
+                        }
                     }
+                    _ => None,
                 }
-                _ => None,
+            } else if ctx.is_event_port {
+                match resolve_ident_or_member_to_literal(&tern.condition, &cond_ctx) {
+                    Some(Literal::Bool(b, _)) => Some(b),
+                    _ => None,
+                }
+            } else {
+                None
             };
             if let Some(b) = cond_bool {
                 let (chosen_raw, other_raw) = if b {
@@ -556,6 +780,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     _ => {}
                 }
             }
+            record_unfolded_ternary_emitted();
             Ok(Expr::Ternary(TernaryExpr {
                 condition: Box::new(rewritten_cond),
                 then_expr: Box::new(then_rewritten),
@@ -628,7 +853,15 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             if target_ident.is_some_and(|id| id.name == Symbol::ENV) {
                 let member_name = m.member.as_str();
                 return match ctx.env_scope.get(member_name) {
-                    Some(EnvEntry::Bound(expr)) => Ok(expr.clone()),
+                    Some(EnvEntry::Bound(expr)) => {
+                        if has_any_pending_fwd_refs() && expr_has_unresolved_ident(expr) {
+                            record_pending_fwd_node(ctx.current_node);
+                        }
+                        if expr_has_ternary(expr) {
+                            record_unfolded_ternary_emitted();
+                        }
+                        Ok(expr.clone())
+                    }
                     Some(EnvEntry::Tombstone) => Err(CompileError::BlockedEnvVariable {
                         name: member_name.to_string(),
                         span: m.span,
@@ -649,6 +882,12 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             if shadowed.contains(m.member.as_str()) {
                                 if let Some(comp_ports) = ctx.comp_ports {
                                     if let Some(port_expr) = comp_ports.get(m.member.as_str()) {
+                                        if expr_has_unresolved_ident(port_expr) {
+                                            record_pending_fwd_node(ctx.current_node);
+                                        }
+                                        if expr_has_ternary(port_expr) {
+                                            record_unfolded_ternary_emitted();
+                                        }
                                         return Ok(port_expr.clone());
                                     }
                                 }
@@ -723,6 +962,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 } else if target_sym == Symbol::NEXT {
                     if ctx.has_next_sibling {
                         if let Some(cid) = ctx.child_node {
+                            record_pending_fwd_node(ctx.current_node);
                             Expr::Ident(Ident::next_of(cid, m.target.span()))
                         } else {
                             rewrite_expr(&m.target, ctx)?
@@ -1100,6 +1340,281 @@ pub(crate) fn extract_event_binding_with_values(
             })
         }
         _ => None,
+    }
+}
+
+/// Evaluates a template expression where `NodeId::TEMPLATE_SELF.<port>` looks up `slot_consts[slot]`.
+/// Returns `None` without any heap allocation if any referenced port is not a known constant.
+pub(super) fn eval_template_expr(
+    expr: &Expr,
+    port_table: &super::schema::PortTable,
+    slot_consts: &[Option<crate::compiler::value::Value>],
+) -> Option<crate::compiler::value::Value> {
+    use crate::compiler::value::Value;
+    match expr {
+        Expr::Literal(_) => super::schema::expr_to_const_value(expr),
+        Expr::Paren(inner, _) => eval_template_expr(inner, port_table, slot_consts),
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(id) = m.target.as_ref() {
+                if id.node_id().is_some_and(|n| n.is_template_self()) {
+                    let slot = port_table.slot_of_sym(m.member.name)?;
+                    return slot_consts.get(slot.0 as usize)?.clone();
+                }
+            }
+            None
+        }
+        Expr::Unary(u) => {
+            let v = eval_template_expr(&u.operand, port_table, slot_consts)?;
+            match u.op {
+                UnaryOp::Not => match v {
+                    Value::Bool(b) => Some(Value::Bool(!b)),
+                    _ => None,
+                },
+                UnaryOp::Neg => match v {
+                    Value::Integer(i) => Some(Value::Integer(-i)),
+                    Value::Float(f) => Some(Value::Float(-f)),
+                    Value::Distance(d) => Some(Value::Distance(-d)),
+                    Value::Area(a) => Some(Value::Area(-a)),
+                    Value::Duration(d) => Some(Value::Duration(-d)),
+                    _ => None,
+                },
+            }
+        }
+        Expr::Binary(b) => match b.op {
+            BinaryOp::And => {
+                let Value::Bool(l) = eval_template_expr(&b.left, port_table, slot_consts)? else {
+                    return None;
+                };
+                if !l {
+                    return Some(Value::Bool(false));
+                }
+                let Value::Bool(r) = eval_template_expr(&b.right, port_table, slot_consts)? else {
+                    return None;
+                };
+                Some(Value::Bool(r))
+            }
+            BinaryOp::Or => {
+                let Value::Bool(l) = eval_template_expr(&b.left, port_table, slot_consts)? else {
+                    return None;
+                };
+                if l {
+                    return Some(Value::Bool(true));
+                }
+                let Value::Bool(r) = eval_template_expr(&b.right, port_table, slot_consts)? else {
+                    return None;
+                };
+                Some(Value::Bool(r))
+            }
+            BinaryOp::Eq | BinaryOp::Ne => {
+                let l = eval_template_expr(&b.left, port_table, slot_consts)?;
+                let r = eval_template_expr(&b.right, port_table, slot_consts)?;
+                let eq = match (&l, &r) {
+                    (Value::Integer(a), Value::Integer(c)) => a == c,
+                    (Value::Float(a), Value::Float(c)) => a == c,
+                    (Value::Integer(a), Value::Float(c)) => (*a as f64) == *c,
+                    (Value::Float(a), Value::Integer(c)) => *a == (*c as f64),
+                    (Value::Distance(a), Value::Distance(c)) => a == c,
+                    (Value::Distance(a), Value::Integer(0))
+                    | (Value::Integer(0), Value::Distance(a)) => *a == 0.0,
+                    (Value::Area(a), Value::Area(c)) => a == c,
+                    (Value::Duration(a), Value::Duration(c)) => a == c,
+                    (Value::String(a), Value::String(c)) => a == c,
+                    (Value::Bool(a), Value::Bool(c)) => a == c,
+                    (Value::Color(a), Value::Color(c)) => a == c,
+                    (
+                        Value::Enum {
+                            enum_name: e1,
+                            variant: v1,
+                        },
+                        Value::Enum {
+                            enum_name: e2,
+                            variant: v2,
+                        },
+                    ) => e1 == e2 && v1 == v2,
+                    _ => return None,
+                };
+                Some(Value::Bool(if b.op == BinaryOp::Eq { eq } else { !eq }))
+            }
+            BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
+                let l = eval_template_expr(&b.left, port_table, slot_consts)?;
+                let r = eval_template_expr(&b.right, port_table, slot_consts)?;
+                let (lv, rv) = match (&l, &r) {
+                    (Value::Integer(a), Value::Integer(c)) => (*a as f64, *c as f64),
+                    (Value::Float(a), Value::Float(c)) => (*a, *c),
+                    (Value::Integer(a), Value::Float(c)) => (*a as f64, *c),
+                    (Value::Float(a), Value::Integer(c)) => (*a, *c as f64),
+                    (Value::Distance(a), Value::Distance(c)) => (*a, *c),
+                    (Value::Distance(a), Value::Integer(0)) => (*a, 0.0),
+                    (Value::Integer(0), Value::Distance(c)) => (0.0, *c),
+                    _ => return None,
+                };
+                let res = match b.op {
+                    BinaryOp::Lt => lv < rv,
+                    BinaryOp::Le => lv <= rv,
+                    BinaryOp::Gt => lv > rv,
+                    BinaryOp::Ge => lv >= rv,
+                    _ => unreachable!(),
+                };
+                Some(Value::Bool(res))
+            }
+            _ => None,
+        },
+        Expr::Ternary(t) => {
+            let Value::Bool(c) = eval_template_expr(&t.condition, port_table, slot_consts)? else {
+                return None;
+            };
+            if c {
+                eval_template_expr(&t.then_expr, port_table, slot_consts)
+            } else {
+                eval_template_expr(&t.else_expr, port_table, slot_consts)
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Instantiates a pre-compiled `NodeId::TEMPLATE_SELF` expression for `comp_node_id`,
+/// folding constant ternaries on the fly without cloning unchosen branches.
+pub(super) fn instantiate_template_expr(
+    expr: &Expr,
+    comp_node_id: NodeId,
+    port_table: &super::schema::PortTable,
+    slot_consts: &[Option<crate::compiler::value::Value>],
+) -> Expr {
+    match expr {
+        Expr::Literal(lit) => Expr::Literal(lit.clone()),
+        Expr::Ident(id) => {
+            if id.node_id().is_some_and(|n| n.is_template_self()) {
+                Expr::Ident(Ident::from_node(comp_node_id, id.span))
+            } else {
+                Expr::Ident(*id)
+            }
+        }
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(id) = m.target.as_ref() {
+                if id.node_id().is_some_and(|n| n.is_template_self()) {
+                    return Expr::MemberAccess(MemberAccessExpr {
+                        target: Box::new(Expr::Ident(Ident::from_node(comp_node_id, id.span))),
+                        member: m.member,
+                        span: m.span,
+                    });
+                }
+            }
+            Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(instantiate_template_expr(
+                    &m.target,
+                    comp_node_id,
+                    port_table,
+                    slot_consts,
+                )),
+                member: m.member,
+                span: m.span,
+            })
+        }
+        Expr::Ternary(t) => {
+            if let Some(crate::compiler::value::Value::Bool(b)) =
+                eval_template_expr(&t.condition, port_table, slot_consts)
+            {
+                let chosen = if b { &t.then_expr } else { &t.else_expr };
+                return instantiate_template_expr(chosen, comp_node_id, port_table, slot_consts);
+            }
+            record_unfolded_ternary_emitted();
+            Expr::Ternary(TernaryExpr {
+                condition: Box::new(instantiate_template_expr(
+                    &t.condition,
+                    comp_node_id,
+                    port_table,
+                    slot_consts,
+                )),
+                then_expr: Box::new(instantiate_template_expr(
+                    &t.then_expr,
+                    comp_node_id,
+                    port_table,
+                    slot_consts,
+                )),
+                else_expr: Box::new(instantiate_template_expr(
+                    &t.else_expr,
+                    comp_node_id,
+                    port_table,
+                    slot_consts,
+                )),
+                span: t.span,
+            })
+        }
+        Expr::Binary(b) => Expr::Binary(BinaryExpr {
+            op: b.op,
+            left: Box::new(instantiate_template_expr(
+                &b.left,
+                comp_node_id,
+                port_table,
+                slot_consts,
+            )),
+            right: Box::new(instantiate_template_expr(
+                &b.right,
+                comp_node_id,
+                port_table,
+                slot_consts,
+            )),
+            span: b.span,
+        }),
+        Expr::Unary(u) => Expr::Unary(UnaryExpr {
+            op: u.op,
+            operand: Box::new(instantiate_template_expr(
+                &u.operand,
+                comp_node_id,
+                port_table,
+                slot_consts,
+            )),
+            span: u.span,
+        }),
+        Expr::Paren(inner, span) => Expr::Paren(
+            Box::new(instantiate_template_expr(
+                inner,
+                comp_node_id,
+                port_table,
+                slot_consts,
+            )),
+            *span,
+        ),
+        Expr::Call(c) => {
+            let mut args = Vec::with_capacity(c.args.len());
+            for arg in &c.args {
+                args.push(instantiate_template_expr(
+                    arg,
+                    comp_node_id,
+                    port_table,
+                    slot_consts,
+                ));
+            }
+            Expr::Call(CallExpr {
+                callee: c.callee,
+                args,
+                span: c.span,
+            })
+        }
+        Expr::MethodCall(mc) => {
+            let mut args = Vec::with_capacity(mc.args.len());
+            for arg in &mc.args {
+                args.push(instantiate_template_expr(
+                    arg,
+                    comp_node_id,
+                    port_table,
+                    slot_consts,
+                ));
+            }
+            Expr::MethodCall(MethodCallExpr {
+                target: Box::new(instantiate_template_expr(
+                    &mc.target,
+                    comp_node_id,
+                    port_table,
+                    slot_consts,
+                )),
+                method: mc.method,
+                args,
+                span: mc.span,
+            })
+        }
+        Expr::Node(n) => Expr::Node(n.clone()),
     }
 }
 

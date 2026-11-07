@@ -13,11 +13,17 @@ pub struct ClipPrimitive;
 
 /// Resolves the inherited `clip` expression from `env_scope` (`\env clip`) or `parent_id.clip` (falling back to `window.clip`).
 pub(in crate::compiler::expand) fn default_inherited_clip_expr(
+    current_node: NodeId,
     parent_id: Option<NodeId>,
     env_scope: &HashMap<String, EnvEntry>,
     span: Span,
 ) -> Expr {
     if let Some(EnvEntry::Bound(clip_expr)) = env_scope.get("clip") {
+        if crate::compiler::expand::rewrite::has_any_pending_fwd_refs()
+            && crate::compiler::expand::rewrite::expr_has_unresolved_ident(clip_expr)
+        {
+            crate::compiler::expand::rewrite::record_pending_fwd_node(current_node);
+        }
         clip_expr.clone()
     } else if let Some(parent) = parent_id {
         let target_node = if parent.is_window() {
@@ -74,7 +80,8 @@ impl BuiltinPrimitive for ClipPrimitive {
             });
         }
         if !state.ports.contains_key("up") {
-            let default_up = default_inherited_clip_expr(ctx.parent_id, ctx.env_scope, elem.span);
+            let default_up =
+                default_inherited_clip_expr(node_id, ctx.parent_id, ctx.env_scope, elem.span);
             state.ports.insert("up".to_string(), default_up);
         }
         state.ports.insert(

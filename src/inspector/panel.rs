@@ -311,14 +311,14 @@ impl InspectPanelComponent {
             if sig_w > max_w {
                 max_w = sig_w;
             }
-            for (s_name, _) in &node.state_vars {
+            for (s_name, _) in node.state_vars.iter() {
                 let val_str = layout.get_value(node.id, s_name).map(|v| format!("{v}")).unwrap_or_default();
                 let w = 24.0 + s_name.len() as f64 * 8.0 + val_str.len() as f64 * 8.0 + 50.0;
                 if w > max_w {
                     max_w = w;
                 }
             }
-            for (e_name, _) in &node.env_vars {
+            for (e_name, _) in node.env_vars.iter() {
                 let val_str = layout.get_value(node.id, e_name).map(|v| format!("{v}")).unwrap_or_default();
                 let w = 24.0 + e_name.len() as f64 * 8.0 + val_str.len() as f64 * 8.0 + 50.0;
                 if w > max_w {

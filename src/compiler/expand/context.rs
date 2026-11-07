@@ -9,8 +9,32 @@ use std::collections::{HashMap, HashSet};
 pub enum LexicalBinding {
     Expr(Expr),
     State(Expr),
+    /// Zero-allocation member access binding (`<node_id>.<member>`) avoiding a boxed `Expr` per port in `local_scope`.
+    Member {
+        node_id: NodeId,
+        member: Ident,
+        is_state: bool,
+    },
     Node(NodeId),
     Uninitialized,
+}
+
+impl LexicalBinding {
+    /// Materializes this binding as an `Expr` if it is an `Expr`, `State`, or `Member`.
+    #[inline]
+    pub fn to_expr(&self) -> Option<Expr> {
+        match self {
+            LexicalBinding::Expr(e) | LexicalBinding::State(e) => Some(e.clone()),
+            LexicalBinding::Member {
+                node_id, member, ..
+            } => Some(Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(Expr::Ident(Ident::from_node(*node_id, member.span))),
+                member: *member,
+                span: member.span,
+            })),
+            LexicalBinding::Node(_) | LexicalBinding::Uninitialized => None,
+        }
+    }
 }
 
 /// An environmental entry in the active Lexical Scope Stack.
