@@ -198,6 +198,13 @@ fn expr_references_any_name(expr: &Expr, names: &HashSet<String>) -> bool {
                 || mc.args.iter().any(|a| expr_references_any_name(a, names))
         }
         Expr::Node(n) => n.ports.iter().any(|p| expr_references_any_name(&p.expr, names)),
+        Expr::ExprDef(def) => {
+            def.params.iter().any(|p| {
+                p.default_edge
+                    .as_ref()
+                    .is_some_and(|e| expr_references_any_name(e, names))
+            }) || expr_references_any_name(&def.body, names)
+        }
         Expr::Literal(_) => false,
     }
 }
@@ -246,6 +253,7 @@ pub struct ComponentSchema {
     pub param_syms: HashSet<Symbol>,
     pub template_self_ports: HashSet<Symbol>,
     pub handler_param_names: HashSet<String>,
+    pub expr_param_names: HashSet<String>,
     pub env_param_names: HashSet<String>,
     pub overload_params: std::sync::Arc<Vec<String>>,
     pub comp_scope_ports: Vec<String>,
@@ -313,6 +321,7 @@ impl ComponentSchema {
         let mut param_names = HashSet::with_capacity(comp_def.params.len());
         let mut param_syms = HashSet::with_capacity(comp_def.params.len());
         let mut handler_param_names = HashSet::new();
+        let mut expr_param_names = HashSet::new();
         let mut env_param_names = HashSet::new();
         let mut overload_params = Vec::new();
         for param in &comp_def.params {
@@ -325,6 +334,14 @@ impl ComponentSchema {
                 .is_some_and(|t| t.name.as_str() == "Handler")
             {
                 handler_param_names.insert(name.clone());
+            }
+            if param
+                .type_annotation
+                .as_ref()
+                .is_some_and(|t| matches!(t.name.as_str(), "Expr" | "Expression"))
+                || matches!(&param.default_edge, Some(Expr::ExprDef(_)))
+            {
+                expr_param_names.insert(name.clone());
             }
             if param.is_env {
                 env_param_names.insert(name.clone());
@@ -528,8 +545,12 @@ impl ComponentSchema {
         let shadowed_expr_lets: Vec<LetBinding> = all_lets
             .iter()
             .filter(|l| {
+                let is_expr_def = matches!(&l.value, Some(LetValue::Expr(Expr::ExprDef(_))))
+                    || l.type_annotation
+                        .as_ref()
+                        .is_some_and(|t| matches!(t.name.as_str(), "Expr" | "Expression"));
                 matches!(l.value, Some(LetValue::Expr(_)))
-                    && comp_shadowed_ports.contains(l.name.as_str())
+                    && (comp_shadowed_ports.contains(l.name.as_str()) || is_expr_def)
             })
             .cloned()
             .collect();
@@ -692,12 +713,15 @@ impl ComponentSchema {
                         | "Anchor"
                         | "AnchorScope"
                         | "Handler"
+                        | "Expr"
+                        | "Expression"
                 )
-            }) && !matches!(&param.default_edge, Some(Expr::Node(_)));
+            }) && !matches!(&param.default_edge, Some(Expr::Node(_) | Expr::ExprDef(_)));
             if is_non_node_typed
                 && !comp_shadowed_ports.contains(name)
                 && !declared_envs.contains_key(name)
                 && !handler_param_names.contains(name)
+                && !expr_param_names.contains(name)
                 && !name.starts_with("on_")
             {
                 template_self_ports.insert(param.name.name);
@@ -714,12 +738,14 @@ impl ComponentSchema {
             }
         }
         for (let_name, l) in &declared_lets {
-            let is_handler = let_name.starts_with("on_")
+            let is_handler_or_expr = let_name.starts_with("on_")
                 || handler_param_names.contains(let_name)
+                || expr_param_names.contains(let_name)
                 || l.type_annotation
                     .as_ref()
-                    .is_some_and(|t| t.name.as_str() == "Handler");
-            if !is_handler
+                    .is_some_and(|t| matches!(t.name.as_str(), "Handler" | "Expr" | "Expression"))
+                || matches!(&l.value, Some(LetValue::Expr(Expr::ExprDef(_))));
+            if !is_handler_or_expr
                 && !comp_shadowed_ports.contains(let_name)
                 && !env_param_names.contains(let_name)
                 && matches!(l.value, Some(LetValue::Expr(_)))
@@ -728,12 +754,14 @@ impl ComponentSchema {
             }
         }
         for (alias_name, a) in &declared_aliases {
-            let is_handler = alias_name.starts_with("on_")
+            let is_handler_or_expr = alias_name.starts_with("on_")
                 || handler_param_names.contains(alias_name)
+                || expr_param_names.contains(alias_name)
                 || a.type_annotation
                     .as_ref()
-                    .is_some_and(|t| t.name.as_str() == "Handler");
-            if !is_handler && !comp_shadowed_ports.contains(alias_name) {
+                    .is_some_and(|t| matches!(t.name.as_str(), "Handler" | "Expr" | "Expression"))
+                || matches!(&a.value, Expr::ExprDef(_));
+            if !is_handler_or_expr && !comp_shadowed_ports.contains(alias_name) {
                 template_self_ports.insert(a.name.name);
             }
         }
@@ -944,6 +972,7 @@ impl ComponentSchema {
             param_syms,
             template_self_ports,
             handler_param_names,
+            expr_param_names,
             env_param_names,
             overload_params: std::sync::Arc::new(overload_params),
             comp_scope_ports,
@@ -1032,6 +1061,9 @@ pub fn validate_registered_component_def(
     for param in &comp_def.params {
         if let Some(ty) = &param.type_annotation {
             StaticType::from_type_name(ty.name.as_str(), ty.span, known_enums, registry)?;
+        }
+        if let Some(default_expr) = &param.default_edge {
+            super::typecheck::validate_expr_type_annotations(default_expr, known_enums, registry)?;
         }
     }
     validate_content_items_type_annotations(&comp_def.body, known_enums, registry)?;
@@ -1164,6 +1196,14 @@ pub(super) fn collect_expr_lets<'a>(expr: &'a Expr, out: &mut Vec<&'a LetBinding
             }
         }
         Expr::MemberAccess(m) => collect_expr_lets(&m.target, out),
+        Expr::ExprDef(def) => {
+            for p in &def.params {
+                if let Some(d) = &p.default_edge {
+                    collect_expr_lets(d, out);
+                }
+            }
+            collect_expr_lets(&def.body, out);
+        }
         Expr::Literal(_) | Expr::Ident(_) => {}
     }
 }
@@ -1440,6 +1480,11 @@ fn validate_key_expr(
             name: n.name.as_str().to_string(),
             span: n.span,
         }),
+        Expr::ExprDef(def) => Err(CompileError::InvalidComponentKeyDependency {
+            node: node_name.to_string(),
+            name: "Expr".to_string(),
+            span: def.span,
+        }),
     }
 }
 
@@ -1519,7 +1564,7 @@ fn expr_has_template_self_or_ternary(expr: &Expr) -> (bool, bool) {
             }
             (has_s, has_t)
         }
-        Expr::Node(_) => (false, false),
+        Expr::Node(_) | Expr::ExprDef(_) => (false, false),
     }
 }
 
@@ -1558,7 +1603,7 @@ fn collect_template_self_deps(expr: &Expr, deps: &mut Vec<Symbol>) {
                 collect_template_self_deps(arg, deps);
             }
         }
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => {}
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) => {}
     }
 }
 
@@ -1757,7 +1802,10 @@ fn try_compile_self_template(
             }))
         }
         Expr::Call(c) => {
-            if c.callee.as_str() == "distance_to_float" || c.callee.name == Symbol::ONLY {
+            if !matches!(
+                c.callee.as_str(),
+                "min" | "max" | "abs" | "floor" | "ceil" | "round" | "clamp" | "to_integer"
+            ) {
                 return None;
             }
             let mut args = Vec::with_capacity(c.args.len());
@@ -1770,20 +1818,7 @@ fn try_compile_self_template(
                 span: c.span,
             }))
         }
-        Expr::MethodCall(mc) => {
-            let target = try_compile_self_template(&mc.target, schema, enums)?;
-            let mut args = Vec::with_capacity(mc.args.len());
-            for arg in &mc.args {
-                args.push(try_compile_self_template(arg, schema, enums)?);
-            }
-            Some(Expr::MethodCall(MethodCallExpr {
-                target: Box::new(target),
-                method: mc.method,
-                args,
-                span: mc.span,
-            }))
-        }
-        Expr::Node(_) => None,
+        Expr::MethodCall(_) | Expr::Node(_) | Expr::ExprDef(_) => None,
     }
 }
 
@@ -1887,8 +1922,10 @@ impl CompiledComponentTemplates {
                 continue;
             };
             let name = param.name.as_str();
-            let is_handler = name.starts_with("on_") || schema.handler_param_names.contains(name);
-            if is_handler || matches!(default_expr, Expr::Node(_)) {
+            let is_handler_or_expr = name.starts_with("on_")
+                || schema.handler_param_names.contains(name)
+                || schema.expr_param_names.contains(name);
+            if is_handler_or_expr || matches!(default_expr, Expr::Node(_) | Expr::ExprDef(_)) {
                 continue;
             }
             if let Some(compiled) = try_compile_self_template(default_expr, schema, enums) {
@@ -1941,12 +1978,14 @@ impl CompiledComponentTemplates {
             let Some(LetValue::Expr(raw_expr)) = &l.value else {
                 continue;
             };
-            let is_handler = let_name.starts_with("on_")
+            let is_handler_or_expr = let_name.starts_with("on_")
                 || schema.handler_param_names.contains(let_name)
+                || schema.expr_param_names.contains(let_name)
                 || l.type_annotation
                     .as_ref()
-                    .is_some_and(|t| t.name.as_str() == "Handler");
-            if is_handler {
+                    .is_some_and(|t| matches!(t.name.as_str(), "Handler" | "Expr" | "Expression"))
+                || matches!(raw_expr, Expr::ExprDef(_));
+            if is_handler_or_expr {
                 continue;
             }
             if let Some(compiled) = try_compile_self_template(raw_expr, schema, enums) {
@@ -1990,12 +2029,14 @@ impl CompiledComponentTemplates {
 
         let mut alias_templates = Vec::with_capacity(schema.declared_aliases.len() + 4);
         for (alias_name, a) in &schema.declared_aliases {
-            let is_handler = alias_name.starts_with("on_")
+            let is_handler_or_expr = alias_name.starts_with("on_")
                 || schema.handler_param_names.contains(alias_name)
+                || schema.expr_param_names.contains(alias_name)
                 || a.type_annotation
                     .as_ref()
-                    .is_some_and(|t| t.name.as_str() == "Handler");
-            if is_handler {
+                    .is_some_and(|t| matches!(t.name.as_str(), "Handler" | "Expr" | "Expression"))
+                || matches!(&a.value, Expr::ExprDef(_));
+            if is_handler_or_expr {
                 continue;
             }
             if let Some(compiled) = try_compile_self_template(&a.value, schema, enums) {

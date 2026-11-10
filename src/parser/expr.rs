@@ -1,6 +1,6 @@
 use crate::ast::{
-    BinaryExpr, BinaryOp, CallExpr, Expr, Ident, Literal, MemberAccessExpr, MethodCallExpr,
-    TernaryExpr, UnaryExpr, UnaryOp,
+    BinaryExpr, BinaryOp, CallExpr, Expr, ExprDef, Ident, Literal, MemberAccessExpr,
+    MethodCallExpr, ParamDef, TernaryExpr, TypeRef, UnaryExpr, UnaryOp,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::ParserCursor;
@@ -128,11 +128,17 @@ fn parse_expr_bp(cursor: &mut ParserCursor<'_>, min_bp: u8) -> Result<Expr, Pars
 }
 
 fn parse_prefix(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
-    if cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Backslash)
-        && cursor.peek_nth(1)?.is_some_and(|(t, _)| t != &Token::Children)
-    {
-        let node = crate::parser::node::parse_element_node(cursor)?;
-        return Ok(Expr::Node(Box::new(node)));
+    if cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Backslash) {
+        if matches!(
+            cursor.peek_nth(1)?,
+            Some((Token::Ident(ref n), _)) if n == "Expr"
+        ) {
+            return parse_expr_def(cursor);
+        }
+        if cursor.peek_nth(1)?.is_some_and(|(t, _)| t != &Token::Children) {
+            let node = crate::parser::node::parse_element_node(cursor)?;
+            return Ok(Expr::Node(Box::new(node)));
+        }
     }
 
     let (tok, span) = cursor.expect_token("expression")?;
@@ -198,6 +204,219 @@ fn parse_prefix(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
             span,
         }),
     }
+}
+
+fn parse_expr_param_def(cursor: &mut ParserCursor<'_>) -> Result<ParamDef, ParseError> {
+    if let Some((Token::Env, span)) = cursor.peek_token()?.cloned() {
+        return Err(ParseError::Custom {
+            message: "'env' modifier is not allowed on \\Expr parameters".to_string(),
+            span,
+        });
+    }
+
+    let name = parse_ident(cursor)?;
+
+    let type_annotation = if let Some((Token::Colon, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Colon)?;
+        let (tok, type_span) = cursor.expect_token("type name")?;
+        if let Token::Ident(type_name) = tok {
+            Some(TypeRef {
+                name: Ident::new(type_name, type_span),
+                span: type_span,
+            })
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                expected: "type name identifier".to_string(),
+                found: tok.to_string(),
+                span: type_span,
+            });
+        }
+    } else {
+        None
+    };
+
+    let default_edge = if let Some((Token::Eq, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Eq)?;
+        Some(parse_expr(cursor)?)
+    } else {
+        None
+    };
+
+    let end_span = default_edge
+        .as_ref()
+        .map(|e| e.span())
+        .or_else(|| type_annotation.as_ref().map(|t| t.span))
+        .unwrap_or(name.span);
+
+    Ok(ParamDef {
+        is_env: false,
+        name: name.clone(),
+        type_annotation,
+        default_edge,
+        span: name.span.merge(end_span),
+    })
+}
+
+fn expr_contains_non_value_node(expr: &Expr) -> bool {
+    match expr {
+        Expr::Node(node) => !matches!(node.name.as_str(), "Timer" | "IndefiniteTimer"),
+        Expr::MemberAccess(m) => expr_contains_non_value_node(&m.target),
+        Expr::Ternary(t) => {
+            expr_contains_non_value_node(&t.condition)
+                || expr_contains_non_value_node(&t.then_expr)
+                || expr_contains_non_value_node(&t.else_expr)
+        }
+        Expr::Call(c) => c.args.iter().any(expr_contains_non_value_node),
+        Expr::MethodCall(m) => {
+            expr_contains_non_value_node(&m.target)
+                || m.args.iter().any(expr_contains_non_value_node)
+        }
+        Expr::Binary(b) => {
+            expr_contains_non_value_node(&b.left) || expr_contains_non_value_node(&b.right)
+        }
+        Expr::Unary(u) => expr_contains_non_value_node(&u.operand),
+        Expr::Paren(inner, _) => expr_contains_non_value_node(inner),
+        Expr::ExprDef(def) => expr_contains_non_value_node(&def.body),
+        Expr::Literal(_) | Expr::Ident(_) => false,
+    }
+}
+
+fn parse_expr_def(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
+    let bs_span = cursor.consume_token(&Token::Backslash)?;
+    let (_, expr_kw_span) = cursor.expect_token("Expr")?;
+    let start_span = bs_span.merge(expr_kw_span);
+
+    let params = if let Some((Token::LParen, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::LParen)?;
+        let mut params = Vec::new();
+        while let Some((tok, _)) = cursor.peek_token()? {
+            if tok == &Token::RParen {
+                break;
+            }
+            params.push(parse_expr_param_def(cursor)?);
+            if let Some((Token::Comma, _)) = cursor.peek_token()? {
+                cursor.consume_token(&Token::Comma)?;
+            } else {
+                break;
+            }
+        }
+        cursor.consume_token(&Token::RParen)?;
+        params
+    } else {
+        Vec::new()
+    };
+
+    let open_brace_span = match cursor.peek_token()?.cloned() {
+        Some((Token::LBrace, _)) => cursor.consume_token(&Token::LBrace)?,
+        Some((other, span)) => {
+            return Err(ParseError::UnexpectedToken {
+                expected: "'(' or '{' after \\Expr".to_string(),
+                found: other.to_string(),
+                span,
+            });
+        }
+        None => {
+            return Err(ParseError::UnexpectedEof {
+                expected: "'{' after \\Expr".to_string(),
+                span: start_span,
+            });
+        }
+    };
+
+    if let Some((Token::RBrace, close_span)) = cursor.peek_token()?.cloned() {
+        return Err(ParseError::Custom {
+            message: "\\Expr body cannot be empty; expected an expression inside '{ ... }'"
+                .to_string(),
+            span: open_brace_span.merge(close_span),
+        });
+    }
+
+    if let Some((Token::Backslash, bs)) = cursor.peek_token()?.cloned() {
+        match cursor.peek_nth(1)?.cloned() {
+            Some((
+                Token::Let
+                | Token::State
+                | Token::Env
+                | Token::Alias
+                | Token::Assert
+                | Token::Children
+                | Token::Component
+                | Token::Span
+                | Token::InlineBox
+                | Token::Enum
+                | Token::Use,
+                kw_span,
+            )) => {
+                return Err(ParseError::Custom {
+                    message:
+                        "\\Expr body must be a single expression, not a statement or directive"
+                            .to_string(),
+                    span: bs.merge(kw_span),
+                });
+            }
+            Some((Token::Ident(ref n), id_span))
+                if !matches!(n.as_str(), "Expr" | "Timer" | "IndefiniteTimer") =>
+            {
+                return Err(ParseError::Custom {
+                    message: format!(
+                        "\\Expr body must be a single expression, not element node '\\{}'",
+                        n
+                    ),
+                    span: bs.merge(id_span),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    let body = parse_expr_bp(cursor, 0).map_err(|err| match err {
+        ParseError::UnexpectedToken { span, .. } => ParseError::Custom {
+            message: "\\Expr body must contain a valid expression inside '{ ... }'".to_string(),
+            span,
+        },
+        other => other,
+    })?;
+
+    if expr_contains_non_value_node(&body) {
+        return Err(ParseError::Custom {
+            message:
+                "\\Expr body must be a single expression and cannot contain layout element nodes"
+                    .to_string(),
+            span: body.span(),
+        });
+    }
+
+    if let Some((Token::Semicolon, semi_span)) = cursor.peek_token()?.cloned() {
+        return Err(ParseError::Custom {
+            message: "\\Expr body must be a single expression without a trailing ';'".to_string(),
+            span: semi_span,
+        });
+    }
+
+    let close_brace_span = match cursor.peek_token()?.cloned() {
+        Some((Token::RBrace, _)) => cursor.consume_token(&Token::RBrace)?,
+        Some((other, span)) => {
+            return Err(ParseError::Custom {
+                message: format!(
+                    "\\Expr body must contain a single expression followed by '}}', found {}",
+                    other
+                ),
+                span,
+            });
+        }
+        None => {
+            return Err(ParseError::UnclosedDelimiter {
+                delimiter: '}',
+                open_span: open_brace_span,
+            });
+        }
+    };
+
+    Ok(Expr::ExprDef(Box::new(ExprDef {
+        params,
+        body: Box::new(body),
+        span: start_span.merge(close_brace_span),
+    })))
 }
 
 pub fn parse_ident(cursor: &mut ParserCursor<'_>) -> Result<Ident, ParseError> {

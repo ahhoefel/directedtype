@@ -318,6 +318,14 @@ pub fn build_variable_graph_with_window(
     );
 
     for (port_name, expr) in &doc.window_ports {
+        if matches!(expr, Expr::ExprDef(_))
+            || doc
+                .window_port_types
+                .get(port_name)
+                .is_some_and(|s| matches!(s.as_str(), "Expr" | "Expression"))
+        {
+            continue;
+        }
         let span = expr.span();
         graph.add_variable(
             VarId::new(NodeId::WINDOW, port_name.clone()),
@@ -340,7 +348,11 @@ pub fn build_variable_graph_with_window(
 
         for (port_name, expr) in &node.ports {
             if port_name.starts_with("on_")
-                || node.port_types.get(port_name).map(|s| s.as_str()) == Some("Handler")
+                || matches!(expr, Expr::ExprDef(_))
+                || node
+                    .port_types
+                    .get(port_name)
+                    .is_some_and(|s| matches!(s.as_str(), "Handler" | "Expr" | "Expression"))
             {
                 continue;
             }
@@ -519,7 +531,8 @@ pub fn build_variable_graph_with_window(
                         let source_node = doc.get_node(var_id_node);
                         let is_internal = var_id_node == dep.node
                             || source_node.and_then(|n| n.enclosing_component) == Some(dep.node)
-                            || (target_node.is_span && dep.port == Symbol::BASELINE_SHIFT);
+                            || (target_node.is_span && dep.port == Symbol::BASELINE_SHIFT)
+                            || var_node.id.port.as_str().starts_with("__expr_");
                         let is_ambient = source_node
                             .is_some_and(|n| n.ambient_ports.contains(var_node.id.port.as_str()));
 
@@ -609,6 +622,6 @@ fn collect_dependencies(expr: &Expr, out: &mut Vec<VarId>) {
                 collect_dependencies(&port.expr, out);
             }
         }
-        Expr::Ident(_) | Expr::Literal(_) => {}
+        Expr::Ident(_) | Expr::Literal(_) | Expr::ExprDef(_) => {}
     }
 }

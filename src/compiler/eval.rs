@@ -1553,6 +1553,11 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                 span: n.span,
             }),
         },
+        Expr::ExprDef(def) => Err(CompileError::Custom {
+            message: "Cannot evaluate uninvoked '\\Expr' as a value; call it with '(...)'"
+                .to_string(),
+            span: def.span,
+        }),
     }
 }
 

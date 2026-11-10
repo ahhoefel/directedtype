@@ -98,6 +98,9 @@ const PREINTERNED: &[&str] = &[
     "font_ascender",
     "font_descender",
     "num_children",
+    "outer",
+    "Expr",
+    "Expression",
 ];
 
 struct SymbolInterner {
@@ -230,6 +233,9 @@ impl Symbol {
     pub const FN_FONT_ASCENDER: Self = Self(80);
     pub const FN_FONT_DESCENDER: Self = Self(81);
     pub const NUM_CHILDREN: Self = Self(82);
+    pub const OUTER: Self = Self(83);
+    pub const EXPR_KW: Self = Self(84);
+    pub const EXPRESSION_KW: Self = Self(85);
 
     /// Canonical node symbol for `NodeId::WINDOW` (`"__window"`).
     pub const WINDOW_NODE: Self = Self(TAG_NODE | NODE_WINDOW_RAW);
@@ -442,6 +448,9 @@ impl Symbol {
             "font_ascender" => Self::FN_FONT_ASCENDER,
             "font_descender" => Self::FN_FONT_DESCENDER,
             "num_children" => Self::NUM_CHILDREN,
+            "outer" => Self::OUTER,
+            "Expr" => Self::EXPR_KW,
+            "Expression" => Self::EXPRESSION_KW,
             other => intern_dynamic_str(other),
         }
     }

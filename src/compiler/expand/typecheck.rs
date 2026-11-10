@@ -22,6 +22,7 @@ pub enum StaticType {
     IndefiniteTimer,
     Unset,
     ViewPort,
+    Expr,
     Enum(String),
     Node(String),
 }
@@ -41,6 +42,7 @@ impl StaticType {
             StaticType::Timer => "Timer".to_string(),
             StaticType::IndefiniteTimer => "IndefiniteTimer".to_string(),
             StaticType::ViewPort => "ViewPort".to_string(),
+            StaticType::Expr => "Expr".to_string(),
             StaticType::Enum(name) => name.clone(),
             StaticType::Node(name) => name.clone(),
         }
@@ -81,6 +83,7 @@ impl StaticType {
             "Timer" => Ok(StaticType::Timer),
             "IndefiniteTimer" => Ok(StaticType::IndefiniteTimer),
             "ViewPort" => Ok(StaticType::ViewPort),
+            "Expr" | "Expression" => Ok(StaticType::Expr),
             "Node" => Ok(StaticType::Node("Node".to_string())),
             "Window" | "Rect" | "Line" | "Text" | "Font" | "Clip" | "Box" | "Anchor" | "AnchorScope" => {
                 Ok(StaticType::Node(name.to_string()))
@@ -154,6 +157,59 @@ impl StaticType {
     }
 }
 
+pub(super) fn validate_expr_type_annotations(
+    expr: &Expr,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> Result<(), CompileError> {
+    match expr {
+        Expr::ExprDef(def) => {
+            for param in &def.params {
+                if let Some(ty) = &param.type_annotation {
+                    StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
+                }
+                if let Some(default_expr) = &param.default_edge {
+                    validate_expr_type_annotations(default_expr, enums, registry)?;
+                }
+            }
+            validate_expr_type_annotations(&def.body, enums, registry)?;
+        }
+        Expr::Binary(b) => {
+            validate_expr_type_annotations(&b.left, enums, registry)?;
+            validate_expr_type_annotations(&b.right, enums, registry)?;
+        }
+        Expr::Unary(u) => validate_expr_type_annotations(&u.operand, enums, registry)?,
+        Expr::Ternary(t) => {
+            validate_expr_type_annotations(&t.condition, enums, registry)?;
+            validate_expr_type_annotations(&t.then_expr, enums, registry)?;
+            validate_expr_type_annotations(&t.else_expr, enums, registry)?;
+        }
+        Expr::MemberAccess(m) => validate_expr_type_annotations(&m.target, enums, registry)?,
+        Expr::Call(c) => {
+            for arg in &c.args {
+                validate_expr_type_annotations(arg, enums, registry)?;
+            }
+        }
+        Expr::MethodCall(mc) => {
+            validate_expr_type_annotations(&mc.target, enums, registry)?;
+            for arg in &mc.args {
+                validate_expr_type_annotations(arg, enums, registry)?;
+            }
+        }
+        Expr::Paren(inner, _) => validate_expr_type_annotations(inner, enums, registry)?,
+        Expr::Node(elem) => {
+            for port in &elem.ports {
+                validate_expr_type_annotations(&port.expr, enums, registry)?;
+            }
+            if let Some(slot) = &elem.content {
+                validate_content_items_type_annotations(&slot.items, enums, registry)?;
+            }
+        }
+        Expr::Literal(_) | Expr::Ident(_) => {}
+    }
+    Ok(())
+}
+
 pub(super) fn validate_content_items_type_annotations(
     items: &[ContentItem],
     enums: &HashMap<String, EnumDef>,
@@ -165,28 +221,47 @@ pub(super) fn validate_content_items_type_annotations(
                 if let Some(ty) = &l.type_annotation {
                     StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
                 }
-                if let Some(LetValue::Node(n)) = &l.value {
-                    if let Some(slot) = &n.content {
-                        validate_content_items_type_annotations(&slot.items, enums, registry)?;
+                match &l.value {
+                    Some(LetValue::Node(n)) => {
+                        for port in &n.ports {
+                            validate_expr_type_annotations(&port.expr, enums, registry)?;
+                        }
+                        if let Some(slot) = &n.content {
+                            validate_content_items_type_annotations(&slot.items, enums, registry)?;
+                        }
                     }
+                    Some(LetValue::Expr(e)) => {
+                        validate_expr_type_annotations(e, enums, registry)?;
+                    }
+                    None => {}
                 }
             }
             ContentItem::Alias(a) => {
                 if let Some(ty) = &a.type_annotation {
                     StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
                 }
+                validate_expr_type_annotations(&a.value, enums, registry)?;
             }
             ContentItem::State(s) => {
                 if let Some(ty) = &s.type_annotation {
                     StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
+                }
+                if let Some(d) = &s.default {
+                    validate_expr_type_annotations(d, enums, registry)?;
                 }
             }
             ContentItem::Env(e) => {
                 if let Some(ty) = &e.type_annotation {
                     StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
                 }
+                if let Some(v) = &e.value {
+                    validate_expr_type_annotations(v, enums, registry)?;
+                }
             }
             ContentItem::Node(n) => {
+                for port in &n.ports {
+                    validate_expr_type_annotations(&port.expr, enums, registry)?;
+                }
                 if let Some(slot) = &n.content {
                     validate_content_items_type_annotations(&slot.items, enums, registry)?;
                 }
@@ -438,6 +513,17 @@ pub(super) fn infer_expr_literal_for_typecheck<'a>(
         }
         Expr::MemberAccess(m) => {
             let member = m.member.as_str();
+            if let Expr::Ident(target_id) = m.target.as_ref() {
+                if let Some(nid) = target_id.node_id() {
+                    if member.starts_with("__expr_") {
+                        if let Some(mat_expr) =
+                            super::rewrite::lookup_materialized_expr_port(nid, member, ctx.nodes)
+                        {
+                            return infer_expr_literal_for_typecheck(&mat_expr, ctx);
+                        }
+                    }
+                }
+            }
             if matches!(
                 member,
                 "size"
@@ -891,6 +977,17 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                 if target_id.as_str() == "children" && m.member.as_str() == "len" {
                     return Some(Literal::Integer(ctx.num_children as i64, m.span));
                 }
+                if let Some(nid) = target_id.node_id() {
+                    if m.member.as_str().starts_with("__expr_") {
+                        if let Some(mat_expr) = super::rewrite::lookup_materialized_expr_port(
+                            nid,
+                            m.member.as_str(),
+                            ctx.nodes,
+                        ) {
+                            return resolve_ident_or_member_to_literal(&mat_expr, ctx);
+                        }
+                    }
+                }
                 if let Some(enum_def) = ctx.enums.get(target_id.as_str()) {
                     if enum_def.has_variant(m.member.as_str()) {
                         return Some(Literal::Enum(
@@ -1173,10 +1270,11 @@ pub fn typecheck_expanded_document(
                 registry,
                 &mut cache,
             )?;
-            if inferred == StaticType::Handler && !doc.nodes[idx].port_types.contains_key(port_name)
+            if (inferred == StaticType::Handler || inferred == StaticType::Expr)
+                && !doc.nodes[idx].port_types.contains_key(port_name)
             {
                 std::sync::Arc::make_mut(&mut doc.nodes[idx].port_types)
-                    .insert(port_name.clone(), "Handler".to_string());
+                    .insert(port_name.clone(), inferred.type_name());
             }
         }
     }
@@ -1277,11 +1375,25 @@ fn infer_port_type(
         return Ok(StaticType::Float);
     }
 
+    let materialized_fallback = if node_id.is_window() {
+        doc.window_ports
+            .get(port_name)
+            .is_none()
+            .then(|| super::rewrite::get_materialized_expr_port(node_id, port_name))
+            .flatten()
+    } else {
+        doc.get_node(node_id)
+            .and_then(|n| n.ports.get(port_name))
+            .is_none()
+            .then(|| super::rewrite::get_materialized_expr_port(node_id, port_name))
+            .flatten()
+    };
     let expr_opt = if node_id.is_window() {
         doc.window_ports.get(port_name)
     } else {
         doc.get_node(node_id).and_then(|n| n.ports.get(port_name))
-    };
+    }
+    .or(materialized_fallback.as_ref());
 
     let result = if let Some(expr) = expr_opt {
         let actual = infer_expr_type(expr, doc, enums, registry, cache)?;
@@ -1414,14 +1526,22 @@ fn infer_expr_type(
                     }
                     let has_port = if node_id.is_window() {
                         doc.window_ports.contains_key(m.member.as_str())
+                            || super::rewrite::has_materialized_expr_port(
+                                node_id,
+                                m.member.as_str(),
+                            )
                             || known_builtin_port_type("Window", m.member.as_str()).is_some()
                     } else if let Some(node) = doc.get_node(node_id) {
                         node.ports.contains_key(m.member.as_str())
                             || node.port_types.contains_key(m.member.as_str())
+                            || super::rewrite::has_materialized_expr_port(
+                                node_id,
+                                m.member.as_str(),
+                            )
                             || (!node.is_component
                                 && known_builtin_port_type(&node.name, m.member.as_str()).is_some())
                     } else {
-                        false
+                        super::rewrite::has_materialized_expr_port(node_id, m.member.as_str())
                     };
                     if has_port {
                         return infer_port_type(
@@ -2065,6 +2185,7 @@ fn infer_expr_type(
             }
             _ => Ok(StaticType::Node(elem.name.as_str().to_string())),
         },
+        Expr::ExprDef(_) => Ok(StaticType::Expr),
     }
 }
 

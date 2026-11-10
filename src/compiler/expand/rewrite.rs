@@ -183,6 +183,9 @@ thread_local! {
     static PENDING_FWD_BINDINGS: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
     static FWD_REF_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     static UNFOLDED_TERNARY_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    static MATERIALIZED_EXPR_PORTS: std::cell::RefCell<HashMap<NodeId, Vec<(String, Expr)>>> = std::cell::RefCell::new(HashMap::new());
+    static PENDING_EXPR_TYPECHECKS: std::cell::RefCell<Vec<(Expr, Option<String>, Span)>> = const { std::cell::RefCell::new(Vec::new()) };
+    static ACTIVE_EXPR_EVAL_STACK: std::cell::RefCell<Vec<Span>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 pub(in crate::compiler::expand) fn reset_rewrite_tracking() {
@@ -190,6 +193,117 @@ pub(in crate::compiler::expand) fn reset_rewrite_tracking() {
     PENDING_FWD_BINDINGS.with(|c| c.borrow_mut().clear());
     FWD_REF_COUNT.with(|c| c.set(0));
     UNFOLDED_TERNARY_COUNT.with(|c| c.set(0));
+    MATERIALIZED_EXPR_PORTS.with(|c| c.borrow_mut().clear());
+    PENDING_EXPR_TYPECHECKS.with(|c| c.borrow_mut().clear());
+    ACTIVE_EXPR_EVAL_STACK.with(|c| c.borrow_mut().clear());
+}
+
+/// Materializes an evaluated `\Expr` body as a synthetic DAG port (`__expr_N`) on `owner_node`,
+/// deduplicating structurally identical expressions on the same node.
+pub(in crate::compiler::expand) fn materialize_expr_instance(
+    owner_node: NodeId,
+    expanded_body: Expr,
+    call_span: Span,
+) -> Expr {
+    if owner_node.is_template_self() {
+        return expanded_body;
+    }
+    let port_name = MATERIALIZED_EXPR_PORTS.with(|cell| {
+        let mut map = cell.borrow_mut();
+        let list = map.entry(owner_node).or_default();
+        if let Some((existing_name, _)) = list
+            .iter()
+            .find(|(_, existing_expr)| expr_eq_ignore_span(existing_expr, &expanded_body))
+        {
+            return existing_name.clone();
+        }
+        let name = format!("__expr_{}", list.len());
+        list.push((name.clone(), expanded_body));
+        name
+    });
+    Expr::MemberAccess(MemberAccessExpr {
+        target: Box::new(Expr::Ident(Ident::from_node(owner_node, call_span))),
+        member: Ident::new(port_name, call_span),
+        span: call_span,
+    })
+}
+
+pub(in crate::compiler::expand) fn get_materialized_expr_port(
+    node_id: NodeId,
+    port_name: &str,
+) -> Option<Expr> {
+    MATERIALIZED_EXPR_PORTS.with(|cell| {
+        let map = cell.borrow();
+        map.get(&node_id)?
+            .iter()
+            .find(|(k, _)| k == port_name)
+            .map(|(_, v)| v.clone())
+    })
+}
+
+pub(in crate::compiler::expand) fn has_materialized_expr_port(
+    node_id: NodeId,
+    port_name: &str,
+) -> bool {
+    MATERIALIZED_EXPR_PORTS.with(|cell| {
+        let map = cell.borrow();
+        map.get(&node_id)
+            .is_some_and(|list| list.iter().any(|(k, _)| k == port_name))
+    })
+}
+
+pub(in crate::compiler::expand) fn lookup_materialized_expr_port(
+    node_id: NodeId,
+    port_name: &str,
+    nodes: &[crate::compiler::expanded::ExpandedNode],
+) -> Option<Expr> {
+    if !node_id.is_window() && !node_id.is_template_self() {
+        if let Some(expr) = nodes.get(node_id.0).and_then(|n| n.ports.get(port_name)) {
+            return Some(expr.clone());
+        }
+    }
+    get_materialized_expr_port(node_id, port_name)
+}
+
+pub(in crate::compiler::expand) fn sync_materialized_expr_ports_for_node(
+    node_id: NodeId,
+    ports: &mut HashMap<String, Expr>,
+) {
+    MATERIALIZED_EXPR_PORTS.with(|cell| {
+        let map = cell.borrow();
+        if let Some(list) = map.get(&node_id) {
+            for (k, v) in list {
+                ports.entry(k.clone()).or_insert_with(|| v.clone());
+            }
+        }
+    });
+}
+
+pub(in crate::compiler::expand) fn flush_all_materialized_expr_ports(
+    doc: &mut crate::compiler::expanded::ExpandedDocument,
+) {
+    MATERIALIZED_EXPR_PORTS.with(|cell| {
+        let map = cell.borrow();
+        for (&node_id, list) in map.iter() {
+            if node_id.is_window() {
+                for (k, v) in list {
+                    doc.window_ports
+                        .entry(k.clone())
+                        .or_insert_with(|| v.clone());
+                }
+            } else if !node_id.is_template_self() {
+                if let Some(node) = doc.nodes.get_mut(node_id.0) {
+                    for (k, v) in list {
+                        node.ports.entry(k.clone()).or_insert_with(|| v.clone());
+                    }
+                }
+            }
+        }
+    });
+    PENDING_EXPR_TYPECHECKS.with(|cell| {
+        let mut checks = cell.borrow_mut();
+        doc.local_bindings.append(&mut checks);
+    });
 }
 
 #[inline]
@@ -270,6 +384,19 @@ pub(super) fn resolve_forward_refs_in_range(
             still_has_unresolved
         });
     });
+    MATERIALIZED_EXPR_PORTS.with(|cell| {
+        let mut map = cell.borrow_mut();
+        for (&node_id, list) in map.iter_mut() {
+            if !node_id.is_window() && node_id.0 < start_node_idx {
+                continue;
+            }
+            for (_, expr) in list.iter_mut() {
+                if expr_has_scope_ref(expr, scope) {
+                    *expr = resolve_forward_scope_refs(expr, scope);
+                }
+            }
+        }
+    });
     PENDING_FWD_BINDINGS.with(|cell| {
         let mut pending = cell.borrow_mut();
         if pending.is_empty() {
@@ -342,7 +469,7 @@ pub(super) fn expr_vars_in_env(
         Expr::MethodCall(m) => {
             expr_vars_in_env(&m.target, env) && m.args.iter().all(|a| expr_vars_in_env(a, env))
         }
-        Expr::Node(_) => false,
+        Expr::Node(_) | Expr::ExprDef(_) => false,
     }
 }
 
@@ -534,12 +661,535 @@ fn resolve_active_font_size_expr(
     }
 }
 
+fn split_outer_member_chain(expr: &Expr) -> Option<(usize, Vec<Ident>)> {
+    let mut members = Vec::new();
+    let mut cur = expr;
+    while let Expr::MemberAccess(m) = cur {
+        members.push(m.member);
+        cur = m.target.as_ref();
+    }
+    if let Expr::Ident(root_id) = cur {
+        if root_id.name == Symbol::OUTER {
+            members.push(*root_id);
+            members.reverse();
+            let k = members
+                .iter()
+                .take_while(|id| id.name == Symbol::OUTER)
+                .count();
+            return Some((k, members));
+        }
+    }
+    None
+}
+
+fn build_member_chain(chain: &[Ident], full_span: Span) -> Expr {
+    let mut expr = Expr::Ident(chain[0]);
+    for (idx, member) in chain[1..].iter().enumerate() {
+        let span = if idx + 2 == chain.len() {
+            full_span
+        } else {
+            member.span
+        };
+        expr = Expr::MemberAccess(MemberAccessExpr {
+            target: Box::new(expr),
+            member: *member,
+            span,
+        });
+    }
+    expr
+}
+
+fn first_unresolved_lexical_ident(expr: &Expr) -> Option<Ident> {
+    match expr {
+        Expr::Ident(id) => {
+            if !id.is_canonical_node_ref()
+                && id.name.agg_child_of_node().is_none()
+                && id.name.next_of_node().is_none()
+                && id.name != Symbol::WINDOW
+                && id.name != Symbol::UNSET
+                && id.name != Symbol::NONE
+            {
+                Some(*id)
+            } else {
+                None
+            }
+        }
+        Expr::MemberAccess(m) => first_unresolved_lexical_ident(&m.target),
+        Expr::Binary(b) => first_unresolved_lexical_ident(&b.left)
+            .or_else(|| first_unresolved_lexical_ident(&b.right)),
+        Expr::Unary(u) => first_unresolved_lexical_ident(&u.operand),
+        Expr::Ternary(t) => first_unresolved_lexical_ident(&t.condition)
+            .or_else(|| first_unresolved_lexical_ident(&t.then_expr))
+            .or_else(|| first_unresolved_lexical_ident(&t.else_expr)),
+        Expr::Paren(inner, _) => first_unresolved_lexical_ident(inner),
+        Expr::Call(c) => c.args.iter().find_map(first_unresolved_lexical_ident),
+        Expr::MethodCall(mc) => first_unresolved_lexical_ident(&mc.target)
+            .or_else(|| mc.args.iter().find_map(first_unresolved_lexical_ident)),
+        Expr::Node(_) | Expr::ExprDef(_) | Expr::Literal(_) => None,
+    }
+}
+
+fn resolve_outer_chain(
+    chain: &[Ident],
+    k: usize,
+    full_span: Span,
+    creation_ctx: &ScopeContext<'_>,
+) -> Result<Expr, CompileError> {
+    let mut stripped_chain: Vec<Ident> = chain[k..].to_vec();
+    if stripped_chain[0].name == Symbol::SELF && stripped_chain.len() > 1 {
+        if let Some(comp_id) = creation_ctx.enclosing_component {
+            if !creation_ctx.is_event_port
+                && !creation_ctx
+                    .shadowed_ports
+                    .is_some_and(|s| s.contains(stripped_chain[1].as_str()))
+            {
+                stripped_chain[0] = Ident::from_node(comp_id, stripped_chain[0].span);
+            }
+        }
+    }
+    let stripped_expr = build_member_chain(&stripped_chain, full_span);
+    let rewritten = rewrite_expr(&stripped_expr, creation_ctx)?;
+    if let Some(bad_id) = first_unresolved_lexical_ident(&rewritten) {
+        return Err(CompileError::Custom {
+            message: format!(
+                "Undefined variable or property '{}' in 'outer'",
+                bad_id.as_str()
+            ),
+            span: bad_id.span,
+        });
+    }
+    Ok(rewritten)
+}
+
+fn rewrite_outer_in_expr(
+    expr: &Expr,
+    depth: usize,
+    creation_ctx: &ScopeContext<'_>,
+) -> Result<Expr, CompileError> {
+    match expr {
+        Expr::Ident(id) => {
+            if id.name == Symbol::OUTER {
+                return Err(CompileError::Custom {
+                    message: "Bare 'outer' is not allowed; use 'outer.<property>' to access a property from the outer scope".to_string(),
+                    span: id.span,
+                });
+            }
+            Ok(expr.clone())
+        }
+        Expr::MemberAccess(m) => {
+            if let Some((k, chain)) = split_outer_member_chain(expr) {
+                if k == chain.len() {
+                    return Err(CompileError::Custom {
+                        message: "Bare 'outer' is not allowed; use 'outer.<property>' to access a property from the outer scope".to_string(),
+                        span: expr.span(),
+                    });
+                }
+                if k > depth + 1 {
+                    return Err(CompileError::Custom {
+                        message: "Too many 'outer.' prefixes for the current '\\Expr' nesting depth"
+                            .to_string(),
+                        span: expr.span(),
+                    });
+                }
+                if k == depth + 1 {
+                    return resolve_outer_chain(&chain, k, expr.span(), creation_ctx);
+                }
+                return Ok(expr.clone());
+            }
+            Ok(Expr::MemberAccess(MemberAccessExpr {
+                target: Box::new(rewrite_outer_in_expr(&m.target, depth, creation_ctx)?),
+                member: m.member,
+                span: m.span,
+            }))
+        }
+        Expr::Call(call) => {
+            let mut rewritten_args = Vec::with_capacity(call.args.len());
+            for arg in &call.args {
+                if let Expr::MemberAccess(m) = arg {
+                    if let Some((k, chain)) = split_outer_member_chain(arg) {
+                        if k == depth + 1
+                            && chain.len() == k + 2
+                            && chain[k].name == Symbol::CHILDREN
+                            && chain[k + 1].name != Symbol::LEN
+                        {
+                            if let Some(comp_id) = creation_ctx.enclosing_component {
+                                if creation_ctx.num_children > 0 {
+                                    super::aggregation::record_agg_emitted(comp_id);
+                                }
+                                for idx in 0..creation_ctx.num_children {
+                                    rewritten_args.push(Expr::MemberAccess(MemberAccessExpr {
+                                        target: Box::new(Expr::Ident(Ident::agg_child_of(
+                                            comp_id,
+                                            idx,
+                                            chain[k].span,
+                                        ))),
+                                        member: chain[k + 1],
+                                        span: m.span,
+                                    }));
+                                }
+                                continue;
+                            } else if creation_ctx.child_ids.len() == creation_ctx.num_children {
+                                for &child_id in creation_ctx.child_ids {
+                                    rewritten_args.push(Expr::MemberAccess(MemberAccessExpr {
+                                        target: Box::new(Expr::Ident(Ident::from_node(
+                                            child_id,
+                                            chain[k].span,
+                                        ))),
+                                        member: chain[k + 1],
+                                        span: m.span,
+                                    }));
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                }
+                rewritten_args.push(rewrite_outer_in_expr(arg, depth, creation_ctx)?);
+            }
+            Ok(Expr::Call(CallExpr {
+                callee: call.callee,
+                args: rewritten_args,
+                span: call.span,
+            }))
+        }
+        Expr::MethodCall(mc) => {
+            let mut rewritten_args = Vec::with_capacity(mc.args.len());
+            for arg in &mc.args {
+                rewritten_args.push(rewrite_outer_in_expr(arg, depth, creation_ctx)?);
+            }
+            let target_outer = match mc.target.as_ref() {
+                Expr::Ident(id) if id.name == Symbol::OUTER => Some((1, vec![*id])),
+                _ => split_outer_member_chain(&mc.target),
+            };
+            if let Some((k, target_chain)) = target_outer {
+                if k == target_chain.len() {
+                    if k > depth + 1 {
+                        return Err(CompileError::Custom {
+                            message:
+                                "Too many 'outer.' prefixes for the current '\\Expr' nesting depth"
+                                    .to_string(),
+                            span: mc.span,
+                        });
+                    }
+                    if k == depth + 1 {
+                        let mut full_chain = target_chain;
+                        full_chain.push(mc.method);
+                        let rewritten_callee =
+                            resolve_outer_chain(&full_chain, k, mc.span, creation_ctx)?;
+                        return Ok(Expr::MethodCall(MethodCallExpr {
+                            target: Box::new(rewritten_callee),
+                            method: Ident::from_symbol(Symbol::EMPTY, mc.method.span),
+                            args: rewritten_args,
+                            span: mc.span,
+                        }));
+                    }
+                    return Ok(Expr::MethodCall(MethodCallExpr {
+                        target: mc.target.clone(),
+                        method: mc.method,
+                        args: rewritten_args,
+                        span: mc.span,
+                    }));
+                }
+            }
+            Ok(Expr::MethodCall(MethodCallExpr {
+                target: Box::new(rewrite_outer_in_expr(&mc.target, depth, creation_ctx)?),
+                method: mc.method,
+                args: rewritten_args,
+                span: mc.span,
+            }))
+        }
+        Expr::Binary(b) => Ok(Expr::Binary(BinaryExpr {
+            op: b.op,
+            left: Box::new(rewrite_outer_in_expr(&b.left, depth, creation_ctx)?),
+            right: Box::new(rewrite_outer_in_expr(&b.right, depth, creation_ctx)?),
+            span: b.span,
+        })),
+        Expr::Unary(u) => Ok(Expr::Unary(UnaryExpr {
+            op: u.op,
+            operand: Box::new(rewrite_outer_in_expr(&u.operand, depth, creation_ctx)?),
+            span: u.span,
+        })),
+        Expr::Ternary(t) => Ok(Expr::Ternary(TernaryExpr {
+            condition: Box::new(rewrite_outer_in_expr(&t.condition, depth, creation_ctx)?),
+            then_expr: Box::new(rewrite_outer_in_expr(&t.then_expr, depth, creation_ctx)?),
+            else_expr: Box::new(rewrite_outer_in_expr(&t.else_expr, depth, creation_ctx)?),
+            span: t.span,
+        })),
+        Expr::Paren(inner, span) => Ok(Expr::Paren(
+            Box::new(rewrite_outer_in_expr(inner, depth, creation_ctx)?),
+            *span,
+        )),
+        Expr::Node(n) => {
+            let mut cloned = n.clone();
+            for port in &mut cloned.ports {
+                port.expr = rewrite_outer_in_expr(&port.expr, depth, creation_ctx)?;
+            }
+            Ok(Expr::Node(cloned))
+        }
+        Expr::ExprDef(nested) => {
+            let mut params = Vec::with_capacity(nested.params.len());
+            for param in &nested.params {
+                let default_edge = match &param.default_edge {
+                    Some(d) => Some(rewrite_outer_in_expr(d, depth + 1, creation_ctx)?),
+                    None => None,
+                };
+                params.push(ParamDef {
+                    name: param.name,
+                    type_annotation: param.type_annotation.clone(),
+                    default_edge,
+                    is_env: param.is_env,
+                    span: param.span,
+                });
+            }
+            let body = rewrite_outer_in_expr(&nested.body, depth + 1, creation_ctx)?;
+            Ok(Expr::ExprDef(Box::new(ExprDef {
+                params,
+                body: Box::new(body),
+                span: nested.span,
+            })))
+        }
+        Expr::Literal(_) => Ok(expr.clone()),
+    }
+}
+
+pub(super) fn rewrite_expr_def_at_creation(
+    def: &ExprDef,
+    creation_ctx: &ScopeContext<'_>,
+) -> Result<Expr, CompileError> {
+    let mut seen_params = std::collections::HashSet::with_capacity(def.params.len());
+    let mut params = Vec::with_capacity(def.params.len());
+    for param in &def.params {
+        if !seen_params.insert(param.name.name) {
+            return Err(CompileError::Custom {
+                message: format!("Duplicate parameter '{}' in '\\Expr'", param.name),
+                span: param.name.span,
+            });
+        }
+        let default_edge = match &param.default_edge {
+            Some(d) => Some(rewrite_outer_in_expr(d, 0, creation_ctx)?),
+            None => None,
+        };
+        params.push(ParamDef {
+            name: param.name,
+            type_annotation: param.type_annotation.clone(),
+            default_edge,
+            is_env: param.is_env,
+            span: param.span,
+        });
+    }
+    let body = rewrite_outer_in_expr(&def.body, 0, creation_ctx)?;
+    Ok(Expr::ExprDef(Box::new(ExprDef {
+        params,
+        body: Box::new(body),
+        span: def.span,
+    })))
+}
+
+fn lookup_expr_def_on_node(
+    node_id: NodeId,
+    member_name: &str,
+    ctx: &ScopeContext<'_>,
+) -> Option<Box<ExprDef>> {
+    if Some(node_id) == ctx.enclosing_component || node_id == ctx.current_node {
+        if let Some(comp_ports) = ctx.comp_ports {
+            if let Some(Expr::ExprDef(def)) = comp_ports.get(member_name) {
+                return Some(def.clone());
+            }
+        }
+    }
+    if !node_id.is_window() && !node_id.is_template_self() {
+        if let Some(node) = ctx.nodes.get(node_id.0) {
+            if let Some(Expr::ExprDef(def)) = node.ports.get(member_name) {
+                return Some(def.clone());
+            }
+        }
+    }
+    None
+}
+
+fn eval_expr_def_call(
+    def: &ExprDef,
+    raw_args: &[Expr],
+    call_span: Span,
+    ctx: &ScopeContext<'_>,
+) -> Result<Expr, CompileError> {
+    let is_recursive = ACTIVE_EXPR_EVAL_STACK.with(|cell| {
+        let stack = cell.borrow();
+        stack.len() >= 64 || stack.contains(&def.span)
+    });
+    if is_recursive {
+        return Err(CompileError::Custom {
+            message: "Recursive '\\Expr' evaluation is not allowed".to_string(),
+            span: call_span,
+        });
+    }
+
+    let max_args = def.params.len();
+    let min_args = def
+        .params
+        .iter()
+        .filter(|p| p.default_edge.is_none())
+        .count();
+    let missing_required = raw_args.len() > max_args
+        || def
+            .params
+            .iter()
+            .skip(raw_args.len())
+            .any(|p| p.default_edge.is_none());
+    if missing_required {
+        let expected_str = if min_args == max_args {
+            format!("{}", max_args)
+        } else {
+            format!("{}..={}", min_args, max_args)
+        };
+        return Err(CompileError::Custom {
+            message: format!(
+                "'\\Expr' expects {} argument(s), got {}",
+                expected_str,
+                raw_args.len()
+            ),
+            span: call_span,
+        });
+    }
+
+    let mut call_lexical_scope = ctx.lexical_scope.clone();
+    let mut shadowed_ports_owned: Option<std::collections::HashSet<String>> = None;
+    if !def.params.is_empty() {
+        if let Some(existing_shadowed) = ctx.shadowed_ports {
+            let mut s = existing_shadowed.clone();
+            for p in &def.params {
+                s.insert(p.name.as_str().to_string());
+            }
+            shadowed_ports_owned = Some(s);
+        }
+    }
+
+    for (idx, param) in def.params.iter().enumerate() {
+        let arg_span;
+        let mut rewritten_arg = if idx < raw_args.len() {
+            let raw_arg = &raw_args[idx];
+            arg_span = raw_arg.span();
+            if let Expr::Ident(id) = raw_arg {
+                if id.name == Symbol::SELF {
+                    if let Some(comp_id) = ctx.enclosing_component {
+                        Expr::Ident(Ident::from_node(comp_id, id.span))
+                    } else {
+                        rewrite_expr(raw_arg, ctx)?
+                    }
+                } else {
+                    rewrite_expr(raw_arg, ctx)?
+                }
+            } else {
+                rewrite_expr(raw_arg, ctx)?
+            }
+        } else {
+            let default_expr = param.default_edge.as_ref().unwrap();
+            arg_span = default_expr.span();
+            let mut default_ctx = ctx.clone();
+            default_ctx.lexical_scope = &call_lexical_scope;
+            if let Some(ref s) = shadowed_ports_owned {
+                default_ctx.shadowed_ports = Some(s);
+            }
+            rewrite_expr(default_expr, &default_ctx)?
+        };
+
+        if let Some(type_ref) = &param.type_annotation {
+            let expected_type = type_ref.name.as_str();
+            rewritten_arg =
+                super::typecheck::coerce_typed_binding_expr(rewritten_arg, Some(type_ref));
+            if matches!(expected_type, "Expr" | "Expression") {
+                if !matches!(rewritten_arg, Expr::ExprDef(_)) {
+                    let actual_str =
+                        if let Some(lit) = infer_expr_literal_for_typecheck(&rewritten_arg, ctx) {
+                            lit.type_name().to_string()
+                        } else {
+                            "non-Expr".to_string()
+                        };
+                    return Err(CompileError::TypeMismatch {
+                        expected: expected_type.to_string(),
+                        actual: actual_str,
+                        span: arg_span,
+                    });
+                }
+            } else if matches!(rewritten_arg, Expr::ExprDef(_)) {
+                return Err(CompileError::TypeMismatch {
+                    expected: expected_type.to_string(),
+                    actual: "Expr".to_string(),
+                    span: arg_span,
+                });
+            } else if let Some(lit) = infer_expr_literal_for_typecheck(&rewritten_arg, ctx) {
+                if !lit.matches_type_name(expected_type) {
+                    return Err(CompileError::TypeMismatch {
+                        expected: expected_type.to_string(),
+                        actual: lit.type_name().to_string(),
+                        span: arg_span,
+                    });
+                }
+            } else {
+                PENDING_EXPR_TYPECHECKS.with(|cell| {
+                    cell.borrow_mut().push((
+                        rewritten_arg.clone(),
+                        Some(expected_type.to_string()),
+                        type_ref.span,
+                    ));
+                });
+            }
+        }
+
+        let binding = match &rewritten_arg {
+            Expr::Ident(id) if id.node_id().is_some() => {
+                LexicalBinding::Node(id.node_id().unwrap())
+            }
+            _ => LexicalBinding::Expr(rewritten_arg),
+        };
+        call_lexical_scope.insert(param.name.name, binding);
+    }
+
+    ACTIVE_EXPR_EVAL_STACK.with(|cell| cell.borrow_mut().push(def.span));
+    let mut body_ctx = ctx.clone();
+    body_ctx.lexical_scope = &call_lexical_scope;
+    if let Some(ref s) = shadowed_ports_owned {
+        body_ctx.shadowed_ports = Some(s);
+    }
+    let body_res = rewrite_expr(&def.body, &body_ctx);
+    ACTIVE_EXPR_EVAL_STACK.with(|cell| {
+        cell.borrow_mut().pop();
+    });
+    let expanded_body = body_res?;
+
+    if ctx.is_event_port
+        || matches!(expanded_body, Expr::ExprDef(_) | Expr::Node(_))
+        || matches!(
+            &expanded_body,
+            Expr::Ident(id)
+                if id.is_canonical_node_ref()
+                    || id.name == Symbol::WINDOW
+                    || id.name == Symbol::UNSET
+                    || id.name == Symbol::NONE
+        )
+    {
+        return Ok(expanded_body);
+    }
+
+    Ok(materialize_expr_instance(
+        ctx.current_node,
+        expanded_body,
+        call_span,
+    ))
+}
+
 /// Recursively rewrites an expression into canonical node variable references and resolves derived aliases.
 pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, CompileError> {
     match expr {
         Expr::Ident(id) => {
             if id.name == Symbol::ENV {
                 return Err(CompileError::BareEnvUse { span: id.span });
+            }
+            if id.name == Symbol::OUTER {
+                return Err(CompileError::Custom {
+                    message: "'outer' can only be used inside an '\\Expr' literal".to_string(),
+                    span: id.span,
+                });
             }
             if !id.is_canonical_node_ref() && ctx.enums.contains_key(id.as_str()) {
                 return Err(CompileError::BareEnumUse {
@@ -570,6 +1220,11 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         LexicalBinding::Member {
                             node_id, member, ..
                         } => {
+                            if let Some(def) =
+                                lookup_expr_def_on_node(*node_id, member.as_str(), ctx)
+                            {
+                                return Ok(Expr::ExprDef(def));
+                            }
                             return Ok(Expr::MemberAccess(MemberAccessExpr {
                                 target: Box::new(Expr::Ident(Ident::from_node(*node_id, id.span))),
                                 member: Ident::from_symbol(member.name, id.span),
@@ -1015,7 +1670,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     if target_node.private_ports.contains(m.member.as_str())
                         && ctx.current_node != tid
                         && ctx.enclosing_component != Some(tid)
-                        && !target_ident.is_some_and(|id| id.name == Symbol::PARENT)
+                        && !target_ident.is_some_and(|id| {
+                            id.name == Symbol::PARENT || id.is_canonical_node_ref()
+                        })
                     {
                         return Err(CompileError::Custom {
                             message: format!(
@@ -1025,6 +1682,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             span: m.span,
                         });
                     }
+                }
+                if let Some(def) = lookup_expr_def_on_node(tid, m.member.as_str(), ctx) {
+                    return Ok(Expr::ExprDef(def));
                 }
             }
 
@@ -1036,6 +1696,106 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
         }
 
         Expr::Call(call) => {
+            let is_builtin_fn = matches!(
+                call.callee.as_str(),
+                "max"
+                    | "min"
+                    | "sum"
+                    | "only"
+                    | "clamp"
+                    | "round"
+                    | "floor"
+                    | "ceil"
+                    | "abs"
+                    | "hypot"
+                    | "sqrt"
+                    | "sin"
+                    | "cos"
+                    | "tan"
+                    | "atan2"
+                    | "hsl"
+                    | "hsla"
+                    | "rgb"
+                    | "rgba"
+                    | "distance_to_float"
+                    | "to_fixed"
+                    | "to_precision"
+                    | "to_px"
+                    | "to_pt"
+                    | "to_float"
+                    | "to_number"
+                    | "to_integer"
+                    | "text_width"
+                    | "text_height"
+                    | "text_baseline_offset"
+                    | "span_metric"
+                    | "font_cap_height"
+                    | "font_x_height"
+                    | "font_ascent"
+                    | "font_descent"
+                    | "font_line_gap"
+                    | "font_line_height"
+            );
+            if call.callee.name != Symbol::SELF
+                && call.callee.name != Symbol::PARENT
+                && call.callee.name != Symbol::WINDOW
+                && call.callee.name != Symbol::PREV
+                && call.callee.name != Symbol::NEXT
+                && call.callee.name != Symbol::CHILD
+            {
+                if let Some(binding) = ctx.lexical_scope.get(&call.callee.name) {
+                    match binding {
+                        LexicalBinding::Expr(Expr::ExprDef(def)) => {
+                            let def_cloned = def.clone();
+                            return eval_expr_def_call(&def_cloned, &call.args, call.span, ctx);
+                        }
+                        LexicalBinding::Member {
+                            node_id, member, ..
+                        } => {
+                            if let Some(def) =
+                                lookup_expr_def_on_node(*node_id, member.as_str(), ctx)
+                            {
+                                return eval_expr_def_call(&def, &call.args, call.span, ctx);
+                            }
+                            if !is_builtin_fn {
+                                return Err(CompileError::Custom {
+                                    message: format!(
+                                        "'{}' is not an '\\Expr' and cannot be called",
+                                        call.callee
+                                    ),
+                                    span: call.span,
+                                });
+                            }
+                        }
+                        LexicalBinding::Uninitialized if !is_builtin_fn => {
+                            return Err(CompileError::UninitializedVariableUse {
+                                name: call.callee.as_str().to_string(),
+                                span: call.callee.span,
+                            });
+                        }
+                        LexicalBinding::Expr(_)
+                        | LexicalBinding::State(_)
+                        | LexicalBinding::Node(_)
+                        | LexicalBinding::Uninitialized => {
+                            if !is_builtin_fn {
+                                return Err(CompileError::Custom {
+                                    message: format!(
+                                        "'{}' is not an '\\Expr' and cannot be called",
+                                        call.callee
+                                    ),
+                                    span: call.span,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(comp_id) = ctx.enclosing_component {
+                if let Some(def) = lookup_expr_def_on_node(comp_id, call.callee.as_str(), ctx) {
+                    return eval_expr_def_call(&def, &call.args, call.span, ctx);
+                }
+            }
+
             if call.callee.as_str() == "distance_to_float" {
                 if call.args.len() != 2 {
                     return Err(CompileError::Custom {
@@ -1148,6 +1908,96 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
         }
 
         Expr::MethodCall(mc) => {
+            if mc.method.name == Symbol::EMPTY {
+                let callee = match mc.target.as_ref() {
+                    Expr::ExprDef(def) => Expr::ExprDef(def.clone()),
+                    other => rewrite_expr(other, ctx)?,
+                };
+                match callee {
+                    Expr::ExprDef(def) => {
+                        return eval_expr_def_call(&def, &mc.args, mc.span, ctx);
+                    }
+                    Expr::MemberAccess(m) => {
+                        if let Expr::Ident(tid) = m.target.as_ref() {
+                            if let Some(nid) = tid.node_id() {
+                                if let Some(def) =
+                                    lookup_expr_def_on_node(nid, m.member.as_str(), ctx)
+                                {
+                                    return eval_expr_def_call(&def, &mc.args, mc.span, ctx);
+                                }
+                            }
+                        }
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Property '{}' is not an '\\Expr' and cannot be called",
+                                m.member
+                            ),
+                            span: mc.span,
+                        });
+                    }
+                    _ => {
+                        return Err(CompileError::Custom {
+                            message: "Target is not an '\\Expr' and cannot be called".to_string(),
+                            span: mc.span,
+                        });
+                    }
+                }
+            }
+
+            let is_builtin_method = matches!(
+                mc.method.as_str(),
+                "append"
+                    | "to_fixed"
+                    | "to_precision"
+                    | "to_px"
+                    | "to_pt"
+                    | "to_float"
+                    | "to_number"
+                    | "to_seconds"
+                    | "to_ms"
+                    | "to_integer"
+            );
+            if !ctx.is_event_port && !is_builtin_method {
+                let member_expr = Expr::MemberAccess(MemberAccessExpr {
+                    target: mc.target.clone(),
+                    member: mc.method,
+                    span: mc.span,
+                });
+                let resolved_member = rewrite_expr(&member_expr, ctx)?;
+                match resolved_member {
+                    Expr::ExprDef(def) => {
+                        return eval_expr_def_call(&def, &mc.args, mc.span, ctx);
+                    }
+                    Expr::MemberAccess(m) => {
+                        if let Expr::Ident(tid) = m.target.as_ref() {
+                            if let Some(nid) = tid.node_id() {
+                                if let Some(def) =
+                                    lookup_expr_def_on_node(nid, m.member.as_str(), ctx)
+                                {
+                                    return eval_expr_def_call(&def, &mc.args, mc.span, ctx);
+                                }
+                            }
+                        }
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Property '{}' is not an '\\Expr' and cannot be called",
+                                mc.method
+                            ),
+                            span: mc.span,
+                        });
+                    }
+                    _ => {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Property '{}' is not an '\\Expr' and cannot be called",
+                                mc.method
+                            ),
+                            span: mc.span,
+                        });
+                    }
+                }
+            }
+
             let mut rewritten_args = Vec::new();
             for arg in &mc.args {
                 rewritten_args.push(rewrite_expr(arg, ctx)?);
@@ -1223,6 +2073,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
             Ok(Expr::Node(cloned))
         }
+        Expr::ExprDef(def) => rewrite_expr_def_at_creation(def, ctx),
     }
 }
 
@@ -1615,6 +2466,7 @@ pub(super) fn instantiate_template_expr(
             })
         }
         Expr::Node(n) => Expr::Node(n.clone()),
+        Expr::ExprDef(def) => Expr::ExprDef(def.clone()),
     }
 }
 

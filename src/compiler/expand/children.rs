@@ -709,6 +709,11 @@ pub(super) fn expand_caller_slot_envs(
                                 children_env_scope,
                                 node_fonts,
                                 caller_child_ids,
+                            )
+                            .with_parent(
+                                Some(ctx.comp_node_id),
+                                Some(comp_def.name.as_str()),
+                                comp_scope_ports,
                             );
                             rewrite_expr(raw_expr, &scope_ctx)?
                         };
@@ -741,6 +746,52 @@ pub(super) fn expand_caller_slot_envs(
                 );
                 children_env_scope
                     .insert(env_binding.name.as_str().to_string(), EnvEntry::Tombstone);
+            }
+        } else if let ContentItem::Let(let_binding) = item {
+            if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
+                let is_expr_def = matches!(raw_expr, Expr::ExprDef(_));
+                if is_expr_def || !lexical_scope.borrow().contains_key(&let_binding.name.name) {
+                    let rewritten = {
+                        let scope_borrow = lexical_scope.borrow();
+                        let empty_children: [NodeId; 0] = [];
+                        let caller_inst_borrow =
+                            ctx.enclosing_instantiated_children.map(|c| c.borrow());
+                        let caller_child_ids: &[NodeId] = match &caller_inst_borrow {
+                            Some(b) => b.as_slice(),
+                            None => &empty_children,
+                        };
+                        let scope_ctx = ScopeContext::from_instance(
+                            ctx,
+                            &doc.nodes,
+                            &scope_borrow,
+                            children_env_scope,
+                            node_fonts,
+                            caller_child_ids,
+                        )
+                        .with_parent(
+                            Some(ctx.comp_node_id),
+                            Some(comp_def.name.as_str()),
+                            comp_scope_ports,
+                        );
+                        rewrite_expr(raw_expr, &scope_ctx)?
+                    };
+                    let rewritten = coerce_typed_binding_expr(
+                        rewritten,
+                        let_binding.type_annotation.as_ref(),
+                    );
+                    doc.push_local_binding(
+                        rewritten.clone(),
+                        let_binding
+                            .type_annotation
+                            .as_ref()
+                            .map(|t| t.name.as_str().to_string()),
+                        raw_expr.span(),
+                    );
+                    lexical_scope.borrow_mut().insert(
+                        let_binding.name.name,
+                        LexicalBinding::Expr(rewritten),
+                    );
+                }
             }
         }
     }

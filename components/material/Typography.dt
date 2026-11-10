@@ -43,6 +43,66 @@
 \let material_font_caption = \Font(size: 12px, weight: 400, line_height: 20px);
 \let material_font_overline = \Font(size: 12px, weight: 400, line_height: 32px);
 
+// Reusable \Expr definitions for mapping TypographyVariant -> (size, weight, line_height)
+// across all Typography component overloads.
+\let typography_variant_size: Expr = \Expr(v: TypographyVariant) {
+    (v == TypographyVariant.H1) ? 96px : (
+        (v == TypographyVariant.H2) ? 60px : (
+            (v == TypographyVariant.H3) ? 48px : (
+                (v == TypographyVariant.H4) ? 34px : (
+                    (v == TypographyVariant.H5) ? 24px : (
+                        (v == TypographyVariant.H6) ? 20px : (
+                            (v == TypographyVariant.Subtitle1) ? 16px : (
+                                (v == TypographyVariant.Subtitle2) ? 14px : (
+                                    (v == TypographyVariant.Body2) ? 14px : (
+                                        (v == TypographyVariant.Button) ? 14px : (
+                                            (v == TypographyVariant.Caption) ? 12px : (
+                                                (v == TypographyVariant.Overline) ? 12px : 16px
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+};
+
+\let typography_variant_weight: Expr = \Expr(v: TypographyVariant) {
+    ((v == TypographyVariant.H1) || (v == TypographyVariant.H2)) ? 300 : (
+        ((v == TypographyVariant.H6) || (v == TypographyVariant.Subtitle2) || (v == TypographyVariant.Button)) ? 500 : 400
+    )
+};
+
+\let typography_variant_line_height: Expr = \Expr(v: TypographyVariant) {
+    (v == TypographyVariant.H1) ? 112px : (
+        (v == TypographyVariant.H2) ? 72px : (
+            (v == TypographyVariant.H3) ? 56px : (
+                (v == TypographyVariant.H4) ? 42px : (
+                    (v == TypographyVariant.H5) ? 32px : (
+                        (v == TypographyVariant.H6) ? 32px : (
+                            (v == TypographyVariant.Subtitle1) ? 28px : (
+                                (v == TypographyVariant.Subtitle2) ? 22px : (
+                                    (v == TypographyVariant.Body2) ? 20px : (
+                                        (v == TypographyVariant.Button) ? 24px : (
+                                            (v == TypographyVariant.Caption) ? 20px : (
+                                                (v == TypographyVariant.Overline) ? 32px : 24px
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+};
+
 // 1. Explicit Width Typography (Wrapping or Aligned within Container)
 \Component Typography(
     width: Distance,
@@ -54,70 +114,9 @@
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
-    \let is_h1 = variant == TypographyVariant.H1;
-    \let is_h2 = variant == TypographyVariant.H2;
-    \let is_h3 = variant == TypographyVariant.H3;
-    \let is_h4 = variant == TypographyVariant.H4;
-    \let is_h5 = variant == TypographyVariant.H5;
-    \let is_h6 = variant == TypographyVariant.H6;
-    \let is_sub1 = variant == TypographyVariant.Subtitle1;
-    \let is_sub2 = variant == TypographyVariant.Subtitle2;
-    \let is_body2 = variant == TypographyVariant.Body2;
-    \let is_button = variant == TypographyVariant.Button;
-    \let is_caption = variant == TypographyVariant.Caption;
-    \let is_overline = variant == TypographyVariant.Overline;
-
-    \let v_size = is_h1 ? 96px : (
-        is_h2 ? 60px : (
-            is_h3 ? 48px : (
-                is_h4 ? 34px : (
-                    is_h5 ? 24px : (
-                        is_h6 ? 20px : (
-                            is_sub1 ? 16px : (
-                                is_sub2 ? 14px : (
-                                    is_body2 ? 14px : (
-                                        is_button ? 14px : (
-                                            is_caption ? 12px : (
-                                                is_overline ? 12px : 16px
-                                            )
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
-    );
-
-    \let v_weight = (is_h1 || is_h2) ? 300 : (
-        (is_h6 || is_sub2 || is_button) ? 500 : 400
-    );
-
-    \let v_line_height = is_h1 ? 112px : (
-        is_h2 ? 72px : (
-            is_h3 ? 56px : (
-                is_h4 ? 42px : (
-                    is_h5 ? 32px : (
-                        is_h6 ? 32px : (
-                            is_sub1 ? 28px : (
-                                is_sub2 ? 22px : (
-                                    is_body2 ? 20px : (
-                                        is_button ? 24px : (
-                                            is_caption ? 20px : (
-                                                is_overline ? 32px : 24px
-                                            )
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
-    );
+    \let v_size = typography_variant_size(variant);
+    \let v_weight = typography_variant_weight(variant);
+    \let v_line_height = typography_variant_line_height(variant);
 
     \env font = \Font(
         font: self.font,
@@ -156,70 +155,9 @@
     x: Distance = parent.left,
     y: Distance = parent.top
 ) {
-    \let is_h1 = variant == TypographyVariant.H1;
-    \let is_h2 = variant == TypographyVariant.H2;
-    \let is_h3 = variant == TypographyVariant.H3;
-    \let is_h4 = variant == TypographyVariant.H4;
-    \let is_h5 = variant == TypographyVariant.H5;
-    \let is_h6 = variant == TypographyVariant.H6;
-    \let is_sub1 = variant == TypographyVariant.Subtitle1;
-    \let is_sub2 = variant == TypographyVariant.Subtitle2;
-    \let is_body2 = variant == TypographyVariant.Body2;
-    \let is_button = variant == TypographyVariant.Button;
-    \let is_caption = variant == TypographyVariant.Caption;
-    \let is_overline = variant == TypographyVariant.Overline;
-
-    \let v_size = is_h1 ? 96px : (
-        is_h2 ? 60px : (
-            is_h3 ? 48px : (
-                is_h4 ? 34px : (
-                    is_h5 ? 24px : (
-                        is_h6 ? 20px : (
-                            is_sub1 ? 16px : (
-                                is_sub2 ? 14px : (
-                                    is_body2 ? 14px : (
-                                        is_button ? 14px : (
-                                            is_caption ? 12px : (
-                                                is_overline ? 12px : 16px
-                                            )
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
-    );
-
-    \let v_weight = (is_h1 || is_h2) ? 300 : (
-        (is_h6 || is_sub2 || is_button) ? 500 : 400
-    );
-
-    \let v_line_height = is_h1 ? 112px : (
-        is_h2 ? 72px : (
-            is_h3 ? 56px : (
-                is_h4 ? 42px : (
-                    is_h5 ? 32px : (
-                        is_h6 ? 32px : (
-                            is_sub1 ? 28px : (
-                                is_sub2 ? 22px : (
-                                    is_body2 ? 20px : (
-                                        is_button ? 24px : (
-                                            is_caption ? 20px : (
-                                                is_overline ? 32px : 24px
-                                            )
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
-    );
+    \let v_size = typography_variant_size(variant);
+    \let v_weight = typography_variant_weight(variant);
+    \let v_line_height = typography_variant_line_height(variant);
 
     \env font = \Font(
         font: self.font,

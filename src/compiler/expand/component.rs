@@ -832,7 +832,9 @@ impl<'a> ComponentExpander<'a> {
             let name_sym = param.name.name;
             populated_mask.insert(&self.schema.port_table, name);
             let is_handler_param = self.schema.handler_param_names.contains(name);
-            if name.starts_with("on_") || is_handler_param {
+            let is_expr_param = self.schema.expr_param_names.contains(name)
+                || matches!(self.comp_ports.get(name), Some(Expr::ExprDef(_)));
+            if name.starts_with("on_") || is_handler_param || is_expr_param {
                 continue;
             }
             if let Some(Expr::Ident(id)) = self.comp_ports.get(name) {
@@ -930,6 +932,52 @@ impl<'a> ComponentExpander<'a> {
                                     }
                                 }
                             }
+                        }
+                        local_scope.insert(name_sym, LexicalBinding::Expr(expr));
+                    }
+                }
+            } else if self.schema.expr_param_names.contains(name)
+                || matches!(self.comp_ports.get(name), Some(Expr::ExprDef(_)))
+            {
+                if let Some(expr) = self.comp_ports.get(name).cloned() {
+                    if !self
+                        .already_rewritten_ports
+                        .contains(&self.schema.port_table, name)
+                    {
+                        let expr_default_ctx = ScopeContext::from_instance(
+                            ctx,
+                            &self.doc.nodes,
+                            &local_scope,
+                            self.caller_env_scope,
+                            self.node_fonts,
+                            &empty_children,
+                        )
+                        .with_children(&empty_children, self.num_consumer_children)
+                        .with_shadowed_ports(None)
+                        .with_enclosing_component(Some(ctx.comp_node_id))
+                        .with_comp_state(
+                            Some(&self.comp_ports),
+                            Some(&self.schema.declared_state_names),
+                        );
+                        let rewritten = rewrite_expr(&expr, &expr_default_ctx)?;
+                        self.already_rewritten_ports
+                            .insert(&self.schema.port_table, name);
+                        self.comp_ports.insert(name.to_string(), rewritten.clone());
+                        if matches!(rewritten, Expr::ExprDef(_)) {
+                            self.doc
+                                .get_node_mut(ctx.comp_node_id)
+                                .unwrap()
+                                .ports
+                                .insert(name.to_string(), rewritten.clone());
+                        }
+                        local_scope.insert(name_sym, LexicalBinding::Expr(rewritten));
+                    } else {
+                        if matches!(expr, Expr::ExprDef(_)) {
+                            self.doc
+                                .get_node_mut(ctx.comp_node_id)
+                                .unwrap()
+                                .ports
+                                .insert(name.to_string(), expr.clone());
                         }
                         local_scope.insert(name_sym, LexicalBinding::Expr(expr));
                     }
@@ -1059,14 +1107,31 @@ impl<'a> ComponentExpander<'a> {
                             .as_event_port(is_event_let);
                             rewrite_expr(raw_expr, &scope_ctx)
                         };
-                        if try_preresolve_expr_binding(
+                        if let Some(rewritten) = try_preresolve_expr_binding(
                             &mut local_scope,
                             let_binding.name.name,
                             rewritten_res,
                             let_binding.type_annotation.as_ref(),
-                        )
-                        .is_some()
-                        {
+                        ) {
+                            if !self
+                                .schema
+                                .comp_shadowed_ports
+                                .contains(let_binding.name.as_str())
+                                && matches!(rewritten, Expr::ExprDef(_))
+                            {
+                                self.doc
+                                    .get_node_mut(ctx.comp_node_id)
+                                    .unwrap()
+                                    .ports
+                                    .insert(
+                                        let_binding.name.as_str().to_string(),
+                                        rewritten.clone(),
+                                    );
+                                self.comp_ports
+                                    .insert(let_binding.name.as_str().to_string(), rewritten);
+                                self.already_rewritten_ports
+                                    .insert(&self.schema.port_table, let_binding.name.as_str());
+                            }
                             changed = true;
                         }
                     }
@@ -1201,7 +1266,12 @@ impl<'a> ComponentExpander<'a> {
                 .schema
                 .comp_shadowed_ports
                 .contains(let_binding.name.as_str());
-            if is_param_shadow {
+            let is_expr_def = matches!(raw_expr, Expr::ExprDef(_))
+                || let_binding
+                    .type_annotation
+                    .as_ref()
+                    .is_some_and(|t| matches!(t.name.as_str(), "Expr" | "Expression"));
+            if is_param_shadow || is_expr_def {
                 let is_event_let = let_binding.name.as_str().starts_with("on_")
                     || let_binding
                         .type_annotation
@@ -1238,6 +1308,30 @@ impl<'a> ComponentExpander<'a> {
                         .map(|t| t.name.as_str().to_string()),
                     raw_expr.span(),
                 );
+                if !is_param_shadow {
+                    if matches!(rewritten, Expr::ExprDef(_)) {
+                        self.doc
+                            .get_node_mut(ctx.comp_node_id)
+                            .unwrap()
+                            .ports
+                            .insert(let_binding.name.as_str().to_string(), rewritten.clone());
+                    }
+                    self.comp_ports
+                        .insert(let_binding.name.as_str().to_string(), rewritten.clone());
+                    self.already_rewritten_ports
+                        .insert(&self.schema.port_table, let_binding.name.as_str());
+                    if !is_env_param_shadow {
+                        self.children_env_scope.insert(
+                            let_binding.name.as_str().to_string(),
+                            EnvEntry::Bound(rewritten.clone()),
+                        );
+                        self.children_env_scope_dirty = true;
+                        self.internal_body_env_scope.insert(
+                            let_binding.name.as_str().to_string(),
+                            EnvEntry::Bound(rewritten.clone()),
+                        );
+                    }
+                }
                 let new_binding = LexicalBinding::Expr(rewritten);
                 let mut scope_mut = self.local_scope.borrow_mut();
                 if scope_mut.get(&let_binding.name.name) != Some(&new_binding) {
@@ -1502,8 +1596,59 @@ impl<'a> ComponentExpander<'a> {
                 ComponentBodyItem::Env(env_binding) => self.expand_body_env(env_binding)?,
                 ComponentBodyItem::Node(body_node) => self.expand_body_node(body_node)?,
                 ComponentBodyItem::Children(dir) => self.expand_body_children(dir)?,
-                ComponentBodyItem::Alias(_)
-                | ComponentBodyItem::State(_)
+                ComponentBodyItem::Alias(alias_binding) => {
+                    let is_expr_alias = matches!(alias_binding.value, Expr::ExprDef(_))
+                        || alias_binding
+                            .type_annotation
+                            .as_ref()
+                            .is_some_and(|t| matches!(t.name.as_str(), "Expr" | "Expression"));
+                    if is_expr_alias {
+                        let rewritten = {
+                            let scope_borrow = self.local_scope.borrow();
+                            let inst_borrow = self.instantiated_children_ids.borrow();
+                            let scope_ctx = ScopeContext::from_instance(
+                                self.ctx,
+                                &self.doc.nodes,
+                                &scope_borrow,
+                                &self.internal_body_env_scope,
+                                self.node_fonts,
+                                &inst_borrow,
+                            )
+                            .with_children(&inst_borrow, self.num_consumer_children)
+                            .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
+                            .with_enclosing_component(Some(self.ctx.comp_node_id))
+                            .with_comp_state(
+                                Some(&self.comp_ports),
+                                Some(&self.schema.declared_state_names),
+                            );
+                            rewrite_expr(&alias_binding.value, &scope_ctx)?
+                        };
+                        let rewritten = coerce_typed_binding_expr(
+                            rewritten,
+                            alias_binding.type_annotation.as_ref(),
+                        );
+                        if matches!(rewritten, Expr::ExprDef(_)) {
+                            self.doc
+                                .get_node_mut(self.ctx.comp_node_id)
+                                .unwrap()
+                                .ports
+                                .insert(
+                                    alias_binding.name.as_str().to_string(),
+                                    rewritten.clone(),
+                                );
+                        }
+                        self.comp_ports.insert(
+                            alias_binding.name.as_str().to_string(),
+                            rewritten.clone(),
+                        );
+                        self.already_rewritten_ports
+                            .insert(&self.schema.port_table, alias_binding.name.as_str());
+                        self.local_scope
+                            .borrow_mut()
+                            .insert(alias_binding.name.name, LexicalBinding::Expr(rewritten));
+                    }
+                }
+                ComponentBodyItem::State(_)
                 | ComponentBodyItem::Text(_)
                 | ComponentBodyItem::ParagraphBreak(_)
                 | ComponentBodyItem::Assert(_) => {}
@@ -1733,7 +1878,11 @@ impl<'a> ComponentExpander<'a> {
             self.has_unfolded_port_ternary = true;
         }
 
-        let rewritten_ports = std::mem::take(&mut self.comp_ports);
+        let mut rewritten_ports = std::mem::take(&mut self.comp_ports);
+        super::rewrite::sync_materialized_expr_ports_for_node(
+            self.ctx.comp_node_id,
+            &mut rewritten_ports,
+        );
 
         let override_cap = instance.ports.len()
             + self.schema.enum_state_bindings.len()
@@ -2083,6 +2232,10 @@ impl<'a> ComponentExpander<'a> {
             node.text_spans = self.span_text_spans;
             node.inline_boxes = self.span_inline_boxes;
         }
+        super::rewrite::sync_materialized_expr_ports_for_node(
+            self.ctx.comp_node_id,
+            &mut rewritten_ports,
+        );
         node.port_types = node_port_types;
         node.ports = rewritten_ports;
     }

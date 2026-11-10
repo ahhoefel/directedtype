@@ -979,6 +979,17 @@ fn collect_from_expr(expr: &Expr, out: &mut HashSet<String>) {
         }
         Expr::Unary(u) => collect_from_expr(&u.operand, out),
         Expr::Paren(p, _) => collect_from_expr(p, out),
+        Expr::ExprDef(def) => {
+            for param in &def.params {
+                if let Some(ty) = &param.type_annotation {
+                    out.insert(ty.name.as_str().to_string());
+                }
+                if let Some(d) = &param.default_edge {
+                    collect_from_expr(d, out);
+                }
+            }
+            collect_from_expr(&def.body, out);
+        }
         Expr::Literal(_) | Expr::Ident(_) => {}
     }
 }
@@ -1109,6 +1120,21 @@ fn rewrite_expr(expr: &mut Expr, renames: &HashMap<String, String>) {
         }
         Expr::Unary(u) => rewrite_expr(&mut u.operand, renames),
         Expr::Paren(p, _) => rewrite_expr(p, renames),
+        Expr::ExprDef(def) => {
+            for param in &mut def.params {
+                if let Some(ty) = &mut param.type_annotation {
+                    if let Some(new_name) = renames.get(ty.name.as_str()) {
+                        if !new_name.starts_with("__dt_") {
+                            ty.name = Ident::new(new_name, ty.name.span);
+                        }
+                    }
+                }
+                if let Some(d) = &mut param.default_edge {
+                    rewrite_expr(d, renames);
+                }
+            }
+            rewrite_expr(&mut def.body, renames);
+        }
         Expr::Literal(_) | Expr::Ident(_) => {}
     }
 }
@@ -1225,6 +1251,14 @@ fn resolve_expr_enum_literals(
         }
         Expr::Unary(u) => resolve_expr_enum_literals(&mut u.operand, enums),
         Expr::Paren(p, _) => resolve_expr_enum_literals(p, enums),
+        Expr::ExprDef(def) => {
+            for param in &mut def.params {
+                if let Some(d) = &mut param.default_edge {
+                    resolve_expr_enum_literals(d, enums);
+                }
+            }
+            resolve_expr_enum_literals(&mut def.body, enums);
+        }
         Expr::Literal(_) | Expr::Ident(_) => {}
     }
 }

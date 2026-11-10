@@ -193,7 +193,7 @@ fn populate_comp_cond_consts<'a>(
                 depth,
             );
         }
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => {}
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) => {}
     }
 }
 
@@ -334,7 +334,7 @@ fn collect_cond_consts_from_expr<'a>(
                 has_any_ternary,
             );
         }
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => {}
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) => {}
     }
 }
 
@@ -381,7 +381,7 @@ fn collect_agg_members_and_parent_refs(
         Expr::Paren(inner, _) => {
             collect_agg_members_and_parent_refs(inner, parent_id, agg_members, parent_refs);
         }
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => {}
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) => {}
     }
 }
 
@@ -505,7 +505,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             child_id,
             stack,
         ),
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => false,
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) => false,
     }
 }
 
@@ -854,7 +854,9 @@ fn resolve_and_filter_agg_expr(
                 Expr::Paren(Box::new(unfilt), *span),
             ))
         }
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => Ok((expr.clone(), expr.clone())),
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) => {
+            Ok((expr.clone(), expr.clone()))
+        }
     }
 }
 
@@ -910,7 +912,7 @@ fn fold_const_ternaries_in_place(
         Expr::Paren(inner, _) => {
             fold_const_ternaries_in_place(inner, const_env);
         }
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) => {}
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) => {}
     }
 }
 
@@ -940,7 +942,7 @@ fn expr_contains_agg_child_of(expr: &Expr, comp_id: NodeId) -> bool {
                 || expr_contains_agg_child_of(&t.else_expr, comp_id)
         }
         Expr::Paren(inner, _) => expr_contains_agg_child_of(inner, comp_id),
-        Expr::Literal(_) | Expr::Node(_) => false,
+        Expr::Literal(_) | Expr::Node(_) | Expr::ExprDef(_) => false,
     }
 }
 

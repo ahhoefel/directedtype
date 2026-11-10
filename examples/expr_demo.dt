@@ -1,0 +1,172 @@
+// Reusable Expressions (\Expr) Showcase
+// Demonstrates:
+//   1. Zero-parameter \Expr { ... } evaluated with e() at the call site
+//   2. Parameterized \Expr(param: Type = default) { ... }
+//   3. Creation-site `outer.<prop>` capture vs. evaluation-site `parent.<prop>` capture
+//   4. Passing `Expr` values as component parameters and exposing `Expr` ports via `\alias`
+
+\let font_title = \Font(size: 22px, weight: 700);
+\let font_section = \Font(size: 15px, weight: 600);
+\let font_body = \Font(size: 13px, weight: 400);
+
+// 1. Zero-parameter \Expr: captures `prev`, `gap`, and `top` at the evaluation site
+\let vertical_flow_y: Expr = \Expr { prev ? prev.bottom + gap : top };
+
+// 2. Parameterized \Expr with default parameter: captures `parent.width` at the evaluation site
+\let proportional_width: Expr = \Expr(ratio: Float, min_w: Distance = 60px) {
+    max(parent.width * ratio, min_w)
+};
+
+\Component VFlow(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    gap: Distance = 16px,
+    padding: Distance = 20px
+) {
+    \alias height = (children.len > 0 ? max(children.bottom) - top : 0px) + padding;
+    \Children(
+        x: left + padding,
+        y: vertical_flow_y(),
+        width: width - 2 * padding
+    )
+}
+
+// 3. Component exposing an \Expr port via \alias that combines `outer.` (creation-site)
+//    and `parent.` (evaluation-site) properties.
+\Component ThemeContainer(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = min(max(window.width - 48px, 420px), 760px),
+    base_pad: Distance = 32px,
+    gap: Distance = 18px
+) {
+    // `outer.base_pad` is captured from ThemeContainer (32px),
+    // while `parent.width` is captured wherever `scaled_span(...)` is evaluated.
+    \alias scaled_span: Expr = \Expr(fraction: Float = 0.5) {
+        outer.base_pad + parent.width * fraction
+    };
+
+    \let content_bottom = children.len > 0 ? max(children.bottom) : top;
+    \alias height = (content_bottom - top) + 28px;
+
+    \Rect(
+        x: left,
+        y: top,
+        width: width,
+        height: height,
+        color: #0f172a,
+        radius: 14px,
+        border_width: 1px,
+        border_color: #334155
+    )
+
+    \Children(
+        x: left + 24px,
+        y: prev ? prev.bottom + gap : top + 24px,
+        width: width - 48px
+    )
+}
+
+// 4. Component accepting an `Expr` parameter (`size_fn: Expr`) to compute bar widths
+\Component MetricBar(
+    label: String,
+    step: Float,
+    bar_color: Color = #38bdf8,
+    size_fn: Expr = \Expr(s: Float) { parent.width * 0.15 * s },
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    height: Distance = 52px
+) {
+    \let bar_w: Distance = clamp(size_fn(step), 40px, width - 24px);
+
+    \Rect(
+        x: left,
+        y: top,
+        width: width,
+        height: height,
+        color: #1e293b,
+        radius: 8px
+    )
+    \Text(
+        x: left + 12px,
+        y: top + 8px,
+        text: label,
+        font: font_body,
+        color: #e2e8f0
+    )
+    \Rect(
+        x: left + 12px,
+        y: top + 28px,
+        width: bar_w,
+        height: 14px,
+        color: bar_color,
+        radius: 4px
+    )
+}
+
+\let linear_curve: Expr = \Expr(s: Float) {
+    proportional_width(0.18 * s, 50px)
+};
+
+\let quadratic_curve: Expr = \Expr(s: Float) {
+    proportional_width(0.06 * s * s, 50px)
+};
+
+\let theme = \ThemeContainer(x: 24px, y: 24px) {
+    \Text(font: font_title, color: #f8fafc) {
+        Reusable Expressions (\\Expr) Demo
+    }
+
+    \Text(font: font_section, color: #94a3b8) {
+        1. Passing \\Expr Parameters (Linear vs. Quadratic Growth)
+    }
+
+    \MetricBar(
+        label: "Step 1 — Default \\Expr parameter (15% * step)",
+        step: 1,
+        bar_color: #38bdf8
+    )
+    \MetricBar(
+        label: "Step 2 — Passed linear_curve \\Expr (18% * step)",
+        step: 2,
+        bar_color: #818cf8,
+        size_fn: linear_curve
+    )
+    \MetricBar(
+        label: "Step 3 — Passed quadratic_curve \\Expr (6% * step^2)",
+        step: 3,
+        bar_color: #c084fc,
+        size_fn: quadratic_curve
+    )
+    \MetricBar(
+        label: "Step 4 — Passed quadratic_curve \\Expr (6% * step^2)",
+        step: 4,
+        bar_color: #f472b6,
+        size_fn: quadratic_curve
+    )
+
+    \Text(font: font_section, color: #94a3b8) {
+        2. Creation-Site (outer.base_pad) vs. Evaluation-Site (parent.width)
+    }
+
+    \VFlow(gap: 10px, padding: 14px) {
+        \Rect(
+            x: parent.left,
+            y: parent.top,
+            width: theme.scaled_span(0.35),
+            height: 22px,
+            color: #34d399,
+            radius: 6px
+        )
+        \Rect(
+            x: parent.left,
+            y: prev.bottom + 10px,
+            width: theme.scaled_span(0.70),
+            height: 22px,
+            color: #10b981,
+            radius: 6px
+        )
+    }
+};

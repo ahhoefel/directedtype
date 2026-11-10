@@ -801,20 +801,28 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             };
             let rewritten =
                 super::coerce_typed_binding_expr(rewritten, let_binding.type_annotation.as_ref());
+            let is_expr_def = matches!(rewritten, Expr::ExprDef(_));
             if self.ctx.enclosing_component_id.is_none()
                 && self
                     .doc
                     .window_ports
                     .contains_key(let_binding.name.as_str())
             {
+                if is_expr_def {
+                    self.ctx.lexical_scope.borrow_mut().insert(
+                        let_binding.name.name,
+                        LexicalBinding::Expr(rewritten.clone()),
+                    );
+                }
                 self.doc
                     .window_ports
                     .insert(let_binding.name.as_str().to_string(), rewritten);
-            } else if !self
-                .ctx
-                .lexical_scope
-                .borrow()
-                .contains_key(&let_binding.name.name)
+            } else if is_expr_def
+                || !self
+                    .ctx
+                    .lexical_scope
+                    .borrow()
+                    .contains_key(&let_binding.name.name)
             {
                 self.doc.push_local_binding(
                     rewritten.clone(),
@@ -1232,6 +1240,10 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 ports.insert(port_name, rewritten);
             }
         }
+        crate::compiler::expand::rewrite::sync_materialized_expr_ports_for_node(
+            self.node_id,
+            &mut ports,
+        );
 
         Ok((ports, authored_ports, event_handlers))
     }

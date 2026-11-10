@@ -163,23 +163,41 @@ fn validate_top_level_type_annotations(
                 if let Some(ty) = &l.type_annotation {
                     StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
                 }
-                if let Some(LetValue::Node(n)) = &l.value {
-                    if let Some(slot) = &n.content {
-                        validate_content_items_type_annotations(&slot.items, enums, registry)?;
+                match &l.value {
+                    Some(LetValue::Node(n)) => {
+                        for port in &n.ports {
+                            typecheck::validate_expr_type_annotations(&port.expr, enums, registry)?;
+                        }
+                        if let Some(slot) = &n.content {
+                            validate_content_items_type_annotations(&slot.items, enums, registry)?;
+                        }
                     }
+                    Some(LetValue::Expr(e)) => {
+                        typecheck::validate_expr_type_annotations(e, enums, registry)?;
+                    }
+                    None => {}
                 }
             }
             Item::State(s) => {
                 if let Some(ty) = &s.type_annotation {
                     StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
                 }
+                if let Some(d) = &s.default {
+                    typecheck::validate_expr_type_annotations(d, enums, registry)?;
+                }
             }
             Item::Env(e) => {
                 if let Some(ty) = &e.type_annotation {
                     StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
                 }
+                if let Some(v) = &e.value {
+                    typecheck::validate_expr_type_annotations(v, enums, registry)?;
+                }
             }
             Item::Node(n) => {
+                for port in &n.ports {
+                    typecheck::validate_expr_type_annotations(&port.expr, enums, registry)?;
+                }
                 if let Some(slot) = &n.content {
                     validate_content_items_type_annotations(&slot.items, enums, registry)?;
                 }
@@ -548,6 +566,7 @@ fn finalize_window_and_forward_refs(
         *expr = resolve_forward_scope_refs(expr, final_global_scope);
     }
     resolve_forward_refs_in_range(expanded_doc, 0, 0, final_global_scope);
+    rewrite::flush_all_materialized_expr_ports(expanded_doc);
     Ok(())
 }
 

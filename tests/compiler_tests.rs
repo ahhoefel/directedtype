@@ -5634,5 +5634,351 @@ fn test_timer_fps_example_compiles_and_runs() {
     );
 }
 
+#[test]
+fn test_expr_def_zero_param_and_parameterized() {
+    use directedtype::compiler::NodeId;
+    let src = r#"
+    \let half_w: Expr = \Expr { parent.width * 0.5 };
+    \let quarter_h: Expression = \Expr() { parent.height * 0.25 };
+    \let offset_y: Expr = \Expr(y: Distance, extra: Distance = 10px) { parent.y + y + extra };
+
+    \Component Container(
+        x: Distance = 0px,
+        y: Distance = 20px,
+        width: Distance = 200px,
+        height: Distance = 100px
+    ) {
+        \Children
+    }
+
+    \Container {
+        \let child = \Rect(
+            x: 15px,
+            y: offset_y(15px),
+            width: half_w(),
+            height: quarter_h(),
+            color: #ff0000
+        );
+        \let child2 = \Rect(
+            x: 15px,
+            y: offset_y(15px, 30px),
+            width: half_w(),
+            height: quarter_h(),
+            color: #00ff00
+        );
+    }
+    "#;
+
+    let doc = parse(src).expect("Should parse \\Expr definitions");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0)
+        .expect("Should evaluate \\Expr definitions");
+
+    // Container is NodeId(0), child is NodeId(1), child2 is NodeId(2)
+    let child = layout.get_node(NodeId(1)).unwrap();
+    // child.y = parent.y (20) + 15 + default extra (10) = 45
+    assert_eq!(child.rect.y, 45.0);
+    // child.width = parent.width (200) * 0.5 = 100
+    assert_eq!(child.rect.width, 100.0);
+    // child.height = parent.height (100) * 0.25 = 25
+    assert_eq!(child.rect.height, 25.0);
+
+    let child2 = layout.get_node(NodeId(2)).unwrap();
+    // child2.y = parent.y (20) + 15 + extra (30) = 65
+    assert_eq!(child2.rect.y, 65.0);
+}
+
+#[test]
+fn test_expr_def_outer_vs_call_site_capture() {
+    use directedtype::compiler::NodeId;
+    let src = r#"
+    \Component OuterBox(
+        x: Distance = 0px,
+        y: Distance = 100px,
+        width: Distance = 400px,
+        height: Distance = 300px
+    ) {
+        \let factor: Float = 2;
+
+        // `outer.y` and `outer.factor` capture OuterBox's scope (y=100, factor=2),
+        // while `parent.y` captures the evaluation site's scope (InnerBox y=50).
+        \alias calc_y: Expr = \Expr(delta: Distance) {
+            outer.y + parent.y * outer.factor + delta
+        };
+
+        // Nested \Expr testing `outer.outer.factor`
+        \let make_nested: Expr = \Expr {
+            \Expr(v: Distance) { v * outer.outer.factor + outer.y }
+        };
+        \alias nested_fn: Expr = make_nested();
+
+        \Children
+    }
+
+    \Component InnerBox(
+        x: Distance = 0px,
+        y: Distance = 50px,
+        width: Distance = 200px,
+        height: Distance = 150px
+    ) {
+        \Children
+    }
+
+    \let ob = \OuterBox {
+        \InnerBox {
+            \Rect(
+                x: 7px,
+                y: ob.calc_y(10px),
+                width: ob.nested_fn(10px),
+                height: 20px,
+                color: #0000ff
+            )
+        }
+    };
+    "#;
+
+    let doc = parse(src).expect("Should parse outer. capture test");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0)
+        .expect("Should evaluate outer. capture test");
+
+    // ob = NodeId(0), InnerBox = NodeId(1), Rect = NodeId(2)
+    let rect = layout.get_node(NodeId(2)).unwrap();
+    // Rect.y = outer.y (100) + parent.y (50) * outer.factor (2) + delta (10) = 210
+    assert_eq!(rect.rect.y, 210.0);
+    // Rect.width = v (10) * outer.outer.factor (2) + outer.y (100) = 120
+    assert_eq!(rect.rect.width, 120.0);
+}
+
+#[test]
+fn test_expr_def_passed_to_component_and_port_access() {
+    use directedtype::compiler::NodeId;
+    let src = r#"
+    \Component ThemedItem(
+        idx: Float,
+        x: Distance = 0px,
+        y: Distance = 0px,
+        height: Distance = 20px,
+        size_fn: Expr = \Expr(i: Float) { 10px + i * 5px }
+    ) {
+        \let index: Float = idx;
+        \alias width: Distance = size_fn(index);
+        \alias exported_fn: Expr = \Expr(mult: Float) { outer.width * mult };
+        \Rect(x: x, y: y, width: width, height: height, color: #123456)
+    }
+
+    \let custom_size: Expr = \Expr(i: Float) { parent.width * 0.1 * i };
+
+    \let item_default = \ThemedItem(idx: 3);
+    \let item_custom = \ThemedItem(idx: 2, size_fn: custom_size);
+    \let follower = \Rect(
+        x: 0px,
+        y: 50px,
+        width: item_custom.exported_fn(3),
+        height: 10px,
+        color: #654321
+    );
+    "#;
+
+    let doc = parse(src).expect("Should parse component Expr param test");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0)
+        .expect("Should evaluate component Expr param test");
+
+    // item_default is NodeId(0) (its inner Rect is NodeId(1)): width = 10 + 3 * 5 = 25
+    assert_eq!(layout.get_node(NodeId(0)).unwrap().rect.width, 25.0);
+    // item_custom is NodeId(2) (its inner Rect is NodeId(3)):
+    // parent is window (width=800), so width = 800 * 0.1 * 2 = 160
+    assert_eq!(layout.get_node(NodeId(2)).unwrap().rect.width, 160.0);
+    // follower is NodeId(4): width = item_custom.exported_fn(3) = 160 * 3 = 480
+    assert_eq!(layout.get_node(NodeId(4)).unwrap().rect.width, 480.0);
+}
+
+#[test]
+fn test_expr_def_dag_materialization_and_nested_diamond() {
+    use directedtype::compiler::NodeId;
+    let src = r#"
+    \let e1: Expr = \Expr(v: Distance) { parent.y + v * 2 };
+    \let e2: Expr = \Expr(z: Distance) { e1(z) + e1(z) };
+
+    \Component Box(
+        x: Distance = 0px,
+        y: Distance = 10px,
+        width: Distance = 100px,
+        height: Distance = 100px
+    ) {
+        \Children
+    }
+
+    \Component ChildItem(
+        x: Distance = 5px,
+        y: Distance = 0px,
+        width: Distance = e2(x),
+        height: Distance = 20px
+    ) {
+        \Rect(x: x, y: y, width: width, height: height, color: #abcdef)
+    }
+
+    \Box {
+        \ChildItem()
+    }
+    "#;
+
+    let doc = parse(src).expect("Should parse diamond \\Expr test");
+    let (expanded, graph) = compile_to_graph(&doc).expect("Should compile diamond \\Expr test");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0)
+        .expect("Should evaluate diamond \\Expr test");
+
+    // Box is NodeId(0), ChildItem is NodeId(1) (its inner Rect is NodeId(2)).
+    // e1(x) = parent.y (10) + 5 * 2 = 20 -> materialized as NodeId(1).__expr_0
+    // e2(x) = __expr_0 + __expr_0 = 40 -> materialized as NodeId(1).__expr_1
+    let item_id = NodeId(1);
+    assert_eq!(layout.get_node(item_id).unwrap().rect.width, 40.0);
+
+    // Verify that __expr_0 and __expr_1 were materialized on NodeId(1) and deduplicated (no __expr_2)
+    let item_node = &expanded.nodes[item_id.0];
+    assert!(
+        item_node.ports.contains_key("__expr_0"),
+        "Expected __expr_0 to be materialized on ChildItem"
+    );
+    assert!(
+        item_node.ports.contains_key("__expr_1"),
+        "Expected __expr_1 to be materialized on ChildItem"
+    );
+    assert!(
+        !item_node.ports.contains_key("__expr_2"),
+        "Expected duplicate e1(z) call to share __expr_0 rather than creating __expr_2"
+    );
+
+    // Verify DAG dependencies:
+    // ChildItem.width depends ONLY on ChildItem.__expr_1
+    let width_var = VarId::new(item_id, "width");
+    let expr1_var = VarId::new(item_id, "__expr_1");
+    let expr0_var = VarId::new(item_id, "__expr_0");
+    let item_x_var = VarId::new(item_id, "x");
+    let box_y_var = VarId::new(NodeId(0), "y");
+
+    let width_deps = graph
+        .upstream_of(&width_var)
+        .expect("ChildItem.width should be in graph");
+    assert_eq!(width_deps, &[expr1_var]);
+
+    // ChildItem.__expr_1 depends ONLY on ChildItem.__expr_0
+    let expr1_deps = graph
+        .upstream_of(&expr1_var)
+        .expect("ChildItem.__expr_1 should be in graph");
+    assert_eq!(expr1_deps, &[expr0_var]);
+
+    // ChildItem.__expr_0 depends on Box.y (parent.y) and ChildItem.x (x)
+    let expr0_deps = graph
+        .upstream_of(&expr0_var)
+        .expect("ChildItem.__expr_0 should be in graph");
+    assert!(expr0_deps.contains(&box_y_var));
+    assert!(expr0_deps.contains(&item_x_var));
+}
+
+#[test]
+fn test_expr_def_parse_and_compile_errors() {
+    // 1. Parse errors for invalid \Expr bodies
+    for (bad_src, expected_parse_err) in [
+        (
+            r#"
+            \let e: Expr = \Expr { };
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "\\Expr body cannot be empty; expected an expression inside '{ ... }'",
+        ),
+        (
+            r#"
+            \let e: Expr = \Expr { \let a = 10px; a };
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "\\Expr body must be a single expression, not a statement or directive",
+        ),
+        (
+            r#"
+            \let e: Expr = \Expr { \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000) };
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "\\Expr body must be a single expression, not element node '\\Rect'",
+        ),
+        (
+            r#"
+            \let e: Expr = \Expr { 10px; };
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "\\Expr body must be a single expression without a trailing ';'",
+        ),
+    ] {
+        let err = parse(bad_src).expect_err(expected_parse_err);
+        assert!(
+            err.to_string().contains(expected_parse_err),
+            "Expected parse error containing '{}', got: {}",
+            expected_parse_err,
+            err
+        );
+    }
+
+    // 2. Compile errors for invalid \Expr usage, types, arity, and outer scoping
+    for (bad_src, expected_compile_err) in [
+        (
+            r#"
+            \let e: Expr = \Expr { 10px };
+            \Rect(x: 0, y: 0, width: e, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Distance', found 'Expr'",
+        ),
+        (
+            r#"
+            \let e: Expr = \Expr { 10px };
+            \Rect(x: 0, y: 0, width: e(5px), height: 10px, color: #000)
+            "#,
+            "'\\Expr' expects 0 argument(s), got 1",
+        ),
+        (
+            r#"
+            \let e: Expr = \Expr(x: Distance) { x * 2 };
+            \Rect(x: 0, y: 0, width: e(), height: 10px, color: #000)
+            "#,
+            "'\\Expr' expects 1 argument(s), got 0",
+        ),
+        (
+            r#"
+            \let e: Expr = \Expr(x: Distance) { x * 2 };
+            \Rect(x: 0, y: 0, width: e(#ff0000), height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Distance', found 'Color'",
+        ),
+        (
+            r#"
+            \let not_expr: Distance = 10px;
+            \Rect(x: 0, y: 0, width: not_expr(), height: 10px, color: #000)
+            "#,
+            "is not an '\\Expr' and cannot be called",
+        ),
+        (
+            r#"
+            \let x: Distance = outer.width;
+            \Rect(x: 0, y: 0, width: x, height: 10px, color: #000)
+            "#,
+            "'outer' can only be used inside an '\\Expr' literal",
+        ),
+        (
+            r#"
+            \let e: Expr = \Expr { outer.outer.width };
+            \Rect(x: 0, y: 0, width: e(), height: 10px, color: #000)
+            "#,
+            "Too many 'outer.' prefixes for the current '\\Expr' nesting depth",
+        ),
+    ] {
+        let doc = parse(bad_src).expect("Should parse");
+        let err = compile_to_graph(&doc).expect_err(expected_compile_err);
+        assert!(
+            err.to_string().contains(expected_compile_err),
+            "Expected compile error containing '{}', got: {}",
+            expected_compile_err,
+            err
+        );
+    }
+}
+
+
 
 

@@ -408,6 +408,24 @@ pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
                     .zip(&m2.args)
                     .all(|(a1, a2)| expr_eq_ignore_span(a1, a2))
         }
+        (Expr::ExprDef(e1), Expr::ExprDef(e2)) => {
+            e1.params.len() == e2.params.len()
+                && e1
+                    .params
+                    .iter()
+                    .zip(&e2.params)
+                    .all(|(p1, p2)| {
+                        p1.name.as_str() == p2.name.as_str()
+                            && p1.type_annotation.as_ref().map(|t| t.name.as_str())
+                                == p2.type_annotation.as_ref().map(|t| t.name.as_str())
+                            && match (&p1.default_edge, &p2.default_edge) {
+                                (Some(d1), Some(d2)) => expr_eq_ignore_span(d1, d2),
+                                (None, None) => true,
+                                _ => false,
+                            }
+                    })
+                && expr_eq_ignore_span(&e1.body, &e2.body)
+        }
         _ => false,
     }
 }
@@ -563,6 +581,15 @@ pub enum Expr {
     Unary(UnaryExpr),
     Paren(Box<Expr>, Span),
     Node(Box<ElementNode>),
+    ExprDef(Box<ExprDef>),
+}
+
+/// Reusable expression literal: `\Expr(param1: Type1, ...) { <body_expr> }` or `\Expr { <body_expr> }`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExprDef {
+    pub params: Vec<ParamDef>,
+    pub body: Box<Expr>,
+    pub span: Span,
 }
 
 impl Expr {
@@ -578,6 +605,7 @@ impl Expr {
             Expr::Unary(u) => u.span,
             Expr::Paren(_, span) => *span,
             Expr::Node(n) => n.span,
+            Expr::ExprDef(e) => e.span,
         }
     }
 
@@ -903,6 +931,7 @@ impl Literal {
             "String" => matches!(self, Literal::String(..)),
             "Boolean" => matches!(self, Literal::Bool(..)),
             "Color" => matches!(self, Literal::Color(..)),
+            "Expr" | "Expression" => false,
             custom => match self {
                 Literal::Enum(enum_name, ..) => enum_name == custom,
                 _ => false,
@@ -1005,6 +1034,26 @@ impl fmt::Display for Expr {
             Expr::Unary(u) => write!(f, "{}{}", u.op, u.operand),
             Expr::Paren(inner, _) => write!(f, "({})", inner),
             Expr::Node(node) => write!(f, "\\{}(...)", node.name),
+            Expr::ExprDef(def) => {
+                if def.params.is_empty() {
+                    write!(f, "\\Expr {{ {} }}", def.body)
+                } else {
+                    write!(f, "\\Expr(")?;
+                    for (i, p) in def.params.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", p.name)?;
+                        if let Some(ty) = &p.type_annotation {
+                            write!(f, ": {}", ty.name)?;
+                        }
+                        if let Some(def_val) = &p.default_edge {
+                            write!(f, " = {}", def_val)?;
+                        }
+                    }
+                    write!(f, ") {{ {} }}", def.body)
+                }
+            }
         }
     }
 }
