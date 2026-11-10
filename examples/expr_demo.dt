@@ -1,9 +1,17 @@
-// Reusable Expressions (\Expr) Showcase
+// Reusable Expressions (\Expr) & `match` Showcase
 // Demonstrates:
 //   1. Zero-parameter \Expr { ... } evaluated with e() at the call site
 //   2. Parameterized \Expr(param: Type = default) { ... }
-//   3. Creation-site `outer.<prop>` capture vs. evaluation-site `parent.<prop>` capture
-//   4. Passing `Expr` values as component parameters and exposing `Expr` ports via `\alias`
+//   3. Enum `match` (bare variants & `|` OR-patterns) and boolean `match { ... }` inside \Expr
+//   4. Creation-site `outer.<prop>` capture vs. evaluation-site `parent.<prop>` capture
+//   5. Passing `Expr` values as component parameters and exposing `Expr` ports via `\alias`
+
+\Enum Severity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
 
 \let font_title = \Font(size: 22px, weight: 700);
 \let font_section = \Font(size: 15px, weight: 600);
@@ -15,6 +23,24 @@
 // 2. Parameterized \Expr with default parameter: captures `parent.width` at the evaluation site
 \let proportional_width: Expr = \Expr(ratio: Float, min_w: Distance = 60px) {
     max(parent.width * ratio, min_w)
+};
+
+// 3. Enum `match` with bare variants and `|` OR-patterns inside \Expr
+\let severity_color: Expr = \Expr(level: Severity) {
+    match level {
+        Low => #38bdf8,
+        Medium => #818cf8,
+        High | Critical => #f472b6,
+    }
+};
+
+// 4. Boolean `match { ... }` inside \Expr
+\let step_color: Expr = \Expr(s: Float) {
+    match {
+        s <= 1 => severity_color(Severity.Low),
+        s <= 2 => severity_color(Severity.Medium),
+        _ => severity_color(Severity.High),
+    }
 };
 
 \Component VFlow(
@@ -126,24 +152,24 @@
     \MetricBar(
         label: "Step 1 — Default \\Expr parameter (15% * step)",
         step: 1,
-        bar_color: #38bdf8
+        bar_color: step_color(1)
     )
     \MetricBar(
         label: "Step 2 — Passed linear_curve \\Expr (18% * step)",
         step: 2,
-        bar_color: #818cf8,
+        bar_color: step_color(2),
         size_fn: linear_curve
     )
     \MetricBar(
         label: "Step 3 — Passed quadratic_curve \\Expr (6% * step^2)",
         step: 3,
-        bar_color: #c084fc,
+        bar_color: step_color(3),
         size_fn: quadratic_curve
     )
     \MetricBar(
         label: "Step 4 — Passed quadratic_curve \\Expr (6% * step^2)",
         step: 4,
-        bar_color: #f472b6,
+        bar_color: severity_color(Severity.Critical),
         size_fn: quadratic_curve
     )
 

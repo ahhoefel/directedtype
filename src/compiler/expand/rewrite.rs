@@ -102,6 +102,27 @@ pub(super) fn resolve_forward_scope_refs(
             }
             Expr::Node(cloned)
         }
+        Expr::Match(m) => Expr::Match(Box::new(MatchExpr {
+            scrutinee: m
+                .scrutinee
+                .as_ref()
+                .map(|s| Box::new(resolve_forward_scope_refs(s, scope))),
+            arms: m
+                .arms
+                .iter()
+                .map(|arm| MatchArm {
+                    pattern: match &arm.pattern {
+                        MatchPattern::Condition(c) => {
+                            MatchPattern::Condition(resolve_forward_scope_refs(c, scope))
+                        }
+                        other => other.clone(),
+                    },
+                    body: resolve_forward_scope_refs(&arm.body, scope),
+                    span: arm.span,
+                })
+                .collect(),
+            span: m.span,
+        })),
         _ => expr.clone(),
     }
 }
@@ -126,6 +147,17 @@ pub(super) fn expr_has_scope_ref(expr: &Expr, scope: &HashMap<Symbol, LexicalBin
                 || m.args.iter().any(|a| expr_has_scope_ref(a, scope))
         }
         Expr::Node(n) => n.ports.iter().any(|p| expr_has_scope_ref(&p.expr, scope)),
+        Expr::Match(m) => {
+            m.scrutinee
+                .as_ref()
+                .is_some_and(|s| expr_has_scope_ref(s, scope))
+                || m.arms.iter().any(|arm| {
+                    (match &arm.pattern {
+                        MatchPattern::Condition(c) => expr_has_scope_ref(c, scope),
+                        MatchPattern::Variants(_) | MatchPattern::Wildcard(_) => false,
+                    }) || expr_has_scope_ref(&arm.body, scope)
+                })
+        }
         _ => false,
     }
 }
@@ -157,6 +189,17 @@ pub(in crate::compiler::expand) fn expr_has_unresolved_ident(expr: &Expr) -> boo
             expr_has_unresolved_ident(&m.target) || m.args.iter().any(expr_has_unresolved_ident)
         }
         Expr::Node(n) => n.ports.iter().any(|p| expr_has_unresolved_ident(&p.expr)),
+        Expr::Match(m) => {
+            m.scrutinee
+                .as_ref()
+                .is_some_and(|s| expr_has_unresolved_ident(s))
+                || m.arms.iter().any(|arm| {
+                    (match &arm.pattern {
+                        MatchPattern::Condition(c) => expr_has_unresolved_ident(c),
+                        MatchPattern::Variants(_) | MatchPattern::Wildcard(_) => false,
+                    }) || expr_has_unresolved_ident(&arm.body)
+                })
+        }
         _ => false,
     }
 }
@@ -164,7 +207,7 @@ pub(in crate::compiler::expand) fn expr_has_unresolved_ident(expr: &Expr) -> boo
 /// Returns `true` if `expr` contains any `Expr::Ternary` sub-expression.
 pub(in crate::compiler::expand) fn expr_has_ternary(expr: &Expr) -> bool {
     match expr {
-        Expr::Ternary(_) => true,
+        Expr::Ternary(_) | Expr::Match(_) => true,
         Expr::MemberAccess(m) => expr_has_ternary(&m.target),
         Expr::Binary(b) => expr_has_ternary(&b.left) || expr_has_ternary(&b.right),
         Expr::Unary(u) => expr_has_ternary(&u.operand),
@@ -186,6 +229,8 @@ thread_local! {
     static MATERIALIZED_EXPR_PORTS: std::cell::RefCell<HashMap<NodeId, Vec<(String, Expr)>>> = std::cell::RefCell::new(HashMap::new());
     static PENDING_EXPR_TYPECHECKS: std::cell::RefCell<Vec<(Expr, Option<String>, Span)>> = const { std::cell::RefCell::new(Vec::new()) };
     static ACTIVE_EXPR_EVAL_STACK: std::cell::RefCell<Vec<Span>> = const { std::cell::RefCell::new(Vec::new()) };
+    static ACTIVE_EXPR_PARAM_TYPES: std::cell::RefCell<Vec<(Expr, String)>> = const { std::cell::RefCell::new(Vec::new()) };
+    static WINDOW_PORT_TYPES: std::cell::RefCell<HashMap<String, String>> = std::cell::RefCell::new(HashMap::new());
 }
 
 pub(in crate::compiler::expand) fn reset_rewrite_tracking() {
@@ -196,6 +241,14 @@ pub(in crate::compiler::expand) fn reset_rewrite_tracking() {
     MATERIALIZED_EXPR_PORTS.with(|c| c.borrow_mut().clear());
     PENDING_EXPR_TYPECHECKS.with(|c| c.borrow_mut().clear());
     ACTIVE_EXPR_EVAL_STACK.with(|c| c.borrow_mut().clear());
+    ACTIVE_EXPR_PARAM_TYPES.with(|c| c.borrow_mut().clear());
+    WINDOW_PORT_TYPES.with(|c| c.borrow_mut().clear());
+}
+
+pub(in crate::compiler::expand) fn set_window_port_types(types: &HashMap<String, String>) {
+    WINDOW_PORT_TYPES.with(|c| {
+        *c.borrow_mut() = types.clone();
+    });
 }
 
 /// Materializes an evaluated `\Expr` body as a synthetic DAG port (`__expr_N`) on `owner_node`,
@@ -469,7 +522,7 @@ pub(super) fn expr_vars_in_env(
         Expr::MethodCall(m) => {
             expr_vars_in_env(&m.target, env) && m.args.iter().all(|a| expr_vars_in_env(a, env))
         }
-        Expr::Node(_) | Expr::ExprDef(_) => false,
+        Expr::Node(_) | Expr::ExprDef(_) | Expr::Match(_) => false,
     }
 }
 
@@ -725,6 +778,19 @@ fn first_unresolved_lexical_ident(expr: &Expr) -> Option<Ident> {
         Expr::Call(c) => c.args.iter().find_map(first_unresolved_lexical_ident),
         Expr::MethodCall(mc) => first_unresolved_lexical_ident(&mc.target)
             .or_else(|| mc.args.iter().find_map(first_unresolved_lexical_ident)),
+        Expr::Match(m) => m
+            .scrutinee
+            .as_ref()
+            .and_then(|s| first_unresolved_lexical_ident(s))
+            .or_else(|| {
+                m.arms.iter().find_map(|arm| {
+                    (match &arm.pattern {
+                        MatchPattern::Condition(c) => first_unresolved_lexical_ident(c),
+                        MatchPattern::Variants(_) | MatchPattern::Wildcard(_) => None,
+                    })
+                    .or_else(|| first_unresolved_lexical_ident(&arm.body))
+                })
+            }),
         Expr::Node(_) | Expr::ExprDef(_) | Expr::Literal(_) => None,
     }
 }
@@ -948,6 +1014,32 @@ fn rewrite_outer_in_expr(
                 span: nested.span,
             })))
         }
+        Expr::Match(m) => {
+            let scrutinee = match &m.scrutinee {
+                Some(s) => Some(Box::new(rewrite_outer_in_expr(s, depth, creation_ctx)?)),
+                None => None,
+            };
+            let mut arms = Vec::with_capacity(m.arms.len());
+            for arm in &m.arms {
+                let pattern = match &arm.pattern {
+                    MatchPattern::Condition(c) => {
+                        MatchPattern::Condition(rewrite_outer_in_expr(c, depth, creation_ctx)?)
+                    }
+                    other => other.clone(),
+                };
+                let body = rewrite_outer_in_expr(&arm.body, depth, creation_ctx)?;
+                arms.push(MatchArm {
+                    pattern,
+                    body,
+                    span: arm.span,
+                });
+            }
+            Ok(Expr::Match(Box::new(MatchExpr {
+                scrutinee,
+                arms,
+                span: m.span,
+            })))
+        }
         Expr::Literal(_) => Ok(expr.clone()),
     }
 }
@@ -1064,6 +1156,7 @@ fn eval_expr_def_call(
         }
     }
 
+    let mut pushed_param_types = 0usize;
     for (idx, param) in def.params.iter().enumerate() {
         let arg_span;
         let mut rewritten_arg = if idx < raw_args.len() {
@@ -1099,6 +1192,11 @@ fn eval_expr_def_call(
                 super::typecheck::coerce_typed_binding_expr(rewritten_arg, Some(type_ref));
             if matches!(expected_type, "Expr" | "Expression") {
                 if !matches!(rewritten_arg, Expr::ExprDef(_)) {
+                    ACTIVE_EXPR_PARAM_TYPES.with(|c| {
+                        let mut v = c.borrow_mut();
+                        let new_len = v.len().saturating_sub(pushed_param_types);
+                        v.truncate(new_len);
+                    });
                     let actual_str =
                         if let Some(lit) = infer_expr_literal_for_typecheck(&rewritten_arg, ctx) {
                             lit.type_name().to_string()
@@ -1112,6 +1210,11 @@ fn eval_expr_def_call(
                     });
                 }
             } else if matches!(rewritten_arg, Expr::ExprDef(_)) {
+                ACTIVE_EXPR_PARAM_TYPES.with(|c| {
+                    let mut v = c.borrow_mut();
+                    let new_len = v.len().saturating_sub(pushed_param_types);
+                    v.truncate(new_len);
+                });
                 return Err(CompileError::TypeMismatch {
                     expected: expected_type.to_string(),
                     actual: "Expr".to_string(),
@@ -1119,6 +1222,11 @@ fn eval_expr_def_call(
                 });
             } else if let Some(lit) = infer_expr_literal_for_typecheck(&rewritten_arg, ctx) {
                 if !lit.matches_type_name(expected_type) {
+                    ACTIVE_EXPR_PARAM_TYPES.with(|c| {
+                        let mut v = c.borrow_mut();
+                        let new_len = v.len().saturating_sub(pushed_param_types);
+                        v.truncate(new_len);
+                    });
                     return Err(CompileError::TypeMismatch {
                         expected: expected_type.to_string(),
                         actual: lit.type_name().to_string(),
@@ -1134,6 +1242,11 @@ fn eval_expr_def_call(
                     ));
                 });
             }
+            ACTIVE_EXPR_PARAM_TYPES.with(|c| {
+                c.borrow_mut()
+                    .push((rewritten_arg.clone(), expected_type.to_string()));
+            });
+            pushed_param_types += 1;
         }
 
         let binding = match &rewritten_arg {
@@ -1154,6 +1267,11 @@ fn eval_expr_def_call(
     let body_res = rewrite_expr(&def.body, &body_ctx);
     ACTIVE_EXPR_EVAL_STACK.with(|cell| {
         cell.borrow_mut().pop();
+    });
+    ACTIVE_EXPR_PARAM_TYPES.with(|c| {
+        let mut v = c.borrow_mut();
+        let new_len = v.len().saturating_sub(pushed_param_types);
+        v.truncate(new_len);
     });
     let expanded_body = body_res?;
 
@@ -2074,6 +2192,729 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             Ok(Expr::Node(cloned))
         }
         Expr::ExprDef(def) => rewrite_expr_def_at_creation(def, ctx),
+        Expr::Match(m) => rewrite_match_expr(m, ctx),
+    }
+}
+
+fn infer_rewritten_expr_type_name(
+    expr: &Expr,
+    ctx: &ScopeContext<'_>,
+    depth: usize,
+) -> Option<String> {
+    if depth > 8 {
+        return None;
+    }
+    if let Some(lit) = infer_expr_literal_for_typecheck(expr, ctx) {
+        return match lit {
+            Literal::Integer(0, _) => Some("ZeroInteger".to_string()),
+            other => Some(other.type_name().to_string()),
+        };
+    }
+    if let Some(param_ty) = ACTIVE_EXPR_PARAM_TYPES.with(|c| {
+        c.borrow()
+            .iter()
+            .rev()
+            .find(|(e, _)| expr_eq_ignore_span(e, expr))
+            .map(|(_, t)| t.clone())
+    }) {
+        return Some(param_ty);
+    }
+    match expr {
+        Expr::Paren(inner, _) => infer_rewritten_expr_type_name(inner, ctx, depth + 1),
+        Expr::Ident(id) => {
+            if id.name == Symbol::UNSET || id.name == Symbol::NONE {
+                Some("Unset".to_string())
+            } else {
+                None
+            }
+        }
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(tid) = m.target.as_ref() {
+                if !tid.is_canonical_node_ref() && ctx.enums.contains_key(tid.as_str()) {
+                    return Some(tid.as_str().to_string());
+                }
+                if let Some(nid) = tid.node_id() {
+                    let member_str = m.member.as_str();
+                    if nid.is_window() {
+                        if let Some(ty) =
+                            WINDOW_PORT_TYPES.with(|c| c.borrow().get(member_str).cloned())
+                        {
+                            return Some(ty);
+                        }
+                        if let Some(st) = super::builtins::window::window_port_type(member_str) {
+                            return Some(st.type_name());
+                        }
+                        if member_str.starts_with("__expr_") {
+                            if let Some(mat_expr) =
+                                lookup_materialized_expr_port(nid, member_str, ctx.nodes)
+                            {
+                                return infer_rewritten_expr_type_name(&mat_expr, ctx, depth + 1);
+                            }
+                        }
+                    } else if !nid.is_template_self() {
+                        if let Some(node) = ctx.nodes.get(nid.0) {
+                            if let Some(ty) = node.port_types.get(member_str) {
+                                return Some(ty.clone());
+                            }
+                        }
+                        if Some(nid) == ctx.enclosing_component || nid == ctx.current_node {
+                            if let Some(comp_ports) = ctx.comp_ports {
+                                if let Some(p_expr) = comp_ports.get(member_str) {
+                                    if let Some(ty) =
+                                        infer_rewritten_expr_type_name(p_expr, ctx, depth + 1)
+                                    {
+                                        return Some(ty);
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(node) = ctx.nodes.get(nid.0) {
+                            if let Some(p_expr) = node.ports.get(member_str) {
+                                if let Some(ty) =
+                                    infer_rewritten_expr_type_name(p_expr, ctx, depth + 1)
+                                {
+                                    return Some(ty);
+                                }
+                            }
+                            if !node.is_component {
+                                if let Some(st) =
+                                    super::builtins::default_builtin_port_type(member_str)
+                                {
+                                    return Some(st.type_name());
+                                }
+                            }
+                        }
+                        if member_str.starts_with("__expr_") {
+                            if let Some(mat_expr) =
+                                lookup_materialized_expr_port(nid, member_str, ctx.nodes)
+                            {
+                                return infer_rewritten_expr_type_name(&mat_expr, ctx, depth + 1);
+                            }
+                        }
+                    }
+                }
+            }
+            None
+        }
+        Expr::Unary(u) => match u.op {
+            UnaryOp::Not => Some("Boolean".to_string()),
+            UnaryOp::Neg => infer_rewritten_expr_type_name(&u.operand, ctx, depth + 1).map(|t| {
+                if t == "ZeroInteger" {
+                    "Integer".to_string()
+                } else {
+                    t
+                }
+            }),
+        },
+        Expr::Binary(b) => match b.op {
+            BinaryOp::Eq
+            | BinaryOp::Ne
+            | BinaryOp::Lt
+            | BinaryOp::Le
+            | BinaryOp::Gt
+            | BinaryOp::Ge
+            | BinaryOp::And
+            | BinaryOp::Or => Some("Boolean".to_string()),
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Rem => {
+                let l = infer_rewritten_expr_type_name(&b.left, ctx, depth + 1);
+                let r = infer_rewritten_expr_type_name(&b.right, ctx, depth + 1);
+                match (l.as_deref(), r.as_deref()) {
+                    (Some("String"), _) | (_, Some("String")) if b.op == BinaryOp::Add => {
+                        Some("String".to_string())
+                    }
+                    (Some("Distance"), _) | (_, Some("Distance")) => Some("Distance".to_string()),
+                    (Some("Area"), _) | (_, Some("Area")) => Some("Area".to_string()),
+                    (Some("Duration"), _) | (_, Some("Duration")) => Some("Duration".to_string()),
+                    (Some("Float"), _) | (_, Some("Float")) => Some("Float".to_string()),
+                    (
+                        Some("Integer" | "ZeroInteger"),
+                        Some("Integer" | "ZeroInteger"),
+                    ) => Some("Integer".to_string()),
+                    _ => None,
+                }
+            }
+            BinaryOp::Mul => {
+                let l = infer_rewritten_expr_type_name(&b.left, ctx, depth + 1);
+                let r = infer_rewritten_expr_type_name(&b.right, ctx, depth + 1);
+                match (l.as_deref(), r.as_deref()) {
+                    (Some("Distance"), Some("Distance")) => Some("Area".to_string()),
+                    (Some("Distance"), _) | (_, Some("Distance")) => Some("Distance".to_string()),
+                    (Some("Area"), _) | (_, Some("Area")) => Some("Area".to_string()),
+                    (Some("Duration"), _) | (_, Some("Duration")) => Some("Duration".to_string()),
+                    (Some("Float"), _) | (_, Some("Float")) => Some("Float".to_string()),
+                    (
+                        Some("Integer" | "ZeroInteger"),
+                        Some("Integer" | "ZeroInteger"),
+                    ) => Some("Integer".to_string()),
+                    _ => None,
+                }
+            }
+            BinaryOp::Div => {
+                let l = infer_rewritten_expr_type_name(&b.left, ctx, depth + 1);
+                let r = infer_rewritten_expr_type_name(&b.right, ctx, depth + 1);
+                match (l.as_deref(), r.as_deref()) {
+                    (Some("Distance"), Some("Distance"))
+                    | (Some("Area"), Some("Area"))
+                    | (Some("Duration"), Some("Duration")) => Some("Float".to_string()),
+                    (Some("Area"), Some("Distance")) => Some("Distance".to_string()),
+                    (Some("Distance"), _) => Some("Distance".to_string()),
+                    (Some("Area"), _) => Some("Area".to_string()),
+                    (Some("Duration"), _) => Some("Duration".to_string()),
+                    _ => Some("Float".to_string()),
+                }
+            }
+        },
+        Expr::Ternary(t) => {
+            let t1 = infer_rewritten_expr_type_name(&t.then_expr, ctx, depth + 1);
+            let t2 = infer_rewritten_expr_type_name(&t.else_expr, ctx, depth + 1);
+            match (t1.as_deref(), t2.as_deref()) {
+                (Some("ZeroInteger"), Some(other)) => Some(other.to_string()),
+                (Some(other), _) => Some(other.to_string()),
+                (None, Some(other)) => Some(other.to_string()),
+                _ => None,
+            }
+        }
+        Expr::Call(c) => match c.callee.as_str() {
+            "to_integer" => Some("Integer".to_string()),
+            "to_float" | "to_number" | "to_px" | "to_pt" | "distance_to_float" => {
+                Some("Float".to_string())
+            }
+            "to_fixed" | "to_precision" => Some("String".to_string()),
+            "rgb" | "rgba" | "hsl" | "hsla" => Some("Color".to_string()),
+            "text_width"
+            | "text_height"
+            | "text_baseline_offset"
+            | "span_metric"
+            | "font_cap_height"
+            | "font_x_height"
+            | "font_ascent"
+            | "font_descent"
+            | "font_line_gap"
+            | "font_line_height" => Some("Distance".to_string()),
+            "max" | "min" | "sum" | "abs" | "clamp" | "only" | "round" | "floor" | "ceil" => c
+                .args
+                .first()
+                .and_then(|a| infer_rewritten_expr_type_name(a, ctx, depth + 1)),
+            _ => None,
+        },
+        Expr::MethodCall(mc) => match mc.method.as_str() {
+            "append" | "to_fixed" | "to_precision" => Some("String".to_string()),
+            "to_px" | "to_pt" | "to_float" | "to_number" | "to_seconds" | "to_ms" => {
+                Some("Float".to_string())
+            }
+            "to_integer" => Some("Integer".to_string()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn display_inferred_type_name(ty: &str) -> &str {
+    if ty == "ZeroInteger" {
+        "Integer"
+    } else {
+        ty
+    }
+}
+
+fn combine_arm_types(acc: &str, arm: &str) -> Option<String> {
+    if acc == arm {
+        return Some(acc.to_string());
+    }
+    if acc == "Unset" {
+        return Some(arm.to_string());
+    }
+    if arm == "Unset" {
+        return Some(acc.to_string());
+    }
+    if acc == "ZeroInteger"
+        && matches!(
+            arm,
+            "Integer" | "Float" | "Distance" | "Area" | "Duration" | "ZeroInteger"
+        )
+    {
+        return Some(arm.to_string());
+    }
+    if arm == "ZeroInteger"
+        && matches!(
+            acc,
+            "Integer" | "Float" | "Distance" | "Area" | "Duration" | "ZeroInteger"
+        )
+    {
+        return Some(acc.to_string());
+    }
+    if matches!((acc, arm), ("Integer", "Float") | ("Float", "Integer")) {
+        return Some("Float".to_string());
+    }
+    None
+}
+
+fn validate_and_coerce_match_arm_bodies(
+    bodies: &mut [Option<Expr>],
+    arm_spans: &[Span],
+    ctx: &ScopeContext<'_>,
+) -> Result<Option<String>, CompileError> {
+    let mut acc_type: Option<String> = None;
+    for (idx, body_opt) in bodies.iter().enumerate() {
+        let Some(body) = body_opt else {
+            continue;
+        };
+        if let Some(arm_ty) = infer_rewritten_expr_type_name(body, ctx, 0) {
+            if let Some(ref prev_ty) = acc_type {
+                if let Some(combined) = combine_arm_types(prev_ty, &arm_ty) {
+                    acc_type = Some(combined);
+                } else {
+                    return Err(CompileError::TypeMismatch {
+                        expected: display_inferred_type_name(prev_ty).to_string(),
+                        actual: display_inferred_type_name(&arm_ty).to_string(),
+                        span: arm_spans[idx],
+                    });
+                }
+            } else {
+                acc_type = Some(arm_ty);
+            }
+        }
+    }
+
+    if let Some(ref target_ty) = acc_type {
+        for body_opt in bodies.iter_mut() {
+            let Some(body) = body_opt else {
+                continue;
+            };
+            if let Expr::Literal(Literal::Integer(0, span)) = *body {
+                match target_ty.as_str() {
+                    "Distance" => {
+                        *body = Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span));
+                    }
+                    "Area" => {
+                        *body = Expr::Literal(Literal::Area(0.0, DistanceUnit::Px, span));
+                    }
+                    "Duration" => {
+                        *body = Expr::Literal(Literal::Duration(0, DurationUnit::S, span));
+                    }
+                    "Float" => {
+                        *body = Expr::Literal(Literal::Float(0.0, span));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    Ok(acc_type.map(|t| display_inferred_type_name(&t).to_string()))
+}
+
+fn eval_const_enum_scrutinee(
+    rewritten_scrutinee: &Expr,
+    enum_name: &str,
+    ctx: &ScopeContext<'_>,
+) -> Option<String> {
+    if let Some(Literal::Enum(e, v, _)) =
+        resolve_ident_or_member_to_literal(rewritten_scrutinee, ctx)
+    {
+        if e == enum_name {
+            return Some(v);
+        }
+    }
+    let mut const_env = HashMap::new();
+    populate_const_env_for_cond(rewritten_scrutinee, ctx, &mut const_env);
+    if expr_vars_in_env(rewritten_scrutinee, &const_env) {
+        if let Ok(crate::compiler::value::Value::Enum {
+            enum_name: e,
+            variant: v,
+        }) = crate::compiler::eval::eval_expr(rewritten_scrutinee, &const_env)
+        {
+            if e == enum_name {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+fn eval_const_bool_cond(
+    raw_cond: &Expr,
+    rewritten_cond: &Expr,
+    cond_ctx: &ScopeContext<'_>,
+    is_event_port: bool,
+) -> Option<bool> {
+    let mut const_env = HashMap::new();
+    populate_const_env_for_cond(rewritten_cond, cond_ctx, &mut const_env);
+    if expr_vars_in_env(rewritten_cond, &const_env) {
+        match crate::compiler::eval::eval_expr(rewritten_cond, &const_env) {
+            Ok(crate::compiler::value::Value::Bool(b)) => Some(b),
+            _ if is_event_port => match resolve_ident_or_member_to_literal(raw_cond, cond_ctx) {
+                Some(Literal::Bool(b, _)) => Some(b),
+                _ => None,
+            },
+            _ => None,
+        }
+    } else if is_event_port {
+        match resolve_ident_or_member_to_literal(raw_cond, cond_ctx) {
+            Some(Literal::Bool(b, _)) => Some(b),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
+fn rewrite_match_expr(m: &MatchExpr, ctx: &ScopeContext<'_>) -> Result<Expr, CompileError> {
+    if let Some(scrutinee) = &m.scrutinee {
+        let mut scrutinee_ctx = ctx.clone();
+        scrutinee_ctx.is_event_port = false;
+        let rewritten_scrutinee = rewrite_expr(scrutinee, &scrutinee_ctx)?;
+
+        let enum_def = if let Some(ty_name) =
+            infer_rewritten_expr_type_name(&rewritten_scrutinee, &scrutinee_ctx, 0)
+        {
+            if let Some(def) = ctx.enums.get(&ty_name) {
+                def
+            } else {
+                return Err(CompileError::Custom {
+                    message: format!(
+                        "Scrutinee of enum 'match' must be an Enum value, found '{}'",
+                        display_inferred_type_name(&ty_name)
+                    ),
+                    span: scrutinee.span(),
+                });
+            }
+        } else {
+            let mut inferred_def = None;
+            for arm in &m.arms {
+                if let MatchPattern::Variants(vars) = &arm.pattern {
+                    for v in vars {
+                        if let Some(en) = &v.enum_name {
+                            if let Some(def) = ctx.enums.get(en.as_str()) {
+                                inferred_def = Some(def);
+                                break;
+                            }
+                        } else {
+                            let matching: Vec<&EnumDef> = ctx
+                                .enums
+                                .values()
+                                .filter(|d| d.has_variant(v.variant.as_str()))
+                                .collect();
+                            if matching.len() == 1 {
+                                inferred_def = Some(matching[0]);
+                                break;
+                            }
+                        }
+                    }
+                }
+                if inferred_def.is_some() {
+                    break;
+                }
+            }
+            if let Some(def) = inferred_def {
+                def
+            } else {
+                return Err(CompileError::Custom {
+                    message: "Cannot infer Enum type for 'match' scrutinee; add an explicit type annotation".to_string(),
+                    span: scrutinee.span(),
+                });
+            }
+        };
+
+        let enum_name = enum_def.name.as_str();
+        let mut seen_variants = std::collections::HashSet::new();
+        let mut wildcard_seen = false;
+
+        for arm in &m.arms {
+            if wildcard_seen {
+                return Err(CompileError::Custom {
+                    message: "Unreachable match arm after wildcard '_'".to_string(),
+                    span: arm.span,
+                });
+            }
+            match &arm.pattern {
+                MatchPattern::Wildcard(_) => {
+                    wildcard_seen = true;
+                }
+                MatchPattern::Variants(vars) => {
+                    for v in vars {
+                        if let Some(explicit_en) = &v.enum_name {
+                            if explicit_en.as_str() != enum_name {
+                                return Err(CompileError::TypeMismatch {
+                                    expected: enum_name.to_string(),
+                                    actual: explicit_en.as_str().to_string(),
+                                    span: v.span,
+                                });
+                            }
+                        }
+                        if !enum_def.has_variant(v.variant.as_str()) {
+                            return Err(CompileError::UnknownEnumVariant {
+                                enum_name: enum_name.to_string(),
+                                variant: v.variant.as_str().to_string(),
+                                span: v.variant.span,
+                            });
+                        }
+                        if !seen_variants.insert(v.variant.as_str().to_string()) {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Duplicate enum variant '{}.{}' in match expression",
+                                    enum_name, v.variant
+                                ),
+                                span: v.span,
+                            });
+                        }
+                    }
+                }
+                MatchPattern::Condition(_) => unreachable!(),
+            }
+        }
+
+        if !wildcard_seen {
+            let missing: Vec<&str> = enum_def
+                .variants
+                .iter()
+                .map(|v| v.as_str())
+                .filter(|v| !seen_variants.contains(*v))
+                .collect();
+            if !missing.is_empty() {
+                return Err(CompileError::Custom {
+                    message: format!(
+                        "Non-exhaustive 'match' on enum '{}': missing variant(s) {}",
+                        enum_name,
+                        missing.join(", ")
+                    ),
+                    span: m.span,
+                });
+            }
+        }
+
+        let mut rewritten_bodies: Vec<Option<Expr>> = Vec::with_capacity(m.arms.len());
+        let mut arm_spans: Vec<Span> = Vec::with_capacity(m.arms.len());
+        for arm in &m.arms {
+            rewritten_bodies.push(Some(rewrite_expr(&arm.body, ctx)?));
+            arm_spans.push(arm.body.span());
+        }
+
+        let expected_arm_ty =
+            validate_and_coerce_match_arm_bodies(&mut rewritten_bodies, &arm_spans, ctx)?;
+
+        if let Some(const_variant) =
+            eval_const_enum_scrutinee(&rewritten_scrutinee, enum_name, &scrutinee_ctx)
+        {
+            let mut chosen_idx = m.arms.len() - 1;
+            for (idx, arm) in m.arms.iter().enumerate() {
+                match &arm.pattern {
+                    MatchPattern::Wildcard(_) => {
+                        chosen_idx = idx;
+                        break;
+                    }
+                    MatchPattern::Variants(vars) => {
+                        if vars.iter().any(|v| v.variant.as_str() == const_variant) {
+                            chosen_idx = idx;
+                            break;
+                        }
+                    }
+                    MatchPattern::Condition(_) => {}
+                }
+            }
+            for (idx, body_opt) in rewritten_bodies.iter().enumerate() {
+                if idx != chosen_idx {
+                    if let Some(unchosen_body) = body_opt {
+                        PENDING_EXPR_TYPECHECKS.with(|cell| {
+                            cell.borrow_mut().push((
+                                unchosen_body.clone(),
+                                expected_arm_ty.clone(),
+                                arm_spans[idx],
+                            ));
+                        });
+                    }
+                }
+            }
+            return Ok(rewritten_bodies[chosen_idx].take().unwrap());
+        }
+
+        let mut acc_expr = rewritten_bodies.pop().unwrap().unwrap();
+        for (arm, body_opt) in m.arms[..m.arms.len() - 1]
+            .iter()
+            .zip(rewritten_bodies.into_iter())
+            .rev()
+        {
+            let then_expr = body_opt.unwrap();
+            let MatchPattern::Variants(vars) = &arm.pattern else {
+                unreachable!();
+            };
+            let mut cond_expr: Option<Expr> = None;
+            for v in vars {
+                let eq_expr = Expr::Binary(BinaryExpr {
+                    op: BinaryOp::Eq,
+                    left: Box::new(rewritten_scrutinee.clone()),
+                    right: Box::new(Expr::Literal(Literal::Enum(
+                        enum_name.to_string(),
+                        v.variant.as_str().to_string(),
+                        v.span,
+                    ))),
+                    span: v.span,
+                });
+                cond_expr = Some(match cond_expr {
+                    None => eq_expr,
+                    Some(prev) => Expr::Binary(BinaryExpr {
+                        op: BinaryOp::Or,
+                        span: prev.span().merge(v.span),
+                        left: Box::new(prev),
+                        right: Box::new(eq_expr),
+                    }),
+                });
+            }
+            record_unfolded_ternary_emitted();
+            acc_expr = Expr::Ternary(TernaryExpr {
+                condition: Box::new(cond_expr.unwrap()),
+                then_expr: Box::new(then_expr),
+                else_expr: Box::new(acc_expr),
+                span: m.span,
+            });
+        }
+        Ok(acc_expr)
+    } else {
+        // Boolean condition match: `match { cond1 => body1, ..., _ => default_body }`
+        let mut wildcard_seen = false;
+        for arm in &m.arms {
+            if wildcard_seen {
+                return Err(CompileError::Custom {
+                    message: "Unreachable match arm after wildcard '_'".to_string(),
+                    span: arm.span,
+                });
+            }
+            if matches!(arm.pattern, MatchPattern::Wildcard(_)) {
+                wildcard_seen = true;
+            }
+        }
+        if !wildcard_seen {
+            return Err(CompileError::Custom {
+                message: "Boolean 'match' expression must end with a wildcard '_ => ...' catch-all arm".to_string(),
+                span: m.span,
+            });
+        }
+
+        let mut cond_ctx = ctx.clone();
+        cond_ctx.is_event_port = false;
+
+        enum EvaluatedCond {
+            Const(bool),
+            Runtime(Expr),
+            Wildcard,
+        }
+
+        let mut eval_conds: Vec<EvaluatedCond> = Vec::with_capacity(m.arms.len());
+        let mut rewritten_bodies: Vec<Option<Expr>> = Vec::with_capacity(m.arms.len());
+        let mut arm_spans: Vec<Span> = Vec::with_capacity(m.arms.len());
+
+        for arm in &m.arms {
+            arm_spans.push(arm.body.span());
+            match &arm.pattern {
+                MatchPattern::Wildcard(_) => {
+                    eval_conds.push(EvaluatedCond::Wildcard);
+                    rewritten_bodies.push(Some(rewrite_expr(&arm.body, ctx)?));
+                }
+                MatchPattern::Condition(raw_cond) => {
+                    if let Some(sib_bool) = eval_sibling_condition(raw_cond, ctx) {
+                        eval_conds.push(EvaluatedCond::Const(sib_bool));
+                        if sib_bool {
+                            rewritten_bodies.push(Some(rewrite_expr(&arm.body, ctx)?));
+                        } else {
+                            rewritten_bodies.push(rewrite_expr(&arm.body, ctx).ok());
+                        }
+                    } else {
+                        let rewritten_cond = rewrite_expr(raw_cond, &cond_ctx)?;
+                        if let Some(cond_ty) =
+                            infer_rewritten_expr_type_name(&rewritten_cond, &cond_ctx, 0)
+                        {
+                            if !matches!(
+                                cond_ty.as_str(),
+                                "Boolean"
+                                    | "Timer"
+                                    | "IndefiniteTimer"
+                                    | "Handler"
+                                    | "Unset"
+                            ) {
+                                return Err(CompileError::TypeMismatch {
+                                    expected: "Boolean".to_string(),
+                                    actual: display_inferred_type_name(&cond_ty).to_string(),
+                                    span: raw_cond.span(),
+                                });
+                            }
+                        }
+                        if let Some(b) = eval_const_bool_cond(
+                            raw_cond,
+                            &rewritten_cond,
+                            &cond_ctx,
+                            ctx.is_event_port,
+                        ) {
+                            eval_conds.push(EvaluatedCond::Const(b));
+                        } else {
+                            eval_conds.push(EvaluatedCond::Runtime(rewritten_cond));
+                        }
+                        rewritten_bodies.push(Some(rewrite_expr(&arm.body, ctx)?));
+                    }
+                }
+                MatchPattern::Variants(_) => unreachable!(),
+            }
+        }
+
+        let expected_arm_ty =
+            validate_and_coerce_match_arm_bodies(&mut rewritten_bodies, &arm_spans, ctx)?;
+
+        let mut active_runtime_arms: Vec<(Expr, Expr)> = Vec::new();
+        let mut final_else_expr: Option<Expr> = None;
+
+        for (idx, cond_state) in eval_conds.into_iter().enumerate() {
+            match cond_state {
+                EvaluatedCond::Const(false) => {
+                    if let Some(unchosen_body) = &rewritten_bodies[idx] {
+                        PENDING_EXPR_TYPECHECKS.with(|cell| {
+                            cell.borrow_mut().push((
+                                unchosen_body.clone(),
+                                expected_arm_ty.clone(),
+                                arm_spans[idx],
+                            ));
+                        });
+                    }
+                }
+                EvaluatedCond::Const(true) | EvaluatedCond::Wildcard => {
+                    if final_else_expr.is_none() {
+                        final_else_expr = Some(rewritten_bodies[idx].take().unwrap());
+                    } else if let Some(unchosen_body) = &rewritten_bodies[idx] {
+                        PENDING_EXPR_TYPECHECKS.with(|cell| {
+                            cell.borrow_mut().push((
+                                unchosen_body.clone(),
+                                expected_arm_ty.clone(),
+                                arm_spans[idx],
+                            ));
+                        });
+                    }
+                }
+                EvaluatedCond::Runtime(cond_expr) => {
+                    if final_else_expr.is_none() {
+                        active_runtime_arms
+                            .push((cond_expr, rewritten_bodies[idx].take().unwrap()));
+                    } else if let Some(unchosen_body) = &rewritten_bodies[idx] {
+                        PENDING_EXPR_TYPECHECKS.with(|cell| {
+                            cell.borrow_mut().push((
+                                unchosen_body.clone(),
+                                expected_arm_ty.clone(),
+                                arm_spans[idx],
+                            ));
+                        });
+                    }
+                }
+            }
+        }
+
+        let mut acc_expr = final_else_expr.expect("boolean match guaranteed to have wildcard arm");
+        for (cond_expr, then_expr) in active_runtime_arms.into_iter().rev() {
+            record_unfolded_ternary_emitted();
+            acc_expr = Expr::Ternary(TernaryExpr {
+                condition: Box::new(cond_expr),
+                then_expr: Box::new(then_expr),
+                else_expr: Box::new(acc_expr),
+                span: m.span,
+            });
+        }
+        Ok(acc_expr)
     }
 }
 
@@ -2467,6 +3308,7 @@ pub(super) fn instantiate_template_expr(
         }
         Expr::Node(n) => Expr::Node(n.clone()),
         Expr::ExprDef(def) => Expr::ExprDef(def.clone()),
+        Expr::Match(m) => Expr::Match(m.clone()),
     }
 }
 

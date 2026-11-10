@@ -103,6 +103,8 @@ impl<'a> ComponentExpander<'a> {
         if schema.is_inline_box_def {
             doc.get_node_mut(ctx.comp_node_id).unwrap().is_inline_box = true;
         }
+        doc.get_node_mut(ctx.comp_node_id).unwrap().port_types =
+            std::sync::Arc::clone(&schema.static_port_types);
 
         let slot_consts = vec![None; schema.port_table.len()];
         let preverified_ports = templates.preverified_template_mask.clone();

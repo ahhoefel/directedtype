@@ -369,7 +369,7 @@ fn format_dag_expr_into_spans(
         Expr::Node(node) => {
             push_equation_span(spans, format!("\\{}(...)", node.name), false, false);
         }
-        Expr::ExprDef(_) => {
+        Expr::ExprDef(_) | Expr::Match(_) => {
             push_equation_span(spans, format!("{expr}"), false, false);
         }
     }
@@ -436,7 +436,7 @@ pub fn format_dag_expr(expr: &Expr, layout: &ResolvedLayout) -> String {
         Expr::Node(node) => {
             format!("\\{}(...)", node.name)
         }
-        Expr::ExprDef(_) => format!("{expr}"),
+        Expr::ExprDef(_) | Expr::Match(_) => format!("{expr}"),
     }
 }
 

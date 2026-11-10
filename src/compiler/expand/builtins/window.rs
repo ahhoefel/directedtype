@@ -236,6 +236,8 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
         }
     }
 
+    super::super::rewrite::set_window_port_types(&expanded_doc.window_port_types);
+
     Ok(window_scope_ports)
 }
 

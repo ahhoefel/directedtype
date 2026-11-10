@@ -101,6 +101,8 @@ const PREINTERNED: &[&str] = &[
     "outer",
     "Expr",
     "Expression",
+    "match",
+    "_",
 ];
 
 struct SymbolInterner {
@@ -236,6 +238,8 @@ impl Symbol {
     pub const OUTER: Self = Self(83);
     pub const EXPR_KW: Self = Self(84);
     pub const EXPRESSION_KW: Self = Self(85);
+    pub const MATCH_KW: Self = Self(86);
+    pub const UNDERSCORE: Self = Self(87);
 
     /// Canonical node symbol for `NodeId::WINDOW` (`"__window"`).
     pub const WINDOW_NODE: Self = Self(TAG_NODE | NODE_WINDOW_RAW);
@@ -451,6 +455,8 @@ impl Symbol {
             "outer" => Self::OUTER,
             "Expr" => Self::EXPR_KW,
             "Expression" => Self::EXPRESSION_KW,
+            "match" => Self::MATCH_KW,
+            "_" => Self::UNDERSCORE,
             other => intern_dynamic_str(other),
         }
     }

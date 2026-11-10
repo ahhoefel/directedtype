@@ -426,6 +426,33 @@ pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
                     })
                 && expr_eq_ignore_span(&e1.body, &e2.body)
         }
+        (Expr::Match(m1), Expr::Match(m2)) => {
+            let scrutinee_eq = match (&m1.scrutinee, &m2.scrutinee) {
+                (Some(s1), Some(s2)) => expr_eq_ignore_span(s1, s2),
+                (None, None) => true,
+                _ => false,
+            };
+            scrutinee_eq
+                && m1.arms.len() == m2.arms.len()
+                && m1.arms.iter().zip(&m2.arms).all(|(a1, a2)| {
+                    let pat_eq = match (&a1.pattern, &a2.pattern) {
+                        (MatchPattern::Wildcard(_), MatchPattern::Wildcard(_)) => true,
+                        (MatchPattern::Condition(c1), MatchPattern::Condition(c2)) => {
+                            expr_eq_ignore_span(c1, c2)
+                        }
+                        (MatchPattern::Variants(v1), MatchPattern::Variants(v2)) => {
+                            v1.len() == v2.len()
+                                && v1.iter().zip(v2).all(|(p1, p2)| {
+                                    p1.enum_name.as_ref().map(|e| e.as_str())
+                                        == p2.enum_name.as_ref().map(|e| e.as_str())
+                                        && p1.variant.as_str() == p2.variant.as_str()
+                                })
+                        }
+                        _ => false,
+                    };
+                    pat_eq && expr_eq_ignore_span(&a1.body, &a2.body)
+                })
+        }
         _ => false,
     }
 }
@@ -582,6 +609,7 @@ pub enum Expr {
     Paren(Box<Expr>, Span),
     Node(Box<ElementNode>),
     ExprDef(Box<ExprDef>),
+    Match(Box<MatchExpr>),
 }
 
 /// Reusable expression literal: `\Expr(param1: Type1, ...) { <body_expr> }` or `\Expr { <body_expr> }`.
@@ -589,6 +617,59 @@ pub enum Expr {
 pub struct ExprDef {
     pub params: Vec<ParamDef>,
     pub body: Box<Expr>,
+    pub span: Span,
+}
+
+/// A single enum variant pattern in a `match` arm: either bare `H1` or qualified `TypographyVariant.H1`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumVariantPattern {
+    pub enum_name: Option<Ident>,
+    pub variant: Ident,
+    pub span: Span,
+}
+
+/// Pattern on the left-hand side of `=>` in a `match` arm.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MatchPattern {
+    /// One or more enum variants separated by `|` (`H1 | H2 => ...`).
+    Variants(Vec<EnumVariantPattern>),
+    /// A boolean condition expression (`x < 100px => ...`).
+    Condition(Expr),
+    /// Catch-all wildcard (`_ => ...`).
+    Wildcard(Span),
+}
+
+impl MatchPattern {
+    pub fn span(&self) -> Span {
+        match self {
+            MatchPattern::Variants(vars) => {
+                if let (Some(first), Some(last)) = (vars.first(), vars.last()) {
+                    first.span.merge(last.span)
+                } else {
+                    Span::default()
+                }
+            }
+            MatchPattern::Condition(expr) => expr.span(),
+            MatchPattern::Wildcard(span) => *span,
+        }
+    }
+}
+
+/// A single arm inside a `match` expression (`pattern => body`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    pub pattern: MatchPattern,
+    pub body: Expr,
+    pub span: Span,
+}
+
+/// Match expression:
+/// - Enum match: `match scrutinee { H1 => 96px, H2 | H3 => 60px, _ => 16px }`
+/// - Boolean condition match: `match { x < 100px => 10px, _ => 20px }`
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchExpr {
+    pub scrutinee: Option<Box<Expr>>,
+    pub arms: Vec<MatchArm>,
     pub span: Span,
 }
 
@@ -606,6 +687,7 @@ impl Expr {
             Expr::Paren(_, span) => *span,
             Expr::Node(n) => n.span,
             Expr::ExprDef(e) => e.span,
+            Expr::Match(m) => m.span,
         }
     }
 
@@ -1053,6 +1135,36 @@ impl fmt::Display for Expr {
                     }
                     write!(f, ") {{ {} }}", def.body)
                 }
+            }
+            Expr::Match(m) => {
+                if let Some(scrutinee) = &m.scrutinee {
+                    write!(f, "match {} {{ ", scrutinee)?;
+                } else {
+                    write!(f, "match {{ ")?;
+                }
+                for (i, arm) in m.arms.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    match &arm.pattern {
+                        MatchPattern::Wildcard(_) => write!(f, "_ => {}", arm.body)?,
+                        MatchPattern::Condition(cond) => write!(f, "{} => {}", cond, arm.body)?,
+                        MatchPattern::Variants(vars) => {
+                            for (vi, v) in vars.iter().enumerate() {
+                                if vi > 0 {
+                                    write!(f, " | ")?;
+                                }
+                                if let Some(en) = &v.enum_name {
+                                    write!(f, "{}.{}", en, v.variant)?;
+                                } else {
+                                    write!(f, "{}", v.variant)?;
+                                }
+                            }
+                            write!(f, " => {}", arm.body)?;
+                        }
+                    }
+                }
+                write!(f, " }}")
             }
         }
     }

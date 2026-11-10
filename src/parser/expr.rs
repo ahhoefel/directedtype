@@ -1,6 +1,7 @@
 use crate::ast::{
-    BinaryExpr, BinaryOp, CallExpr, Expr, ExprDef, Ident, Literal, MemberAccessExpr,
-    MethodCallExpr, ParamDef, TernaryExpr, TypeRef, UnaryExpr, UnaryOp,
+    BinaryExpr, BinaryOp, CallExpr, EnumVariantPattern, Expr, ExprDef, Ident, Literal, MatchArm,
+    MatchExpr, MatchPattern, MemberAccessExpr, MethodCallExpr, ParamDef, TernaryExpr, TypeRef,
+    UnaryExpr, UnaryOp,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::ParserCursor;
@@ -171,6 +172,7 @@ fn parse_prefix(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
         Token::Color(val) => Ok(Expr::Literal(Literal::Color(val, span))),
         Token::True => Ok(Expr::Literal(Literal::Bool(true, span))),
         Token::False => Ok(Expr::Literal(Literal::Bool(false, span))),
+        Token::Ident(name) if name == "match" => parse_match_expr(cursor, span),
         Token::Ident(name) => Ok(Expr::Ident(Ident::new(name, span))),
         Token::Children => Ok(Expr::Ident(Ident::new("Children", span))),
         Token::Env => Ok(Expr::Ident(Ident::new("env", span))),
@@ -277,8 +279,189 @@ fn expr_contains_non_value_node(expr: &Expr) -> bool {
         Expr::Unary(u) => expr_contains_non_value_node(&u.operand),
         Expr::Paren(inner, _) => expr_contains_non_value_node(inner),
         Expr::ExprDef(def) => expr_contains_non_value_node(&def.body),
+        Expr::Match(m) => {
+            m.scrutinee
+                .as_ref()
+                .is_some_and(|s| expr_contains_non_value_node(s))
+                || m.arms.iter().any(|arm| {
+                    (match &arm.pattern {
+                        MatchPattern::Condition(c) => expr_contains_non_value_node(c),
+                        MatchPattern::Variants(_) | MatchPattern::Wildcard(_) => false,
+                    }) || expr_contains_non_value_node(&arm.body)
+                })
+        }
         Expr::Literal(_) | Expr::Ident(_) => false,
     }
+}
+
+fn parse_enum_variant_pattern(cursor: &mut ParserCursor<'_>) -> Result<EnumVariantPattern, ParseError> {
+    let first = parse_ident(cursor)?;
+    if first.as_str() == "_" {
+        return Err(ParseError::Custom {
+            message: "Wildcard '_' cannot be combined with '|' in a match arm".to_string(),
+            span: first.span,
+        });
+    }
+    if let Some((Token::Dot, _)) = cursor.peek_token()? {
+        cursor.consume_token(&Token::Dot)?;
+        let variant = parse_ident(cursor)?;
+        let span = first.span.merge(variant.span);
+        Ok(EnumVariantPattern {
+            enum_name: Some(first),
+            variant,
+            span,
+        })
+    } else {
+        let span = first.span;
+        Ok(EnumVariantPattern {
+            enum_name: None,
+            variant: first,
+            span,
+        })
+    }
+}
+
+fn parse_match_expr(
+    cursor: &mut ParserCursor<'_>,
+    match_kw_span: crate::span::Span,
+) -> Result<Expr, ParseError> {
+    let scrutinee = if matches!(cursor.peek_token()?, Some((Token::LBrace, _))) {
+        None
+    } else {
+        Some(Box::new(parse_expr_bp(cursor, 0)?))
+    };
+
+    let open_brace_span = match cursor.peek_token()?.cloned() {
+        Some((Token::LBrace, _)) => cursor.consume_token(&Token::LBrace)?,
+        Some((other, span)) => {
+            return Err(ParseError::UnexpectedToken {
+                expected: "'{' to start match arms".to_string(),
+                found: other.to_string(),
+                span,
+            });
+        }
+        None => {
+            return Err(ParseError::UnexpectedEof {
+                expected: "'{' to start match arms".to_string(),
+                span: match_kw_span,
+            });
+        }
+    };
+
+    let mut arms = Vec::new();
+    while let Some((tok, _)) = cursor.peek_token()?.cloned() {
+        if tok == Token::RBrace {
+            break;
+        }
+
+        let pattern = if scrutinee.is_some() {
+            if matches!(cursor.peek_token()?, Some((Token::Ident(s), _)) if s == "_") {
+                let (_, wc_span) = cursor.next_token()?.unwrap();
+                if let Some((Token::Pipe, pipe_span)) = cursor.peek_token()?.cloned() {
+                    return Err(ParseError::Custom {
+                        message: "Wildcard '_' cannot be combined with '|' in a match arm"
+                            .to_string(),
+                        span: wc_span.merge(pipe_span),
+                    });
+                }
+                MatchPattern::Wildcard(wc_span)
+            } else {
+                let mut variants = vec![parse_enum_variant_pattern(cursor)?];
+                while let Some((Token::Pipe, _)) = cursor.peek_token()? {
+                    cursor.consume_token(&Token::Pipe)?;
+                    variants.push(parse_enum_variant_pattern(cursor)?);
+                }
+                MatchPattern::Variants(variants)
+            }
+        } else if matches!(cursor.peek_token()?, Some((Token::Ident(s), _)) if s == "_")
+            && matches!(cursor.peek_nth(1)?, Some((Token::FatArrow, _)))
+        {
+            let (_, wc_span) = cursor.next_token()?.unwrap();
+            MatchPattern::Wildcard(wc_span)
+        } else {
+            let cond = parse_expr_bp(cursor, 0)?;
+            MatchPattern::Condition(cond)
+        };
+
+        let pat_span = pattern.span();
+        match cursor.peek_token()?.cloned() {
+            Some((Token::FatArrow, _)) => {
+                cursor.consume_token(&Token::FatArrow)?;
+            }
+            Some((other, span)) => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: "'=>' after match pattern".to_string(),
+                    found: other.to_string(),
+                    span,
+                });
+            }
+            None => {
+                return Err(ParseError::UnexpectedEof {
+                    expected: "'=>' after match pattern".to_string(),
+                    span: pat_span,
+                });
+            }
+        }
+
+        let body = parse_expr_bp(cursor, 0)?;
+        let arm_span = pat_span.merge(body.span());
+        arms.push(MatchArm {
+            pattern,
+            body,
+            span: arm_span,
+        });
+
+        match cursor.peek_token()?.cloned() {
+            Some((Token::Comma, _)) => {
+                cursor.consume_token(&Token::Comma)?;
+            }
+            Some((Token::RBrace, _)) => break,
+            Some((other, span)) => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: "',' or '}' after match arm".to_string(),
+                    found: other.to_string(),
+                    span,
+                });
+            }
+            None => {
+                return Err(ParseError::UnclosedDelimiter {
+                    delimiter: '}',
+                    open_span: open_brace_span,
+                });
+            }
+        }
+    }
+
+    let close_brace_span = match cursor.peek_token()?.cloned() {
+        Some((Token::RBrace, _)) => cursor.consume_token(&Token::RBrace)?,
+        Some((other, span)) => {
+            return Err(ParseError::UnexpectedToken {
+                expected: "'}' to close match expression".to_string(),
+                found: other.to_string(),
+                span,
+            });
+        }
+        None => {
+            return Err(ParseError::UnclosedDelimiter {
+                delimiter: '}',
+                open_span: open_brace_span,
+            });
+        }
+    };
+
+    let full_span = match_kw_span.merge(close_brace_span);
+    if arms.is_empty() {
+        return Err(ParseError::Custom {
+            message: "match expression must contain at least one arm".to_string(),
+            span: full_span,
+        });
+    }
+
+    Ok(Expr::Match(Box::new(MatchExpr {
+        scrutinee,
+        arms,
+        span: full_span,
+    })))
 }
 
 fn parse_expr_def(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {

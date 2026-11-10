@@ -205,6 +205,17 @@ fn expr_references_any_name(expr: &Expr, names: &HashSet<String>) -> bool {
                     .is_some_and(|e| expr_references_any_name(e, names))
             }) || expr_references_any_name(&def.body, names)
         }
+        Expr::Match(m) => {
+            m.scrutinee
+                .as_ref()
+                .is_some_and(|s| expr_references_any_name(s, names))
+                || m.arms.iter().any(|arm| {
+                    (match &arm.pattern {
+                        MatchPattern::Condition(c) => expr_references_any_name(c, names),
+                        MatchPattern::Variants(_) | MatchPattern::Wildcard(_) => false,
+                    }) || expr_references_any_name(&arm.body, names)
+                })
+        }
         Expr::Literal(_) => false,
     }
 }
@@ -1204,6 +1215,17 @@ pub(super) fn collect_expr_lets<'a>(expr: &'a Expr, out: &mut Vec<&'a LetBinding
             }
             collect_expr_lets(&def.body, out);
         }
+        Expr::Match(m) => {
+            if let Some(s) = &m.scrutinee {
+                collect_expr_lets(s, out);
+            }
+            for arm in &m.arms {
+                if let MatchPattern::Condition(c) = &arm.pattern {
+                    collect_expr_lets(c, out);
+                }
+                collect_expr_lets(&arm.body, out);
+            }
+        }
         Expr::Literal(_) | Expr::Ident(_) => {}
     }
 }
@@ -1485,6 +1507,18 @@ fn validate_key_expr(
             name: "Expr".to_string(),
             span: def.span,
         }),
+        Expr::Match(m) => {
+            if let Some(s) = &m.scrutinee {
+                validate_key_expr(node_name, s, lexical_scope)?;
+            }
+            for arm in &m.arms {
+                if let MatchPattern::Condition(c) = &arm.pattern {
+                    validate_key_expr(node_name, c, lexical_scope)?;
+                }
+                validate_key_expr(node_name, &arm.body, lexical_scope)?;
+            }
+            Ok(())
+        }
     }
 }
 
@@ -1565,6 +1599,22 @@ fn expr_has_template_self_or_ternary(expr: &Expr) -> (bool, bool) {
             (has_s, has_t)
         }
         Expr::Node(_) | Expr::ExprDef(_) => (false, false),
+        Expr::Match(m) => {
+            let mut has_s = false;
+            if let Some(s) = &m.scrutinee {
+                let (s1, _) = expr_has_template_self_or_ternary(s);
+                has_s |= s1;
+            }
+            for arm in &m.arms {
+                if let MatchPattern::Condition(c) = &arm.pattern {
+                    let (s1, _) = expr_has_template_self_or_ternary(c);
+                    has_s |= s1;
+                }
+                let (s2, _) = expr_has_template_self_or_ternary(&arm.body);
+                has_s |= s2;
+            }
+            (has_s, true)
+        }
     }
 }
 
@@ -1601,6 +1651,17 @@ fn collect_template_self_deps(expr: &Expr, deps: &mut Vec<Symbol>) {
             collect_template_self_deps(&mc.target, deps);
             for arg in &mc.args {
                 collect_template_self_deps(arg, deps);
+            }
+        }
+        Expr::Match(m) => {
+            if let Some(s) = &m.scrutinee {
+                collect_template_self_deps(s, deps);
+            }
+            for arm in &m.arms {
+                if let MatchPattern::Condition(c) = &arm.pattern {
+                    collect_template_self_deps(c, deps);
+                }
+                collect_template_self_deps(&arm.body, deps);
             }
         }
         Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) => {}
@@ -1818,7 +1879,7 @@ fn try_compile_self_template(
                 span: c.span,
             }))
         }
-        Expr::MethodCall(_) | Expr::Node(_) | Expr::ExprDef(_) => None,
+        Expr::MethodCall(_) | Expr::Node(_) | Expr::ExprDef(_) | Expr::Match(_) => None,
     }
 }
 

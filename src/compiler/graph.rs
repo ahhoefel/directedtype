@@ -622,6 +622,6 @@ fn collect_dependencies(expr: &Expr, out: &mut Vec<VarId>) {
                 collect_dependencies(&port.expr, out);
             }
         }
-        Expr::Ident(_) | Expr::Literal(_) | Expr::ExprDef(_) => {}
+        Expr::Ident(_) | Expr::Literal(_) | Expr::ExprDef(_) | Expr::Match(_) => {}
     }
 }

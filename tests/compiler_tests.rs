@@ -5979,6 +5979,179 @@ fn test_expr_def_parse_and_compile_errors() {
     }
 }
 
+#[test]
+fn test_enum_and_boolean_match_expressions() {
+    use directedtype::compiler::NodeId;
+    let src = r#"
+    \Enum Role {
+        H1,
+        H2,
+        H3,
+        Body,
+        Caption,
+    }
+
+    \let role_size: Expr = \Expr(r: Role) {
+        match r {
+            H1 => 96px,
+            H2 | H3 => 48px,
+            _ => 16px,
+        }
+    };
+
+    \let exhaustive_weight: Expr = \Expr(r: Role) {
+        match r {
+            H1 | H2 => 300,
+            H3 => 400,
+            Body | Caption => 500,
+        }
+    };
+
+    \Component Badge(
+        role: Role = Role.H2,
+        score: Distance = 150px,
+        x: Distance = 0px,
+        y: Distance = 0px
+    ) {
+        \let w: Distance = role_size(role);
+        \let weight_px: Distance = exhaustive_weight(role) * 1px;
+        \let h: Distance = match {
+            score < 100px => 10px,
+            score < 200px => 20px,
+            _ => 30px,
+        };
+        \Rect(x: x, y: y, width: w + weight_px, height: h, color: #000)
+    }
+
+    \let b1 = \Badge(role: Role.H1, score: 50px);
+    \let b2 = \Badge(role: Role.H3, score: 150px);
+    \let b3 = \Badge(role: Role.Caption, score: 250px);
+    "#;
+
+    let doc = parse(src).expect("Failed to parse match test");
+    let _ = compile_to_graph(&doc).expect("Failed to compile match test");
+    let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0)
+        .expect("Failed to evaluate");
+
+    // b1 is NodeId(0) (its inner Rect is NodeId(1))
+    // b2 is NodeId(2) (its inner Rect is NodeId(3))
+    // b3 is NodeId(4) (its inner Rect is NodeId(5))
+    // b1: H1 -> 96 + 300 = 396, score 50px -> 10px
+    assert_eq!(layout.get_node(NodeId(1)).unwrap().rect.width, 396.0);
+    assert_eq!(layout.get_node(NodeId(1)).unwrap().rect.height, 10.0);
+    // b2: H3 -> 48 + 400 = 448, score 150px -> 20px
+    assert_eq!(layout.get_node(NodeId(3)).unwrap().rect.width, 448.0);
+    assert_eq!(layout.get_node(NodeId(3)).unwrap().rect.height, 20.0);
+    // b3: Caption -> 16 + 500 = 516, score 250px -> 30px
+    assert_eq!(layout.get_node(NodeId(5)).unwrap().rect.width, 516.0);
+    assert_eq!(layout.get_node(NodeId(5)).unwrap().rect.height, 30.0);
+}
+
+#[test]
+fn test_match_compile_errors() {
+    for (bad_src, expected_err) in [
+        // 1. Non-exhaustive enum match (missing variant)
+        (
+            r#"
+            \Enum ColorMode { Light, Dark, System }
+            \let m = ColorMode.Light;
+            \let w = match m {
+                Light => 10px,
+                Dark => 20px,
+            };
+            \Rect(x: 0, y: 0, width: w, height: 10px, color: #000)
+            "#,
+            "Non-exhaustive 'match' on enum 'ColorMode': missing variant(s) System",
+        ),
+        // 2. Unknown enum variant in match pattern
+        (
+            r#"
+            \Enum ColorMode { Light, Dark }
+            \let m = ColorMode.Light;
+            \let w = match m {
+                Light => 10px,
+                Neon => 20px,
+                _ => 30px,
+            };
+            \Rect(x: 0, y: 0, width: w, height: 10px, color: #000)
+            "#,
+            "Unknown variant 'Neon' on enum 'ColorMode'",
+        ),
+        // 3. Duplicate enum variant across arms
+        (
+            r#"
+            \Enum ColorMode { Light, Dark }
+            \let m = ColorMode.Light;
+            \let w = match m {
+                Light => 10px,
+                Light | Dark => 20px,
+            };
+            \Rect(x: 0, y: 0, width: w, height: 10px, color: #000)
+            "#,
+            "Duplicate enum variant 'ColorMode.Light' in match expression",
+        ),
+        // 4. Unreachable arm after `_`
+        (
+            r#"
+            \Enum ColorMode { Light, Dark }
+            \let m = ColorMode.Light;
+            \let w = match m {
+                _ => 10px,
+                Light => 20px,
+            };
+            \Rect(x: 0, y: 0, width: w, height: 10px, color: #000)
+            "#,
+            "Unreachable match arm after wildcard '_'",
+        ),
+        // 5. Missing `_` wildcard arm in boolean match
+        (
+            r#"
+            \let x = 50px;
+            \let w = match {
+                x < 100px => 10px,
+                x < 200px => 20px,
+            };
+            \Rect(x: 0, y: 0, width: w, height: 10px, color: #000)
+            "#,
+            "Boolean 'match' expression must end with a wildcard '_ => ...' catch-all arm",
+        ),
+        // 6. Non-boolean condition in boolean match
+        (
+            r#"
+            \let x = 50px;
+            \let w = match {
+                x + 10px => 10px,
+                _ => 20px,
+            };
+            \Rect(x: 0, y: 0, width: w, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Boolean', found 'Distance'",
+        ),
+        // 7. Type mismatch across match arm bodies
+        (
+            r#"
+            \let x = 50px;
+            \let w = match {
+                x < 100px => 10px,
+                _ => #ff0000,
+            };
+            \Rect(x: 0, y: 0, width: w, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Distance', found 'Color'",
+        ),
+    ] {
+        let doc = parse(bad_src).expect("Should parse");
+        let err = compile_to_graph(&doc).expect_err(expected_err);
+        assert!(
+            err.to_string().contains(expected_err),
+            "Expected compile error containing '{}', got: {}",
+            expected_err,
+            err
+        );
+    }
+}
+
+
 
 
 

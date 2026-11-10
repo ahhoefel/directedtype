@@ -990,6 +990,17 @@ fn collect_from_expr(expr: &Expr, out: &mut HashSet<String>) {
             }
             collect_from_expr(&def.body, out);
         }
+        Expr::Match(m) => {
+            if let Some(s) = &m.scrutinee {
+                collect_from_expr(s, out);
+            }
+            for arm in &m.arms {
+                if let crate::ast::MatchPattern::Condition(c) = &arm.pattern {
+                    collect_from_expr(c, out);
+                }
+                collect_from_expr(&arm.body, out);
+            }
+        }
         Expr::Literal(_) | Expr::Ident(_) => {}
     }
 }
@@ -1135,6 +1146,17 @@ fn rewrite_expr(expr: &mut Expr, renames: &HashMap<String, String>) {
             }
             rewrite_expr(&mut def.body, renames);
         }
+        Expr::Match(m) => {
+            if let Some(s) = &mut m.scrutinee {
+                rewrite_expr(s, renames);
+            }
+            for arm in &mut m.arms {
+                if let crate::ast::MatchPattern::Condition(c) = &mut arm.pattern {
+                    rewrite_expr(c, renames);
+                }
+                rewrite_expr(&mut arm.body, renames);
+            }
+        }
         Expr::Literal(_) | Expr::Ident(_) => {}
     }
 }
@@ -1258,6 +1280,17 @@ fn resolve_expr_enum_literals(
                 }
             }
             resolve_expr_enum_literals(&mut def.body, enums);
+        }
+        Expr::Match(m) => {
+            if let Some(s) = &mut m.scrutinee {
+                resolve_expr_enum_literals(s, enums);
+            }
+            for arm in &mut m.arms {
+                if let crate::ast::MatchPattern::Condition(c) = &mut arm.pattern {
+                    resolve_expr_enum_literals(c, enums);
+                }
+                resolve_expr_enum_literals(&mut arm.body, enums);
+            }
         }
         Expr::Literal(_) | Expr::Ident(_) => {}
     }

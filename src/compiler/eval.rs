@@ -1558,6 +1558,10 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                 .to_string(),
             span: def.span,
         }),
+        Expr::Match(m) => Err(CompileError::Custom {
+            message: "Unlowered 'match' expression in evaluator".to_string(),
+            span: m.span,
+        }),
     }
 }
 

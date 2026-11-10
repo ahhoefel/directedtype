@@ -205,6 +205,17 @@ pub(super) fn validate_expr_type_annotations(
                 validate_content_items_type_annotations(&slot.items, enums, registry)?;
             }
         }
+        Expr::Match(m) => {
+            if let Some(s) = &m.scrutinee {
+                validate_expr_type_annotations(s, enums, registry)?;
+            }
+            for arm in &m.arms {
+                if let MatchPattern::Condition(c) = &arm.pattern {
+                    validate_expr_type_annotations(c, enums, registry)?;
+                }
+                validate_expr_type_annotations(&arm.body, enums, registry)?;
+            }
+        }
         Expr::Literal(_) | Expr::Ident(_) => {}
     }
     Ok(())
@@ -2186,6 +2197,45 @@ fn infer_expr_type(
             _ => Ok(StaticType::Node(elem.name.as_str().to_string())),
         },
         Expr::ExprDef(_) => Ok(StaticType::Expr),
+        Expr::Match(m) => {
+            let mut acc_ty: Option<StaticType> = None;
+            for arm in &m.arms {
+                if let MatchPattern::Condition(c) = &arm.pattern {
+                    let c_ty = infer_expr_type(c, doc, enums, registry, cache)?;
+                    if !matches!(
+                        c_ty,
+                        StaticType::Boolean
+                            | StaticType::Timer
+                            | StaticType::IndefiniteTimer
+                            | StaticType::Handler
+                            | StaticType::Unset
+                    ) {
+                        return Err(CompileError::TypeMismatch {
+                            expected: "Boolean".to_string(),
+                            actual: c_ty.type_name(),
+                            span: c.span(),
+                        });
+                    }
+                }
+                let arm_ty = infer_expr_type(&arm.body, doc, enums, registry, cache)?;
+                if let Some(prev_ty) = &acc_ty {
+                    if arm_ty == *prev_ty || arm_ty.matches(prev_ty) {
+                        // keep prev_ty
+                    } else if prev_ty.matches(&arm_ty) {
+                        acc_ty = Some(arm_ty.decay());
+                    } else {
+                        return Err(CompileError::TypeMismatch {
+                            expected: prev_ty.type_name(),
+                            actual: arm_ty.type_name(),
+                            span: arm.body.span(),
+                        });
+                    }
+                } else {
+                    acc_ty = Some(arm_ty);
+                }
+            }
+            Ok(acc_ty.unwrap_or(StaticType::Integer).decay())
+        }
     }
 }
 

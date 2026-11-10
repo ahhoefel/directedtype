@@ -82,6 +82,12 @@ pub enum Token {
     #[token("=")]
     Eq,
 
+    #[token("=>")]
+    FatArrow,
+
+    #[token("|")]
+    Pipe,
+
     #[token("?")]
     Question,
 
@@ -229,6 +235,8 @@ impl fmt::Display for Token {
             Token::Dot => write!(f, "."),
             Token::Semicolon => write!(f, ";"),
             Token::Eq => write!(f, "="),
+            Token::FatArrow => write!(f, "=>"),
+            Token::Pipe => write!(f, "|"),
             Token::Question => write!(f, "?"),
             Token::Plus => write!(f, "+"),
             Token::Minus => write!(f, "-"),

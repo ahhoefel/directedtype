@@ -46,61 +46,39 @@
 // Reusable \Expr definitions for mapping TypographyVariant -> (size, weight, line_height)
 // across all Typography component overloads.
 \let typography_variant_size: Expr = \Expr(v: TypographyVariant) {
-    (v == TypographyVariant.H1) ? 96px : (
-        (v == TypographyVariant.H2) ? 60px : (
-            (v == TypographyVariant.H3) ? 48px : (
-                (v == TypographyVariant.H4) ? 34px : (
-                    (v == TypographyVariant.H5) ? 24px : (
-                        (v == TypographyVariant.H6) ? 20px : (
-                            (v == TypographyVariant.Subtitle1) ? 16px : (
-                                (v == TypographyVariant.Subtitle2) ? 14px : (
-                                    (v == TypographyVariant.Body2) ? 14px : (
-                                        (v == TypographyVariant.Button) ? 14px : (
-                                            (v == TypographyVariant.Caption) ? 12px : (
-                                                (v == TypographyVariant.Overline) ? 12px : 16px
-                                            )
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
-    )
+    match v {
+        H1 => 96px,
+        H2 => 60px,
+        H3 => 48px,
+        H4 => 34px,
+        H5 => 24px,
+        H6 => 20px,
+        Subtitle1 | Body1 => 16px,
+        Subtitle2 | Body2 | Button => 14px,
+        Caption | Overline => 12px,
+    }
 };
 
 \let typography_variant_weight: Expr = \Expr(v: TypographyVariant) {
-    ((v == TypographyVariant.H1) || (v == TypographyVariant.H2)) ? 300 : (
-        ((v == TypographyVariant.H6) || (v == TypographyVariant.Subtitle2) || (v == TypographyVariant.Button)) ? 500 : 400
-    )
+    match v {
+        H1 | H2 => 300,
+        H6 | Subtitle2 | Button => 500,
+        _ => 400,
+    }
 };
 
 \let typography_variant_line_height: Expr = \Expr(v: TypographyVariant) {
-    (v == TypographyVariant.H1) ? 112px : (
-        (v == TypographyVariant.H2) ? 72px : (
-            (v == TypographyVariant.H3) ? 56px : (
-                (v == TypographyVariant.H4) ? 42px : (
-                    (v == TypographyVariant.H5) ? 32px : (
-                        (v == TypographyVariant.H6) ? 32px : (
-                            (v == TypographyVariant.Subtitle1) ? 28px : (
-                                (v == TypographyVariant.Subtitle2) ? 22px : (
-                                    (v == TypographyVariant.Body2) ? 20px : (
-                                        (v == TypographyVariant.Button) ? 24px : (
-                                            (v == TypographyVariant.Caption) ? 20px : (
-                                                (v == TypographyVariant.Overline) ? 32px : 24px
-                                            )
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
-    )
+    match v {
+        H1 => 112px,
+        H2 => 72px,
+        H3 => 56px,
+        H4 => 42px,
+        H5 | H6 | Overline => 32px,
+        Subtitle1 => 28px,
+        Subtitle2 => 22px,
+        Body1 | Button => 24px,
+        Body2 | Caption => 20px,
+    }
 };
 
 // 1. Explicit Width Typography (Wrapping or Aligned within Container)
