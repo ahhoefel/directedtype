@@ -757,7 +757,28 @@ pub(super) fn infer_expr_literal_for_typecheck<'a>(
     }
 }
 
-fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
+fn is_component_handler_port(port_name: &str, ctx: &ScopeContext<'_>) -> bool {
+    if port_name.starts_with("on_") {
+        return true;
+    }
+    for nid in [
+        Some(ctx.current_node),
+        ctx.parent_node,
+        ctx.enclosing_component,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if let Some(node) = ctx.nodes.get(nid.0) {
+            if let Some(ty) = node.port_types.get(port_name) {
+                return ty == "Handler";
+            }
+        }
+    }
+    false
+}
+
+pub(super) fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
     match expr {
         Expr::Paren(inner, _) => is_handler_expr_unset(inner, ctx),
         Expr::Ident(id) => {
@@ -770,36 +791,42 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
             {
                 return None;
             }
-            if let Some(comp_ports) = ctx.comp_ports {
-                if let Some(port_expr) = comp_ports.get(id.as_str()) {
-                    return match port_expr {
-                        Expr::Ident(pid) if pid.as_str() == "unset" || pid.as_str() == "None" => {
-                            Some(true)
-                        }
-                        Expr::MemberAccess(m) => {
-                            if let Expr::Ident(target_id) = m.target.as_ref() {
-                                if ctx.enums.contains_key(target_id.as_str()) {
-                                    return None;
-                                }
-                                let is_self = target_id.name == Symbol::SELF
-                                    || target_id.node_id() == Some(ctx.current_node);
-                                Some(is_self)
-                            } else {
-                                None
+            if is_component_handler_port(id.as_str(), ctx) {
+                if let Some(comp_ports) = ctx.comp_ports {
+                    if let Some(port_expr) = comp_ports.get(id.as_str()) {
+                        return match port_expr {
+                            Expr::Ident(pid)
+                                if pid.as_str() == "unset" || pid.as_str() == "None" =>
+                            {
+                                Some(true)
                             }
-                        }
-                        _ => None,
-                    };
+                            Expr::MemberAccess(m) => {
+                                if let Expr::Ident(target_id) = m.target.as_ref() {
+                                    if ctx.enums.contains_key(target_id.as_str()) {
+                                        return None;
+                                    }
+                                    let is_self = target_id.name == Symbol::SELF
+                                        || target_id.node_id() == Some(ctx.current_node);
+                                    Some(is_self)
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        };
+                    }
                 }
             }
             match ctx.lexical_scope.get(&id.name) {
-                Some(LexicalBinding::Expr(e)) => return is_handler_expr_unset(e, ctx),
+                Some(LexicalBinding::Expr(e)) if is_component_handler_port(id.as_str(), ctx) => {
+                    return is_handler_expr_unset(e, ctx);
+                }
                 Some(LexicalBinding::Member {
                     node_id,
                     member,
                     is_state,
                 }) => {
-                    if *is_state {
+                    if *is_state || !is_component_handler_port(member.as_str(), ctx) {
                         return None;
                     }
                     let is_target =
@@ -849,6 +876,7 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
                     if ctx
                         .declared_state_names
                         .is_some_and(|s| s.contains(m.member.as_str()))
+                        || !is_component_handler_port(m.member.as_str(), ctx)
                     {
                         return None;
                     }
@@ -881,6 +909,19 @@ fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
             None
         }
         _ => None,
+    }
+}
+
+pub(super) fn resolve_const_bool_or_handler<'a>(
+    expr: &'a Expr,
+    ctx: &ScopeContext<'a>,
+) -> Option<bool> {
+    if let Some(Literal::Bool(b, _)) = resolve_ident_or_member_to_literal(expr, ctx) {
+        Some(b)
+    } else if let Some(is_unset) = is_handler_expr_unset(expr, ctx) {
+        Some(!is_unset)
+    } else {
+        None
     }
 }
 
@@ -1063,6 +1104,16 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                     return Some(Literal::Bool(res, bin.span));
                 }
             }
+            if bin.op == BinaryOp::And {
+                let b1 = resolve_const_bool_or_handler(&bin.left, ctx)?;
+                let b2 = resolve_const_bool_or_handler(&bin.right, ctx)?;
+                return Some(Literal::Bool(b1 && b2, bin.span));
+            }
+            if bin.op == BinaryOp::Or {
+                let b1 = resolve_const_bool_or_handler(&bin.left, ctx)?;
+                let b2 = resolve_const_bool_or_handler(&bin.right, ctx)?;
+                return Some(Literal::Bool(b1 || b2, bin.span));
+            }
             let left_lit = resolve_ident_or_member_to_literal(&bin.left, ctx)?;
             let right_lit = resolve_ident_or_member_to_literal(&bin.right, ctx)?;
             match bin.op {
@@ -1128,30 +1179,13 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                     };
                     Some(Literal::Bool(ne, bin.span))
                 }
-                BinaryOp::And => {
-                    if let (Literal::Bool(b1, _), Literal::Bool(b2, _)) = (&left_lit, &right_lit) {
-                        Some(Literal::Bool(*b1 && *b2, bin.span))
-                    } else {
-                        None
-                    }
-                }
-                BinaryOp::Or => {
-                    if let (Literal::Bool(b1, _), Literal::Bool(b2, _)) = (&left_lit, &right_lit) {
-                        Some(Literal::Bool(*b1 || *b2, bin.span))
-                    } else {
-                        None
-                    }
-                }
                 _ => None,
             }
         }
         Expr::Unary(u) => match u.op {
             UnaryOp::Not => {
-                if let Some(Literal::Bool(b, _)) = resolve_ident_or_member_to_literal(&u.operand, ctx) {
-                    Some(Literal::Bool(!b, u.span))
-                } else {
-                    None
-                }
+                let b = resolve_const_bool_or_handler(&u.operand, ctx)?;
+                Some(Literal::Bool(!b, u.span))
             }
             UnaryOp::Neg => match resolve_ident_or_member_to_literal(&u.operand, ctx)? {
                 Literal::Integer(i, _) => Some(Literal::Integer(-i, u.span)),
@@ -1943,14 +1977,28 @@ fn infer_expr_type(
                     }
                 }
                 BinaryOp::And | BinaryOp::Or => {
-                    if left_ty != StaticType::Boolean {
+                    if !matches!(
+                        left_ty,
+                        StaticType::Boolean
+                            | StaticType::Timer
+                            | StaticType::IndefiniteTimer
+                            | StaticType::Handler
+                            | StaticType::Unset
+                    ) {
                         return Err(CompileError::TypeMismatch {
                             expected: "Boolean".to_string(),
                             actual: left_ty.type_name(),
                             span: bin.left.span(),
                         });
                     }
-                    if right_ty != StaticType::Boolean {
+                    if !matches!(
+                        right_ty,
+                        StaticType::Boolean
+                            | StaticType::Timer
+                            | StaticType::IndefiniteTimer
+                            | StaticType::Handler
+                            | StaticType::Unset
+                    ) {
                         return Err(CompileError::TypeMismatch {
                             expected: "Boolean".to_string(),
                             actual: right_ty.type_name(),

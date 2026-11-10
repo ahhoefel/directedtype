@@ -260,19 +260,24 @@ pub(in crate::compiler::expand) fn eval_assert_directive(
         rewritten = crate::compiler::expand::rewrite::resolve_forward_scope_refs(&rewritten, scope);
     }
     match eval_expr(&rewritten, const_env) {
-        Ok(val) => {
-            if !val.is_truthy() {
+        Ok(val) => match val.as_truthy() {
+            Some(true) => Ok(()),
+            Some(false) => {
                 let msg = assert_dir
                     .message
                     .clone()
                     .unwrap_or_else(|| format!("Assertion failed: {}", assert_dir.condition));
-                return Err(CompileError::AssertionFailed {
+                Err(CompileError::AssertionFailed {
                     message: msg,
                     span: assert_dir.span,
-                });
+                })
             }
-            Ok(())
-        }
+            None => Err(CompileError::TypeMismatch {
+                expected: "Boolean".to_string(),
+                actual: val.type_name().to_string(),
+                span: assert_dir.condition.span(),
+            }),
+        },
         Err(e) => Err(CompileError::Custom {
             message: format!("Could not evaluate assertion condition: {}", e),
             span: assert_dir.span,

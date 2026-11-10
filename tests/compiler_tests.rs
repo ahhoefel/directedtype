@@ -6151,6 +6151,117 @@ fn test_match_compile_errors() {
     }
 }
 
+#[test]
+fn test_no_truthy_coercion_on_primitives_and_shorthand_for_handlers_timers_siblings() {
+    // 1. Primitive, String, Color, Enum, and Node values are rejected in boolean contexts and \assert
+    for (bad_src, expected_err) in [
+        (
+            r#"
+            \let w = 1 ? 10px : 20px;
+            \Rect(x: 0, y: 0, width: w, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Boolean', found 'Integer'",
+        ),
+        (
+            r#"
+            \let w = "nonempty" ? 10px : 20px;
+            \Rect(x: 0, y: 0, width: w, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Boolean', found 'String'",
+        ),
+        (
+            r#"
+            \let b = !0;
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Boolean or Timer', found 'Integer'",
+        ),
+        (
+            r#"
+            \let b = true && 10px;
+            \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            "#,
+            "Type mismatch: expected 'Boolean', found 'Distance'",
+        ),
+        (
+            r#"
+            \Box(x: 0, y: 0, width: 10px, height: 10px) {
+                \assert 42 as "should reject integer condition";
+                \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)
+            }
+            "#,
+            "Type mismatch: expected 'Boolean', found 'Integer'",
+        ),
+        (
+            r#"
+            \Component BoxWithBadAssert(w: Distance = 10px) {
+                \assert w as "should reject distance condition";
+                \Rect(x: 0, y: 0, width: w, height: 10px, color: #000)
+            }
+            \BoxWithBadAssert()
+            "#,
+            "Type mismatch: expected 'Boolean', found 'Distance'",
+        ),
+    ] {
+        let doc = parse(bad_src).expect("Should parse");
+        let err = compile_to_graph(&doc).expect_err(expected_err);
+        assert!(
+            err.to_string().contains(expected_err),
+            "Expected compile error containing '{}', got: {}",
+            expected_err,
+            err
+        );
+    }
+
+    // 2. Shorthand truthiness checks work for Handler, Timer, and prev/next
+    let valid_src = r#"
+    \Component ActionItem(
+        x: Distance = parent.left,
+        y: Distance = parent.top,
+        disabled: Boolean = false,
+        clickable: Boolean = false,
+        on_click: Handler = self.click,
+        width: Distance = (!disabled && (clickable || on_click)) ? 120px : (!on_click ? 60px : 80px),
+        height: Distance = 30px
+    ) {
+        \let has_handler: Boolean = on_click ? true : false;
+        \Rect(x: x, y: y, width: width, height: height, color: has_handler ? #2563eb : #64748b)
+    }
+
+    \Component Row(x: Distance = 0px, y: Distance = 0px) {
+        \Children(
+            x: prev ? prev.right + 10px : x,
+            y: y
+        )
+    }
+
+    \Component HostApp() {
+        \let t = \Timer(duration: 2s);
+        \Row(x: 5px, y: t ? 10px : 0px) {
+            \ActionItem()
+            \ActionItem(clickable: true)
+            \ActionItem(on_click: handle_click)
+        }
+    }
+    \HostApp()
+    "#;
+    let doc = parse(valid_src).expect("Should parse valid shorthand truthiness document");
+    let compiled = directedtype::compiler::compile_document(&doc)
+        .expect("Should compile shorthand truthiness for Handler, Timer, and prev");
+    let rects: Vec<_> = compiled
+        .layout()
+        .nodes
+        .iter()
+        .filter(|n| n.name == "Rect")
+        .collect();
+    assert_eq!(rects.len(), 3);
+    assert_eq!(rects[0].rect.width, 60.0);
+    assert_eq!(rects[1].rect.width, 120.0);
+    assert_eq!(rects[2].rect.width, 120.0);
+    assert_eq!(rects[0].rect.x, 5.0);
+    assert_eq!(rects[1].rect.x, 75.0);
+    assert_eq!(rects[2].rect.x, 205.0);
+}
 
 
 

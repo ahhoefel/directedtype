@@ -146,18 +146,13 @@ impl Value {
         }
     }
 
-    pub fn is_truthy(&self) -> bool {
+    pub fn as_truthy(&self) -> Option<bool> {
         match self {
-            Value::Bool(b) => *b,
-            Value::Integer(n) | Value::Duration(n) => *n != 0,
-            Value::Float(n) | Value::Distance(n) | Value::Area(n) => *n != 0.0,
-            Value::String(s) => !s.is_empty(),
-            Value::Color(_) => true,
-            Value::Node(_) => true,
-            Value::Enum { .. } => true,
-            Value::Timer { time, duration, .. } => *duration > 0 && *time < *duration,
-            Value::IndefiniteTimer { .. } => true,
-            Value::Unset => false,
+            Value::Bool(b) => Some(*b),
+            Value::Timer { time, duration, .. } => Some(*duration > 0 && *time < *duration),
+            Value::IndefiniteTimer { .. } => Some(true),
+            Value::Unset => Some(false),
+            _ => None,
         }
     }
 

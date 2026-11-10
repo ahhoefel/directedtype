@@ -2,7 +2,8 @@ use crate::ast::*;
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::context::{EnvEntry, LexicalBinding, ScopeContext};
 use crate::compiler::expand::typecheck::{
-    infer_expr_literal_for_typecheck, resolve_ident_or_member_to_literal,
+    infer_expr_literal_for_typecheck, is_handler_expr_unset, resolve_const_bool_or_handler,
+    resolve_ident_or_member_to_literal,
 };
 use crate::compiler::expanded::NodeId;
 use crate::span::Span;
@@ -1470,25 +1471,27 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
             let mut cond_ctx = ctx.clone();
             cond_ctx.is_event_port = false;
-            let rewritten_cond = rewrite_expr(&tern.condition, &cond_ctx)?;
+            let rewritten_cond = if cond_ctx.comp_ports.is_some() {
+                if let Some(is_unset) = is_handler_expr_unset(&tern.condition, &cond_ctx) {
+                    Expr::Literal(Literal::Bool(!is_unset, tern.condition.span()))
+                } else {
+                    rewrite_expr(&tern.condition, &cond_ctx)?
+                }
+            } else {
+                rewrite_expr(&tern.condition, &cond_ctx)?
+            };
             let mut const_env = HashMap::new();
             populate_const_env_for_cond(&rewritten_cond, &cond_ctx, &mut const_env);
             let cond_bool = if expr_vars_in_env(&rewritten_cond, &const_env) {
                 match crate::compiler::eval::eval_expr(&rewritten_cond, &const_env) {
                     Ok(crate::compiler::value::Value::Bool(b)) => Some(b),
                     _ if ctx.is_event_port => {
-                        match resolve_ident_or_member_to_literal(&tern.condition, &cond_ctx) {
-                            Some(Literal::Bool(b, _)) => Some(b),
-                            _ => None,
-                        }
+                        resolve_const_bool_or_handler(&tern.condition, &cond_ctx)
                     }
                     _ => None,
                 }
             } else if ctx.is_event_port {
-                match resolve_ident_or_member_to_literal(&tern.condition, &cond_ctx) {
-                    Some(Literal::Bool(b, _)) => Some(b),
-                    _ => None,
-                }
+                resolve_const_bool_or_handler(&tern.condition, &cond_ctx)
             } else {
                 None
             };
@@ -2128,18 +2131,60 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }))
         }
 
-        Expr::Binary(bin) => Ok(Expr::Binary(BinaryExpr {
-            op: bin.op,
-            left: Box::new(rewrite_expr(&bin.left, ctx)?),
-            right: Box::new(rewrite_expr(&bin.right, ctx)?),
-            span: bin.span,
-        })),
+        Expr::Binary(bin) => {
+            if ctx.comp_ports.is_some() {
+                if matches!(bin.op, BinaryOp::Eq | BinaryOp::Ne) {
+                    if let (Some(l_unset), Some(r_unset)) = (
+                        is_handler_expr_unset(&bin.left, ctx),
+                        is_handler_expr_unset(&bin.right, ctx),
+                    ) {
+                        let res = if bin.op == BinaryOp::Eq {
+                            l_unset == r_unset
+                        } else {
+                            l_unset != r_unset
+                        };
+                        return Ok(Expr::Literal(Literal::Bool(res, bin.span)));
+                    }
+                }
+                if matches!(bin.op, BinaryOp::And | BinaryOp::Or) {
+                    let left = if let Some(l_unset) = is_handler_expr_unset(&bin.left, ctx) {
+                        Expr::Literal(Literal::Bool(!l_unset, bin.left.span()))
+                    } else {
+                        rewrite_expr(&bin.left, ctx)?
+                    };
+                    let right = if let Some(r_unset) = is_handler_expr_unset(&bin.right, ctx) {
+                        Expr::Literal(Literal::Bool(!r_unset, bin.right.span()))
+                    } else {
+                        rewrite_expr(&bin.right, ctx)?
+                    };
+                    return Ok(Expr::Binary(BinaryExpr {
+                        op: bin.op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                        span: bin.span,
+                    }));
+                }
+            }
+            Ok(Expr::Binary(BinaryExpr {
+                op: bin.op,
+                left: Box::new(rewrite_expr(&bin.left, ctx)?),
+                right: Box::new(rewrite_expr(&bin.right, ctx)?),
+                span: bin.span,
+            }))
+        }
 
-        Expr::Unary(u) => Ok(Expr::Unary(UnaryExpr {
-            op: u.op,
-            operand: Box::new(rewrite_expr(&u.operand, ctx)?),
-            span: u.span,
-        })),
+        Expr::Unary(u) => {
+            if u.op == UnaryOp::Not && ctx.comp_ports.is_some() {
+                if let Some(is_unset) = is_handler_expr_unset(&u.operand, ctx) {
+                    return Ok(Expr::Literal(Literal::Bool(is_unset, u.span)));
+                }
+            }
+            Ok(Expr::Unary(UnaryExpr {
+                op: u.op,
+                operand: Box::new(rewrite_expr(&u.operand, ctx)?),
+                span: u.span,
+            }))
+        }
 
         Expr::Paren(inner, span) => Ok(Expr::Paren(Box::new(rewrite_expr(inner, ctx)?), *span)),
 
@@ -2543,17 +2588,11 @@ fn eval_const_bool_cond(
     if expr_vars_in_env(rewritten_cond, &const_env) {
         match crate::compiler::eval::eval_expr(rewritten_cond, &const_env) {
             Ok(crate::compiler::value::Value::Bool(b)) => Some(b),
-            _ if is_event_port => match resolve_ident_or_member_to_literal(raw_cond, cond_ctx) {
-                Some(Literal::Bool(b, _)) => Some(b),
-                _ => None,
-            },
+            _ if is_event_port => resolve_const_bool_or_handler(raw_cond, cond_ctx),
             _ => None,
         }
     } else if is_event_port {
-        match resolve_ident_or_member_to_literal(raw_cond, cond_ctx) {
-            Some(Literal::Bool(b, _)) => Some(b),
-            _ => None,
-        }
+        resolve_const_bool_or_handler(raw_cond, cond_ctx)
     } else {
         None
     }
@@ -2819,7 +2858,15 @@ fn rewrite_match_expr(m: &MatchExpr, ctx: &ScopeContext<'_>) -> Result<Expr, Com
                             rewritten_bodies.push(rewrite_expr(&arm.body, ctx).ok());
                         }
                     } else {
-                        let rewritten_cond = rewrite_expr(raw_cond, &cond_ctx)?;
+                        let rewritten_cond = if cond_ctx.comp_ports.is_some() {
+                            if let Some(is_unset) = is_handler_expr_unset(raw_cond, &cond_ctx) {
+                                Expr::Literal(Literal::Bool(!is_unset, raw_cond.span()))
+                            } else {
+                                rewrite_expr(raw_cond, &cond_ctx)?
+                            }
+                        } else {
+                            rewrite_expr(raw_cond, &cond_ctx)?
+                        };
                         if let Some(cond_ty) =
                             infer_rewritten_expr_type_name(&rewritten_cond, &cond_ctx, 0)
                         {
@@ -2997,7 +3044,7 @@ pub(crate) fn extract_event_binding_with_values(
         Expr::Ternary(tern) => {
             let vals = values?;
             let cond_val = crate::compiler::eval::eval_expr(&tern.condition, vals).ok()?;
-            let b = cond_val.as_bool()?;
+            let b = cond_val.as_truthy()?;
             let branch = if b { &tern.then_expr } else { &tern.else_expr };
             extract_event_binding_with_values(port_name, branch, values)
         }

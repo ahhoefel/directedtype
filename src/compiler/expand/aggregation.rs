@@ -874,8 +874,8 @@ fn fold_const_ternaries_in_place(
             } else {
                 None
             };
-            if let Some(val) = cond_val {
-                let chosen = if val.is_truthy() {
+            if let Some(b) = cond_val.and_then(|val| val.as_truthy()) {
+                let chosen = if b {
                     &mut *t.then_expr
                 } else {
                     &mut *t.else_expr

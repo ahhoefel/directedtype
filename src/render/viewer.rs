@@ -1063,7 +1063,7 @@ impl ViewerApp {
     #[inline]
     pub fn is_vscroll_enabled(&self) -> bool {
         if let Some(val) = self.layout().values.get(&VarId::new(NodeId::WINDOW, "vscroll")) {
-            val.is_truthy()
+            val.as_bool().unwrap_or(true)
         } else {
             true
         }
@@ -1073,7 +1073,7 @@ impl ViewerApp {
     #[inline]
     pub fn is_hscroll_enabled(&self) -> bool {
         if let Some(val) = self.layout().values.get(&VarId::new(NodeId::WINDOW, "hscroll")) {
-            val.is_truthy()
+            val.as_bool().unwrap_or(true)
         } else {
             true
         }
@@ -2318,7 +2318,7 @@ impl ViewerApp {
         let vscroll_enabled = layout
             .values
             .get(&VarId::new(NodeId::WINDOW, "vscroll"))
-            .map(|v| v.is_truthy())
+            .and_then(|v| v.as_bool())
             .unwrap_or(true);
 
         let raw_content_w = layout
@@ -2329,7 +2329,7 @@ impl ViewerApp {
         let hscroll_enabled = layout
             .values
             .get(&VarId::new(NodeId::WINDOW, "hscroll"))
-            .map(|v| v.is_truthy())
+            .and_then(|v| v.as_bool())
             .unwrap_or(true);
 
         let z = self.zoom.max(0.01);

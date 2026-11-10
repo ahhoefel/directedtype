@@ -719,8 +719,16 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                     };
                     Ok(Value::Bool(res))
                 }
-                BinaryOp::And => Ok(Value::Bool(left.is_truthy() && right.is_truthy())),
-                BinaryOp::Or => Ok(Value::Bool(left.is_truthy() || right.is_truthy())),
+                BinaryOp::And => {
+                    let l = eval_truthy(&left, b.left.span())?;
+                    let r = eval_truthy(&right, b.right.span())?;
+                    Ok(Value::Bool(l && r))
+                }
+                BinaryOp::Or => {
+                    let l = eval_truthy(&left, b.left.span())?;
+                    let r = eval_truthy(&right, b.right.span())?;
+                    Ok(Value::Bool(l || r))
+                }
             }
         }
 
@@ -738,13 +746,16 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         span: u.span,
                     }),
                 },
-                UnaryOp::Not => Ok(Value::Bool(!operand.is_truthy())),
+                UnaryOp::Not => {
+                    let b = eval_truthy(&operand, u.operand.span())?;
+                    Ok(Value::Bool(!b))
+                }
             }
         }
 
         Expr::Ternary(t) => {
             let cond = eval_expr_with_env(&t.condition, env)?;
-            if cond.is_truthy() {
+            if eval_truthy(&cond, t.condition.span())? {
                 let val = eval_expr_with_env(&t.then_expr, env)?;
                 if matches!(val, Value::Integer(0)) {
                     match eval_expr_with_env(&t.else_expr, env) {
@@ -1563,6 +1574,14 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
             span: m.span,
         }),
     }
+}
+
+fn eval_truthy(val: &Value, span: crate::span::Span) -> Result<bool, CompileError> {
+    val.as_truthy().ok_or_else(|| CompileError::TypeMismatch {
+        expected: "Boolean".to_string(),
+        actual: val.type_name().to_string(),
+        span,
+    })
 }
 
 fn values_equal(left: &Value, right: &Value) -> bool {

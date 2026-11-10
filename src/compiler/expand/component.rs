@@ -2046,17 +2046,26 @@ impl<'a> ComponentExpander<'a> {
                         &mut targeted_env,
                     );
                     if let Ok(val) = eval_expr(&rewritten_cond, &targeted_env) {
-                        if !val.is_truthy() {
-                            let msg = assert_dir
-                                .message
-                                .clone()
-                                .unwrap_or_else(|| format!("Assertion failed: {}", assert_dir.condition));
-                            return Err(CompileError::AssertionFailed {
-                                message: msg,
-                                span: assert_dir.span,
-                            });
+                        match val.as_truthy() {
+                            Some(true) => continue,
+                            Some(false) => {
+                                let msg = assert_dir
+                                    .message
+                                    .clone()
+                                    .unwrap_or_else(|| format!("Assertion failed: {}", assert_dir.condition));
+                                return Err(CompileError::AssertionFailed {
+                                    message: msg,
+                                    span: assert_dir.span,
+                                });
+                            }
+                            None => {
+                                return Err(CompileError::TypeMismatch {
+                                    expected: "Boolean".to_string(),
+                                    actual: val.type_name().to_string(),
+                                    span: assert_dir.condition.span(),
+                                });
+                            }
                         }
-                        continue;
                     }
 
                     let const_env = full_env.get_or_insert_with(|| {
