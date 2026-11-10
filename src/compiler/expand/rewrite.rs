@@ -665,19 +665,122 @@ fn eval_sibling_condition(expr: &Expr, ctx: &ScopeContext<'_>) -> Option<bool> {
             eval_sibling_condition(&u.operand, ctx).map(|b| !b)
         }
         Expr::Binary(bin) => match bin.op {
+            BinaryOp::Eq | BinaryOp::Ne => {
+                fn unwrap_ident(e: &Expr) -> Option<Symbol> {
+                    match e {
+                        Expr::Paren(inner, _) => unwrap_ident(inner),
+                        Expr::Ident(id) => Some(id.name),
+                        _ => None,
+                    }
+                }
+                let l_sym = unwrap_ident(&bin.left);
+                let r_sym = unwrap_ident(&bin.right);
+                let is_unset_sym =
+                    |s: Option<Symbol>| matches!(s, Some(Symbol::UNSET | Symbol::NONE));
+                let sib_exists = if (l_sym == Some(Symbol::PREV) && is_unset_sym(r_sym))
+                    || (r_sym == Some(Symbol::PREV) && is_unset_sym(l_sym))
+                {
+                    Some(ctx.prev_sibling.is_some())
+                } else if (l_sym == Some(Symbol::NEXT) && is_unset_sym(r_sym))
+                    || (r_sym == Some(Symbol::NEXT) && is_unset_sym(l_sym))
+                {
+                    Some(ctx.has_next_sibling)
+                } else {
+                    None
+                }?;
+                Some(if bin.op == BinaryOp::Ne {
+                    sib_exists
+                } else {
+                    !sib_exists
+                })
+            }
             BinaryOp::And => {
-                let l = eval_sibling_condition(&bin.left, ctx)?;
-                let r = eval_sibling_condition(&bin.right, ctx)?;
-                Some(l && r)
+                let l = eval_sibling_condition(&bin.left, ctx);
+                if l == Some(false) {
+                    return Some(false);
+                }
+                let r = eval_sibling_condition(&bin.right, ctx);
+                if r == Some(false) {
+                    return Some(false);
+                }
+                Some(l? && r?)
             }
             BinaryOp::Or => {
-                let l = eval_sibling_condition(&bin.left, ctx)?;
-                let r = eval_sibling_condition(&bin.right, ctx)?;
-                Some(l || r)
+                let l = eval_sibling_condition(&bin.left, ctx);
+                if l == Some(true) {
+                    return Some(true);
+                }
+                let r = eval_sibling_condition(&bin.right, ctx);
+                if r == Some(true) {
+                    return Some(true);
+                }
+                Some(l? || r?)
             }
             _ => None,
         },
         _ => None,
+    }
+}
+
+fn expr_has_timer_property_access(expr: &Expr) -> bool {
+    match expr {
+        Expr::MemberAccess(m) => {
+            matches!(
+                m.member.as_str(),
+                "time" | "duration" | "elapsed" | "dt" | "frames"
+            ) || expr_has_timer_property_access(&m.target)
+        }
+        Expr::Binary(b) => {
+            expr_has_timer_property_access(&b.left) || expr_has_timer_property_access(&b.right)
+        }
+        Expr::Unary(u) => expr_has_timer_property_access(&u.operand),
+        Expr::Paren(inner, _) => expr_has_timer_property_access(inner),
+        Expr::Ternary(t) => {
+            expr_has_timer_property_access(&t.condition)
+                || expr_has_timer_property_access(&t.then_expr)
+                || expr_has_timer_property_access(&t.else_expr)
+        }
+        Expr::Call(c) => c.args.iter().any(expr_has_timer_property_access),
+        Expr::MethodCall(mc) => {
+            expr_has_timer_property_access(&mc.target)
+                || mc.args.iter().any(expr_has_timer_property_access)
+        }
+        Expr::Match(m) => {
+            m.scrutinee
+                .as_ref()
+                .is_some_and(|s| expr_has_timer_property_access(s))
+                || m.arms.iter().any(|arm| {
+                    (match &arm.pattern {
+                        MatchPattern::Condition(c) => expr_has_timer_property_access(c),
+                        _ => false,
+                    }) || expr_has_timer_property_access(&arm.body)
+                })
+        }
+        _ => false,
+    }
+}
+
+fn expr_has_unresolved_sibling_ident(expr: &Expr) -> bool {
+    match expr {
+        Expr::Ident(id) => id.name == Symbol::PREV || id.name == Symbol::NEXT,
+        Expr::MemberAccess(m) => expr_has_unresolved_sibling_ident(&m.target),
+        Expr::Binary(b) => {
+            expr_has_unresolved_sibling_ident(&b.left)
+                || expr_has_unresolved_sibling_ident(&b.right)
+        }
+        Expr::Unary(u) => expr_has_unresolved_sibling_ident(&u.operand),
+        Expr::Paren(inner, _) => expr_has_unresolved_sibling_ident(inner),
+        Expr::Ternary(t) => {
+            expr_has_unresolved_sibling_ident(&t.condition)
+                || expr_has_unresolved_sibling_ident(&t.then_expr)
+                || expr_has_unresolved_sibling_ident(&t.else_expr)
+        }
+        Expr::Call(c) => c.args.iter().any(expr_has_unresolved_sibling_ident),
+        Expr::MethodCall(mc) => {
+            expr_has_unresolved_sibling_ident(&mc.target)
+                || mc.args.iter().any(expr_has_unresolved_sibling_ident)
+        }
+        _ => false,
     }
 }
 
@@ -1234,7 +1337,7 @@ fn eval_expr_def_call(
                         span: arg_span,
                     });
                 }
-            } else {
+            } else if !expr_has_timer_property_access(&rewritten_arg) {
                 PENDING_EXPR_TYPECHECKS.with(|cell| {
                     cell.borrow_mut().push((
                         rewritten_arg.clone(),
@@ -1278,6 +1381,7 @@ fn eval_expr_def_call(
 
     if ctx.is_event_port
         || matches!(expanded_body, Expr::ExprDef(_) | Expr::Node(_))
+        || expr_has_timer_property_access(&expanded_body)
         || matches!(
             &expanded_body,
             Expr::Ident(id)
@@ -2132,8 +2236,11 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
         }
 
         Expr::Binary(bin) => {
-            if ctx.comp_ports.is_some() {
-                if matches!(bin.op, BinaryOp::Eq | BinaryOp::Ne) {
+            if matches!(bin.op, BinaryOp::Eq | BinaryOp::Ne) {
+                if let Some(sib_bool) = eval_sibling_condition(expr, ctx) {
+                    return Ok(Expr::Literal(Literal::Bool(sib_bool, bin.span)));
+                }
+                if ctx.comp_ports.is_some() {
                     if let (Some(l_unset), Some(r_unset)) = (
                         is_handler_expr_unset(&bin.left, ctx),
                         is_handler_expr_unset(&bin.right, ctx),
@@ -2146,24 +2253,36 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         return Ok(Expr::Literal(Literal::Bool(res, bin.span)));
                     }
                 }
-                if matches!(bin.op, BinaryOp::And | BinaryOp::Or) {
-                    let left = if let Some(l_unset) = is_handler_expr_unset(&bin.left, ctx) {
+            }
+            if matches!(bin.op, BinaryOp::And | BinaryOp::Or) {
+                let left = if let Some(sib_l) = eval_sibling_condition(&bin.left, ctx) {
+                    Expr::Literal(Literal::Bool(sib_l, bin.left.span()))
+                } else if ctx.comp_ports.is_some() {
+                    if let Some(l_unset) = is_handler_expr_unset(&bin.left, ctx) {
                         Expr::Literal(Literal::Bool(!l_unset, bin.left.span()))
                     } else {
                         rewrite_expr(&bin.left, ctx)?
-                    };
-                    let right = if let Some(r_unset) = is_handler_expr_unset(&bin.right, ctx) {
+                    }
+                } else {
+                    rewrite_expr(&bin.left, ctx)?
+                };
+                let right = if let Some(sib_r) = eval_sibling_condition(&bin.right, ctx) {
+                    Expr::Literal(Literal::Bool(sib_r, bin.right.span()))
+                } else if ctx.comp_ports.is_some() {
+                    if let Some(r_unset) = is_handler_expr_unset(&bin.right, ctx) {
                         Expr::Literal(Literal::Bool(!r_unset, bin.right.span()))
                     } else {
                         rewrite_expr(&bin.right, ctx)?
-                    };
-                    return Ok(Expr::Binary(BinaryExpr {
-                        op: bin.op,
-                        left: Box::new(left),
-                        right: Box::new(right),
-                        span: bin.span,
-                    }));
-                }
+                    }
+                } else {
+                    rewrite_expr(&bin.right, ctx)?
+                };
+                return Ok(Expr::Binary(BinaryExpr {
+                    op: bin.op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                    span: bin.span,
+                }));
             }
             Ok(Expr::Binary(BinaryExpr {
                 op: bin.op,
@@ -2174,9 +2293,14 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
         }
 
         Expr::Unary(u) => {
-            if u.op == UnaryOp::Not && ctx.comp_ports.is_some() {
-                if let Some(is_unset) = is_handler_expr_unset(&u.operand, ctx) {
-                    return Ok(Expr::Literal(Literal::Bool(is_unset, u.span)));
+            if u.op == UnaryOp::Not {
+                if let Some(sib_bool) = eval_sibling_condition(expr, ctx) {
+                    return Ok(Expr::Literal(Literal::Bool(sib_bool, u.span)));
+                }
+                if ctx.comp_ports.is_some() {
+                    if let Some(is_unset) = is_handler_expr_unset(&u.operand, ctx) {
+                        return Ok(Expr::Literal(Literal::Bool(is_unset, u.span)));
+                    }
                 }
             }
             Ok(Expr::Unary(UnaryExpr {
@@ -2833,7 +2957,8 @@ fn rewrite_match_expr(m: &MatchExpr, ctx: &ScopeContext<'_>) -> Result<Expr, Com
         cond_ctx.is_event_port = false;
 
         enum EvaluatedCond {
-            Const(bool),
+            ConstSibling(bool),
+            Const(bool, Expr),
             Runtime(Expr),
             Wildcard,
         }
@@ -2841,18 +2966,24 @@ fn rewrite_match_expr(m: &MatchExpr, ctx: &ScopeContext<'_>) -> Result<Expr, Com
         let mut eval_conds: Vec<EvaluatedCond> = Vec::with_capacity(m.arms.len());
         let mut rewritten_bodies: Vec<Option<Expr>> = Vec::with_capacity(m.arms.len());
         let mut arm_spans: Vec<Span> = Vec::with_capacity(m.arms.len());
+        let mut const_sib_true_seen = false;
 
         for arm in &m.arms {
             arm_spans.push(arm.body.span());
             match &arm.pattern {
                 MatchPattern::Wildcard(_) => {
                     eval_conds.push(EvaluatedCond::Wildcard);
-                    rewritten_bodies.push(Some(rewrite_expr(&arm.body, ctx)?));
+                    if const_sib_true_seen {
+                        rewritten_bodies.push(rewrite_expr(&arm.body, ctx).ok());
+                    } else {
+                        rewritten_bodies.push(Some(rewrite_expr(&arm.body, ctx)?));
+                    }
                 }
                 MatchPattern::Condition(raw_cond) => {
                     if let Some(sib_bool) = eval_sibling_condition(raw_cond, ctx) {
-                        eval_conds.push(EvaluatedCond::Const(sib_bool));
-                        if sib_bool {
+                        eval_conds.push(EvaluatedCond::ConstSibling(sib_bool));
+                        if sib_bool && !const_sib_true_seen {
+                            const_sib_true_seen = true;
                             rewritten_bodies.push(Some(rewrite_expr(&arm.body, ctx)?));
                         } else {
                             rewritten_bodies.push(rewrite_expr(&arm.body, ctx).ok());
@@ -2891,11 +3022,15 @@ fn rewrite_match_expr(m: &MatchExpr, ctx: &ScopeContext<'_>) -> Result<Expr, Com
                             &cond_ctx,
                             ctx.is_event_port,
                         ) {
-                            eval_conds.push(EvaluatedCond::Const(b));
+                            eval_conds.push(EvaluatedCond::Const(b, rewritten_cond));
                         } else {
                             eval_conds.push(EvaluatedCond::Runtime(rewritten_cond));
                         }
-                        rewritten_bodies.push(Some(rewrite_expr(&arm.body, ctx)?));
+                        if const_sib_true_seen {
+                            rewritten_bodies.push(rewrite_expr(&arm.body, ctx).ok());
+                        } else {
+                            rewritten_bodies.push(Some(rewrite_expr(&arm.body, ctx)?));
+                        }
                     }
                 }
                 MatchPattern::Variants(_) => unreachable!(),
@@ -2910,28 +3045,41 @@ fn rewrite_match_expr(m: &MatchExpr, ctx: &ScopeContext<'_>) -> Result<Expr, Com
 
         for (idx, cond_state) in eval_conds.into_iter().enumerate() {
             match cond_state {
-                EvaluatedCond::Const(false) => {
+                EvaluatedCond::ConstSibling(false) => {}
+                EvaluatedCond::Const(false, cond_expr) => {
                     if let Some(unchosen_body) = &rewritten_bodies[idx] {
-                        PENDING_EXPR_TYPECHECKS.with(|cell| {
-                            cell.borrow_mut().push((
-                                unchosen_body.clone(),
-                                expected_arm_ty.clone(),
-                                arm_spans[idx],
-                            ));
-                        });
+                        if !expr_has_unresolved_sibling_ident(unchosen_body) {
+                            let guarded = Expr::Ternary(TernaryExpr {
+                                condition: Box::new(cond_expr),
+                                then_expr: Box::new(unchosen_body.clone()),
+                                else_expr: Box::new(unchosen_body.clone()),
+                                span: arm_spans[idx],
+                            });
+                            PENDING_EXPR_TYPECHECKS.with(|cell| {
+                                cell.borrow_mut().push((
+                                    guarded,
+                                    expected_arm_ty.clone(),
+                                    arm_spans[idx],
+                                ));
+                            });
+                        }
                     }
                 }
-                EvaluatedCond::Const(true) | EvaluatedCond::Wildcard => {
+                EvaluatedCond::ConstSibling(true)
+                | EvaluatedCond::Const(true, _)
+                | EvaluatedCond::Wildcard => {
                     if final_else_expr.is_none() {
                         final_else_expr = Some(rewritten_bodies[idx].take().unwrap());
                     } else if let Some(unchosen_body) = &rewritten_bodies[idx] {
-                        PENDING_EXPR_TYPECHECKS.with(|cell| {
-                            cell.borrow_mut().push((
-                                unchosen_body.clone(),
-                                expected_arm_ty.clone(),
-                                arm_spans[idx],
-                            ));
-                        });
+                        if !expr_has_unresolved_sibling_ident(unchosen_body) {
+                            PENDING_EXPR_TYPECHECKS.with(|cell| {
+                                cell.borrow_mut().push((
+                                    unchosen_body.clone(),
+                                    expected_arm_ty.clone(),
+                                    arm_spans[idx],
+                                ));
+                            });
+                        }
                     }
                 }
                 EvaluatedCond::Runtime(cond_expr) => {
@@ -2939,13 +3087,21 @@ fn rewrite_match_expr(m: &MatchExpr, ctx: &ScopeContext<'_>) -> Result<Expr, Com
                         active_runtime_arms
                             .push((cond_expr, rewritten_bodies[idx].take().unwrap()));
                     } else if let Some(unchosen_body) = &rewritten_bodies[idx] {
-                        PENDING_EXPR_TYPECHECKS.with(|cell| {
-                            cell.borrow_mut().push((
-                                unchosen_body.clone(),
-                                expected_arm_ty.clone(),
-                                arm_spans[idx],
-                            ));
-                        });
+                        if !expr_has_unresolved_sibling_ident(unchosen_body) {
+                            let guarded = Expr::Ternary(TernaryExpr {
+                                condition: Box::new(cond_expr),
+                                then_expr: Box::new(unchosen_body.clone()),
+                                else_expr: Box::new(unchosen_body.clone()),
+                                span: arm_spans[idx],
+                            });
+                            PENDING_EXPR_TYPECHECKS.with(|cell| {
+                                cell.borrow_mut().push((
+                                    guarded,
+                                    expected_arm_ty.clone(),
+                                    arm_spans[idx],
+                                ));
+                            });
+                        }
                     }
                 }
             }

@@ -277,13 +277,222 @@ pub(super) fn validate_content_items_type_annotations(
                     validate_content_items_type_annotations(&slot.items, enums, registry)?;
                 }
             }
-            ContentItem::Children(_)
-            | ContentItem::Text(_)
+            ContentItem::Children(dir) => {
+                for port in &dir.ports {
+                    validate_expr_type_annotations(&port.expr, enums, registry)?;
+                    validate_children_sibling_guards(&port.expr, false, false)?;
+                }
+            }
+            ContentItem::Text(_)
             | ContentItem::ParagraphBreak(_)
             | ContentItem::Assert(_) => {}
         }
     }
     Ok(())
+}
+
+fn extract_sibling_guards(
+    cond: &Expr,
+    prev_guarded: bool,
+    next_guarded: bool,
+) -> Result<(bool, bool, bool, bool), CompileError> {
+    match cond {
+        Expr::Paren(inner, _) => extract_sibling_guards(inner, prev_guarded, next_guarded),
+        Expr::Ident(id) => {
+            if id.name == Symbol::PREV {
+                Ok((true, false, false, false))
+            } else if id.name == Symbol::NEXT {
+                Ok((false, false, true, false))
+            } else {
+                Ok((false, false, false, false))
+            }
+        }
+        Expr::Unary(u) if u.op == UnaryOp::Not => {
+            let (pp, np, pn, nn) = extract_sibling_guards(&u.operand, prev_guarded, next_guarded)?;
+            Ok((np, pp, nn, pn))
+        }
+        Expr::Binary(bin) => match bin.op {
+            BinaryOp::Eq | BinaryOp::Ne => {
+                fn unwrap_ident(e: &Expr) -> Option<Symbol> {
+                    match e {
+                        Expr::Paren(inner, _) => unwrap_ident(inner),
+                        Expr::Ident(id) => Some(id.name),
+                        _ => None,
+                    }
+                }
+                let l_sym = unwrap_ident(&bin.left);
+                let r_sym = unwrap_ident(&bin.right);
+                let is_unset_sym =
+                    |s: Option<Symbol>| matches!(s, Some(Symbol::UNSET | Symbol::NONE));
+                if (l_sym == Some(Symbol::PREV) && is_unset_sym(r_sym))
+                    || (r_sym == Some(Symbol::PREV) && is_unset_sym(l_sym))
+                {
+                    if bin.op == BinaryOp::Ne {
+                        return Ok((true, false, false, false));
+                    } else {
+                        return Ok((false, true, false, false));
+                    }
+                }
+                if (l_sym == Some(Symbol::NEXT) && is_unset_sym(r_sym))
+                    || (r_sym == Some(Symbol::NEXT) && is_unset_sym(l_sym))
+                {
+                    if bin.op == BinaryOp::Ne {
+                        return Ok((false, false, true, false));
+                    } else {
+                        return Ok((false, false, false, true));
+                    }
+                }
+                validate_children_sibling_guards(&bin.left, prev_guarded, next_guarded)?;
+                validate_children_sibling_guards(&bin.right, prev_guarded, next_guarded)?;
+                Ok((false, false, false, false))
+            }
+            BinaryOp::And => {
+                let (l_pp, l_np, l_pn, l_nn) =
+                    extract_sibling_guards(&bin.left, prev_guarded, next_guarded)?;
+                let (r_pp, r_np, r_pn, r_nn) = extract_sibling_guards(
+                    &bin.right,
+                    prev_guarded || l_pp,
+                    next_guarded || l_pn,
+                )?;
+                Ok((l_pp || r_pp, l_np && r_np, l_pn || r_pn, l_nn && r_nn))
+            }
+            BinaryOp::Or => {
+                let (l_pp, l_np, l_pn, l_nn) =
+                    extract_sibling_guards(&bin.left, prev_guarded, next_guarded)?;
+                let (r_pp, r_np, r_pn, r_nn) = extract_sibling_guards(
+                    &bin.right,
+                    prev_guarded || l_np,
+                    next_guarded || l_nn,
+                )?;
+                Ok((l_pp && r_pp, l_np || r_np, l_pn && r_pn, l_nn || r_nn))
+            }
+            _ => {
+                validate_children_sibling_guards(&bin.left, prev_guarded, next_guarded)?;
+                validate_children_sibling_guards(&bin.right, prev_guarded, next_guarded)?;
+                Ok((false, false, false, false))
+            }
+        },
+        _ => {
+            validate_children_sibling_guards(cond, prev_guarded, next_guarded)?;
+            Ok((false, false, false, false))
+        }
+    }
+}
+
+pub(super) fn validate_children_sibling_guards(
+    expr: &Expr,
+    prev_guarded: bool,
+    next_guarded: bool,
+) -> Result<(), CompileError> {
+    match expr {
+        Expr::Literal(_) => Ok(()),
+        Expr::Paren(inner, _) => validate_children_sibling_guards(inner, prev_guarded, next_guarded),
+        Expr::Ident(id) => {
+            if id.name == Symbol::PREV && !prev_guarded {
+                return Err(CompileError::Custom {
+                    message:
+                        "Cannot access 'prev' without a guard in '\\Children'; guard with 'prev ? ... : ...'"
+                            .to_string(),
+                    span: id.span,
+                });
+            }
+            if id.name == Symbol::NEXT && !next_guarded {
+                return Err(CompileError::Custom {
+                    message:
+                        "Cannot access 'next' without a guard in '\\Children'; guard with 'next ? ... : ...'"
+                            .to_string(),
+                    span: id.span,
+                });
+            }
+            Ok(())
+        }
+        Expr::MemberAccess(m) => {
+            validate_children_sibling_guards(&m.target, prev_guarded, next_guarded)
+        }
+        Expr::Unary(u) => {
+            if u.op == UnaryOp::Not {
+                let _ = extract_sibling_guards(expr, prev_guarded, next_guarded)?;
+                Ok(())
+            } else {
+                validate_children_sibling_guards(&u.operand, prev_guarded, next_guarded)
+            }
+        }
+        Expr::Binary(b) => {
+            if matches!(
+                b.op,
+                BinaryOp::And | BinaryOp::Or | BinaryOp::Eq | BinaryOp::Ne
+            ) {
+                let _ = extract_sibling_guards(expr, prev_guarded, next_guarded)?;
+                Ok(())
+            } else {
+                validate_children_sibling_guards(&b.left, prev_guarded, next_guarded)?;
+                validate_children_sibling_guards(&b.right, prev_guarded, next_guarded)
+            }
+        }
+        Expr::Ternary(t) => {
+            let (pp, np, pn, nn) =
+                extract_sibling_guards(&t.condition, prev_guarded, next_guarded)?;
+            validate_children_sibling_guards(&t.then_expr, prev_guarded || pp, next_guarded || pn)?;
+            validate_children_sibling_guards(&t.else_expr, prev_guarded || np, next_guarded || nn)
+        }
+        Expr::Call(c) => {
+            for arg in &c.args {
+                validate_children_sibling_guards(arg, prev_guarded, next_guarded)?;
+            }
+            Ok(())
+        }
+        Expr::MethodCall(mc) => {
+            validate_children_sibling_guards(&mc.target, prev_guarded, next_guarded)?;
+            for arg in &mc.args {
+                validate_children_sibling_guards(arg, prev_guarded, next_guarded)?;
+            }
+            Ok(())
+        }
+        Expr::Node(elem) => {
+            for port in &elem.ports {
+                validate_children_sibling_guards(&port.expr, prev_guarded, next_guarded)?;
+            }
+            Ok(())
+        }
+        Expr::ExprDef(def) => {
+            for p in &def.params {
+                if let Some(d) = &p.default_edge {
+                    validate_children_sibling_guards(d, prev_guarded, next_guarded)?;
+                }
+            }
+            validate_children_sibling_guards(&def.body, prev_guarded, next_guarded)
+        }
+        Expr::Match(m) => {
+            if let Some(s) = &m.scrutinee {
+                validate_children_sibling_guards(s, prev_guarded, next_guarded)?;
+            }
+            let mut acc_neg_prev = false;
+            let mut acc_neg_next = false;
+            for arm in &m.arms {
+                if let MatchPattern::Condition(c) = &arm.pattern {
+                    let (pp, np, pn, nn) = extract_sibling_guards(
+                        c,
+                        prev_guarded || acc_neg_prev,
+                        next_guarded || acc_neg_next,
+                    )?;
+                    validate_children_sibling_guards(
+                        &arm.body,
+                        prev_guarded || acc_neg_prev || pp,
+                        next_guarded || acc_neg_next || pn,
+                    )?;
+                    acc_neg_prev |= np;
+                    acc_neg_next |= nn;
+                } else {
+                    validate_children_sibling_guards(
+                        &arm.body,
+                        prev_guarded || acc_neg_prev,
+                        next_guarded || acc_neg_next,
+                    )?;
+                }
+            }
+            Ok(())
+        }
+    }
 }
 
 pub(super) fn coerce_typed_binding_expr(mut expr: Expr, type_annotation: Option<&TypeRef>) -> Expr {
@@ -1214,6 +1423,7 @@ struct TypecheckCache<'a> {
     node_caches: Vec<HashMap<Symbol, StaticType>>,
     window_cache: HashMap<Symbol, StaticType>,
     visiting: HashSet<(NodeId, Symbol)>,
+    guarded_timers: HashSet<(NodeId, Symbol)>,
     template_types: Option<&'a HashMap<Symbol, StaticType>>,
 }
 
@@ -1223,6 +1433,7 @@ impl<'a> TypecheckCache<'a> {
             node_caches: vec![HashMap::new(); num_nodes],
             window_cache: HashMap::new(),
             visiting: HashSet::new(),
+            guarded_timers: HashSet::new(),
             template_types: None,
         }
     }
@@ -1232,6 +1443,7 @@ impl<'a> TypecheckCache<'a> {
             node_caches: Vec::new(),
             window_cache: HashMap::new(),
             visiting: HashSet::new(),
+            guarded_timers: HashSet::new(),
             template_types: Some(template_types),
         }
     }
@@ -1441,7 +1653,16 @@ fn infer_port_type(
     .or(materialized_fallback.as_ref());
 
     let result = if let Some(expr) = expr_opt {
-        let actual = infer_expr_type(expr, doc, enums, registry, cache)?;
+        let saved_guards = std::mem::take(&mut cache.guarded_timers);
+        let actual_res = infer_expr_type(expr, doc, enums, registry, cache);
+        cache.guarded_timers = saved_guards;
+        let actual = match actual_res {
+            Ok(ty) => ty,
+            Err(e) => {
+                cache.visiting.remove(&key);
+                return Err(e);
+            }
+        };
         if let Some(expected) = explicit_ty {
             if !actual.matches(&expected) {
                 cache.visiting.remove(&key);
@@ -1506,6 +1727,191 @@ fn infer_port_type(
     result
 }
 
+fn canonical_timer_key(expr: &Expr) -> Option<(NodeId, Symbol)> {
+    match expr {
+        Expr::Paren(inner, _) => canonical_timer_key(inner),
+        Expr::MemberAccess(m) => {
+            if let Expr::Ident(id) = m.target.as_ref() {
+                if let Some(node_id) = id.node_id() {
+                    return Some((node_id, m.member.name));
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+fn unwrap_parens(mut expr: &Expr) -> &Expr {
+    while let Expr::Paren(inner, _) = expr {
+        expr = inner;
+    }
+    expr
+}
+
+fn is_direct_indefinite_timer_node(expr: &Expr) -> bool {
+    matches!(
+        unwrap_parens(expr),
+        Expr::Node(elem) if elem.name.as_str() == "IndefiniteTimer"
+    )
+}
+
+fn is_non_nullable_indefinite_timer_expr(
+    expr: &Expr,
+    doc: &ExpandedDocument,
+    depth: usize,
+) -> bool {
+    if depth > 4 {
+        return false;
+    }
+    if is_direct_indefinite_timer_node(expr) {
+        return true;
+    }
+    if let Some((node_id, port_sym)) = canonical_timer_key(expr) {
+        let port_name = port_sym.as_str();
+        if node_id.is_window() {
+            if !doc.window_state_vars.contains_key(port_name) {
+                if let Some(port_expr) = doc.window_ports.get(port_name) {
+                    return is_non_nullable_indefinite_timer_expr(port_expr, doc, depth + 1);
+                }
+            }
+        } else if !node_id.is_template_self() {
+            if let Some(node) = doc.get_node(node_id) {
+                if !node.state_vars.contains_key(port_name) {
+                    if let Some(port_expr) = node.ports.get(port_name) {
+                        return is_non_nullable_indefinite_timer_expr(port_expr, doc, depth + 1);
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn is_nullable_timer_target(
+    target: &Expr,
+    target_ty: &StaticType,
+    doc: &ExpandedDocument,
+) -> bool {
+    match target_ty {
+        StaticType::Timer => true,
+        StaticType::IndefiniteTimer => !is_non_nullable_indefinite_timer_expr(target, doc, 0),
+        _ => false,
+    }
+}
+
+fn extract_timer_guards(
+    cond: &Expr,
+    doc: &ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    cache: &mut TypecheckCache<'_>,
+    depth: usize,
+) -> (HashSet<(NodeId, Symbol)>, HashSet<(NodeId, Symbol)>) {
+    if depth > 4 {
+        return (HashSet::new(), HashSet::new());
+    }
+    match cond {
+        Expr::Paren(inner, _) => extract_timer_guards(inner, doc, enums, registry, cache, depth),
+        Expr::Unary(u) if u.op == UnaryOp::Not => {
+            let (pos, neg) =
+                extract_timer_guards(&u.operand, doc, enums, registry, cache, depth);
+            (neg, pos)
+        }
+        Expr::Binary(bin) => match bin.op {
+            BinaryOp::Ne | BinaryOp::Eq => {
+                let is_unset_expr = |e: &Expr| {
+                    matches!(
+                        unwrap_parens(e),
+                        Expr::Ident(id) if id.name == Symbol::UNSET || id.name == Symbol::NONE
+                    )
+                };
+                let timer_key = if is_unset_expr(&bin.right) {
+                    canonical_timer_key(&bin.left)
+                } else if is_unset_expr(&bin.left) {
+                    canonical_timer_key(&bin.right)
+                } else {
+                    None
+                };
+                let mut pos = HashSet::new();
+                let mut neg = HashSet::new();
+                if let Some(k) = timer_key {
+                    if bin.op == BinaryOp::Ne {
+                        pos.insert(k);
+                    } else {
+                        neg.insert(k);
+                    }
+                }
+                (pos, neg)
+            }
+            BinaryOp::And => {
+                let (l_pos, l_neg) =
+                    extract_timer_guards(&bin.left, doc, enums, registry, cache, depth);
+                let (r_pos, r_neg) =
+                    extract_timer_guards(&bin.right, doc, enums, registry, cache, depth);
+                let pos = l_pos.union(&r_pos).copied().collect();
+                let neg = l_neg.intersection(&r_neg).copied().collect();
+                (pos, neg)
+            }
+            BinaryOp::Or => {
+                let (l_pos, l_neg) =
+                    extract_timer_guards(&bin.left, doc, enums, registry, cache, depth);
+                let (r_pos, r_neg) =
+                    extract_timer_guards(&bin.right, doc, enums, registry, cache, depth);
+                let pos = l_pos.intersection(&r_pos).copied().collect();
+                let neg = l_neg.union(&r_neg).copied().collect();
+                (pos, neg)
+            }
+            _ => (HashSet::new(), HashSet::new()),
+        },
+        Expr::MemberAccess(_) => {
+            let mut pos = HashSet::new();
+            if let Some(k) = canonical_timer_key(cond) {
+                if matches!(
+                    infer_expr_type(cond, doc, enums, registry, cache),
+                    Ok(StaticType::Timer | StaticType::IndefiniteTimer)
+                ) {
+                    pos.insert(k);
+                    return (pos, HashSet::new());
+                }
+                let (node_id, port_sym) = k;
+                let port_name = port_sym.as_str();
+                if node_id.is_window() {
+                    if !doc.window_state_vars.contains_key(port_name) {
+                        if let Some(port_expr) = doc.window_ports.get(port_name) {
+                            return extract_timer_guards(
+                                port_expr,
+                                doc,
+                                enums,
+                                registry,
+                                cache,
+                                depth + 1,
+                            );
+                        }
+                    }
+                } else if !node_id.is_template_self() {
+                    if let Some(node) = doc.get_node(node_id) {
+                        if !node.state_vars.contains_key(port_name) {
+                            if let Some(port_expr) = node.ports.get(port_name) {
+                                return extract_timer_guards(
+                                    port_expr,
+                                    doc,
+                                    enums,
+                                    registry,
+                                    cache,
+                                    depth + 1,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            (pos, HashSet::new())
+        }
+        _ => (HashSet::new(), HashSet::new()),
+    }
+}
+
 fn infer_expr_type(
     expr: &Expr,
     doc: &ExpandedDocument,
@@ -1533,6 +1939,18 @@ fn infer_expr_type(
             }
             if id.name == Symbol::WINDOW {
                 return Ok(StaticType::Node("Window".to_string()));
+            }
+            if id.name == Symbol::PREV {
+                return Err(CompileError::Custom {
+                    message: "Cannot access 'prev' without a guard; no previous sibling exists (guard with 'prev ? ... : ...')".to_string(),
+                    span: id.span,
+                });
+            }
+            if id.name == Symbol::NEXT {
+                return Err(CompileError::Custom {
+                    message: "Cannot access 'next' without a guard; no next sibling exists (guard with 'next ? ... : ...')".to_string(),
+                    span: id.span,
+                });
             }
             if let Some(node_id) = id.node_id() {
                 if node_id.is_window() {
@@ -1654,26 +2072,65 @@ fn infer_expr_type(
                         span: m.span,
                     }),
                 },
-                StaticType::Timer => match m.member.as_str() {
-                    "time" | "duration" | "dt" => Ok(StaticType::Duration),
-                    "elapsed" => Ok(StaticType::Float),
-                    "frames" => Ok(StaticType::Integer),
-                    _ => Err(CompileError::Custom {
-                        message: format!("Node 'Timer' has no public property '{}'", m.member),
-                        span: m.span,
-                    }),
-                },
-                StaticType::IndefiniteTimer => match m.member.as_str() {
-                    "time" | "dt" => Ok(StaticType::Duration),
-                    "frames" => Ok(StaticType::Integer),
-                    _ => Err(CompileError::Custom {
-                        message: format!(
-                            "Node 'IndefiniteTimer' has no public property '{}'",
-                            m.member
-                        ),
-                        span: m.span,
-                    }),
-                },
+                StaticType::Timer => {
+                    let prop_ty = match m.member.as_str() {
+                        "time" | "duration" | "dt" => StaticType::Duration,
+                        "elapsed" => StaticType::Float,
+                        "frames" => StaticType::Integer,
+                        _ => {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Node 'Timer' has no public property '{}'",
+                                    m.member
+                                ),
+                                span: m.span,
+                            });
+                        }
+                    };
+                    if is_nullable_timer_target(&m.target, &target_ty, doc) {
+                        let is_guarded = canonical_timer_key(&m.target)
+                            .is_some_and(|k| cache.guarded_timers.contains(&k));
+                        if !is_guarded {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Cannot access property '{}' on unguarded 'Timer'; guard with 'timer ? ... : ...'",
+                                    m.member
+                                ),
+                                span: m.span,
+                            });
+                        }
+                    }
+                    Ok(prop_ty)
+                }
+                StaticType::IndefiniteTimer => {
+                    let prop_ty = match m.member.as_str() {
+                        "time" | "dt" => StaticType::Duration,
+                        "frames" => StaticType::Integer,
+                        _ => {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Node 'IndefiniteTimer' has no public property '{}'",
+                                    m.member
+                                ),
+                                span: m.span,
+                            });
+                        }
+                    };
+                    if is_nullable_timer_target(&m.target, &target_ty, doc) {
+                        let is_guarded = canonical_timer_key(&m.target)
+                            .is_some_and(|k| cache.guarded_timers.contains(&k));
+                        if !is_guarded {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Cannot access property '{}' on unguarded 'IndefiniteTimer'; guard with 'timer ? ... : ...'",
+                                    m.member
+                                ),
+                                span: m.span,
+                            });
+                        }
+                    }
+                    Ok(prop_ty)
+                }
                 other => Err(CompileError::Custom {
                     message: format!(
                         "Cannot access member '{}' on value of type '{}'",
@@ -1714,7 +2171,21 @@ fn infer_expr_type(
         }
         Expr::Binary(bin) => {
             let left_ty = infer_expr_type(&bin.left, doc, enums, registry, cache)?;
-            let right_ty = infer_expr_type(&bin.right, doc, enums, registry, cache)?;
+            let right_ty = if matches!(bin.op, BinaryOp::And | BinaryOp::Or) {
+                let (l_pos, l_neg) =
+                    extract_timer_guards(&bin.left, doc, enums, registry, cache, 0);
+                let saved = cache.guarded_timers.clone();
+                if bin.op == BinaryOp::And {
+                    cache.guarded_timers.extend(l_pos);
+                } else {
+                    cache.guarded_timers.extend(l_neg);
+                }
+                let res = infer_expr_type(&bin.right, doc, enums, registry, cache);
+                cache.guarded_timers = saved;
+                res?
+            } else {
+                infer_expr_type(&bin.right, doc, enums, registry, cache)?
+            };
             match bin.op {
                 BinaryOp::Add => match (&left_ty, &right_ty) {
                     (StaticType::String, _) | (_, StaticType::String) => Ok(StaticType::String),
@@ -2025,8 +2496,18 @@ fn infer_expr_type(
                     span: tern.condition.span(),
                 });
             }
-            let then_ty = infer_expr_type(&tern.then_expr, doc, enums, registry, cache)?;
-            let else_ty = infer_expr_type(&tern.else_expr, doc, enums, registry, cache)?;
+            let (pos_guards, neg_guards) =
+                extract_timer_guards(&tern.condition, doc, enums, registry, cache, 0);
+            let saved_guards = cache.guarded_timers.clone();
+            cache.guarded_timers.extend(pos_guards);
+            let then_res = infer_expr_type(&tern.then_expr, doc, enums, registry, cache);
+            cache.guarded_timers.clone_from(&saved_guards);
+            let then_ty = then_res?;
+
+            cache.guarded_timers.extend(neg_guards);
+            let else_res = infer_expr_type(&tern.else_expr, doc, enums, registry, cache);
+            cache.guarded_timers = saved_guards;
+            let else_ty = else_res?;
             if then_ty == else_ty {
                 Ok(then_ty.decay())
             } else if then_ty.matches(&else_ty) {
@@ -2247,9 +2728,17 @@ fn infer_expr_type(
         Expr::ExprDef(_) => Ok(StaticType::Expr),
         Expr::Match(m) => {
             let mut acc_ty: Option<StaticType> = None;
+            let saved_guards = cache.guarded_timers.clone();
+            let mut acc_neg_guards: HashSet<(NodeId, Symbol)> = HashSet::new();
             for arm in &m.arms {
+                let mut arm_pos_guards = HashSet::new();
+                let mut arm_neg_guards = HashSet::new();
                 if let MatchPattern::Condition(c) = &arm.pattern {
-                    let c_ty = infer_expr_type(c, doc, enums, registry, cache)?;
+                    cache.guarded_timers.clone_from(&saved_guards);
+                    cache.guarded_timers.extend(acc_neg_guards.iter().copied());
+                    let c_res = infer_expr_type(c, doc, enums, registry, cache);
+                    cache.guarded_timers.clone_from(&saved_guards);
+                    let c_ty = c_res?;
                     if !matches!(
                         c_ty,
                         StaticType::Boolean
@@ -2264,8 +2753,17 @@ fn infer_expr_type(
                             span: c.span(),
                         });
                     }
+                    let (pos, neg) = extract_timer_guards(c, doc, enums, registry, cache, 0);
+                    arm_pos_guards = pos;
+                    arm_neg_guards = neg;
                 }
-                let arm_ty = infer_expr_type(&arm.body, doc, enums, registry, cache)?;
+                cache.guarded_timers.clone_from(&saved_guards);
+                cache.guarded_timers.extend(acc_neg_guards.iter().copied());
+                cache.guarded_timers.extend(arm_pos_guards);
+                let arm_res = infer_expr_type(&arm.body, doc, enums, registry, cache);
+                cache.guarded_timers.clone_from(&saved_guards);
+                let arm_ty = arm_res?;
+                acc_neg_guards.extend(arm_neg_guards);
                 if let Some(prev_ty) = &acc_ty {
                     if arm_ty == *prev_ty || arm_ty.matches(prev_ty) {
                         // keep prev_ty

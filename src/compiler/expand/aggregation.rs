@@ -64,13 +64,20 @@ fn populate_comp_cond_consts<'a>(
                             );
                             if super::rewrite::expr_vars_in_env(port_expr, const_env) {
                                 if let Ok(val) = eval_expr(port_expr, const_env) {
-                                    const_env.insert(
-                                        crate::compiler::graph::VarId::from_symbol(
-                                            comp_id,
-                                            m.member.name,
-                                        ),
+                                    if !matches!(
                                         val,
-                                    );
+                                        crate::compiler::value::Value::Timer { .. }
+                                            | crate::compiler::value::Value::IndefiniteTimer { .. }
+                                            | crate::compiler::value::Value::Unset
+                                    ) {
+                                        const_env.insert(
+                                            crate::compiler::graph::VarId::from_symbol(
+                                                comp_id,
+                                                m.member.name,
+                                            ),
+                                            val,
+                                        );
+                                    }
                                 }
                             }
                         }

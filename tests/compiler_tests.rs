@@ -6263,6 +6263,140 @@ fn test_no_truthy_coercion_on_primitives_and_shorthand_for_handlers_timers_sibli
     assert_eq!(rects[2].rect.x, 205.0);
 }
 
+#[test]
+fn test_compile_time_guard_checks_for_timers_and_siblings() {
+    for (bad_src, expected_err) in [
+        (
+            r#"
+            \let t = \Timer(duration: 2s);
+            \let w = t.elapsed * 100px;
+            \Rect(x: 0px, y: 0px, width: w, height: 20px, color: #000000)
+            "#,
+            "Cannot access property 'elapsed' on unguarded 'Timer'; guard with 'timer ? ... : ...'",
+        ),
+        (
+            r#"
+            \Component AnimBox() {
+                \state anim: Timer = unset;
+                \let w = anim.elapsed * 100px;
+                \Rect(x: 0px, y: 0px, width: w, height: 20px, color: #000000)
+            }
+            \AnimBox()
+            "#,
+            "Cannot access property 'elapsed' on unguarded 'Timer'; guard with 'timer ? ... : ...'",
+        ),
+        (
+            r#"
+            \Component ClockBox() {
+                \state clock: IndefiniteTimer = unset;
+                \let f = clock.frames;
+                \Rect(x: 0px, y: 0px, width: 20px, height: 20px, color: #000000, z: f)
+            }
+            \ClockBox()
+            "#,
+            "Cannot access property 'frames' on unguarded 'IndefiniteTimer'; guard with 'timer ? ... : ...'",
+        ),
+        (
+            r#"
+            \let t = \Timer(duration: 2s);
+            \let bad = !t ? t.elapsed : 0.0;
+            \Rect(x: 0px, y: 0px, width: 20px, height: 20px, color: #000000, opacity: bad)
+            "#,
+            "Cannot access property 'elapsed' on unguarded 'Timer'; guard with 'timer ? ... : ...'",
+        ),
+        (
+            r#"
+            \let t = \Timer(duration: 2s);
+            \let bad = (t == unset) ? t.elapsed : 0.0;
+            \Rect(x: 0px, y: 0px, width: 20px, height: 20px, color: #000000, opacity: bad)
+            "#,
+            "Cannot access property 'elapsed' on unguarded 'Timer'; guard with 'timer ? ... : ...'",
+        ),
+        (
+            r#"
+            \Component BadStack() {
+                \Children(y: prev.bottom)
+            }
+            \Rect(x: 0px, y: 0px, width: 10px, height: 10px, color: #000000)
+            "#,
+            "Cannot access 'prev' without a guard in '\\Children'; guard with 'prev ? ... : ...'",
+        ),
+        (
+            r#"
+            \Component BadNextRow() {
+                \Children(width: next.width)
+            }
+            \Rect(x: 0px, y: 0px, width: 10px, height: 10px, color: #000000)
+            "#,
+            "Cannot access 'next' without a guard in '\\Children'; guard with 'next ? ... : ...'",
+        ),
+        (
+            r#"
+            \Component BadNegStack() {
+                \Children(y: !prev ? prev.bottom : 0px)
+            }
+            \BadNegStack()
+            "#,
+            "Cannot access 'prev' without a guard in '\\Children'; guard with 'prev ? ... : ...'",
+        ),
+        (
+            r#"
+            \Rect(x: prev.right, y: 0px, width: 10px, height: 10px, color: #000000)
+            "#,
+            "Cannot access 'prev' without a guard; no previous sibling exists (guard with 'prev ? ... : ...')",
+        ),
+    ] {
+        let doc = parse(bad_src).expect("Should parse");
+        let err = compile_to_graph(&doc).expect_err(expected_err);
+        assert!(
+            err.to_string().contains(expected_err),
+            "Expected compile error containing '{}', got: {}",
+            expected_err,
+            err
+        );
+    }
+
+    // Valid guarded forms for Timer, IndefiniteTimer, and prev/next
+    let valid_src = r#"
+    \let t = \Timer(duration: 2s);
+    \let clock = \IndefiniteTimer();
+    \let a = t ? t.elapsed : 0.0;
+    \let b = !t ? 0.0 : t.elapsed;
+    \let c = (t != unset) ? t.elapsed : 0.0;
+    \let d = (t == unset) ? 0.0 : t.elapsed;
+    \let e = (t && t.elapsed > 0.1) ? t.elapsed : 0.0;
+    \let f = (!t || t.elapsed < 0.1) ? 0.0 : t.elapsed;
+    \let g = match {
+        t => t.elapsed,
+        _ => 0.0,
+    };
+    \let h = match {
+        !t => 0.0,
+        _ => t.elapsed,
+    };
+    \let frames = clock.frames;
+
+    \Component GuardedStack(x: Distance = 0px, y: Distance = 0px) {
+        \Children(
+            x: match {
+                !prev => x,
+                _ => prev.right,
+            },
+            y: (prev != unset) ? prev.bottom : y
+        )
+    }
+
+    \GuardedStack() {
+        \Rect(width: 20px, height: 10px, color: #000000, opacity: a + b + c + d + e + f + g + h, z: frames)
+        \Rect(width: 20px, height: 10px, color: #000000)
+    }
+    "#;
+    let doc = parse(valid_src).expect("Should parse valid guarded timers and siblings");
+    directedtype::compiler::compile_document(&doc)
+        .expect("Should compile valid guarded timers and siblings");
+}
+
+
 
 
 

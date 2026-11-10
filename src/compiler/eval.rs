@@ -434,6 +434,26 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
         }
 
         Expr::Binary(b) => {
+            if b.op == BinaryOp::And {
+                let left = eval_expr_with_env(&b.left, env)?;
+                let l = eval_truthy(&left, b.left.span())?;
+                if !l {
+                    return Ok(Value::Bool(false));
+                }
+                let right = eval_expr_with_env(&b.right, env)?;
+                let r = eval_truthy(&right, b.right.span())?;
+                return Ok(Value::Bool(r));
+            }
+            if b.op == BinaryOp::Or {
+                let left = eval_expr_with_env(&b.left, env)?;
+                let l = eval_truthy(&left, b.left.span())?;
+                if l {
+                    return Ok(Value::Bool(true));
+                }
+                let right = eval_expr_with_env(&b.right, env)?;
+                let r = eval_truthy(&right, b.right.span())?;
+                return Ok(Value::Bool(r));
+            }
             let left = eval_expr_with_env(&b.left, env)?;
             let right = eval_expr_with_env(&b.right, env)?;
 
