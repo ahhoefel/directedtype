@@ -48,10 +48,8 @@ struct ComponentExpander<'a> {
 
     schema: &'a ComponentSchema,
     templates: &'a super::schema::CompiledComponentTemplates,
-    slot_consts: Vec<Option<crate::compiler::value::Value>>,
     preverified_ports: PortMask,
     has_node_arg_on_value_param: bool,
-    has_unfolded_port_ternary: bool,
     comp_scope_ports: std::borrow::Cow<'a, [String]>,
     is_single_text_context: bool,
     comp_ports: HashMap<String, Expr>,
@@ -106,7 +104,6 @@ impl<'a> ComponentExpander<'a> {
         doc.get_node_mut(ctx.comp_node_id).unwrap().port_types =
             std::sync::Arc::clone(&schema.static_port_types);
 
-        let slot_consts = vec![None; schema.port_table.len()];
         let preverified_ports = templates.preverified_template_mask.clone();
         let comp_ports = HashMap::with_capacity(schema.port_table.len());
         let already_rewritten_ports = PortMask::default();
@@ -129,10 +126,8 @@ impl<'a> ComponentExpander<'a> {
             node_fonts,
             schema,
             templates,
-            slot_consts,
             preverified_ports,
             has_node_arg_on_value_param: false,
-            has_unfolded_port_ternary: false,
             comp_scope_ports: std::borrow::Cow::Borrowed(&schema.comp_scope_ports),
             is_single_text_context,
             comp_ports,
@@ -260,12 +255,7 @@ impl<'a> ComponentExpander<'a> {
                         caller_child_ids,
                     )
                     .as_event_port(name.starts_with("on_") || is_handler_param);
-                    let tern_before = super::rewrite::get_unfolded_ternary_count();
-                    let rw = rewrite_expr(other, &caller_scope_ctx)?;
-                    if super::rewrite::get_unfolded_ternary_count() != tern_before {
-                        self.has_unfolded_port_ternary = true;
-                    }
-                    rw
+                    rewrite_expr(other, &caller_scope_ctx)?
                 }
             };
             explicit_ports.insert(name, expr);
@@ -428,13 +418,6 @@ impl<'a> ComponentExpander<'a> {
                     .insert(&self.schema.port_table, &name);
                 self.preverified_ports
                     .remove(&self.schema.port_table, &name);
-                if !self.schema.declared_state_names.contains(&name) {
-                    if let Some(val) = super::schema::expr_to_const_value(&explicit_expr) {
-                        if let Some(slot) = self.schema.port_table.slot_of_sym(param.name.name) {
-                            self.slot_consts[slot.0 as usize] = Some(val);
-                        }
-                    }
-                }
                 if let Expr::Ident(id) = &explicit_expr {
                     if id.node_id().is_some()
                         && self.schema.template_self_ports.contains(&param.name.name)
@@ -452,9 +435,6 @@ impl<'a> ComponentExpander<'a> {
                     {
                         super::rewrite::record_pending_fwd_node(self.ctx.comp_node_id);
                     }
-                    if super::rewrite::expr_has_ternary(env_expr) {
-                        self.has_unfolded_port_ternary = true;
-                    }
                     let env_expr = coerce_typed_binding_expr(
                         env_expr.clone(),
                         param.type_annotation.as_ref(),
@@ -463,14 +443,6 @@ impl<'a> ComponentExpander<'a> {
                         .insert(&self.schema.port_table, &name);
                     self.preverified_ports
                         .remove(&self.schema.port_table, &name);
-                    if !self.schema.declared_state_names.contains(&name) {
-                        if let Some(val) = super::schema::expr_to_const_value(&env_expr) {
-                            if let Some(slot) = self.schema.port_table.slot_of_sym(param.name.name)
-                            {
-                                self.slot_consts[slot.0 as usize] = Some(val);
-                            }
-                        }
-                    }
                     if let Expr::Ident(id) = &env_expr {
                         if id.node_id().is_some()
                             && self.schema.template_self_ports.contains(&param.name.name)
@@ -602,14 +574,9 @@ impl<'a> ComponentExpander<'a> {
         default_expr: &Expr,
     ) -> Result<(), CompileError> {
         match self.templates.param_defaults.get(&param.name.name) {
-            Some(super::schema::CompiledParamDefault::Constant { expr, const_val }) => {
+            Some(super::schema::CompiledParamDefault::Constant { expr }) => {
                 self.already_rewritten_ports
                     .insert(&self.schema.port_table, &name);
-                if !self.schema.declared_state_names.contains(&name) {
-                    if let Some(slot) = self.schema.port_table.slot_of_sym(param.name.name) {
-                        self.slot_consts[slot.0 as usize] = const_val.clone();
-                    }
-                }
                 self.comp_ports.insert(name, expr.clone());
                 Ok(())
             }
@@ -637,7 +604,6 @@ impl<'a> ComponentExpander<'a> {
     fn instantiate_pre_body_templates(&mut self) {
         let comp_node_id = self.ctx.comp_node_id;
         let port_table = &self.schema.port_table;
-        let tern_before = super::rewrite::get_unfolded_ternary_count();
 
         // 1. Non-constant parameter default templates
         if !self.has_node_arg_on_value_param {
@@ -650,28 +616,11 @@ impl<'a> ComponentExpander<'a> {
                         .contains_sym(port_table, tmpl.sym, &tmpl.name)
                     {
                         let inst = if tmpl.is_const_no_self {
-                            if tmpl.has_ternary {
-                                super::rewrite::record_unfolded_ternary_emitted();
-                            }
                             tmpl.expr.clone()
                         } else {
-                            super::rewrite::instantiate_template_expr(
-                                &tmpl.expr,
-                                comp_node_id,
-                                port_table,
-                                &self.slot_consts,
-                            )
+                            super::rewrite::instantiate_template_expr(&tmpl.expr, comp_node_id)
                         };
                         if let Some(slot) = tmpl.slot {
-                            self.slot_consts[slot.0 as usize] = if tmpl.is_const_no_self {
-                                tmpl.const_val.clone()
-                            } else {
-                                super::rewrite::eval_template_expr(
-                                    &tmpl.expr,
-                                    port_table,
-                                    &self.slot_consts,
-                                )
-                            };
                             self.already_rewritten_ports.insert_slot(slot);
                         } else {
                             self.already_rewritten_ports.insert(port_table, &tmpl.name);
@@ -686,17 +635,9 @@ impl<'a> ComponentExpander<'a> {
         if !self.has_node_arg_on_value_param {
             for tmpl in &self.templates.state_templates {
                 let inst = if tmpl.is_const_no_self {
-                    if tmpl.has_ternary {
-                        super::rewrite::record_unfolded_ternary_emitted();
-                    }
                     tmpl.expr.clone()
                 } else {
-                    super::rewrite::instantiate_template_expr(
-                        &tmpl.expr,
-                        comp_node_id,
-                        port_table,
-                        &self.slot_consts,
-                    )
+                    super::rewrite::instantiate_template_expr(&tmpl.expr, comp_node_id)
                 };
                 if let Some(slot) = tmpl.slot {
                     self.already_rewritten_ports.insert_slot(slot);
@@ -721,40 +662,17 @@ impl<'a> ComponentExpander<'a> {
         if !self.has_node_arg_on_value_param {
             for tmpl in &self.templates.let_templates {
                 let inst = if tmpl.is_const_no_self {
-                    if tmpl.has_ternary {
-                        super::rewrite::record_unfolded_ternary_emitted();
-                    }
-                    if let Some(slot) = tmpl.slot {
-                        self.slot_consts[slot.0 as usize] = tmpl.const_val.clone();
-                        self.already_rewritten_ports.insert_slot(slot);
-                    } else {
-                        self.already_rewritten_ports.insert(port_table, &tmpl.name);
-                    }
                     tmpl.expr.clone()
                 } else {
-                    let inst = super::rewrite::instantiate_template_expr(
-                        &tmpl.expr,
-                        comp_node_id,
-                        port_table,
-                        &self.slot_consts,
-                    );
-                    if let Some(slot) = tmpl.slot {
-                        self.slot_consts[slot.0 as usize] = super::rewrite::eval_template_expr(
-                            &tmpl.expr,
-                            port_table,
-                            &self.slot_consts,
-                        );
-                        self.already_rewritten_ports.insert_slot(slot);
-                    } else {
-                        self.already_rewritten_ports.insert(port_table, &tmpl.name);
-                    }
-                    inst
+                    super::rewrite::instantiate_template_expr(&tmpl.expr, comp_node_id)
                 };
+                if let Some(slot) = tmpl.slot {
+                    self.already_rewritten_ports.insert_slot(slot);
+                } else {
+                    self.already_rewritten_ports.insert(port_table, &tmpl.name);
+                }
                 self.comp_ports.insert(tmpl.name.clone(), inst);
             }
-        }
-        if super::rewrite::get_unfolded_ternary_count() != tern_before {
-            self.has_unfolded_port_ternary = true;
         }
         if self.templates.let_templates.len() < self.schema.declared_lets.len()
             || self.has_node_arg_on_value_param
@@ -907,11 +825,7 @@ impl<'a> ComponentExpander<'a> {
                         .already_rewritten_ports
                         .contains(&self.schema.port_table, name)
                     {
-                        let tern_before = super::rewrite::get_unfolded_ternary_count();
                         let rewritten = rewrite_expr(&expr, &event_default_ctx)?;
-                        if super::rewrite::get_unfolded_ternary_count() != tern_before {
-                            self.has_unfolded_port_ternary = true;
-                        }
                         self.already_rewritten_ports
                             .insert(&self.schema.port_table, name);
                         self.comp_ports.insert(name.to_string(), rewritten.clone());
@@ -1702,7 +1616,6 @@ impl<'a> ComponentExpander<'a> {
         let instance = self.instance;
         let comp_node_id = ctx.comp_node_id;
         let port_table = &self.schema.port_table;
-        let tern_before = super::rewrite::get_unfolded_ternary_count();
 
         if !self.has_node_arg_on_value_param {
             for tmpl in &self.templates.env_templates {
@@ -1711,28 +1624,11 @@ impl<'a> ComponentExpander<'a> {
                     .contains_sym(port_table, tmpl.sym, &tmpl.name)
                 {
                     let inst = if tmpl.is_const_no_self {
-                        if tmpl.has_ternary {
-                            super::rewrite::record_unfolded_ternary_emitted();
-                        }
                         tmpl.expr.clone()
                     } else {
-                        super::rewrite::instantiate_template_expr(
-                            &tmpl.expr,
-                            comp_node_id,
-                            port_table,
-                            &self.slot_consts,
-                        )
+                        super::rewrite::instantiate_template_expr(&tmpl.expr, comp_node_id)
                     };
                     if let Some(slot) = tmpl.slot {
-                        self.slot_consts[slot.0 as usize] = if tmpl.is_const_no_self {
-                            tmpl.const_val.clone()
-                        } else {
-                            super::rewrite::eval_template_expr(
-                                &tmpl.expr,
-                                port_table,
-                                &self.slot_consts,
-                            )
-                        };
                         self.already_rewritten_ports.insert_slot(slot);
                     } else {
                         self.already_rewritten_ports.insert(port_table, &tmpl.name);
@@ -1749,28 +1645,11 @@ impl<'a> ComponentExpander<'a> {
                     continue;
                 }
                 let inst = if tmpl.is_const_no_self {
-                    if tmpl.has_ternary {
-                        super::rewrite::record_unfolded_ternary_emitted();
-                    }
                     tmpl.expr.clone()
                 } else {
-                    super::rewrite::instantiate_template_expr(
-                        &tmpl.expr,
-                        comp_node_id,
-                        port_table,
-                        &self.slot_consts,
-                    )
+                    super::rewrite::instantiate_template_expr(&tmpl.expr, comp_node_id)
                 };
                 if let Some(slot) = tmpl.slot {
-                    self.slot_consts[slot.0 as usize] = if tmpl.is_const_no_self {
-                        tmpl.const_val.clone()
-                    } else {
-                        super::rewrite::eval_template_expr(
-                            &tmpl.expr,
-                            port_table,
-                            &self.slot_consts,
-                        )
-                    };
                     self.already_rewritten_ports.insert_slot(slot);
                 } else {
                     self.already_rewritten_ports.insert(port_table, &tmpl.name);
@@ -1876,9 +1755,6 @@ impl<'a> ComponentExpander<'a> {
                 self.comp_ports.insert(port_name, rw);
             }
         }
-        if super::rewrite::get_unfolded_ternary_count() != tern_before {
-            self.has_unfolded_port_ternary = true;
-        }
 
         let mut rewritten_ports = std::mem::take(&mut self.comp_ports);
         super::rewrite::sync_materialized_expr_ports_for_node(
@@ -1956,12 +1832,6 @@ impl<'a> ComponentExpander<'a> {
                 &self.schema.declared_state_names,
                 rewritten_ports,
             );
-            if rewritten_ports
-                .get("__baseline_offset")
-                .is_some_and(super::rewrite::expr_has_ternary)
-            {
-                self.has_unfolded_port_ternary = true;
-            }
         }
     }
 
@@ -1975,19 +1845,17 @@ impl<'a> ComponentExpander<'a> {
         let inst_ids = self.instantiated_children_ids.borrow().clone();
         let total_agg_count = get_agg_emitted_count(ctx.comp_node_id);
 
-        if self.has_unfolded_port_ternary || total_agg_count > 0 {
+        if total_agg_count > 0 {
             resolve_and_filter_component_aggregations(
                 ctx.comp_node_id,
                 comp_def.name.as_str(),
                 &inst_ids,
-                &self.schema.declared_state_names,
                 rewritten_ports,
                 self.doc,
                 self.start_node_idx,
                 self.start_local_bindings_idx,
                 self.body_agg_count,
                 total_agg_count,
-                self.has_unfolded_port_ternary,
             )?;
         }
 

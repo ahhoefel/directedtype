@@ -213,10 +213,20 @@ fn test_enum_import_and_aliased_import() {
     let _rect = expanded.get_node(rect_id).unwrap();
 
     let card_w = card.ports.get("w").unwrap();
-    match card_w {
-        Expr::Literal(Literal::Distance(n, DistanceUnit::Px, _)) => assert_eq!(*n, 200.0),
-        other => panic!("Expected Literal 200px, got {:?}", other),
-    }
+    assert!(
+        matches!(card_w, Expr::Ternary(_)),
+        "Expected Ternary expression for w, got {:?}",
+        card_w
+    );
+    let compiled = directedtype::compiler::compile_document_with_resolver(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &resolver,
+    )
+    .expect("Failed to compile document with resolver");
+    assert_eq!(compiled.layout.get_node(rect_id).unwrap().rect.width, 200.0);
 }
 
 #[test]

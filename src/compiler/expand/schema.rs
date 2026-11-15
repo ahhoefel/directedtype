@@ -228,17 +228,12 @@ pub struct CompiledPortTemplate {
     pub slot: Option<PortSlot>,
     pub expr: Expr,
     pub is_const_no_self: bool,
-    pub const_val: Option<crate::compiler::value::Value>,
-    pub has_ternary: bool,
 }
 
 /// A pre-compiled component parameter default value.
 #[derive(Debug, Clone)]
 pub enum CompiledParamDefault {
-    Constant {
-        expr: Expr,
-        const_val: Option<crate::compiler::value::Value>,
-    },
+    Constant { expr: Expr },
     Template(CompiledPortTemplate),
 }
 
@@ -1522,98 +1517,30 @@ fn validate_key_expr(
     }
 }
 
-pub(super) fn expr_to_const_value(expr: &Expr) -> Option<crate::compiler::value::Value> {
+fn expr_has_template_self(expr: &Expr) -> bool {
     match expr {
-        Expr::Literal(Literal::Integer(i, _)) => Some(crate::compiler::value::Value::Integer(*i)),
-        Expr::Literal(Literal::Float(n, _)) => Some(crate::compiler::value::Value::Float(*n)),
-        Expr::Literal(Literal::Distance(d, DistanceUnit::Px, _)) => {
-            Some(crate::compiler::value::Value::Distance(*d))
-        }
-        Expr::Literal(Literal::Area(a, DistanceUnit::Px, _)) => {
-            Some(crate::compiler::value::Value::Area(*a))
-        }
-        Expr::Literal(Literal::Duration(d, _, _)) => {
-            Some(crate::compiler::value::Value::Duration(*d))
-        }
-        Expr::Literal(Literal::String(s, _)) => {
-            Some(crate::compiler::value::Value::String(s.clone()))
-        }
-        Expr::Literal(Literal::Bool(b, _)) => Some(crate::compiler::value::Value::Bool(*b)),
-        Expr::Literal(Literal::Color(c, _)) => {
-            Some(crate::compiler::value::Value::Color(c.clone()))
-        }
-        Expr::Literal(Literal::Enum(e, v, _)) => Some(crate::compiler::value::Value::Enum {
-            enum_name: e.clone(),
-            variant: v.clone(),
-        }),
-        Expr::Call(call) if call.callee.as_str() == "to_integer" && call.args.len() == 1 => {
-            if let Expr::Literal(Literal::Integer(i, _)) = &call.args[0] {
-                Some(crate::compiler::value::Value::Integer(*i))
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
-
-fn expr_has_template_self_or_ternary(expr: &Expr) -> (bool, bool) {
-    match expr {
-        Expr::Literal(_) => (false, false),
-        Expr::Ident(id) => (
-            id.node_id()
-                .is_some_and(|n| n.is_template_self()),
-            false,
-        ),
-        Expr::MemberAccess(m) => expr_has_template_self_or_ternary(&m.target),
-        Expr::Binary(b) => {
-            let (s1, t1) = expr_has_template_self_or_ternary(&b.left);
-            let (s2, t2) = expr_has_template_self_or_ternary(&b.right);
-            (s1 || s2, t1 || t2)
-        }
-        Expr::Unary(u) => expr_has_template_self_or_ternary(&u.operand),
-        Expr::Paren(inner, _) => expr_has_template_self_or_ternary(inner),
+        Expr::Literal(_) => false,
+        Expr::Ident(id) => id.node_id().is_some_and(|n| n.is_template_self()),
+        Expr::MemberAccess(m) => expr_has_template_self(&m.target),
+        Expr::Binary(b) => expr_has_template_self(&b.left) || expr_has_template_self(&b.right),
+        Expr::Unary(u) => expr_has_template_self(&u.operand),
+        Expr::Paren(inner, _) => expr_has_template_self(inner),
         Expr::Ternary(t) => {
-            let (s1, _) = expr_has_template_self_or_ternary(&t.condition);
-            let (s2, _) = expr_has_template_self_or_ternary(&t.then_expr);
-            let (s3, _) = expr_has_template_self_or_ternary(&t.else_expr);
-            (s1 || s2 || s3, true)
+            expr_has_template_self(&t.condition)
+                || expr_has_template_self(&t.then_expr)
+                || expr_has_template_self(&t.else_expr)
         }
-        Expr::Call(c) => {
-            let mut has_s = false;
-            let mut has_t = false;
-            for arg in &c.args {
-                let (s, t) = expr_has_template_self_or_ternary(arg);
-                has_s |= s;
-                has_t |= t;
-            }
-            (has_s, has_t)
-        }
+        Expr::Call(c) => c.args.iter().any(expr_has_template_self),
         Expr::MethodCall(mc) => {
-            let (mut has_s, mut has_t) = expr_has_template_self_or_ternary(&mc.target);
-            for arg in &mc.args {
-                let (s, t) = expr_has_template_self_or_ternary(arg);
-                has_s |= s;
-                has_t |= t;
-            }
-            (has_s, has_t)
+            expr_has_template_self(&mc.target) || mc.args.iter().any(expr_has_template_self)
         }
-        Expr::Node(_) | Expr::ExprDef(_) => (false, false),
+        Expr::Node(_) | Expr::ExprDef(_) => false,
         Expr::Match(m) => {
-            let mut has_s = false;
-            if let Some(s) = &m.scrutinee {
-                let (s1, _) = expr_has_template_self_or_ternary(s);
-                has_s |= s1;
-            }
-            for arm in &m.arms {
-                if let MatchPattern::Condition(c) = &arm.pattern {
-                    let (s1, _) = expr_has_template_self_or_ternary(c);
-                    has_s |= s1;
-                }
-                let (s2, _) = expr_has_template_self_or_ternary(&arm.body);
-                has_s |= s2;
-            }
-            (has_s, true)
+            m.scrutinee.as_ref().is_some_and(|s| expr_has_template_self(s))
+                || m.arms.iter().any(|arm| {
+                    matches!(&arm.pattern, MatchPattern::Condition(c) if expr_has_template_self(c))
+                        || expr_has_template_self(&arm.body)
+                })
         }
     }
 }
@@ -1956,24 +1883,16 @@ impl CompiledComponentTemplates {
             preverified_template_mask.insert(&schema.port_table, "clip");
         }
 
-        let make_port_template = |name: String, expr: Expr, is_state: bool| -> CompiledPortTemplate {
+        let make_port_template = |name: String, expr: Expr| -> CompiledPortTemplate {
             let sym = Symbol::new(&name);
             let slot = schema.port_table.slot_of_sym(sym);
-            let (has_self, has_ternary) = expr_has_template_self_or_ternary(&expr);
-            let is_const_no_self = !has_self && !has_ternary;
-            let const_val = if is_state || has_self {
-                None
-            } else {
-                expr_to_const_value(&expr)
-            };
+            let is_const_no_self = !expr_has_template_self(&expr);
             CompiledPortTemplate {
                 name,
                 sym,
                 slot,
                 expr,
                 is_const_no_self,
-                const_val,
-                has_ternary,
             }
         };
 
@@ -1994,18 +1913,14 @@ impl CompiledComponentTemplates {
                     compiled,
                     param.type_annotation.as_ref(),
                 );
-                let (has_self, has_ternary) = expr_has_template_self_or_ternary(&coerced);
-                if !has_self && !has_ternary && matches!(coerced, Expr::Literal(_) | Expr::Call(_)) {
-                    let const_val = expr_to_const_value(&coerced);
+                let has_self = expr_has_template_self(&coerced);
+                if !has_self && matches!(coerced, Expr::Literal(_) | Expr::Call(_)) {
                     param_defaults.insert(
                         param.name.name,
-                        CompiledParamDefault::Constant {
-                            expr: coerced,
-                            const_val,
-                        },
+                        CompiledParamDefault::Constant { expr: coerced },
                     );
                 } else {
-                    let tmpl = make_port_template(name.to_string(), coerced, false);
+                    let tmpl = make_port_template(name.to_string(), coerced);
                     param_defaults.insert(param.name.name, CompiledParamDefault::Template(tmpl));
                 }
             }
@@ -2025,7 +1940,7 @@ impl CompiledComponentTemplates {
             if let Some(compiled) = try_compile_self_template(&raw_default, schema, enums) {
                 let coerced =
                     super::typecheck::coerce_typed_binding_expr(compiled, s.type_annotation.as_ref());
-                state_templates.push(make_port_template(state_name.clone(), coerced, true));
+                state_templates.push(make_port_template(state_name.clone(), coerced));
             }
         }
         state_templates = topo_sort_templates(state_templates);
@@ -2052,7 +1967,7 @@ impl CompiledComponentTemplates {
             if let Some(compiled) = try_compile_self_template(raw_expr, schema, enums) {
                 let coerced =
                     super::typecheck::coerce_typed_binding_expr(compiled, l.type_annotation.as_ref());
-                let_templates.push(make_port_template(let_name.to_string(), coerced, false));
+                let_templates.push(make_port_template(let_name.to_string(), coerced));
             }
         }
         let_templates = topo_sort_templates(let_templates);
@@ -2083,7 +1998,7 @@ impl CompiledComponentTemplates {
             if let Some(compiled) = try_compile_self_template(raw_expr, schema, enums) {
                 let coerced =
                     super::typecheck::coerce_typed_binding_expr(compiled, e.type_annotation.as_ref());
-                env_templates.push(make_port_template(env_name.to_string(), coerced, false));
+                env_templates.push(make_port_template(env_name.to_string(), coerced));
             }
         }
         env_templates = topo_sort_templates(env_templates);
@@ -2103,7 +2018,7 @@ impl CompiledComponentTemplates {
             if let Some(compiled) = try_compile_self_template(&a.value, schema, enums) {
                 let coerced =
                     super::typecheck::coerce_typed_binding_expr(compiled, a.type_annotation.as_ref());
-                alias_templates.push(make_port_template(alias_name.clone(), coerced, false));
+                alias_templates.push(make_port_template(alias_name.clone(), coerced));
             }
         }
         for sp in ["left", "top", "right", "bottom"] {
@@ -2115,7 +2030,7 @@ impl CompiledComponentTemplates {
             {
                 if let Some(authored_sp) = schema.base_authored_ports.get(sp) {
                     if let Some(compiled) = try_compile_self_template(authored_sp, schema, enums) {
-                        alias_templates.push(make_port_template(sp.to_string(), compiled, false));
+                        alias_templates.push(make_port_template(sp.to_string(), compiled));
                     }
                 }
             }
