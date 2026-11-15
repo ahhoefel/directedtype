@@ -178,7 +178,7 @@ impl BuiltinPrimitive for RectPrimitive {
                 let prop_name = format!("shadow_{field}");
                 if !state.ports.contains_key(&prop_name) {
                     let member_expr = Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(sh_target.clone()),
+                        target: std::sync::Arc::new(sh_target.clone()),
                         member: Ident::new(field, elem.span),
                         span: elem.span,
                     });

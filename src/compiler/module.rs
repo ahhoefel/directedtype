@@ -1108,11 +1108,11 @@ fn rewrite_element_node(node: &mut ElementNode, renames: &HashMap<String, String
 fn rewrite_expr(expr: &mut Expr, renames: &HashMap<String, String>) {
     match expr {
         Expr::Node(node) => rewrite_element_node(node, renames),
-        Expr::MemberAccess(m) => rewrite_expr(&mut m.target, renames),
+        Expr::MemberAccess(m) => rewrite_expr(std::sync::Arc::make_mut(&mut m.target), renames),
         Expr::Ternary(t) => {
-            rewrite_expr(&mut t.condition, renames);
-            rewrite_expr(&mut t.then_expr, renames);
-            rewrite_expr(&mut t.else_expr, renames);
+            rewrite_expr(std::sync::Arc::make_mut(&mut t.condition), renames);
+            rewrite_expr(std::sync::Arc::make_mut(&mut t.then_expr), renames);
+            rewrite_expr(std::sync::Arc::make_mut(&mut t.else_expr), renames);
         }
         Expr::Call(c) => {
             for arg in &mut c.args {
@@ -1120,18 +1120,19 @@ fn rewrite_expr(expr: &mut Expr, renames: &HashMap<String, String>) {
             }
         }
         Expr::MethodCall(m) => {
-            rewrite_expr(&mut m.target, renames);
+            rewrite_expr(std::sync::Arc::make_mut(&mut m.target), renames);
             for arg in &mut m.args {
                 rewrite_expr(arg, renames);
             }
         }
         Expr::Binary(b) => {
-            rewrite_expr(&mut b.left, renames);
-            rewrite_expr(&mut b.right, renames);
+            rewrite_expr(std::sync::Arc::make_mut(&mut b.left), renames);
+            rewrite_expr(std::sync::Arc::make_mut(&mut b.right), renames);
         }
-        Expr::Unary(u) => rewrite_expr(&mut u.operand, renames),
-        Expr::Paren(p, _) => rewrite_expr(p, renames),
+        Expr::Unary(u) => rewrite_expr(std::sync::Arc::make_mut(&mut u.operand), renames),
+        Expr::Paren(p, _) => rewrite_expr(std::sync::Arc::make_mut(p), renames),
         Expr::ExprDef(def) => {
+            let def = std::sync::Arc::make_mut(def);
             for param in &mut def.params {
                 if let Some(ty) = &mut param.type_annotation {
                     if let Some(new_name) = renames.get(ty.name.as_str()) {
@@ -1144,11 +1145,12 @@ fn rewrite_expr(expr: &mut Expr, renames: &HashMap<String, String>) {
                     rewrite_expr(d, renames);
                 }
             }
-            rewrite_expr(&mut def.body, renames);
+            rewrite_expr(std::sync::Arc::make_mut(&mut def.body), renames);
         }
         Expr::Match(m) => {
+            let m = std::sync::Arc::make_mut(m);
             if let Some(s) = &mut m.scrutinee {
-                rewrite_expr(s, renames);
+                rewrite_expr(std::sync::Arc::make_mut(s), renames);
             }
             for arm in &mut m.arms {
                 if let crate::ast::MatchPattern::Condition(c) = &mut arm.pattern {
@@ -1248,13 +1250,13 @@ fn resolve_expr_enum_literals(
                     }
                 }
             }
-            resolve_expr_enum_literals(&mut m.target, enums);
+            resolve_expr_enum_literals(std::sync::Arc::make_mut(&mut m.target), enums);
         }
         Expr::Node(node) => resolve_element_node_enum_literals(node, enums),
         Expr::Ternary(t) => {
-            resolve_expr_enum_literals(&mut t.condition, enums);
-            resolve_expr_enum_literals(&mut t.then_expr, enums);
-            resolve_expr_enum_literals(&mut t.else_expr, enums);
+            resolve_expr_enum_literals(std::sync::Arc::make_mut(&mut t.condition), enums);
+            resolve_expr_enum_literals(std::sync::Arc::make_mut(&mut t.then_expr), enums);
+            resolve_expr_enum_literals(std::sync::Arc::make_mut(&mut t.else_expr), enums);
         }
         Expr::Call(c) => {
             for arg in &mut c.args {
@@ -1262,28 +1264,30 @@ fn resolve_expr_enum_literals(
             }
         }
         Expr::MethodCall(m) => {
-            resolve_expr_enum_literals(&mut m.target, enums);
+            resolve_expr_enum_literals(std::sync::Arc::make_mut(&mut m.target), enums);
             for arg in &mut m.args {
                 resolve_expr_enum_literals(arg, enums);
             }
         }
         Expr::Binary(b) => {
-            resolve_expr_enum_literals(&mut b.left, enums);
-            resolve_expr_enum_literals(&mut b.right, enums);
+            resolve_expr_enum_literals(std::sync::Arc::make_mut(&mut b.left), enums);
+            resolve_expr_enum_literals(std::sync::Arc::make_mut(&mut b.right), enums);
         }
-        Expr::Unary(u) => resolve_expr_enum_literals(&mut u.operand, enums),
-        Expr::Paren(p, _) => resolve_expr_enum_literals(p, enums),
+        Expr::Unary(u) => resolve_expr_enum_literals(std::sync::Arc::make_mut(&mut u.operand), enums),
+        Expr::Paren(p, _) => resolve_expr_enum_literals(std::sync::Arc::make_mut(p), enums),
         Expr::ExprDef(def) => {
+            let def = std::sync::Arc::make_mut(def);
             for param in &mut def.params {
                 if let Some(d) = &mut param.default_edge {
                     resolve_expr_enum_literals(d, enums);
                 }
             }
-            resolve_expr_enum_literals(&mut def.body, enums);
+            resolve_expr_enum_literals(std::sync::Arc::make_mut(&mut def.body), enums);
         }
         Expr::Match(m) => {
+            let m = std::sync::Arc::make_mut(m);
             if let Some(s) = &mut m.scrutinee {
-                resolve_expr_enum_literals(s, enums);
+                resolve_expr_enum_literals(std::sync::Arc::make_mut(s), enums);
             }
             for arm in &mut m.arms {
                 if let crate::ast::MatchPattern::Condition(c) = &mut arm.pattern {

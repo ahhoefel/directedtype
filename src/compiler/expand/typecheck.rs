@@ -653,16 +653,23 @@ pub(super) fn validate_and_coerce_primitive_port_literal(
 /// Validates component parameter types and coerces numeric literals (`0 -> 0px`, `Integer -> Float`).
 pub(super) fn validate_and_coerce_component_param_types(
     comp_def: &ComponentDef,
-    explicit_unlowered_ports: &HashMap<String, Expr>,
+    instance_ports: &[PortBinding],
+    preverified_ports: &super::schema::PortMask,
+    port_table: &super::schema::PortTable,
     scope_ctx: &ScopeContext<'_>,
     rewritten_ports: &mut HashMap<String, Expr>,
 ) -> Result<(), CompileError> {
     for param in &comp_def.params {
         if let Some(type_ref) = &param.type_annotation {
-            let expected_type = type_ref.name.as_str();
             let name = param.name.as_str();
-            let unlowered_lit = explicit_unlowered_ports
-                .get(name)
+            if preverified_ports.contains_sym(port_table, param.name.name, name) {
+                continue;
+            }
+            let expected_type = type_ref.name.as_str();
+            let unlowered_lit = instance_ports
+                .iter()
+                .find(|p| p.name.name == param.name.name)
+                .map(|p| &p.expr)
                 .or(param.default_edge.as_ref())
                 .and_then(|e| match e {
                     Expr::Literal(lit) => Some(lit.clone()),
@@ -1015,7 +1022,9 @@ pub(super) fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Opti
                                         return None;
                                     }
                                     let is_self = target_id.name == Symbol::SELF
-                                        || target_id.node_id() == Some(ctx.current_node);
+                                        || target_id
+                                            .node_id()
+                                            .is_some_and(|n| n == ctx.current_node || n.is_template_self());
                                     Some(is_self)
                                 } else {
                                     None
@@ -1055,8 +1064,9 @@ pub(super) fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Opti
                                                 return None;
                                             }
                                             let is_self = sub_target_id.name == Symbol::SELF
-                                                || sub_target_id.node_id()
-                                                    == Some(ctx.current_node);
+                                                || sub_target_id
+                                                    .node_id()
+                                                    .is_some_and(|n| n == ctx.current_node || n.is_template_self());
                                             Some(is_self)
                                         } else {
                                             None
@@ -1080,7 +1090,9 @@ pub(super) fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Opti
                 let is_target = target_id.name == Symbol::PARENT
                     || target_id.name == Symbol::SELF
                     || (ctx.parent_node.is_some() && target_id.node_id() == ctx.parent_node)
-                    || target_id.node_id() == Some(ctx.current_node);
+                    || target_id
+                        .node_id()
+                        .is_some_and(|n| n == ctx.current_node || n.is_template_self());
                 if is_target {
                     if ctx
                         .declared_state_names
@@ -1103,7 +1115,9 @@ pub(super) fn is_handler_expr_unset(expr: &Expr, ctx: &ScopeContext<'_>) -> Opti
                                             return None;
                                         }
                                         let is_self = sub_target_id.name == Symbol::SELF
-                                            || sub_target_id.node_id() == Some(ctx.current_node);
+                                            || sub_target_id
+                                                .node_id()
+                                                .is_some_and(|n| n == ctx.current_node || n.is_template_self());
                                         Some(is_self)
                                     } else {
                                         None
@@ -1261,7 +1275,9 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                 let is_target = target_id.name == Symbol::PARENT
                     || target_id.name == Symbol::SELF
                     || (ctx.parent_node.is_some() && target_id.node_id() == ctx.parent_node)
-                    || target_id.node_id() == Some(ctx.current_node);
+                    || target_id
+                        .node_id()
+                        .is_some_and(|n| n == ctx.current_node || n.is_template_self());
                 if is_target {
                     if ctx
                         .declared_state_names
@@ -1425,6 +1441,7 @@ struct TypecheckCache<'a> {
     visiting: HashSet<(NodeId, Symbol)>,
     guarded_timers: HashSet<(NodeId, Symbol)>,
     template_types: Option<&'a HashMap<Symbol, StaticType>>,
+    current_self_node: Option<NodeId>,
 }
 
 impl<'a> TypecheckCache<'a> {
@@ -1435,6 +1452,7 @@ impl<'a> TypecheckCache<'a> {
             visiting: HashSet::new(),
             guarded_timers: HashSet::new(),
             template_types: None,
+            current_self_node: None,
         }
     }
 
@@ -1445,6 +1463,7 @@ impl<'a> TypecheckCache<'a> {
             visiting: HashSet::new(),
             guarded_timers: HashSet::new(),
             template_types: Some(template_types),
+            current_self_node: None,
         }
     }
 
@@ -1654,7 +1673,10 @@ fn infer_port_type(
 
     let result = if let Some(expr) = expr_opt {
         let saved_guards = std::mem::take(&mut cache.guarded_timers);
+        let saved_self_node = cache.current_self_node;
+        cache.current_self_node = Some(node_id);
         let actual_res = infer_expr_type(expr, doc, enums, registry, cache);
+        cache.current_self_node = saved_self_node;
         cache.guarded_timers = saved_guards;
         let actual = match actual_res {
             Ok(ty) => ty,
@@ -1727,12 +1749,17 @@ fn infer_port_type(
     result
 }
 
-fn canonical_timer_key(expr: &Expr) -> Option<(NodeId, Symbol)> {
+fn canonical_timer_key(expr: &Expr, current_self_node: Option<NodeId>) -> Option<(NodeId, Symbol)> {
     match expr {
-        Expr::Paren(inner, _) => canonical_timer_key(inner),
+        Expr::Paren(inner, _) => canonical_timer_key(inner, current_self_node),
         Expr::MemberAccess(m) => {
             if let Expr::Ident(id) = m.target.as_ref() {
-                if let Some(node_id) = id.node_id() {
+                if let Some(raw_node_id) = id.node_id() {
+                    let node_id = if raw_node_id.is_template_self() {
+                        current_self_node.unwrap_or(raw_node_id)
+                    } else {
+                        raw_node_id
+                    };
                     return Some((node_id, m.member.name));
                 }
             }
@@ -1759,6 +1786,7 @@ fn is_direct_indefinite_timer_node(expr: &Expr) -> bool {
 fn is_non_nullable_indefinite_timer_expr(
     expr: &Expr,
     doc: &ExpandedDocument,
+    current_self_node: Option<NodeId>,
     depth: usize,
 ) -> bool {
     if depth > 4 {
@@ -1767,19 +1795,29 @@ fn is_non_nullable_indefinite_timer_expr(
     if is_direct_indefinite_timer_node(expr) {
         return true;
     }
-    if let Some((node_id, port_sym)) = canonical_timer_key(expr) {
+    if let Some((node_id, port_sym)) = canonical_timer_key(expr, current_self_node) {
         let port_name = port_sym.as_str();
         if node_id.is_window() {
             if !doc.window_state_vars.contains_key(port_name) {
                 if let Some(port_expr) = doc.window_ports.get(port_name) {
-                    return is_non_nullable_indefinite_timer_expr(port_expr, doc, depth + 1);
+                    return is_non_nullable_indefinite_timer_expr(
+                        port_expr,
+                        doc,
+                        Some(NodeId::WINDOW),
+                        depth + 1,
+                    );
                 }
             }
         } else if !node_id.is_template_self() {
             if let Some(node) = doc.get_node(node_id) {
                 if !node.state_vars.contains_key(port_name) {
                     if let Some(port_expr) = node.ports.get(port_name) {
-                        return is_non_nullable_indefinite_timer_expr(port_expr, doc, depth + 1);
+                        return is_non_nullable_indefinite_timer_expr(
+                            port_expr,
+                            doc,
+                            Some(node_id),
+                            depth + 1,
+                        );
                     }
                 }
             }
@@ -1792,10 +1830,13 @@ fn is_nullable_timer_target(
     target: &Expr,
     target_ty: &StaticType,
     doc: &ExpandedDocument,
+    current_self_node: Option<NodeId>,
 ) -> bool {
     match target_ty {
         StaticType::Timer => true,
-        StaticType::IndefiniteTimer => !is_non_nullable_indefinite_timer_expr(target, doc, 0),
+        StaticType::IndefiniteTimer => {
+            !is_non_nullable_indefinite_timer_expr(target, doc, current_self_node, 0)
+        }
         _ => false,
     }
 }
@@ -1827,9 +1868,9 @@ fn extract_timer_guards(
                     )
                 };
                 let timer_key = if is_unset_expr(&bin.right) {
-                    canonical_timer_key(&bin.left)
+                    canonical_timer_key(&bin.left, cache.current_self_node)
                 } else if is_unset_expr(&bin.left) {
-                    canonical_timer_key(&bin.right)
+                    canonical_timer_key(&bin.right, cache.current_self_node)
                 } else {
                     None
                 };
@@ -1866,7 +1907,7 @@ fn extract_timer_guards(
         },
         Expr::MemberAccess(_) => {
             let mut pos = HashSet::new();
-            if let Some(k) = canonical_timer_key(cond) {
+            if let Some(k) = canonical_timer_key(cond, cache.current_self_node) {
                 if matches!(
                     infer_expr_type(cond, doc, enums, registry, cache),
                     Ok(StaticType::Timer | StaticType::IndefiniteTimer)
@@ -1879,7 +1920,9 @@ fn extract_timer_guards(
                 if node_id.is_window() {
                     if !doc.window_state_vars.contains_key(port_name) {
                         if let Some(port_expr) = doc.window_ports.get(port_name) {
-                            return extract_timer_guards(
+                            let saved_self = cache.current_self_node;
+                            cache.current_self_node = Some(NodeId::WINDOW);
+                            let res = extract_timer_guards(
                                 port_expr,
                                 doc,
                                 enums,
@@ -1887,13 +1930,17 @@ fn extract_timer_guards(
                                 cache,
                                 depth + 1,
                             );
+                            cache.current_self_node = saved_self;
+                            return res;
                         }
                     }
                 } else if !node_id.is_template_self() {
                     if let Some(node) = doc.get_node(node_id) {
                         if !node.state_vars.contains_key(port_name) {
                             if let Some(port_expr) = node.ports.get(port_name) {
-                                return extract_timer_guards(
+                                let saved_self = cache.current_self_node;
+                                cache.current_self_node = Some(node_id);
+                                let res = extract_timer_guards(
                                     port_expr,
                                     doc,
                                     enums,
@@ -1901,6 +1948,8 @@ fn extract_timer_guards(
                                     cache,
                                     depth + 1,
                                 );
+                                cache.current_self_node = saved_self;
+                                return res;
                             }
                         }
                     }
@@ -1972,21 +2021,34 @@ fn infer_expr_type(
                         return Ok(StaticType::Enum(target_id.as_str().to_string()));
                     }
                 }
-                if let Some(node_id) = target_id.node_id() {
-                    if node_id.is_template_self() {
+                if let Some(raw_node_id) = target_id.node_id() {
+                    let node_id = if raw_node_id.is_template_self() {
                         if let Some(template_types) = cache.template_types {
                             if let Some(ty) = template_types.get(&m.member.name) {
                                 return Ok(ty.clone());
                             }
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Template port '{}' has no known static type",
+                                    m.member.as_str()
+                                ),
+                                span: m.span,
+                            });
                         }
-                        return Err(CompileError::Custom {
-                            message: format!(
-                                "Template port '{}' has no known static type",
-                                m.member.as_str()
-                            ),
-                            span: m.span,
-                        });
-                    }
+                        if let Some(self_node) = cache.current_self_node {
+                            self_node
+                        } else {
+                            return Err(CompileError::Custom {
+                                message: format!(
+                                    "Template port '{}' has no known static type",
+                                    m.member.as_str()
+                                ),
+                                span: m.span,
+                            });
+                        }
+                    } else {
+                        raw_node_id
+                    };
                     let has_port = if node_id.is_window() {
                         doc.window_ports.contains_key(m.member.as_str())
                             || super::rewrite::has_materialized_expr_port(
@@ -2087,9 +2149,15 @@ fn infer_expr_type(
                             });
                         }
                     };
-                    if is_nullable_timer_target(&m.target, &target_ty, doc) {
-                        let is_guarded = canonical_timer_key(&m.target)
-                            .is_some_and(|k| cache.guarded_timers.contains(&k));
+                    if is_nullable_timer_target(
+                        &m.target,
+                        &target_ty,
+                        doc,
+                        cache.current_self_node,
+                    ) {
+                        let is_guarded =
+                            canonical_timer_key(&m.target, cache.current_self_node)
+                                .is_some_and(|k| cache.guarded_timers.contains(&k));
                         if !is_guarded {
                             return Err(CompileError::Custom {
                                 message: format!(
@@ -2116,9 +2184,15 @@ fn infer_expr_type(
                             });
                         }
                     };
-                    if is_nullable_timer_target(&m.target, &target_ty, doc) {
-                        let is_guarded = canonical_timer_key(&m.target)
-                            .is_some_and(|k| cache.guarded_timers.contains(&k));
+                    if is_nullable_timer_target(
+                        &m.target,
+                        &target_ty,
+                        doc,
+                        cache.current_self_node,
+                    ) {
+                        let is_guarded =
+                            canonical_timer_key(&m.target, cache.current_self_node)
+                                .is_some_and(|k| cache.guarded_timers.contains(&k));
                         if !is_guarded {
                             return Err(CompileError::Custom {
                                 message: format!(

@@ -372,7 +372,7 @@ fn test_dom_transaction_rollback_on_compile_cycle() {
     // Introduce an algebraic cyclic dependency: __node_0.width -> __node_0.width
     let cycle_res = dom.transaction(|tx| {
         let self_cycle = Expr::MemberAccess(directedtype::ast::MemberAccessExpr {
-            target: Box::new(Expr::Ident(Ident::new("__node_0", Span::default()))),
+            target: std::sync::Arc::new(Expr::Ident(Ident::new("__node_0", Span::default()))),
             member: Ident::new("width", Span::default()),
             span: Span::default(),
         });

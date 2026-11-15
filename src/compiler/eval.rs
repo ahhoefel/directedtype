@@ -25,13 +25,36 @@ impl EvalEnv for HashMap<VarId, Value> {
 struct IndexedEvalEnv<'a> {
     graph: &'a VariableGraph,
     slots: &'a [Option<Value>],
+    self_node: NodeId,
 }
 
 impl<'a> EvalEnv for IndexedEvalEnv<'a> {
     #[inline]
     fn get_var_sym(&self, node: NodeId, port: Symbol) -> Option<&Value> {
-        let idx = self.graph.lookup_var_index_sym(node, port)?;
+        let resolved_node = if node.is_template_self() {
+            self.self_node
+        } else {
+            node
+        };
+        let idx = self.graph.lookup_var_index_sym(resolved_node, port)?;
         self.slots.get(idx.0 as usize)?.as_ref()
+    }
+}
+
+struct NodeMapEnv<'a> {
+    map: &'a HashMap<VarId, Value>,
+    self_node: NodeId,
+}
+
+impl<'a> EvalEnv for NodeMapEnv<'a> {
+    #[inline]
+    fn get_var_sym(&self, node: NodeId, port: Symbol) -> Option<&Value> {
+        let resolved_node = if node.is_template_self() {
+            self.self_node
+        } else {
+            node
+        };
+        self.map.get(&VarId::from_symbol(resolved_node, port))
     }
 }
 
@@ -75,7 +98,14 @@ pub fn evaluate_graph_with_state(
                     continue;
                 }
             }
-            let val = eval_expr_with_env(&node.equation, &IndexedEvalEnv { graph, slots: &slots })?;
+            let val = eval_expr_with_env(
+                &node.equation,
+                &IndexedEvalEnv {
+                    graph,
+                    slots: &slots,
+                    self_node: node.id.node,
+                },
+            )?;
             if node.id.port == Symbol::FAMILY {
                 if let Value::String(ref s) = val {
                     if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
@@ -118,7 +148,7 @@ pub fn evaluate_graph_with_state(
             }
             env.insert(*var_id, override_val.clone());
         } else if let Some(node) = graph.get_variable(var_id) {
-            let val = eval_expr(&node.equation, &env)?;
+            let val = eval_expr_for_node(&node.equation, node.id.node, &env)?;
             if var_id.port == Symbol::FAMILY {
                 if let Value::String(ref s) = val {
                     if !s.is_empty() && !crate::compiler::text::font_family_exists(s) {
@@ -207,7 +237,7 @@ pub fn invalidate_and_reevaluate(
             let new_val = if let Some(override_val) = state_overrides.get(&node.id) {
                 override_val.clone()
             } else {
-                eval_expr(&node.equation, current_values)?
+                eval_expr_for_node(&node.equation, node.id.node, current_values)?
             };
 
             if node.id.port == Symbol::FAMILY {
@@ -241,7 +271,7 @@ pub fn invalidate_and_reevaluate(
             let new_val = if let Some(override_val) = state_overrides.get(var_id) {
                 override_val.clone()
             } else if let Some(node) = graph.get_variable(var_id) {
-                eval_expr(&node.equation, current_values)?
+                eval_expr_for_node(&node.equation, node.id.node, current_values)?
             } else {
                 continue;
             };
@@ -294,6 +324,15 @@ fn validate_font_family(family: Option<&str>, span: crate::span::Span) -> Result
 /// Evaluates an algebraic expression in the given environment.
 pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, CompileError> {
     eval_expr_with_env(expr, env)
+}
+
+/// Evaluates an algebraic expression owned by `self_node`, resolving `NodeId::TEMPLATE_SELF` to `self_node`.
+pub fn eval_expr_for_node(
+    expr: &Expr,
+    self_node: NodeId,
+    env: &HashMap<VarId, Value>,
+) -> Result<Value, CompileError> {
+    eval_expr_with_env(expr, &NodeMapEnv { map: env, self_node })
 }
 
 /// Evaluates an algebraic expression against any `EvalEnv` (flat slot table or `HashMap`).

@@ -295,6 +295,7 @@ fn push_equation_span(
 
 fn format_dag_expr_into_spans(
     expr: &Expr,
+    owner_id: Option<NodeId>,
     layout: &ResolvedLayout,
     skipped_set: &std::collections::HashSet<VarId>,
     spans: &mut Vec<EquationSpan>,
@@ -304,7 +305,12 @@ fn format_dag_expr_into_spans(
         Expr::Ident(id) => {
             let s = if id.as_str() == "__window" || id.as_str() == "window" {
                 "window".to_string()
-            } else if let Some(nid) = id.node_id() {
+            } else if let Some(raw_nid) = id.node_id() {
+                let nid = if raw_nid.is_template_self() {
+                    owner_id.unwrap_or(raw_nid)
+                } else {
+                    raw_nid
+                };
                 layout.node_display_label(nid)
             } else {
                 id.to_string()
@@ -313,7 +319,12 @@ fn format_dag_expr_into_spans(
         }
         Expr::MemberAccess(m) => {
             if let Expr::Ident(id) = m.target.as_ref() {
-                if let Some(nid) = id.node_id() {
+                if let Some(raw_nid) = id.node_id() {
+                    let nid = if raw_nid.is_template_self() {
+                        owner_id.unwrap_or(raw_nid)
+                    } else {
+                        raw_nid
+                    };
                     let vid = VarId::from_symbol(nid, m.member.name);
                     let is_skipped = skipped_set.contains(&vid);
                     let s = format!("{}.{}", layout.node_display_label(nid), m.member);
@@ -321,17 +332,17 @@ fn format_dag_expr_into_spans(
                     return;
                 }
             }
-            format_dag_expr_into_spans(&m.target, layout, skipped_set, spans);
+            format_dag_expr_into_spans(&m.target, owner_id, layout, skipped_set, spans);
             push_equation_span(spans, format!(".{}", m.member), false, false);
         }
         Expr::Binary(b) => {
-            format_dag_expr_into_spans(&b.left, layout, skipped_set, spans);
+            format_dag_expr_into_spans(&b.left, owner_id, layout, skipped_set, spans);
             push_equation_span(spans, format!(" {} ", b.op), false, false);
-            format_dag_expr_into_spans(&b.right, layout, skipped_set, spans);
+            format_dag_expr_into_spans(&b.right, owner_id, layout, skipped_set, spans);
         }
         Expr::Unary(u) => {
             push_equation_span(spans, format!("{}", u.op), false, false);
-            format_dag_expr_into_spans(&u.operand, layout, skipped_set, spans);
+            format_dag_expr_into_spans(&u.operand, owner_id, layout, skipped_set, spans);
         }
         Expr::Call(c) => {
             push_equation_span(spans, format!("{}(", c.callee), false, false);
@@ -339,31 +350,31 @@ fn format_dag_expr_into_spans(
                 if idx > 0 {
                     push_equation_span(spans, ", ", false, false);
                 }
-                format_dag_expr_into_spans(a, layout, skipped_set, spans);
+                format_dag_expr_into_spans(a, owner_id, layout, skipped_set, spans);
             }
             push_equation_span(spans, ")", false, false);
         }
         Expr::MethodCall(m) => {
-            format_dag_expr_into_spans(&m.target, layout, skipped_set, spans);
+            format_dag_expr_into_spans(&m.target, owner_id, layout, skipped_set, spans);
             push_equation_span(spans, format!(".{}(", m.method), false, false);
             for (idx, a) in m.args.iter().enumerate() {
                 if idx > 0 {
                     push_equation_span(spans, ", ", false, false);
                 }
-                format_dag_expr_into_spans(a, layout, skipped_set, spans);
+                format_dag_expr_into_spans(a, owner_id, layout, skipped_set, spans);
             }
             push_equation_span(spans, ")", false, false);
         }
         Expr::Ternary(t) => {
-            format_dag_expr_into_spans(&t.condition, layout, skipped_set, spans);
+            format_dag_expr_into_spans(&t.condition, owner_id, layout, skipped_set, spans);
             push_equation_span(spans, " ? ", false, false);
-            format_dag_expr_into_spans(&t.then_expr, layout, skipped_set, spans);
+            format_dag_expr_into_spans(&t.then_expr, owner_id, layout, skipped_set, spans);
             push_equation_span(spans, " : ", false, false);
-            format_dag_expr_into_spans(&t.else_expr, layout, skipped_set, spans);
+            format_dag_expr_into_spans(&t.else_expr, owner_id, layout, skipped_set, spans);
         }
         Expr::Paren(inner, _) => {
             push_equation_span(spans, "(", false, false);
-            format_dag_expr_into_spans(inner, layout, skipped_set, spans);
+            format_dag_expr_into_spans(inner, owner_id, layout, skipped_set, spans);
             push_equation_span(spans, ")", false, false);
         }
         Expr::Node(node) => {
@@ -378,37 +389,54 @@ fn format_dag_expr_into_spans(
 /// Formats an AST expression into a human-friendly equation string replacing canonical node IDs
 /// with readable component labels (e.g. `__node_5.width` -> `\VStack#5.width` or `reader_pane.width`).
 pub fn format_dag_expr(expr: &Expr, layout: &ResolvedLayout) -> String {
+    format_dag_expr_for_node(expr, None, layout)
+}
+
+fn format_dag_expr_for_node(
+    expr: &Expr,
+    owner_id: Option<NodeId>,
+    layout: &ResolvedLayout,
+) -> String {
     match expr {
         Expr::Literal(lit) => format!("{lit}"),
         Expr::Ident(id) => {
             if id.as_str() == "__window" || id.as_str() == "window" {
                 "window".to_string()
-            } else if let Some(nid) = id.node_id() {
+            } else if let Some(raw_nid) = id.node_id() {
+                let nid = if raw_nid.is_template_self() {
+                    owner_id.unwrap_or(raw_nid)
+                } else {
+                    raw_nid
+                };
                 layout.node_display_label(nid)
             } else {
                 id.to_string()
             }
         }
         Expr::MemberAccess(m) => {
-            let target_str = format_dag_expr(&m.target, layout);
+            let target_str = format_dag_expr_for_node(&m.target, owner_id, layout);
             format!("{}.{}", target_str, m.member)
         }
         Expr::Binary(b) => {
             format!(
                 "{} {} {}",
-                format_dag_expr(&b.left, layout),
+                format_dag_expr_for_node(&b.left, owner_id, layout),
                 b.op,
-                format_dag_expr(&b.right, layout)
+                format_dag_expr_for_node(&b.right, owner_id, layout)
             )
         }
         Expr::Unary(u) => {
-            format!("{}{}", u.op, format_dag_expr(&u.operand, layout))
+            format!(
+                "{}{}",
+                u.op,
+                format_dag_expr_for_node(&u.operand, owner_id, layout)
+            )
         }
         Expr::Call(c) => {
             let args_str = c
                 .args
                 .iter()
-                .map(|a| format_dag_expr(a, layout))
+                .map(|a| format_dag_expr_for_node(a, owner_id, layout))
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("{}({})", c.callee, args_str)
@@ -417,21 +445,26 @@ pub fn format_dag_expr(expr: &Expr, layout: &ResolvedLayout) -> String {
             let args_str = m
                 .args
                 .iter()
-                .map(|a| format_dag_expr(a, layout))
+                .map(|a| format_dag_expr_for_node(a, owner_id, layout))
                 .collect::<Vec<_>>()
                 .join(", ");
-            format!("{}.{}({})", format_dag_expr(&m.target, layout), m.method, args_str)
+            format!(
+                "{}.{}({})",
+                format_dag_expr_for_node(&m.target, owner_id, layout),
+                m.method,
+                args_str
+            )
         }
         Expr::Ternary(t) => {
             format!(
                 "{} ? {} : {}",
-                format_dag_expr(&t.condition, layout),
-                format_dag_expr(&t.then_expr, layout),
-                format_dag_expr(&t.else_expr, layout)
+                format_dag_expr_for_node(&t.condition, owner_id, layout),
+                format_dag_expr_for_node(&t.then_expr, owner_id, layout),
+                format_dag_expr_for_node(&t.else_expr, owner_id, layout)
             )
         }
         Expr::Paren(inner, _) => {
-            format!("({})", format_dag_expr(inner, layout))
+            format!("({})", format_dag_expr_for_node(inner, owner_id, layout))
         }
         Expr::Node(node) => {
             format!("\\{}(...)", node.name)
@@ -527,10 +560,22 @@ pub fn build_property_dag_trace(
     }
 
     if let Some(unfilt_expr) = target_node_opt.and_then(|n| n.unfiltered_ports.get(port)) {
-        format_dag_expr_into_spans(unfilt_expr, layout, &skipped_set, &mut equation_spans);
+        format_dag_expr_into_spans(
+            unfilt_expr,
+            Some(target_id),
+            layout,
+            &skipped_set,
+            &mut equation_spans,
+        );
     } else if let Some(graph) = &layout.graph {
         if let Some(vnode) = graph.get_variable(&var_id) {
-            format_dag_expr_into_spans(&vnode.equation, layout, &skipped_set, &mut equation_spans);
+            format_dag_expr_into_spans(
+                &vnode.equation,
+                Some(vnode.id.node),
+                layout,
+                &skipped_set,
+                &mut equation_spans,
+            );
         } else if let Some(ref af) = authored_formula {
             equation_spans.clear();
             push_equation_span(&mut equation_spans, af.clone(), false, false);
@@ -562,7 +607,7 @@ pub fn build_property_dag_trace(
                     .map(|v| format!("{v}"))
                     .unwrap_or_else(|| "-".to_string());
                 let dep_eq = if let Some(vnode) = graph.get_variable(dep) {
-                    format_dag_expr(&vnode.equation, layout)
+                    format_dag_expr_for_node(&vnode.equation, Some(vnode.id.node), layout)
                 } else {
                     String::new()
                 };
@@ -586,7 +631,7 @@ pub fn build_property_dag_trace(
                 .map(|v| format!("{v}"))
                 .unwrap_or_else(|| "-".to_string());
             let dep_eq = if let Some(vnode) = graph.get_variable(dep) {
-                format_dag_expr(&vnode.equation, layout)
+                format_dag_expr_for_node(&vnode.equation, Some(vnode.id.node), layout)
             } else {
                 String::new()
             };
@@ -609,7 +654,7 @@ pub fn build_property_dag_trace(
                     .map(|v| format!("{v}"))
                     .unwrap_or_else(|| "-".to_string());
                 let dep_eq = if let Some(vnode) = graph.get_variable(dep) {
-                    format_dag_expr(&vnode.equation, layout)
+                    format_dag_expr_for_node(&vnode.equation, Some(vnode.id.node), layout)
                 } else {
                     String::new()
                 };
@@ -645,7 +690,7 @@ pub fn build_property_dag_trace(
                 .map(|v| format!("{v}"))
                 .unwrap_or_else(|| "-".to_string());
             let eq = if let Some(vnode) = graph.get_variable(&curr_dep) {
-                format_dag_expr(&vnode.equation, layout)
+                format_dag_expr_for_node(&vnode.equation, Some(vnode.id.node), layout)
             } else {
                 String::new()
             };

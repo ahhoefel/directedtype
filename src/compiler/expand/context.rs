@@ -28,7 +28,7 @@ impl LexicalBinding {
             LexicalBinding::Member {
                 node_id, member, ..
             } => Some(Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::from_node(*node_id, member.span))),
+                target: std::sync::Arc::new(Expr::Ident(Ident::from_node(*node_id, member.span))),
                 member: *member,
                 span: member.span,
             })),

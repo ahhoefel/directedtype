@@ -17,7 +17,7 @@ pub(super) fn wire_wrapper_child_origin(node_id: NodeId, child_elem: &ElementNod
         child.ports.push(PortBinding {
             name: Ident::new("x", child.span),
             expr: Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::from_node(
+                target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                     node_id,
                     child.span,
                 ))),
@@ -31,7 +31,7 @@ pub(super) fn wire_wrapper_child_origin(node_id: NodeId, child_elem: &ElementNod
         child.ports.push(PortBinding {
             name: Ident::new("y", child.span),
             expr: Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::from_node(
+                target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                     node_id,
                     child.span,
                 ))),
@@ -59,7 +59,7 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
             .entry("x".to_string())
             .or_insert_with(|| {
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
+                    target: std::sync::Arc::new(self_ident.clone()),
                     member: Ident::new("x", elem.span),
                     span: elem.span,
                 })
@@ -69,7 +69,7 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
             .entry("y".to_string())
             .or_insert_with(|| {
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
+                    target: std::sync::Arc::new(self_ident.clone()),
                     member: Ident::new("y", elem.span),
                     span: elem.span,
                 })
@@ -80,7 +80,7 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
             state.ports.insert(
                 "width".to_string(),
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(cid_ident.clone()),
+                    target: std::sync::Arc::new(cid_ident.clone()),
                     member: Ident::new("width", elem.span),
                     span: elem.span,
                 }),
@@ -91,7 +91,7 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
                 .entry("width".to_string())
                 .or_insert_with(|| {
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(self_ident.clone()),
+                        target: std::sync::Arc::new(self_ident.clone()),
                         member: Ident::new("width", elem.span),
                         span: elem.span,
                     })
@@ -102,7 +102,7 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
             state.ports.insert(
                 "height".to_string(),
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(cid_ident),
+                    target: std::sync::Arc::new(cid_ident),
                     member: Ident::new("height", elem.span),
                     span: elem.span,
                 }),
@@ -113,7 +113,7 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
                 .entry("height".to_string())
                 .or_insert_with(|| {
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(self_ident),
+                        target: std::sync::Arc::new(self_ident),
                         member: Ident::new("height", elem.span),
                         span: elem.span,
                     })
@@ -143,7 +143,7 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
                 .entry("x".to_string())
                 .or_insert_with(|| {
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(self_ident.clone()),
+                        target: std::sync::Arc::new(self_ident.clone()),
                         member: Ident::new("x", elem.span),
                         span: elem.span,
                     })
@@ -153,7 +153,7 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
                 .entry("y".to_string())
                 .or_insert_with(|| {
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(self_ident.clone()),
+                        target: std::sync::Arc::new(self_ident.clone()),
                         member: Ident::new("y", elem.span),
                         span: elem.span,
                     })
@@ -164,7 +164,7 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
             state.ports.insert(
                 "width".to_string(),
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::from_node(
+                    target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                         first_cid,
                         elem.span,
                     ))),
@@ -178,7 +178,7 @@ fn finalize_anchor_like_geometry(state: &mut PrimitiveExpandState<'_, '_>) {
             state.ports.insert(
                 "height".to_string(),
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::from_node(
+                    target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                         first_cid,
                         elem.span,
                     ))),

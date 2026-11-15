@@ -68,7 +68,7 @@ impl BuiltinPrimitive for TextPrimitive {
                                 span,
                             }),
                             default_edge: Some(Expr::MemberAccess(MemberAccessExpr {
-                                target: Box::new(Expr::Ident(Ident::new("TextStart", span))),
+                                target: std::sync::Arc::new(Expr::Ident(Ident::new("TextStart", span))),
                                 member: Ident::new("Capital", span),
                                 span,
                             })),
@@ -82,7 +82,7 @@ impl BuiltinPrimitive for TextPrimitive {
                                 span,
                             }),
                             default_edge: Some(Expr::MemberAccess(MemberAccessExpr {
-                                target: Box::new(Expr::Ident(Ident::new("TextEnd", span))),
+                                target: std::sync::Arc::new(Expr::Ident(Ident::new("TextEnd", span))),
                                 member: Ident::new("Baseline", span),
                                 span,
                             })),
@@ -335,12 +335,12 @@ fn validate_and_resolve_text_bounds(
 
     if let Some(tb_target) = state.ports.get("text_bounds").cloned() {
         let start_at_from_tb = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(tb_target.clone()),
+            target: std::sync::Arc::new(tb_target.clone()),
             member: Ident::new("start_at", elem.span),
             span: elem.span,
         });
         let end_at_from_tb = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(tb_target),
+            target: std::sync::Arc::new(tb_target),
             member: Ident::new("end_at", elem.span),
             span: elem.span,
         });
@@ -427,17 +427,17 @@ fn build_text_font_metric_refs(
     let (size_expr, weight_expr, font_expr) = if let Some(target) = font_target {
         (
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(target.clone()),
+                target: std::sync::Arc::new(target.clone()),
                 member: Ident::new("size", span),
                 span,
             }),
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(target.clone()),
+                target: std::sync::Arc::new(target.clone()),
                 member: Ident::new("weight", span),
                 span,
             }),
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(target),
+                target: std::sync::Arc::new(target),
                 member: Ident::new("family", span),
                 span,
             }),
@@ -452,7 +452,7 @@ fn build_text_font_metric_refs(
 
     let start_at_expr = if state.ports.contains_key("start_at") {
         Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::new("start_at", span),
             span,
         })
@@ -480,7 +480,7 @@ fn build_text_line_height_arg(state: &PrimitiveExpandState<'_, '_>) -> Expr {
         {
             let font_ident = Expr::Ident(Ident::from_node(fid, span));
             return Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(font_ident),
+                target: std::sync::Arc::new(font_ident),
                 member: Ident::new("line_height", span),
                 span,
             });
@@ -506,12 +506,12 @@ fn resolve_baseline_and_y(
     {
         let y_from_baseline = Expr::Binary(BinaryExpr {
             op: BinaryOp::Sub,
-            left: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
+            left: std::sync::Arc::new(Expr::MemberAccess(MemberAccessExpr {
+                target: std::sync::Arc::new(self_ident.clone()),
                 member: Ident::new("baseline", span),
                 span,
             })),
-            right: Box::new(Expr::Call(CallExpr {
+            right: std::sync::Arc::new(Expr::Call(CallExpr {
                 callee: Ident::new("text_baseline_offset", span),
                 args: vec![
                     size_expr.clone(),
@@ -533,12 +533,12 @@ fn resolve_baseline_and_y(
     } else {
         let baseline_call = Expr::Binary(BinaryExpr {
             op: BinaryOp::Add,
-            left: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
+            left: std::sync::Arc::new(Expr::MemberAccess(MemberAccessExpr {
+                target: std::sync::Arc::new(self_ident.clone()),
                 member: Ident::new("y", span),
                 span,
             })),
-            right: Box::new(Expr::Call(CallExpr {
+            right: std::sync::Arc::new(Expr::Call(CallExpr {
                 callee: Ident::new("text_baseline_offset", span),
                 args: vec![
                     size_expr.clone(),
@@ -598,23 +598,23 @@ fn collect_span_and_inline_box_style_args(
             let (ts_size, ts_weight, ts_family, ts_italic) = if let Some(fid) = fid_opt {
                 let f_ident = Expr::Ident(Ident::from_node(fid, elem.span));
                 let sz = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(f_ident.clone()),
+                    target: std::sync::Arc::new(f_ident.clone()),
                     member: Ident::new("size", elem.span),
                     span: elem.span,
                 });
                 let wt = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(f_ident.clone()),
+                    target: std::sync::Arc::new(f_ident.clone()),
                     member: Ident::new("weight", elem.span),
                     span: elem.span,
                 });
                 let fam = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(f_ident.clone()),
+                    target: std::sync::Arc::new(f_ident.clone()),
                     member: Ident::new("family", elem.span),
                     span: elem.span,
                 });
                 let it = if state.doc.nodes[fid.0].ports.contains_key("italic") {
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(f_ident),
+                        target: std::sync::Arc::new(f_ident),
                         member: Ident::new("italic", elem.span),
                         span: elem.span,
                     })
@@ -638,7 +638,7 @@ fn collect_span_and_inline_box_style_args(
                 .find_map(|nid| {
                     if state.doc.nodes[nid.0].ports.contains_key("baseline_shift") {
                         Some(Expr::MemberAccess(MemberAccessExpr {
-                            target: Box::new(Expr::Ident(Ident::from_node(
+                            target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                                 nid,
                                 elem.span,
                             ))),
@@ -667,12 +667,12 @@ fn collect_span_and_inline_box_style_args(
         let ib_first = Expr::Literal(Literal::Integer(-(ib.node_id.0 as i64 + 1), elem.span));
         let ib_index = Expr::Literal(Literal::Integer(ib.index as i64, elem.span));
         let ib_width = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(ib_ident.clone()),
+            target: std::sync::Arc::new(ib_ident.clone()),
             member: Ident::new("width", elem.span),
             span: elem.span,
         });
         let ib_height = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(ib_ident.clone()),
+            target: std::sync::Arc::new(ib_ident.clone()),
             member: Ident::new("height", elem.span),
             span: elem.span,
         });
@@ -681,7 +681,7 @@ fn collect_span_and_inline_box_style_args(
             .contains_key("__baseline_offset")
         {
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(ib_ident),
+                target: std::sync::Arc::new(ib_ident),
                 member: Ident::new("__baseline_offset", elem.span),
                 span: elem.span,
             })
@@ -728,7 +728,7 @@ fn synthesize_span_and_inline_box_metrics(
         .and_then(|n| n.text_content.clone());
     let text_arg_expr = if state.ports.contains_key("text") {
         Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::new("text", elem.span),
             span: elem.span,
         })
@@ -738,24 +738,24 @@ fn synthesize_span_and_inline_box_metrics(
     };
 
     let text_x_expr = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident.clone()),
+        target: std::sync::Arc::new(self_ident.clone()),
         member: Ident::new("x", elem.span),
         span: elem.span,
     });
     let text_y_expr = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident.clone()),
+        target: std::sync::Arc::new(self_ident.clone()),
         member: Ident::new("y", elem.span),
         span: elem.span,
     });
     let text_width_expr = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident.clone()),
+        target: std::sync::Arc::new(self_ident.clone()),
         member: Ident::new("width", elem.span),
         span: elem.span,
     });
     let line_height_arg = build_text_line_height_arg(state);
     let align_arg = if state.ports.contains_key("align") {
         Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::new("align", elem.span),
             span: elem.span,
         })
@@ -784,7 +784,7 @@ fn synthesize_span_and_inline_box_metrics(
             .contains_key("baseline_shift")
         {
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::from_node(
+                target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                     span_nid,
                     elem.span,
                 ))),
@@ -881,22 +881,22 @@ fn insert_inline_child_spatial_aliases(
 ) {
     let self_ident = Expr::Ident(Ident::from_node(nid, span));
     let x_expr = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident.clone()),
+        target: std::sync::Arc::new(self_ident.clone()),
         member: Ident::new("x", span),
         span,
     });
     let y_expr = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident.clone()),
+        target: std::sync::Arc::new(self_ident.clone()),
         member: Ident::new("y", span),
         span,
     });
     let w_expr = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident.clone()),
+        target: std::sync::Arc::new(self_ident.clone()),
         member: Ident::new("width", span),
         span,
     });
     let h_expr = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident),
+        target: std::sync::Arc::new(self_ident),
         member: Ident::new("height", span),
         span,
     });
@@ -906,8 +906,8 @@ fn insert_inline_child_spatial_aliases(
         "right".to_string(),
         Expr::Binary(BinaryExpr {
             op: BinaryOp::Add,
-            left: Box::new(x_expr),
-            right: Box::new(w_expr),
+            left: std::sync::Arc::new(x_expr),
+            right: std::sync::Arc::new(w_expr),
             span,
         }),
     );
@@ -915,8 +915,8 @@ fn insert_inline_child_spatial_aliases(
         "bottom".to_string(),
         Expr::Binary(BinaryExpr {
             op: BinaryOp::Add,
-            left: Box::new(y_expr),
-            right: Box::new(h_expr),
+            left: std::sync::Arc::new(y_expr),
+            right: std::sync::Arc::new(h_expr),
             span,
         }),
     );
@@ -961,7 +961,7 @@ fn resolve_text_dimensions(
 
     let text_arg_expr = if state.ports.contains_key("text") {
         Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::new("text", elem.span),
             span: elem.span,
         })
@@ -974,13 +974,13 @@ fn resolve_text_dimensions(
     if !state.ports.contains_key("height") {
         if has_text {
             let width_expr = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(self_ident.clone()),
+                target: std::sync::Arc::new(self_ident.clone()),
                 member: Ident::new("width", elem.span),
                 span: elem.span,
             });
             let end_at_expr = if state.ports.contains_key("end_at") {
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
+                    target: std::sync::Arc::new(self_ident.clone()),
                     member: Ident::new("end_at", elem.span),
                     span: elem.span,
                 })

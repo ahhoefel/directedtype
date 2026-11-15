@@ -131,3 +131,112 @@ fn test_all_components_parse_and_resolve() {
     println!("Successfully parsed and resolved {tested_count} standard library components.");
 }
 
+#[test]
+#[ignore]
+fn bench_compiler_phases() {
+    use directedtype::compiler::{
+        build_variable_graph_with_window, evaluate_graph_with_state, expand_document_with_resolver,
+        resolve_layout, sort_graph,
+    };
+    use std::collections::HashMap;
+    use std::time::{Duration, Instant};
+
+    let registry = ComponentRegistry::standard();
+    let resolver = FsResolver;
+
+    let gallery_path = Path::new("examples/material_gallery.dt");
+    let gallery_src = fs::read_to_string(gallery_path).unwrap();
+    let gallery_doc = parse_document(&gallery_src).unwrap();
+    let base_dir = gallery_path.parent().unwrap();
+
+    // Warmup (loads fonts, caches component schemas/templates)
+    for _ in 0..5 {
+        let _ = CompiledDocument::compile_with_registry(
+            &gallery_doc,
+            1200.0,
+            900.0,
+            base_dir,
+            &resolver,
+            &registry,
+        )
+        .unwrap();
+    }
+
+    let iters = 50;
+    let mut expand_total = Duration::ZERO;
+    let mut graph_total = Duration::ZERO;
+    let mut topo_total = Duration::ZERO;
+    let mut eval_total = Duration::ZERO;
+    let mut layout_total = Duration::ZERO;
+    let mut full_total = Duration::ZERO;
+    let mut var_count = 0;
+    let mut node_count = 0;
+
+    for _ in 0..iters {
+        let t0 = Instant::now();
+        let expanded = expand_document_with_resolver(&gallery_doc, base_dir, &resolver).unwrap();
+        let t1 = Instant::now();
+        let graph = build_variable_graph_with_window(&expanded, 1200.0, 900.0).unwrap();
+        let t2 = Instant::now();
+        let schedule = sort_graph(&graph).unwrap();
+        let t3 = Instant::now();
+        let values = evaluate_graph_with_state(&graph, &schedule, &HashMap::new()).unwrap();
+        let t4 = Instant::now();
+        let layout = resolve_layout(&expanded, values);
+        let t5 = Instant::now();
+
+        var_count = graph.var_nodes.len();
+        node_count = layout.nodes.len();
+        expand_total += t1 - t0;
+        graph_total += t2 - t1;
+        topo_total += t3 - t2;
+        eval_total += t4 - t3;
+        layout_total += t5 - t4;
+
+        let f0 = Instant::now();
+        let _ = CompiledDocument::compile_with_registry(
+            &gallery_doc,
+            1200.0,
+            900.0,
+            base_dir,
+            &resolver,
+            &registry,
+        )
+        .unwrap();
+        full_total += f0.elapsed();
+    }
+
+    println!("\n=== material_gallery.dt ({iters} iterations, warm cache) ===");
+    println!("Nodes: {node_count}, DAG Variables: {var_count}");
+    println!(
+        "  Expand AST:     {:>8.3} ms/iter",
+        expand_total.as_secs_f64() * 1000.0 / iters as f64
+    );
+    println!(
+        "  Build Graph:    {:>8.3} ms/iter",
+        graph_total.as_secs_f64() * 1000.0 / iters as f64
+    );
+    println!(
+        "  Topo Sort:      {:>8.3} ms/iter",
+        topo_total.as_secs_f64() * 1000.0 / iters as f64
+    );
+    println!(
+        "  Eval DAG:       {:>8.3} ms/iter",
+        eval_total.as_secs_f64() * 1000.0 / iters as f64
+    );
+    println!(
+        "  Resolve Layout: {:>8.3} ms/iter",
+        layout_total.as_secs_f64() * 1000.0 / iters as f64
+    );
+    println!(
+        "  Sum of phases:  {:>8.3} ms/iter",
+        (expand_total + graph_total + topo_total + eval_total + layout_total).as_secs_f64()
+            * 1000.0
+            / iters as f64
+    );
+    println!(
+        "  compile_with_registry: {:>8.3} ms/iter",
+        full_total.as_secs_f64() * 1000.0 / iters as f64
+    );
+}
+

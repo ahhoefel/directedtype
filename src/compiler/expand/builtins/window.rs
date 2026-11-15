@@ -21,7 +21,7 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
     global_env_scope.insert(
         "clip".to_string(),
         EnvEntry::Bound(Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(Expr::Ident(Ident::from_node(
+            target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                 NodeId::WINDOW,
                 doc.span,
             ))),
@@ -146,7 +146,7 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
             }
             let default_expr = default_expr_for_state_with_enums(s, enums);
             let window_ref = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::from_node(
+                target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                     NodeId::WINDOW,
                     s.span,
                 ))),
@@ -216,7 +216,7 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
                 global_scope.insert(
                     l.name.name,
                     LexicalBinding::Expr(Expr::MemberAccess(crate::ast::MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::from_node(
+                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                             NodeId::WINDOW,
                             l.name.span,
                         ))),

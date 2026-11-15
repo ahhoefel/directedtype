@@ -373,17 +373,17 @@ pub(super) fn finalize_span_component_ports(
         let f_ident = Expr::Ident(Ident::from_node(fid, span));
         (
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(f_ident.clone()),
+                target: std::sync::Arc::new(f_ident.clone()),
                 member: Ident::new("size", span),
                 span,
             }),
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(f_ident.clone()),
+                target: std::sync::Arc::new(f_ident.clone()),
                 member: Ident::new("weight", span),
                 span,
             }),
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(f_ident),
+                target: std::sync::Arc::new(f_ident),
                 member: Ident::new("family", span),
                 span,
             }),
@@ -418,7 +418,7 @@ pub(super) fn finalize_span_component_ports(
             })
         });
     let width_member = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident_span.clone()),
+        target: std::sync::Arc::new(self_ident_span.clone()),
         member: Ident::new("width", span),
         span,
     });
@@ -453,13 +453,13 @@ pub(super) fn finalize_span_component_ports(
         .or_insert_with(|| {
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident_span.clone()),
+                left: std::sync::Arc::new(Expr::MemberAccess(MemberAccessExpr {
+                    target: std::sync::Arc::new(self_ident_span.clone()),
                     member: Ident::new("y", span),
                     span,
                 })),
-                right: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident_span),
+                right: std::sync::Arc::new(Expr::MemberAccess(MemberAccessExpr {
+                    target: std::sync::Arc::new(self_ident_span),
                     member: Ident::new("height", span),
                     span,
                 })),
@@ -496,19 +496,19 @@ pub(super) fn finalize_inline_box_component_ports(
     } else {
         let self_ident = Expr::Ident(Ident::from_node(comp_node_id, span));
         let self_y = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::from_symbol(Symbol::Y, span),
             span,
         });
         let self_height = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident),
+            target: std::sync::Arc::new(self_ident),
             member: Ident::from_symbol(Symbol::HEIGHT, span),
             span,
         });
         let default_baseline = Expr::Binary(BinaryExpr {
             op: BinaryOp::Add,
-            left: Box::new(self_y),
-            right: Box::new(self_height.clone()),
+            left: std::sync::Arc::new(self_y),
+            right: std::sync::Arc::new(self_height.clone()),
             span,
         });
         rewritten_ports.insert("baseline".to_string(), default_baseline);
@@ -534,15 +534,25 @@ pub(super) fn extract_inline_box_baseline_offset(
     match expr {
         Expr::MemberAccess(m) => {
             if let Expr::Ident(id) = m.target.as_ref() {
-                if let Some(target_nid) = id.node_id() {
+                if let Some(raw_nid) = id.node_id() {
+                    let target_nid = if raw_nid.is_template_self() {
+                        comp_node_id
+                    } else {
+                        raw_nid
+                    };
                     let member = m.member.as_str();
                     if target_nid == comp_node_id {
                         if member == "y" || member == "top" {
                             return Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, m.span));
                         }
+                        let concrete_target = if raw_nid.is_template_self() {
+                            std::sync::Arc::new(Expr::Ident(Ident::from_node(comp_node_id, id.span)))
+                        } else {
+                            m.target.clone()
+                        };
                         if member == "bottom" {
                             return Expr::MemberAccess(MemberAccessExpr {
-                                target: m.target.clone(),
+                                target: concrete_target,
                                 member: Ident::new("height", m.member.span),
                                 span: m.span,
                             });
@@ -563,11 +573,23 @@ pub(super) fn extract_inline_box_baseline_offset(
                                 );
                             }
                         }
+                        if raw_nid.is_template_self() {
+                            return Expr::MemberAccess(MemberAccessExpr {
+                                target: concrete_target,
+                                member: m.member,
+                                span: m.span,
+                            });
+                        }
                     } else if target_nid.0 >= start_node_idx && target_nid.0 < nodes.len() {
                         if matches!(member, "y" | "top" | "bottom" | "baseline") {
                             if let Some(port_expr) = nodes[target_nid.0].ports.get(member) {
+                                let child_expr = if super::rewrite::expr_has_template_self_ref(port_expr) {
+                                    super::rewrite::instantiate_template_expr(port_expr, target_nid)
+                                } else {
+                                    port_expr.clone()
+                                };
                                 return extract_inline_box_baseline_offset(
-                                    port_expr,
+                                    &child_expr,
                                     comp_node_id,
                                     start_node_idx,
                                     nodes,
@@ -581,7 +603,7 @@ pub(super) fn extract_inline_box_baseline_offset(
                 }
             }
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(extract_inline_box_baseline_offset(
+                target: std::sync::Arc::new(extract_inline_box_baseline_offset(
                     &m.target,
                     comp_node_id,
                     start_node_idx,
@@ -596,7 +618,7 @@ pub(super) fn extract_inline_box_baseline_offset(
         }
         Expr::Binary(b) => Expr::Binary(BinaryExpr {
             op: b.op,
-            left: Box::new(extract_inline_box_baseline_offset(
+            left: std::sync::Arc::new(extract_inline_box_baseline_offset(
                 &b.left,
                 comp_node_id,
                 start_node_idx,
@@ -605,7 +627,7 @@ pub(super) fn extract_inline_box_baseline_offset(
                 declared_state_names,
                 depth + 1,
             )),
-            right: Box::new(extract_inline_box_baseline_offset(
+            right: std::sync::Arc::new(extract_inline_box_baseline_offset(
                 &b.right,
                 comp_node_id,
                 start_node_idx,
@@ -618,7 +640,7 @@ pub(super) fn extract_inline_box_baseline_offset(
         }),
         Expr::Unary(u) => Expr::Unary(UnaryExpr {
             op: u.op,
-            operand: Box::new(extract_inline_box_baseline_offset(
+            operand: std::sync::Arc::new(extract_inline_box_baseline_offset(
                 &u.operand,
                 comp_node_id,
                 start_node_idx,
@@ -630,7 +652,7 @@ pub(super) fn extract_inline_box_baseline_offset(
             span: u.span,
         }),
         Expr::Paren(inner, span) => Expr::Paren(
-            Box::new(extract_inline_box_baseline_offset(
+            std::sync::Arc::new(extract_inline_box_baseline_offset(
                 inner,
                 comp_node_id,
                 start_node_idx,
@@ -661,7 +683,7 @@ pub(super) fn extract_inline_box_baseline_offset(
             span: c.span,
         }),
         Expr::Ternary(cond) => Expr::Ternary(TernaryExpr {
-            condition: Box::new(extract_inline_box_baseline_offset(
+            condition: std::sync::Arc::new(extract_inline_box_baseline_offset(
                 &cond.condition,
                 comp_node_id,
                 start_node_idx,
@@ -670,7 +692,7 @@ pub(super) fn extract_inline_box_baseline_offset(
                 declared_state_names,
                 depth + 1,
             )),
-            then_expr: Box::new(extract_inline_box_baseline_offset(
+            then_expr: std::sync::Arc::new(extract_inline_box_baseline_offset(
                 &cond.then_expr,
                 comp_node_id,
                 start_node_idx,
@@ -679,7 +701,7 @@ pub(super) fn extract_inline_box_baseline_offset(
                 declared_state_names,
                 depth + 1,
             )),
-            else_expr: Box::new(extract_inline_box_baseline_offset(
+            else_expr: std::sync::Arc::new(extract_inline_box_baseline_offset(
                 &cond.else_expr,
                 comp_node_id,
                 start_node_idx,

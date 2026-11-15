@@ -606,17 +606,17 @@ pub enum Expr {
     MethodCall(MethodCallExpr),
     Binary(BinaryExpr),
     Unary(UnaryExpr),
-    Paren(Box<Expr>, Span),
+    Paren(std::sync::Arc<Expr>, Span),
     Node(Box<ElementNode>),
-    ExprDef(Box<ExprDef>),
-    Match(Box<MatchExpr>),
+    ExprDef(std::sync::Arc<ExprDef>),
+    Match(std::sync::Arc<MatchExpr>),
 }
 
 /// Reusable expression literal: `\Expr(param1: Type1, ...) { <body_expr> }` or `\Expr { <body_expr> }`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExprDef {
     pub params: Vec<ParamDef>,
-    pub body: Box<Expr>,
+    pub body: std::sync::Arc<Expr>,
     pub span: Span,
 }
 
@@ -668,7 +668,7 @@ pub struct MatchArm {
 /// - Boolean condition match: `match { x < 100px => 10px, _ => 20px }`
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchExpr {
-    pub scrutinee: Option<Box<Expr>>,
+    pub scrutinee: Option<std::sync::Arc<Expr>>,
     pub arms: Vec<MatchArm>,
     pub span: Span,
 }
@@ -746,16 +746,16 @@ impl Expr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemberAccessExpr {
-    pub target: Box<Expr>,
+    pub target: std::sync::Arc<Expr>,
     pub member: Ident,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TernaryExpr {
-    pub condition: Box<Expr>,
-    pub then_expr: Box<Expr>,
-    pub else_expr: Box<Expr>,
+    pub condition: std::sync::Arc<Expr>,
+    pub then_expr: std::sync::Arc<Expr>,
+    pub else_expr: std::sync::Arc<Expr>,
     pub span: Span,
 }
 
@@ -768,7 +768,7 @@ pub struct CallExpr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MethodCallExpr {
-    pub target: Box<Expr>,
+    pub target: std::sync::Arc<Expr>,
     pub method: Ident,
     pub args: Vec<Expr>,
     pub span: Span,
@@ -777,8 +777,8 @@ pub struct MethodCallExpr {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BinaryExpr {
     pub op: BinaryOp,
-    pub left: Box<Expr>,
-    pub right: Box<Expr>,
+    pub left: std::sync::Arc<Expr>,
+    pub right: std::sync::Arc<Expr>,
     pub span: Span,
 }
 
@@ -802,7 +802,7 @@ pub enum BinaryOp {
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnaryExpr {
     pub op: UnaryOp,
-    pub operand: Box<Expr>,
+    pub operand: std::sync::Arc<Expr>,
     pub span: Span,
 }
 

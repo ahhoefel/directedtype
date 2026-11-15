@@ -227,7 +227,6 @@ pub struct CompiledPortTemplate {
     pub sym: Symbol,
     pub slot: Option<PortSlot>,
     pub expr: Expr,
-    pub is_const_no_self: bool,
 }
 
 /// A pre-compiled component parameter default value.
@@ -245,6 +244,7 @@ pub struct CompiledComponentTemplates {
     pub let_templates: Vec<CompiledPortTemplate>,
     pub env_templates: Vec<CompiledPortTemplate>,
     pub alias_templates: Vec<CompiledPortTemplate>,
+    pub inlined_caller_exprs: Vec<(Symbol, Span)>,
     pub preverified_port_types: std::sync::Arc<HashMap<Symbol, StaticType>>,
     pub preverified_template_mask: PortMask,
 }
@@ -279,8 +279,6 @@ pub struct ComponentSchema {
     pub static_port_types: std::sync::Arc<HashMap<String, String>>,
     pub state_var_types: std::sync::Arc<HashMap<String, Option<String>>>,
     pub env_var_types: std::sync::Arc<HashMap<String, Option<String>>>,
-    pub base_comp_ports: HashMap<String, Expr>,
-    pub base_already_rewritten_ports: PortMask,
     pub base_authored_ports: std::sync::Arc<HashMap<String, Expr>>,
     pub has_interdependent_lets_or_envs: bool,
     pub has_assertions: bool,
@@ -301,9 +299,11 @@ impl ComponentSchema {
         comp_def: &ComponentDef,
         enums: &HashMap<String, EnumDef>,
         registry: &HashMap<String, Vec<ComponentDef>>,
+        caller_scope: &HashMap<Symbol, super::context::LexicalBinding>,
     ) -> &CompiledComponentTemplates {
-        self.compiled_templates
-            .get_or_init(|| CompiledComponentTemplates::build(self, comp_def, enums, registry))
+        self.compiled_templates.get_or_init(|| {
+            CompiledComponentTemplates::build(self, comp_def, enums, registry, caller_scope)
+        })
     }
 
     /// Returns whether this component places its `\Children()` inside a single `\Text` context,
@@ -772,22 +772,7 @@ impl ComponentSchema {
             }
         }
 
-        let is_non_unit_literal = |expr: &Expr| -> bool {
-            matches!(
-                expr,
-                Expr::Literal(lit)
-                    if !matches!(
-                        lit,
-                        Literal::Distance(_, DistanceUnit::Pt | DistanceUnit::Em, _)
-                    )
-            )
-        };
-
         let empty_enums = HashMap::new();
-        let mut base_comp_ports = HashMap::with_capacity(
-            declared_states.len() + declared_lets.len() + declared_envs.len() + comp_def.params.len() + 4,
-        );
-        let mut base_already_rewritten_ports = PortMask::default();
         let mut enum_state_bindings = Vec::new();
         for (state_name, s) in &declared_states {
             let needs_enum_lookup = s.default.is_none()
@@ -809,67 +794,6 @@ impl ComponentSchema {
                 });
             if needs_enum_lookup {
                 enum_state_bindings.push((state_name.clone(), s.clone()));
-            } else {
-                let mut default_expr =
-                    super::rewrite::default_expr_for_state_with_enums(s, &empty_enums);
-                let is_handler = state_name.starts_with("on_")
-                    || handler_param_names.contains(state_name)
-                    || s.type_annotation
-                        .as_ref()
-                        .is_some_and(|t| t.name.as_str() == "Handler");
-                if !is_handler && is_non_unit_literal(&default_expr) {
-                    default_expr = super::typecheck::coerce_typed_binding_expr(
-                        default_expr,
-                        s.type_annotation.as_ref(),
-                    );
-                    base_already_rewritten_ports.insert(&port_table, state_name);
-                }
-                base_comp_ports.insert(state_name.clone(), default_expr);
-            }
-        }
-        for (let_name, l) in &declared_lets {
-            if !comp_shadowed_ports.contains(let_name) {
-                if let Some(LetValue::Expr(raw_expr)) = &l.value {
-                    let mut expr = raw_expr.clone();
-                    let is_handler = let_name.starts_with("on_")
-                        || handler_param_names.contains(let_name)
-                        || l.type_annotation
-                            .as_ref()
-                            .is_some_and(|t| t.name.as_str() == "Handler");
-                    if !is_handler && is_non_unit_literal(&expr) {
-                        expr = super::typecheck::coerce_typed_binding_expr(
-                            expr,
-                            l.type_annotation.as_ref(),
-                        );
-                        base_already_rewritten_ports.insert(&port_table, let_name);
-                    }
-                    base_comp_ports.insert(let_name.clone(), expr);
-                }
-            }
-        }
-        for (env_name, e) in &declared_envs {
-            if !comp_shadowed_ports.contains(env_name) {
-                if let Some(raw_expr) = &e.value {
-                    if !matches!(
-                        raw_expr,
-                        Expr::Node(elem) if !super::is_value_node_name(elem.name.as_str())
-                    ) {
-                        let mut expr = raw_expr.clone();
-                        let is_handler = env_name.starts_with("on_")
-                            || handler_param_names.contains(env_name)
-                            || e.type_annotation
-                                .as_ref()
-                                .is_some_and(|t| t.name.as_str() == "Handler");
-                        if !is_handler && is_non_unit_literal(&expr) {
-                            expr = super::typecheck::coerce_typed_binding_expr(
-                                expr,
-                                e.type_annotation.as_ref(),
-                            );
-                            base_already_rewritten_ports.insert(&port_table, env_name);
-                        }
-                        base_comp_ports.insert(env_name.clone(), expr);
-                    }
-                }
             }
         }
 
@@ -929,8 +853,8 @@ impl ComponentSchema {
                 .or_insert_with(|| {
                     Expr::Binary(BinaryExpr {
                         op: BinaryOp::Add,
-                        left: Box::new(Expr::Ident(Ident::from_symbol(left_member, def_span))),
-                        right: Box::new(Expr::Ident(Ident::from_symbol(Symbol::WIDTH, def_span))),
+                        left: std::sync::Arc::new(Expr::Ident(Ident::from_symbol(left_member, def_span))),
+                        right: std::sync::Arc::new(Expr::Ident(Ident::from_symbol(Symbol::WIDTH, def_span))),
                         span: def_span,
                     })
                 });
@@ -946,8 +870,8 @@ impl ComponentSchema {
                 .or_insert_with(|| {
                     Expr::Binary(BinaryExpr {
                         op: BinaryOp::Add,
-                        left: Box::new(Expr::Ident(Ident::from_symbol(top_member, def_span))),
-                        right: Box::new(Expr::Ident(Ident::from_symbol(Symbol::HEIGHT, def_span))),
+                        left: std::sync::Arc::new(Expr::Ident(Ident::from_symbol(top_member, def_span))),
+                        right: std::sync::Arc::new(Expr::Ident(Ident::from_symbol(Symbol::HEIGHT, def_span))),
                         span: def_span,
                     })
                 });
@@ -998,8 +922,6 @@ impl ComponentSchema {
             static_port_types: std::sync::Arc::new(static_port_types),
             state_var_types: std::sync::Arc::new(state_var_types),
             env_var_types: std::sync::Arc::new(env_var_types),
-            base_comp_ports,
-            base_already_rewritten_ports,
             base_authored_ports: std::sync::Arc::new(base_authored_ports),
             has_interdependent_lets_or_envs,
             has_assertions,
@@ -1652,28 +1574,31 @@ fn try_compile_self_template(
     expr: &Expr,
     schema: &ComponentSchema,
     enums: &HashMap<String, EnumDef>,
+    caller_scope: &HashMap<Symbol, super::context::LexicalBinding>,
+    param_bindings: &[(Symbol, Expr, Option<&str>)],
+    inlined_caller_exprs: &mut Vec<(Symbol, Span)>,
 ) -> Option<Expr> {
     match expr {
         Expr::Literal(Literal::Distance(val, unit, span)) => match unit {
             DistanceUnit::Px => Some(expr.clone()),
             DistanceUnit::Pt => Some(Expr::Binary(BinaryExpr {
                 op: BinaryOp::Mul,
-                left: Box::new(Expr::Literal(Literal::Distance(
+                left: std::sync::Arc::new(Expr::Literal(Literal::Distance(
                     *val,
                     DistanceUnit::Px,
                     *span,
                 ))),
-                right: Box::new(Expr::Binary(BinaryExpr {
+                right: std::sync::Arc::new(Expr::Binary(BinaryExpr {
                     op: BinaryOp::Div,
-                    left: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::from_node(
+                    left: std::sync::Arc::new(Expr::MemberAccess(MemberAccessExpr {
+                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                             crate::compiler::expanded::NodeId::WINDOW,
                             *span,
                         ))),
                         member: Ident::from_symbol(Symbol::DPI, *span),
                         span: *span,
                     })),
-                    right: Box::new(Expr::Literal(Literal::Float(72.0, *span))),
+                    right: std::sync::Arc::new(Expr::Literal(Literal::Float(72.0, *span))),
                     span: *span,
                 })),
                 span: *span,
@@ -1683,6 +1608,11 @@ fn try_compile_self_template(
         Expr::Literal(Literal::Area(_, DistanceUnit::Pt | DistanceUnit::Em, _)) => None,
         Expr::Literal(_) => Some(expr.clone()),
         Expr::Ident(id) => {
+            if let Some((_, bound_expr, _)) =
+                param_bindings.iter().find(|(sym, _, _)| *sym == id.name)
+            {
+                return Some(bound_expr.clone());
+            }
             if id.name == Symbol::TRUE {
                 return Some(Expr::Literal(Literal::Bool(true, id.span)));
             }
@@ -1702,9 +1632,9 @@ fn try_compile_self_template(
             {
                 return None;
             }
-            if schema.template_self_ports.contains(&id.name) {
+            if param_bindings.is_empty() && schema.template_self_ports.contains(&id.name) {
                 return Some(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::from_node(
+                    target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                         crate::compiler::expanded::NodeId::TEMPLATE_SELF,
                         id.span,
                     ))),
@@ -1729,9 +1659,12 @@ fn try_compile_self_template(
                         return None;
                     }
                 }
-                if target_id.name == Symbol::SELF && schema.template_self_ports.contains(&m.member.name) {
+                if param_bindings.is_empty()
+                    && target_id.name == Symbol::SELF
+                    && schema.template_self_ports.contains(&m.member.name)
+                {
                     return Some(Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::from_node(
+                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                             crate::compiler::expanded::NodeId::TEMPLATE_SELF,
                             target_id.span,
                         ))),
@@ -1743,31 +1676,80 @@ fn try_compile_self_template(
             None
         }
         Expr::Binary(b) => {
-            let left = try_compile_self_template(&b.left, schema, enums)?;
-            let right = try_compile_self_template(&b.right, schema, enums)?;
+            let left = try_compile_self_template(
+                &b.left,
+                schema,
+                enums,
+                caller_scope,
+                param_bindings,
+                inlined_caller_exprs,
+            )?;
+            let right = try_compile_self_template(
+                &b.right,
+                schema,
+                enums,
+                caller_scope,
+                param_bindings,
+                inlined_caller_exprs,
+            )?;
             Some(Expr::Binary(BinaryExpr {
                 op: b.op,
-                left: Box::new(left),
-                right: Box::new(right),
+                left: std::sync::Arc::new(left),
+                right: std::sync::Arc::new(right),
                 span: b.span,
             }))
         }
         Expr::Unary(u) => {
-            let operand = try_compile_self_template(&u.operand, schema, enums)?;
+            let operand = try_compile_self_template(
+                &u.operand,
+                schema,
+                enums,
+                caller_scope,
+                param_bindings,
+                inlined_caller_exprs,
+            )?;
             Some(Expr::Unary(UnaryExpr {
                 op: u.op,
-                operand: Box::new(operand),
+                operand: std::sync::Arc::new(operand),
                 span: u.span,
             }))
         }
         Expr::Paren(inner, span) => {
-            let compiled = try_compile_self_template(inner, schema, enums)?;
-            Some(Expr::Paren(Box::new(compiled), *span))
+            let compiled = try_compile_self_template(
+                inner,
+                schema,
+                enums,
+                caller_scope,
+                param_bindings,
+                inlined_caller_exprs,
+            )?;
+            Some(Expr::Paren(std::sync::Arc::new(compiled), *span))
         }
         Expr::Ternary(t) => {
-            let condition = try_compile_self_template(&t.condition, schema, enums)?;
-            let mut then_expr = try_compile_self_template(&t.then_expr, schema, enums)?;
-            let mut else_expr = try_compile_self_template(&t.else_expr, schema, enums)?;
+            let condition = try_compile_self_template(
+                &t.condition,
+                schema,
+                enums,
+                caller_scope,
+                param_bindings,
+                inlined_caller_exprs,
+            )?;
+            let mut then_expr = try_compile_self_template(
+                &t.then_expr,
+                schema,
+                enums,
+                caller_scope,
+                param_bindings,
+                inlined_caller_exprs,
+            )?;
+            let mut else_expr = try_compile_self_template(
+                &t.else_expr,
+                schema,
+                enums,
+                caller_scope,
+                param_bindings,
+                inlined_caller_exprs,
+            )?;
             if let Expr::Literal(Literal::Integer(0, z_span)) = then_expr {
                 let maybe_coerced =
                     infer_template_branch_zero_coercion(&else_expr, z_span, schema)?;
@@ -1783,30 +1765,322 @@ fn try_compile_self_template(
                 }
             }
             Some(Expr::Ternary(TernaryExpr {
-                condition: Box::new(condition),
-                then_expr: Box::new(then_expr),
-                else_expr: Box::new(else_expr),
+                condition: std::sync::Arc::new(condition),
+                then_expr: std::sync::Arc::new(then_expr),
+                else_expr: std::sync::Arc::new(else_expr),
                 span: t.span,
             }))
         }
         Expr::Call(c) => {
-            if !matches!(
+            if matches!(
                 c.callee.as_str(),
                 "min" | "max" | "abs" | "floor" | "ceil" | "round" | "clamp" | "to_integer"
             ) {
+                let mut args = Vec::with_capacity(c.args.len());
+                for arg in &c.args {
+                    args.push(try_compile_self_template(
+                        arg,
+                        schema,
+                        enums,
+                        caller_scope,
+                        param_bindings,
+                        inlined_caller_exprs,
+                    )?);
+                }
+                return Some(Expr::Call(CallExpr {
+                    callee: c.callee,
+                    args,
+                    span: c.span,
+                }));
+            }
+            if param_bindings.is_empty()
+                && !schema.all_let_names.contains(c.callee.as_str())
+                && !schema.param_names.contains(c.callee.as_str())
+                && !schema.declared_envs.contains_key(c.callee.as_str())
+                && !schema.declared_states.contains_key(c.callee.as_str())
+                && !schema.declared_aliases.contains_key(c.callee.as_str())
+            {
+                if let Some(super::context::LexicalBinding::Expr(Expr::ExprDef(def))) =
+                    caller_scope.get(&c.callee.name)
+                {
+                    if c.args.len() != def.params.len() {
+                        return None;
+                    }
+                    let mut local_bindings: Vec<(Symbol, Expr, Option<&str>)> =
+                        Vec::with_capacity(def.params.len());
+                    for (arg, param) in c.args.iter().zip(def.params.iter()) {
+                        let mut compiled_arg = try_compile_self_template(
+                            arg,
+                            schema,
+                            enums,
+                            caller_scope,
+                            &[],
+                            inlined_caller_exprs,
+                        )?;
+                        let expected_ty_name =
+                            param.type_annotation.as_ref().map(|t| t.name.as_str());
+                        if let Some(type_ref) = &param.type_annotation {
+                            compiled_arg = super::typecheck::coerce_typed_binding_expr(
+                                compiled_arg,
+                                Some(type_ref),
+                            );
+                            let expected = type_ref.name.as_str();
+                            let matches_expected = match &compiled_arg {
+                                Expr::Literal(lit) => lit.matches_type_name(expected),
+                                Expr::MemberAccess(ma) => {
+                                    if let Expr::Ident(id) = ma.target.as_ref() {
+                                        id.node_id().is_some_and(|n| n.is_template_self())
+                                            && schema
+                                                .static_port_types
+                                                .get(ma.member.as_str())
+                                                .is_some_and(|t| t == expected)
+                                    } else {
+                                        false
+                                    }
+                                }
+                                _ => false,
+                            };
+                            if !matches_expected {
+                                return None;
+                            }
+                        }
+                        local_bindings.push((param.name.name, compiled_arg, expected_ty_name));
+                    }
+                    let compiled_body = try_compile_self_template(
+                        &def.body,
+                        schema,
+                        enums,
+                        caller_scope,
+                        &local_bindings,
+                        inlined_caller_exprs,
+                    )?;
+                    if !inlined_caller_exprs
+                        .iter()
+                        .any(|(s, _)| *s == c.callee.name)
+                    {
+                        inlined_caller_exprs.push((c.callee.name, def.span));
+                    }
+                    return Some(compiled_body);
+                }
+            }
+            None
+        }
+        Expr::Match(m) => {
+            if m.arms.is_empty() {
                 return None;
             }
-            let mut args = Vec::with_capacity(c.args.len());
-            for arg in &c.args {
-                args.push(try_compile_self_template(arg, schema, enums)?);
+            if let Some(scrutinee) = &m.scrutinee {
+                let compiled_scrutinee = try_compile_self_template(
+                    scrutinee,
+                    schema,
+                    enums,
+                    caller_scope,
+                    param_bindings,
+                    inlined_caller_exprs,
+                )?;
+                let scrutinee_ty_name = match scrutinee.as_ref() {
+                    Expr::Ident(id) => param_bindings
+                        .iter()
+                        .find(|(sym, _, _)| *sym == id.name)
+                        .and_then(|(_, _, ty)| *ty),
+                    _ => None,
+                }
+                .or_else(|| match &compiled_scrutinee {
+                    Expr::MemberAccess(ma) => {
+                        if let Expr::Ident(id) = ma.target.as_ref() {
+                            if id.node_id().is_some_and(|n| n.is_template_self()) {
+                                schema
+                                    .static_port_types
+                                    .get(ma.member.as_str())
+                                    .map(|s| s.as_str())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    }
+                    Expr::Literal(Literal::Enum(en, _, _)) => Some(en.as_str()),
+                    _ => None,
+                })?;
+                let enum_def = enums.get(scrutinee_ty_name)?;
+                let enum_name = enum_def.name.as_str();
+                let mut seen_variants = HashSet::new();
+                let mut wildcard_seen = false;
+                for arm in &m.arms {
+                    if wildcard_seen {
+                        return None;
+                    }
+                    match &arm.pattern {
+                        MatchPattern::Wildcard(_) => {
+                            wildcard_seen = true;
+                        }
+                        MatchPattern::Variants(vars) => {
+                            for v in vars {
+                                if let Some(explicit_en) = &v.enum_name {
+                                    if explicit_en.as_str() != enum_name {
+                                        return None;
+                                    }
+                                }
+                                if !enum_def.has_variant(v.variant.as_str()) {
+                                    return None;
+                                }
+                                if !seen_variants.insert(v.variant.as_str()) {
+                                    return None;
+                                }
+                            }
+                        }
+                        MatchPattern::Condition(_) => return None,
+                    }
+                }
+                if !wildcard_seen
+                    && enum_def
+                        .variants
+                        .iter()
+                        .any(|v| !seen_variants.contains(v.as_str()))
+                {
+                    return None;
+                }
+                let mut compiled_bodies = Vec::with_capacity(m.arms.len());
+                for arm in &m.arms {
+                    compiled_bodies.push(try_compile_self_template(
+                        &arm.body,
+                        schema,
+                        enums,
+                        caller_scope,
+                        param_bindings,
+                        inlined_caller_exprs,
+                    )?);
+                }
+                let non_zero_ref = compiled_bodies
+                    .iter()
+                    .find(|e| !matches!(e, Expr::Literal(Literal::Integer(0, _))))
+                    .cloned();
+                if let Some(ref_expr) = non_zero_ref {
+                    for body in &mut compiled_bodies {
+                        if let Expr::Literal(Literal::Integer(0, z_span)) = *body {
+                            if let Some(coerced) =
+                                infer_template_branch_zero_coercion(&ref_expr, z_span, schema)?
+                            {
+                                *body = coerced;
+                            }
+                        }
+                    }
+                }
+                let mut acc_expr = compiled_bodies.pop()?;
+                for (arm, then_expr) in m.arms[..m.arms.len() - 1]
+                    .iter()
+                    .zip(compiled_bodies.into_iter())
+                    .rev()
+                {
+                    let MatchPattern::Variants(vars) = &arm.pattern else {
+                        return None;
+                    };
+                    let mut cond_expr: Option<Expr> = None;
+                    for v in vars {
+                        let eq_expr = Expr::Binary(BinaryExpr {
+                            op: BinaryOp::Eq,
+                            left: std::sync::Arc::new(compiled_scrutinee.clone()),
+                            right: std::sync::Arc::new(Expr::Literal(Literal::Enum(
+                                enum_name.to_string(),
+                                v.variant.as_str().to_string(),
+                                v.span,
+                            ))),
+                            span: v.span,
+                        });
+                        cond_expr = Some(match cond_expr {
+                            None => eq_expr,
+                            Some(prev) => Expr::Binary(BinaryExpr {
+                                op: BinaryOp::Or,
+                                span: prev.span().merge(v.span),
+                                left: std::sync::Arc::new(prev),
+                                right: std::sync::Arc::new(eq_expr),
+                            }),
+                        });
+                    }
+                    acc_expr = Expr::Ternary(TernaryExpr {
+                        condition: std::sync::Arc::new(cond_expr?),
+                        then_expr: std::sync::Arc::new(then_expr),
+                        else_expr: std::sync::Arc::new(acc_expr),
+                        span: m.span,
+                    });
+                }
+                Some(acc_expr)
+            } else {
+                let mut wildcard_seen = false;
+                for arm in &m.arms {
+                    if wildcard_seen {
+                        return None;
+                    }
+                    if matches!(arm.pattern, MatchPattern::Wildcard(_)) {
+                        wildcard_seen = true;
+                    }
+                }
+                if !wildcard_seen {
+                    return None;
+                }
+                let mut compiled_conds = Vec::with_capacity(m.arms.len() - 1);
+                let mut compiled_bodies = Vec::with_capacity(m.arms.len());
+                for (idx, arm) in m.arms.iter().enumerate() {
+                    match &arm.pattern {
+                        MatchPattern::Wildcard(_) => {
+                            if idx + 1 != m.arms.len() {
+                                return None;
+                            }
+                        }
+                        MatchPattern::Condition(c) => {
+                            compiled_conds.push(try_compile_self_template(
+                                c,
+                                schema,
+                                enums,
+                                caller_scope,
+                                param_bindings,
+                                inlined_caller_exprs,
+                            )?);
+                        }
+                        MatchPattern::Variants(_) => return None,
+                    }
+                    compiled_bodies.push(try_compile_self_template(
+                        &arm.body,
+                        schema,
+                        enums,
+                        caller_scope,
+                        param_bindings,
+                        inlined_caller_exprs,
+                    )?);
+                }
+                let non_zero_ref = compiled_bodies
+                    .iter()
+                    .find(|e| !matches!(e, Expr::Literal(Literal::Integer(0, _))))
+                    .cloned();
+                if let Some(ref_expr) = non_zero_ref {
+                    for body in &mut compiled_bodies {
+                        if let Expr::Literal(Literal::Integer(0, z_span)) = *body {
+                            if let Some(coerced) =
+                                infer_template_branch_zero_coercion(&ref_expr, z_span, schema)?
+                            {
+                                *body = coerced;
+                            }
+                        }
+                    }
+                }
+                let mut acc_expr = compiled_bodies.pop()?;
+                for (cond_expr, then_expr) in compiled_conds
+                    .into_iter()
+                    .zip(compiled_bodies.into_iter())
+                    .rev()
+                {
+                    acc_expr = Expr::Ternary(TernaryExpr {
+                        condition: std::sync::Arc::new(cond_expr),
+                        then_expr: std::sync::Arc::new(then_expr),
+                        else_expr: std::sync::Arc::new(acc_expr),
+                        span: m.span,
+                    });
+                }
+                Some(acc_expr)
             }
-            Some(Expr::Call(CallExpr {
-                callee: c.callee,
-                args,
-                span: c.span,
-            }))
         }
-        Expr::MethodCall(_) | Expr::Node(_) | Expr::ExprDef(_) | Expr::Match(_) => None,
+        Expr::MethodCall(_) | Expr::Node(_) | Expr::ExprDef(_) => None,
     }
 }
 
@@ -1864,6 +2138,7 @@ impl CompiledComponentTemplates {
         comp_def: &ComponentDef,
         enums: &HashMap<String, EnumDef>,
         registry: &HashMap<String, Vec<ComponentDef>>,
+        caller_scope: &HashMap<Symbol, super::context::LexicalBinding>,
     ) -> Self {
         let mut known_types: HashMap<Symbol, StaticType> =
             HashMap::with_capacity(schema.static_port_types.len() + schema.declared_lets.len());
@@ -1886,15 +2161,15 @@ impl CompiledComponentTemplates {
         let make_port_template = |name: String, expr: Expr| -> CompiledPortTemplate {
             let sym = Symbol::new(&name);
             let slot = schema.port_table.slot_of_sym(sym);
-            let is_const_no_self = !expr_has_template_self(&expr);
             CompiledPortTemplate {
                 name,
                 sym,
                 slot,
                 expr,
-                is_const_no_self,
             }
         };
+
+        let mut inlined_caller_exprs = Vec::new();
 
         let mut param_defaults = HashMap::with_capacity(comp_def.params.len());
         for param in &comp_def.params {
@@ -1908,7 +2183,14 @@ impl CompiledComponentTemplates {
             if is_handler_or_expr || matches!(default_expr, Expr::Node(_) | Expr::ExprDef(_)) {
                 continue;
             }
-            if let Some(compiled) = try_compile_self_template(default_expr, schema, enums) {
+            if let Some(compiled) = try_compile_self_template(
+                default_expr,
+                schema,
+                enums,
+                caller_scope,
+                &[],
+                &mut inlined_caller_exprs,
+            ) {
                 let coerced = super::typecheck::coerce_typed_binding_expr(
                     compiled,
                     param.type_annotation.as_ref(),
@@ -1937,7 +2219,14 @@ impl CompiledComponentTemplates {
                 continue;
             }
             let raw_default = super::rewrite::default_expr_for_state_with_enums(s, enums);
-            if let Some(compiled) = try_compile_self_template(&raw_default, schema, enums) {
+            if let Some(compiled) = try_compile_self_template(
+                &raw_default,
+                schema,
+                enums,
+                caller_scope,
+                &[],
+                &mut inlined_caller_exprs,
+            ) {
                 let coerced =
                     super::typecheck::coerce_typed_binding_expr(compiled, s.type_annotation.as_ref());
                 state_templates.push(make_port_template(state_name.clone(), coerced));
@@ -1964,7 +2253,14 @@ impl CompiledComponentTemplates {
             if is_handler_or_expr {
                 continue;
             }
-            if let Some(compiled) = try_compile_self_template(raw_expr, schema, enums) {
+            if let Some(compiled) = try_compile_self_template(
+                raw_expr,
+                schema,
+                enums,
+                caller_scope,
+                &[],
+                &mut inlined_caller_exprs,
+            ) {
                 let coerced =
                     super::typecheck::coerce_typed_binding_expr(compiled, l.type_annotation.as_ref());
                 let_templates.push(make_port_template(let_name.to_string(), coerced));
@@ -1995,7 +2291,14 @@ impl CompiledComponentTemplates {
             if is_handler {
                 continue;
             }
-            if let Some(compiled) = try_compile_self_template(raw_expr, schema, enums) {
+            if let Some(compiled) = try_compile_self_template(
+                raw_expr,
+                schema,
+                enums,
+                caller_scope,
+                &[],
+                &mut inlined_caller_exprs,
+            ) {
                 let coerced =
                     super::typecheck::coerce_typed_binding_expr(compiled, e.type_annotation.as_ref());
                 env_templates.push(make_port_template(env_name.to_string(), coerced));
@@ -2015,7 +2318,14 @@ impl CompiledComponentTemplates {
             if is_handler_or_expr {
                 continue;
             }
-            if let Some(compiled) = try_compile_self_template(&a.value, schema, enums) {
+            if let Some(compiled) = try_compile_self_template(
+                &a.value,
+                schema,
+                enums,
+                caller_scope,
+                &[],
+                &mut inlined_caller_exprs,
+            ) {
                 let coerced =
                     super::typecheck::coerce_typed_binding_expr(compiled, a.type_annotation.as_ref());
                 alias_templates.push(make_port_template(alias_name.clone(), coerced));
@@ -2029,7 +2339,14 @@ impl CompiledComponentTemplates {
                 && !schema.declared_envs.contains_key(sp)
             {
                 if let Some(authored_sp) = schema.base_authored_ports.get(sp) {
-                    if let Some(compiled) = try_compile_self_template(authored_sp, schema, enums) {
+                    if let Some(compiled) = try_compile_self_template(
+                        authored_sp,
+                        schema,
+                        enums,
+                        caller_scope,
+                        &[],
+                        &mut inlined_caller_exprs,
+                    ) {
                         alias_templates.push(make_port_template(sp.to_string(), compiled));
                     }
                 }
@@ -2087,6 +2404,7 @@ impl CompiledComponentTemplates {
             let_templates,
             env_templates,
             alias_templates,
+            inlined_caller_exprs,
             preverified_port_types: std::sync::Arc::new(known_types),
             preverified_template_mask,
         }

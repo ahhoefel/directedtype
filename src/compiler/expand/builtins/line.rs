@@ -98,22 +98,22 @@ impl BuiltinPrimitive for LinePrimitive {
 
         let self_ident = Expr::Ident(Ident::from_node(node_id, elem.span));
         let x1_ref = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::new("x1", elem.span),
             span: elem.span,
         });
         let y1_ref = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::new("y1", elem.span),
             span: elem.span,
         });
         let x2_ref = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::new("x2", elem.span),
             span: elem.span,
         });
         let y2_ref = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident),
+            target: std::sync::Arc::new(self_ident),
             member: Ident::new("y2", elem.span),
             span: elem.span,
         });
@@ -137,8 +137,8 @@ impl BuiltinPrimitive for LinePrimitive {
                 callee: Ident::new("abs", elem.span),
                 args: vec![Expr::Binary(BinaryExpr {
                     op: BinaryOp::Sub,
-                    left: Box::new(x2_ref),
-                    right: Box::new(x1_ref),
+                    left: std::sync::Arc::new(x2_ref),
+                    right: std::sync::Arc::new(x1_ref),
                     span: elem.span,
                 })],
                 span: elem.span,
@@ -149,8 +149,8 @@ impl BuiltinPrimitive for LinePrimitive {
                 callee: Ident::new("abs", elem.span),
                 args: vec![Expr::Binary(BinaryExpr {
                     op: BinaryOp::Sub,
-                    left: Box::new(y2_ref),
-                    right: Box::new(y1_ref),
+                    left: std::sync::Arc::new(y2_ref),
+                    right: std::sync::Arc::new(y1_ref),
                     span: elem.span,
                 })],
                 span: elem.span,

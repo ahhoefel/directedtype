@@ -44,7 +44,10 @@ fn collect_agg_members_and_parent_refs(
             if let Expr::Ident(id) = m.target.as_ref() {
                 if id.agg_child_of_node().is_some_and(|(p, _)| p == parent_id) {
                     agg_members.insert(m.member.as_str().to_string());
-                } else if id.node_id() == Some(parent_id) {
+                } else if id
+                    .node_id()
+                    .is_some_and(|n| n == parent_id || n.is_template_self())
+                {
                     parent_refs.insert(m.member.as_str().to_string());
                 }
             }
@@ -82,6 +85,7 @@ fn collect_agg_members_and_parent_refs(
 
 fn scan_expr_for_parent_or_local_deps<'a>(
     expr: &'a Expr,
+    curr_id: NodeId,
     parent_id: NodeId,
     target_member: &str,
     parent_ports_for_member: &HashSet<String>,
@@ -91,7 +95,12 @@ fn scan_expr_for_parent_or_local_deps<'a>(
     match expr {
         Expr::MemberAccess(ma) => {
             if let Expr::Ident(id) = ma.target.as_ref() {
-                if let Some(target_node_id) = id.node_id() {
+                if let Some(raw_node_id) = id.node_id() {
+                    let target_node_id = if raw_node_id.is_template_self() {
+                        curr_id
+                    } else {
+                        raw_node_id
+                    };
                     if target_node_id == parent_id {
                         if parent_ports_for_member.contains(ma.member.as_str()) {
                             return true;
@@ -107,6 +116,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             }
             scan_expr_for_parent_or_local_deps(
                 &ma.target,
+                curr_id,
                 parent_id,
                 target_member,
                 parent_ports_for_member,
@@ -117,6 +127,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
         Expr::Call(c) => c.args.iter().any(|a| {
             scan_expr_for_parent_or_local_deps(
                 a,
+                curr_id,
                 parent_id,
                 target_member,
                 parent_ports_for_member,
@@ -127,6 +138,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
         Expr::MethodCall(mc) => {
             scan_expr_for_parent_or_local_deps(
                 &mc.target,
+                curr_id,
                 parent_id,
                 target_member,
                 parent_ports_for_member,
@@ -135,6 +147,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             ) || mc.args.iter().any(|a| {
                 scan_expr_for_parent_or_local_deps(
                     a,
+                    curr_id,
                     parent_id,
                     target_member,
                     parent_ports_for_member,
@@ -146,6 +159,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
         Expr::Binary(b) => {
             scan_expr_for_parent_or_local_deps(
                 &b.left,
+                curr_id,
                 parent_id,
                 target_member,
                 parent_ports_for_member,
@@ -153,6 +167,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
                 stack,
             ) || scan_expr_for_parent_or_local_deps(
                 &b.right,
+                curr_id,
                 parent_id,
                 target_member,
                 parent_ports_for_member,
@@ -162,6 +177,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
         }
         Expr::Unary(u) => scan_expr_for_parent_or_local_deps(
             &u.operand,
+            curr_id,
             parent_id,
             target_member,
             parent_ports_for_member,
@@ -171,6 +187,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
         Expr::Ternary(t) => {
             scan_expr_for_parent_or_local_deps(
                 &t.condition,
+                curr_id,
                 parent_id,
                 target_member,
                 parent_ports_for_member,
@@ -178,6 +195,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
                 stack,
             ) || scan_expr_for_parent_or_local_deps(
                 &t.then_expr,
+                curr_id,
                 parent_id,
                 target_member,
                 parent_ports_for_member,
@@ -185,6 +203,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
                 stack,
             ) || scan_expr_for_parent_or_local_deps(
                 &t.else_expr,
+                curr_id,
                 parent_id,
                 target_member,
                 parent_ports_for_member,
@@ -194,6 +213,7 @@ fn scan_expr_for_parent_or_local_deps<'a>(
         }
         Expr::Paren(inner, _) => scan_expr_for_parent_or_local_deps(
             inner,
+            curr_id,
             parent_id,
             target_member,
             parent_ports_for_member,
@@ -241,6 +261,7 @@ fn child_port_depends_on_parent<'a>(
         for expr in exprs_to_scan.into_iter().flatten() {
             if scan_expr_for_parent_or_local_deps(
                 expr,
+                curr_id,
                 parent_id,
                 member,
                 parent_ports_for_member,
@@ -280,7 +301,7 @@ fn resolve_and_filter_agg_expr(
                                 if let Some(&child_id) = instantiated_children_ids.get(idx) {
                                     let member = m.member.as_str();
                                     let resolved_arg = Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::from_node(
+                                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                                             child_id,
                                             id.span,
                                         ))),
@@ -385,12 +406,12 @@ fn resolve_and_filter_agg_expr(
             };
             Ok((
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(new_target),
+                    target: std::sync::Arc::new(new_target),
                     member: m.member,
                     span: m.span,
                 }),
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(unfilt_target),
+                    target: std::sync::Arc::new(unfilt_target),
                     member: m.member,
                     span: m.span,
                 }),
@@ -423,13 +444,13 @@ fn resolve_and_filter_agg_expr(
             }
             Ok((
                 Expr::MethodCall(MethodCallExpr {
-                    target: Box::new(new_target),
+                    target: std::sync::Arc::new(new_target),
                     method: mc.method,
                     args: new_args,
                     span: mc.span,
                 }),
                 Expr::MethodCall(MethodCallExpr {
-                    target: Box::new(unfilt_target),
+                    target: std::sync::Arc::new(unfilt_target),
                     method: mc.method,
                     args: unfilt_args,
                     span: mc.span,
@@ -458,14 +479,14 @@ fn resolve_and_filter_agg_expr(
             Ok((
                 Expr::Binary(BinaryExpr {
                     op: b.op,
-                    left: Box::new(l_filt),
-                    right: Box::new(r_filt),
+                    left: std::sync::Arc::new(l_filt),
+                    right: std::sync::Arc::new(r_filt),
                     span: b.span,
                 }),
                 Expr::Binary(BinaryExpr {
                     op: b.op,
-                    left: Box::new(l_unfilt),
-                    right: Box::new(r_unfilt),
+                    left: std::sync::Arc::new(l_unfilt),
+                    right: std::sync::Arc::new(r_unfilt),
                     span: b.span,
                 }),
             ))
@@ -483,12 +504,12 @@ fn resolve_and_filter_agg_expr(
             Ok((
                 Expr::Unary(UnaryExpr {
                     op: u.op,
-                    operand: Box::new(filt),
+                    operand: std::sync::Arc::new(filt),
                     span: u.span,
                 }),
                 Expr::Unary(UnaryExpr {
                     op: u.op,
-                    operand: Box::new(unfilt),
+                    operand: std::sync::Arc::new(unfilt),
                     span: u.span,
                 }),
             ))
@@ -523,15 +544,15 @@ fn resolve_and_filter_agg_expr(
             )?;
             Ok((
                 Expr::Ternary(TernaryExpr {
-                    condition: Box::new(c_filt),
-                    then_expr: Box::new(t_filt),
-                    else_expr: Box::new(e_filt),
+                    condition: std::sync::Arc::new(c_filt),
+                    then_expr: std::sync::Arc::new(t_filt),
+                    else_expr: std::sync::Arc::new(e_filt),
                     span: t.span,
                 }),
                 Expr::Ternary(TernaryExpr {
-                    condition: Box::new(c_unfilt),
-                    then_expr: Box::new(t_unfilt),
-                    else_expr: Box::new(e_unfilt),
+                    condition: std::sync::Arc::new(c_unfilt),
+                    then_expr: std::sync::Arc::new(t_unfilt),
+                    else_expr: std::sync::Arc::new(e_unfilt),
                     span: t.span,
                 }),
             ))
@@ -547,8 +568,8 @@ fn resolve_and_filter_agg_expr(
                 skipped_out,
             )?;
             Ok((
-                Expr::Paren(Box::new(filt), *span),
-                Expr::Paren(Box::new(unfilt), *span),
+                Expr::Paren(std::sync::Arc::new(filt), *span),
+                Expr::Paren(std::sync::Arc::new(unfilt), *span),
             ))
         }
         Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) | Expr::Match(_) => {

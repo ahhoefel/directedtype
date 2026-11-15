@@ -339,22 +339,22 @@ pub fn insert_default_spatial_aliases(
 ) {
     let self_ident = Expr::Ident(Ident::from_node(node_id, span));
     let self_x = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident.clone()),
+        target: std::sync::Arc::new(self_ident.clone()),
         member: Ident::from_symbol(Symbol::X, span),
         span,
     });
     let self_y = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident.clone()),
+        target: std::sync::Arc::new(self_ident.clone()),
         member: Ident::from_symbol(Symbol::Y, span),
         span,
     });
     let self_width = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident.clone()),
+        target: std::sync::Arc::new(self_ident.clone()),
         member: Ident::from_symbol(Symbol::WIDTH, span),
         span,
     });
     let self_height = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(self_ident.clone()),
+        target: std::sync::Arc::new(self_ident.clone()),
         member: Ident::from_symbol(Symbol::HEIGHT, span),
         span,
     });
@@ -376,7 +376,7 @@ pub fn insert_default_spatial_aliases(
         } else {
             (
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
+                    target: std::sync::Arc::new(self_ident.clone()),
                     member: Ident::new("left", span),
                     span,
                 }),
@@ -387,8 +387,8 @@ pub fn insert_default_spatial_aliases(
             "right".to_string(),
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(left_base),
-                right: Box::new(self_width),
+                left: std::sync::Arc::new(left_base),
+                right: std::sync::Arc::new(self_width),
                 span,
             }),
         );
@@ -396,8 +396,8 @@ pub fn insert_default_spatial_aliases(
             "right".to_string(),
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(Expr::Ident(Ident::new(left_authored, span))),
-                right: Box::new(Expr::Ident(Ident::new("width", span))),
+                left: std::sync::Arc::new(Expr::Ident(Ident::new(left_authored, span))),
+                right: std::sync::Arc::new(Expr::Ident(Ident::new("width", span))),
                 span,
             }),
         );
@@ -411,7 +411,7 @@ pub fn insert_default_spatial_aliases(
         } else {
             (
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident),
+                    target: std::sync::Arc::new(self_ident),
                     member: Ident::new("top", span),
                     span,
                 }),
@@ -422,8 +422,8 @@ pub fn insert_default_spatial_aliases(
             "bottom".to_string(),
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(top_base),
-                right: Box::new(self_height),
+                left: std::sync::Arc::new(top_base),
+                right: std::sync::Arc::new(self_height),
                 span,
             }),
         );
@@ -431,8 +431,8 @@ pub fn insert_default_spatial_aliases(
             "bottom".to_string(),
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(Expr::Ident(Ident::new(top_authored, span))),
-                right: Box::new(Expr::Ident(Ident::new("height", span))),
+                left: std::sync::Arc::new(Expr::Ident(Ident::new(top_authored, span))),
+                right: std::sync::Arc::new(Expr::Ident(Ident::new("height", span))),
                 span,
             }),
         );
@@ -462,14 +462,14 @@ pub(super) fn apply_inline_origin_defaults(state: &mut PrimitiveExpandState<'_, 
             let p_ident = Expr::Ident(Ident::from_node(pid, elem.span));
             state.ports.entry("x".to_string()).or_insert_with(|| {
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(p_ident.clone()),
+                    target: std::sync::Arc::new(p_ident.clone()),
                     member: Ident::from_symbol(Symbol::X, elem.span),
                     span: elem.span,
                 })
             });
             state.ports.entry("y".to_string()).or_insert_with(|| {
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(p_ident),
+                    target: std::sync::Arc::new(p_ident),
                     member: Ident::from_symbol(Symbol::Y, elem.span),
                     span: elem.span,
                 })
@@ -949,7 +949,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     merged_ports.insert(
                         "x".to_string(),
                         Expr::MemberAccess(MemberAccessExpr {
-                            target: Box::new(Expr::Ident(Ident::from_node(
+                            target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                                 self.node_id,
                                 child_elem.span,
                             ))),
@@ -962,7 +962,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     merged_ports.insert(
                         "y".to_string(),
                         Expr::MemberAccess(MemberAccessExpr {
-                            target: Box::new(Expr::Ident(Ident::from_node(
+                            target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                                 self.node_id,
                                 child_elem.span,
                             ))),

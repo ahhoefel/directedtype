@@ -53,7 +53,6 @@ struct ComponentExpander<'a> {
     comp_scope_ports: std::borrow::Cow<'a, [String]>,
     is_single_text_context: bool,
     comp_ports: HashMap<String, Expr>,
-    explicit_unlowered_ports: HashMap<String, Expr>,
     already_rewritten_ports: PortMask,
     default_self_handlers: HashMap<String, crate::component::EventHandlerBinding>,
     instantiated_children_ids: &'a RefCell<Vec<NodeId>>,
@@ -92,7 +91,8 @@ impl<'a> ComponentExpander<'a> {
     ) -> Result<Self, CompileError> {
         let schema = ComponentSchema::for_def(comp_def)?;
         schema.validate_caller_ports(comp_def, instance)?;
-        let templates = schema.ensure_templates(comp_def, ctx.enums, registry);
+        let templates =
+            schema.ensure_templates(comp_def, ctx.enums, registry, &lexical_scope.borrow());
         reset_agg_emitted_count(ctx.comp_node_id);
         let is_single_text_context = schema.is_single_text_context(comp_def, registry);
         if schema.is_span_def {
@@ -104,7 +104,25 @@ impl<'a> ComponentExpander<'a> {
         doc.get_node_mut(ctx.comp_node_id).unwrap().port_types =
             std::sync::Arc::clone(&schema.static_port_types);
 
-        let preverified_ports = templates.preverified_template_mask.clone();
+        let mut has_node_arg_on_value_param = false;
+        if !templates.inlined_caller_exprs.is_empty() {
+            let scope_ref = lexical_scope.borrow();
+            for (sym, expected_span) in &templates.inlined_caller_exprs {
+                let matches_expected = matches!(
+                    scope_ref.get(sym),
+                    Some(LexicalBinding::Expr(Expr::ExprDef(d))) if d.span == *expected_span
+                );
+                if !matches_expected {
+                    has_node_arg_on_value_param = true;
+                    break;
+                }
+            }
+        }
+        let preverified_ports = if has_node_arg_on_value_param {
+            PortMask::default()
+        } else {
+            templates.preverified_template_mask.clone()
+        };
         let comp_ports = HashMap::with_capacity(schema.port_table.len());
         let already_rewritten_ports = PortMask::default();
 
@@ -127,11 +145,10 @@ impl<'a> ComponentExpander<'a> {
             schema,
             templates,
             preverified_ports,
-            has_node_arg_on_value_param: false,
+            has_node_arg_on_value_param,
             comp_scope_ports: std::borrow::Cow::Borrowed(&schema.comp_scope_ports),
             is_single_text_context,
             comp_ports,
-            explicit_unlowered_ports: HashMap::with_capacity(instance.ports.len()),
             already_rewritten_ports,
             default_self_handlers: HashMap::new(),
             instantiated_children_ids,
@@ -200,8 +217,6 @@ impl<'a> ComponentExpander<'a> {
 
         for port in &self.instance.ports {
             let name = port.name.as_str().to_string();
-            self.explicit_unlowered_ports
-                .insert(name.clone(), port.expr.clone());
             let is_handler_param = self.schema.handler_param_names.contains(&name);
             let expr = match &port.expr {
                 Expr::Node(inline_elem)
@@ -328,7 +343,7 @@ impl<'a> ComponentExpander<'a> {
                                 port_name
                             };
                             Expr::MemberAccess(MemberAccessExpr {
-                                target: Box::new(Expr::Ident(Ident::from_node(pid, span))),
+                                target: std::sync::Arc::new(Expr::Ident(Ident::from_node(pid, span))),
                                 member: Ident::new(member, span),
                                 span,
                             })
@@ -580,8 +595,18 @@ impl<'a> ComponentExpander<'a> {
                 self.comp_ports.insert(name, expr.clone());
                 Ok(())
             }
-            Some(super::schema::CompiledParamDefault::Template(_)) => {
-                self.comp_ports.insert(name, default_expr.clone());
+            Some(super::schema::CompiledParamDefault::Template(tmpl)) => {
+                if !self.has_node_arg_on_value_param {
+                    if let Some(slot) = tmpl.slot {
+                        self.already_rewritten_ports.insert_slot(slot);
+                    } else {
+                        self.already_rewritten_ports
+                            .insert(&self.schema.port_table, &name);
+                    }
+                    self.comp_ports.insert(name, tmpl.expr.clone());
+                } else {
+                    self.comp_ports.insert(name, default_expr.clone());
+                }
                 Ok(())
             }
             None => {
@@ -602,30 +627,34 @@ impl<'a> ComponentExpander<'a> {
     }
 
     fn instantiate_pre_body_templates(&mut self) {
-        let comp_node_id = self.ctx.comp_node_id;
         let port_table = &self.schema.port_table;
 
-        // 1. Non-constant parameter default templates
-        if !self.has_node_arg_on_value_param {
+        // 1. If a later parameter received a node argument on a value parameter, revert any
+        // earlier parameter default templates that were inserted before `has_node_arg_on_value_param` was set.
+        if self.has_node_arg_on_value_param {
+            self.preverified_ports = PortMask::default();
             for param in &self.comp_def.params {
-                if let Some(super::schema::CompiledParamDefault::Template(tmpl)) =
-                    self.templates.param_defaults.get(&param.name.name)
-                {
-                    if !self
-                        .already_rewritten_ports
-                        .contains_sym(port_table, tmpl.sym, &tmpl.name)
-                    {
-                        let inst = if tmpl.is_const_no_self {
-                            tmpl.expr.clone()
-                        } else {
-                            super::rewrite::instantiate_template_expr(&tmpl.expr, comp_node_id)
-                        };
-                        if let Some(slot) = tmpl.slot {
-                            self.already_rewritten_ports.insert_slot(slot);
-                        } else {
-                            self.already_rewritten_ports.insert(port_table, &tmpl.name);
-                        }
-                        self.comp_ports.insert(tmpl.name.clone(), inst);
+                if let (
+                    Some(default_expr),
+                    Some(super::schema::CompiledParamDefault::Template(tmpl)),
+                ) = (
+                    &param.default_edge,
+                    self.templates.param_defaults.get(&param.name.name),
+                ) {
+                    let used_default = !self
+                        .instance
+                        .ports
+                        .iter()
+                        .any(|p| p.name.name == param.name.name)
+                        && !(param.is_env
+                            && matches!(
+                                self.caller_env_scope.get(param.name.as_str()),
+                                Some(EnvEntry::Bound(_))
+                            ));
+                    if used_default {
+                        self.already_rewritten_ports.remove(port_table, &tmpl.name);
+                        self.comp_ports
+                            .insert(tmpl.name.clone(), default_expr.clone());
                     }
                 }
             }
@@ -634,17 +663,12 @@ impl<'a> ComponentExpander<'a> {
         // 2. State templates & fallback state expressions
         if !self.has_node_arg_on_value_param {
             for tmpl in &self.templates.state_templates {
-                let inst = if tmpl.is_const_no_self {
-                    tmpl.expr.clone()
-                } else {
-                    super::rewrite::instantiate_template_expr(&tmpl.expr, comp_node_id)
-                };
                 if let Some(slot) = tmpl.slot {
                     self.already_rewritten_ports.insert_slot(slot);
                 } else {
                     self.already_rewritten_ports.insert(port_table, &tmpl.name);
                 }
-                self.comp_ports.insert(tmpl.name.clone(), inst);
+                self.comp_ports.insert(tmpl.name.clone(), tmpl.expr.clone());
             }
         }
         if self.templates.state_templates.len() < self.schema.declared_states.len()
@@ -661,17 +685,12 @@ impl<'a> ComponentExpander<'a> {
         // 3. Topologically ordered let templates & fallback let expressions
         if !self.has_node_arg_on_value_param {
             for tmpl in &self.templates.let_templates {
-                let inst = if tmpl.is_const_no_self {
-                    tmpl.expr.clone()
-                } else {
-                    super::rewrite::instantiate_template_expr(&tmpl.expr, comp_node_id)
-                };
                 if let Some(slot) = tmpl.slot {
                     self.already_rewritten_ports.insert_slot(slot);
                 } else {
                     self.already_rewritten_ports.insert(port_table, &tmpl.name);
                 }
-                self.comp_ports.insert(tmpl.name.clone(), inst);
+                self.comp_ports.insert(tmpl.name.clone(), tmpl.expr.clone());
             }
         }
         if self.templates.let_templates.len() < self.schema.declared_lets.len()
@@ -916,7 +935,7 @@ impl<'a> ComponentExpander<'a> {
             }
         }
         Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(Expr::Ident(Ident::from_node(comp_node_id, span))),
+            target: std::sync::Arc::new(Expr::Ident(Ident::from_node(comp_node_id, span))),
             member: param.name,
             span,
         })
@@ -933,7 +952,7 @@ impl<'a> ComponentExpander<'a> {
         let mut local_scope = self.init_local_lexical_scope()?;
 
         let self_clip_entry = EnvEntry::Bound(Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(Expr::Ident(Ident::from_node(
+            target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                 ctx.comp_node_id,
                 instance.span,
             ))),
@@ -1256,7 +1275,7 @@ impl<'a> ComponentExpander<'a> {
                 }
             } else if !is_env_param_shadow {
                 let member_expr = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::from_node(
+                    target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                         ctx.comp_node_id,
                         let_binding.name.span,
                     ))),
@@ -1614,7 +1633,6 @@ impl<'a> ComponentExpander<'a> {
     ) -> Result<(HashMap<String, Expr>, HashMap<String, Expr>), CompileError> {
         let ctx = self.ctx;
         let instance = self.instance;
-        let comp_node_id = ctx.comp_node_id;
         let port_table = &self.schema.port_table;
 
         if !self.has_node_arg_on_value_param {
@@ -1623,17 +1641,12 @@ impl<'a> ComponentExpander<'a> {
                     .already_rewritten_ports
                     .contains_sym(port_table, tmpl.sym, &tmpl.name)
                 {
-                    let inst = if tmpl.is_const_no_self {
-                        tmpl.expr.clone()
-                    } else {
-                        super::rewrite::instantiate_template_expr(&tmpl.expr, comp_node_id)
-                    };
                     if let Some(slot) = tmpl.slot {
                         self.already_rewritten_ports.insert_slot(slot);
                     } else {
                         self.already_rewritten_ports.insert(port_table, &tmpl.name);
                     }
-                    self.comp_ports.insert(tmpl.name.clone(), inst);
+                    self.comp_ports.insert(tmpl.name.clone(), tmpl.expr.clone());
                 }
             }
 
@@ -1644,17 +1657,12 @@ impl<'a> ComponentExpander<'a> {
                 {
                     continue;
                 }
-                let inst = if tmpl.is_const_no_self {
-                    tmpl.expr.clone()
-                } else {
-                    super::rewrite::instantiate_template_expr(&tmpl.expr, comp_node_id)
-                };
                 if let Some(slot) = tmpl.slot {
                     self.already_rewritten_ports.insert_slot(slot);
                 } else {
                     self.already_rewritten_ports.insert(port_table, &tmpl.name);
                 }
-                self.comp_ports.insert(tmpl.name.clone(), inst);
+                self.comp_ports.insert(tmpl.name.clone(), tmpl.expr.clone());
             }
         }
 
@@ -1842,7 +1850,7 @@ impl<'a> ComponentExpander<'a> {
     ) -> Result<(), CompileError> {
         let ctx = self.ctx;
         let comp_def = self.comp_def;
-        let inst_ids = self.instantiated_children_ids.borrow().clone();
+        let inst_ids = self.instantiated_children_ids.borrow();
         let total_agg_count = get_agg_emitted_count(ctx.comp_node_id);
 
         if total_agg_count > 0 {
@@ -1885,7 +1893,9 @@ impl<'a> ComponentExpander<'a> {
 
         validate_and_coerce_component_param_types(
             comp_def,
-            &self.explicit_unlowered_ports,
+            &self.instance.ports,
+            &self.preverified_ports,
+            &self.schema.port_table,
             &scope_ctx,
             rewritten_ports,
         )?;
@@ -2001,7 +2011,11 @@ impl<'a> ComponentExpander<'a> {
                                         val,
                                     );
                                 }
-                            } else if let Ok(val) = eval_expr(port_expr, &env) {
+                            } else if let Ok(val) = crate::compiler::eval::eval_expr_for_node(
+                                port_expr,
+                                ctx.comp_node_id,
+                                &env,
+                            ) {
                                 env.insert(
                                     crate::compiler::graph::VarId::new(ctx.comp_node_id, port_name),
                                     val.clone(),

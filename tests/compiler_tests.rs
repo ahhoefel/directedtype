@@ -482,19 +482,19 @@ fn test_multi_node_cycle_detection() {
 
     // A.x depends on C.x
     let eq_a = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(Expr::Ident(Ident::new("__node_2", Span::default()))),
+        target: std::sync::Arc::new(Expr::Ident(Ident::new("__node_2", Span::default()))),
         member: Ident::new("x", Span::default()),
         span: Span::default(),
     });
     // B.x depends on A.x
     let eq_b = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(Expr::Ident(Ident::new("__node_0", Span::default()))),
+        target: std::sync::Arc::new(Expr::Ident(Ident::new("__node_0", Span::default()))),
         member: Ident::new("x", Span::default()),
         span: Span::default(),
     });
     // C.x depends on B.x
     let eq_c = Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(Expr::Ident(Ident::new("__node_1", Span::default()))),
+        target: std::sync::Arc::new(Expr::Ident(Ident::new("__node_1", Span::default()))),
         member: Ident::new("x", Span::default()),
         span: Span::default(),
     });

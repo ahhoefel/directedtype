@@ -147,7 +147,7 @@ impl VariableGraph {
 
     /// Adds a variable to the graph with its defining equation.
     pub fn add_variable(&mut self, id: VarId, equation: Expr, span: Span) {
-        let deps = extract_var_dependencies(&equation);
+        let deps = extract_var_dependencies_for_node(&equation, id.node);
         let node_id = id.node;
 
         if node_id.is_window() {
@@ -328,7 +328,7 @@ pub fn build_variable_graph_with_window(
         }
         let span = expr.span();
         graph.add_variable(
-            VarId::new(NodeId::WINDOW, port_name.clone()),
+            VarId::new(NodeId::WINDOW, port_name.as_str()),
             expr.clone(),
             span,
         );
@@ -357,7 +357,7 @@ pub fn build_variable_graph_with_window(
                 continue;
             }
             graph.add_variable(
-                VarId::new(node.id, port_name.clone()),
+                VarId::new(node.id, port_name.as_str()),
                 expr.clone(),
                 node.span,
             );
@@ -389,7 +389,7 @@ pub fn build_variable_graph_with_window(
             if !node.ports.contains_key("width") {
                 let w_expr = if is_root {
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, node.span))),
+                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, node.span))),
                         member: Ident::new("width", node.span),
                         span: node.span,
                     })
@@ -401,7 +401,7 @@ pub fn build_variable_graph_with_window(
             if !node.ports.contains_key("height") {
                 let h_expr = if is_root {
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, node.span))),
+                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, node.span))),
                         member: Ident::new("height", node.span),
                         span: node.span,
                     })
@@ -431,7 +431,7 @@ pub fn build_variable_graph_with_window(
                 graph.add_variable(
                     VarId::new(node.id, "left"),
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(self_ident.clone()),
+                        target: std::sync::Arc::new(self_ident.clone()),
                         member: Ident::new("x", node.span),
                         span: node.span,
                     }),
@@ -442,7 +442,7 @@ pub fn build_variable_graph_with_window(
                 graph.add_variable(
                     VarId::new(node.id, "top"),
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(self_ident.clone()),
+                        target: std::sync::Arc::new(self_ident.clone()),
                         member: Ident::new("y", node.span),
                         span: node.span,
                     }),
@@ -452,12 +452,12 @@ pub fn build_variable_graph_with_window(
             if need_right {
                 let left_member = if has_x { "x" } else { "left" };
                 let x = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
+                    target: std::sync::Arc::new(self_ident.clone()),
                     member: Ident::new(left_member, node.span),
                     span: node.span,
                 });
                 let w = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
+                    target: std::sync::Arc::new(self_ident.clone()),
                     member: Ident::new("width", node.span),
                     span: node.span,
                 });
@@ -465,8 +465,8 @@ pub fn build_variable_graph_with_window(
                     VarId::new(node.id, "right"),
                     Expr::Binary(BinaryExpr {
                         op: BinaryOp::Add,
-                        left: Box::new(x),
-                        right: Box::new(w),
+                        left: std::sync::Arc::new(x),
+                        right: std::sync::Arc::new(w),
                         span: node.span,
                     }),
                     node.span,
@@ -475,12 +475,12 @@ pub fn build_variable_graph_with_window(
             if need_bottom {
                 let top_member = if has_y { "y" } else { "top" };
                 let y = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident.clone()),
+                    target: std::sync::Arc::new(self_ident.clone()),
                     member: Ident::new(top_member, node.span),
                     span: node.span,
                 });
                 let h = Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(self_ident),
+                    target: std::sync::Arc::new(self_ident),
                     member: Ident::new("height", node.span),
                     span: node.span,
                 });
@@ -488,8 +488,8 @@ pub fn build_variable_graph_with_window(
                     VarId::new(node.id, "bottom"),
                     Expr::Binary(BinaryExpr {
                         op: BinaryOp::Add,
-                        left: Box::new(y),
-                        right: Box::new(h),
+                        left: std::sync::Arc::new(y),
+                        right: std::sync::Arc::new(h),
                         span: node.span,
                     }),
                     node.span,
@@ -561,11 +561,17 @@ pub fn build_variable_graph_with_window(
 
 /// Extracts all referenced variables (`VarId`) from an expression.
 pub fn extract_var_dependencies(expr: &Expr) -> Vec<VarId> {
+    extract_var_dependencies_for_node(expr, NodeId::TEMPLATE_SELF)
+}
+
+/// Extracts all referenced variables (`VarId`) from an expression owned by `owner_node`,
+/// resolving any `NodeId::TEMPLATE_SELF` references to `owner_node`.
+pub fn extract_var_dependencies_for_node(expr: &Expr, owner_node: NodeId) -> Vec<VarId> {
     if matches!(expr, Expr::Literal(_) | Expr::Ident(_)) {
         return Vec::new();
     }
     let mut deps = Vec::new();
-    collect_dependencies(expr, &mut deps);
+    collect_dependencies(expr, owner_node, &mut deps);
     if deps.len() > 1 {
         deps.sort_unstable();
         deps.dedup();
@@ -573,53 +579,69 @@ pub fn extract_var_dependencies(expr: &Expr) -> Vec<VarId> {
     deps
 }
 
-fn collect_dependencies(expr: &Expr, out: &mut Vec<VarId>) {
+fn collect_dependencies(expr: &Expr, owner_node: NodeId, out: &mut Vec<VarId>) {
     match expr {
         Expr::MemberAccess(m) => {
             if let Expr::Ident(target_id) = m.target.as_ref() {
-                if let Some(node_id) = target_id.node_id() {
-                    out.push(VarId::from_symbol(node_id, m.member.name));
+                if let Some(raw_node_id) = target_id.node_id() {
+                    let node_id = if raw_node_id.is_template_self() {
+                        owner_node
+                    } else {
+                        raw_node_id
+                    };
+                    let var_id = VarId::from_symbol(node_id, m.member.name);
+                    if !out.contains(&var_id) {
+                        out.push(var_id);
+                    }
                 }
             } else {
-                collect_dependencies(&m.target, out);
+                collect_dependencies(&m.target, owner_node, out);
             }
         }
         Expr::Binary(b) => {
-            collect_dependencies(&b.left, out);
-            collect_dependencies(&b.right, out);
+            collect_dependencies(&b.left, owner_node, out);
+            collect_dependencies(&b.right, owner_node, out);
         }
         Expr::Unary(u) => {
-            collect_dependencies(&u.operand, out);
+            collect_dependencies(&u.operand, owner_node, out);
         }
         Expr::Call(c) => {
             for arg in &c.args {
-                collect_dependencies(arg, out);
+                collect_dependencies(arg, owner_node, out);
             }
         }
         Expr::MethodCall(mc) => {
             if mc.method.name == Symbol::APPEND {
                 if let Expr::Ident(target_id) = mc.target.as_ref() {
-                    if let Some(node_id) = target_id.node_id() {
-                        out.push(VarId::from_symbol(node_id, Symbol::PATH));
+                    if let Some(raw_node_id) = target_id.node_id() {
+                        let node_id = if raw_node_id.is_template_self() {
+                            owner_node
+                        } else {
+                            raw_node_id
+                        };
+                        let var_id = VarId::from_symbol(node_id, Symbol::PATH);
+                        if !out.contains(&var_id) {
+                            out.push(var_id);
+                        }
                     }
                 }
             }
-            collect_dependencies(&mc.target, out);
+            collect_dependencies(&mc.target, owner_node, out);
             for arg in &mc.args {
-                collect_dependencies(arg, out);
+                collect_dependencies(arg, owner_node, out);
             }
         }
         Expr::Ternary(t) => {
-            collect_dependencies(&t.condition, out);
-            collect_dependencies(&t.then_expr, out);
-            collect_dependencies(&t.else_expr, out);
+            collect_dependencies(&t.condition, owner_node, out);
+            collect_dependencies(&t.then_expr, owner_node, out);
+            collect_dependencies(&t.else_expr, owner_node, out);
         }
         Expr::Paren(p, _) => {
-            collect_dependencies(p, out);
+            collect_dependencies(p, owner_node, out);
         }
         Expr::Node(n) => {
             for port in &n.ports {
-                collect_dependencies(&port.expr, out);
+                collect_dependencies(&port.expr, owner_node, out);
             }
         }
         Expr::Ident(_) | Expr::Literal(_) | Expr::ExprDef(_) | Expr::Match(_) => {}

@@ -23,7 +23,7 @@ fn parse_expr_bp(cursor: &mut ParserCursor<'_>, min_bp: u8) -> Result<Expr, Pars
             let member = parse_ident(cursor)?;
             let span = lhs.span().merge(member.span);
             lhs = Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(lhs),
+                target: std::sync::Arc::new(lhs),
                 member,
                 span,
             });
@@ -96,9 +96,9 @@ fn parse_expr_bp(cursor: &mut ParserCursor<'_>, min_bp: u8) -> Result<Expr, Pars
             let else_expr = parse_expr_bp(cursor, 0)?;
             let span = lhs.span().merge(else_expr.span());
             lhs = Expr::Ternary(TernaryExpr {
-                condition: Box::new(lhs),
-                then_expr: Box::new(then_expr),
-                else_expr: Box::new(else_expr),
+                condition: std::sync::Arc::new(lhs),
+                then_expr: std::sync::Arc::new(then_expr),
+                else_expr: std::sync::Arc::new(else_expr),
                 span,
             });
             continue;
@@ -115,8 +115,8 @@ fn parse_expr_bp(cursor: &mut ParserCursor<'_>, min_bp: u8) -> Result<Expr, Pars
             let span = lhs.span().merge(rhs.span());
             lhs = Expr::Binary(BinaryExpr {
                 op: bin_op,
-                left: Box::new(lhs),
-                right: Box::new(rhs),
+                left: std::sync::Arc::new(lhs),
+                right: std::sync::Arc::new(rhs),
                 span,
             });
             continue;
@@ -181,7 +181,7 @@ fn parse_prefix(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
             let total_span = span.merge(operand.span());
             Ok(Expr::Unary(UnaryExpr {
                 op: UnaryOp::Neg,
-                operand: Box::new(operand),
+                operand: std::sync::Arc::new(operand),
                 span: total_span,
             }))
         }
@@ -190,7 +190,7 @@ fn parse_prefix(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
             let total_span = span.merge(operand.span());
             Ok(Expr::Unary(UnaryExpr {
                 op: UnaryOp::Not,
-                operand: Box::new(operand),
+                operand: std::sync::Arc::new(operand),
                 span: total_span,
             }))
         }
@@ -198,7 +198,7 @@ fn parse_prefix(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
             let inner = parse_expr_bp(cursor, 0)?;
             let rparen_span = cursor.consume_token(&Token::RParen)?;
             let total_span = span.merge(rparen_span);
-            Ok(Expr::Paren(Box::new(inner), total_span))
+            Ok(Expr::Paren(std::sync::Arc::new(inner), total_span))
         }
         other => Err(ParseError::UnexpectedToken {
             expected: "expression (literal, identifier, unary operator, or parenthesis)".to_string(),
@@ -328,7 +328,7 @@ fn parse_match_expr(
     let scrutinee = if matches!(cursor.peek_token()?, Some((Token::LBrace, _))) {
         None
     } else {
-        Some(Box::new(parse_expr_bp(cursor, 0)?))
+        Some(std::sync::Arc::new(parse_expr_bp(cursor, 0)?))
     };
 
     let open_brace_span = match cursor.peek_token()?.cloned() {
@@ -457,7 +457,7 @@ fn parse_match_expr(
         });
     }
 
-    Ok(Expr::Match(Box::new(MatchExpr {
+    Ok(Expr::Match(std::sync::Arc::new(MatchExpr {
         scrutinee,
         arms,
         span: full_span,
@@ -595,9 +595,9 @@ fn parse_expr_def(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
         }
     };
 
-    Ok(Expr::ExprDef(Box::new(ExprDef {
+    Ok(Expr::ExprDef(std::sync::Arc::new(ExprDef {
         params,
-        body: Box::new(body),
+        body: std::sync::Arc::new(body),
         span: start_span.merge(close_brace_span),
     })))
 }

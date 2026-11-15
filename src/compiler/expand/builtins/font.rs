@@ -280,7 +280,7 @@ impl BuiltinPrimitive for FontPrimitive {
                 state.ports.insert(
                     "size".to_string(),
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(base_target.clone()),
+                        target: std::sync::Arc::new(base_target.clone()),
                         member: Ident::new("size", elem.span),
                         span: elem.span,
                     }),
@@ -290,7 +290,7 @@ impl BuiltinPrimitive for FontPrimitive {
                 state.ports.insert(
                     "weight".to_string(),
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(base_target.clone()),
+                        target: std::sync::Arc::new(base_target.clone()),
                         member: Ident::new("weight", elem.span),
                         span: elem.span,
                     }),
@@ -300,7 +300,7 @@ impl BuiltinPrimitive for FontPrimitive {
                 state.ports.insert(
                     "family".to_string(),
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(base_target.clone()),
+                        target: std::sync::Arc::new(base_target.clone()),
                         member: Ident::new("family", elem.span),
                         span: elem.span,
                     }),
@@ -310,7 +310,7 @@ impl BuiltinPrimitive for FontPrimitive {
                 state.ports.insert(
                     "italic".to_string(),
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(base_target.clone()),
+                        target: std::sync::Arc::new(base_target.clone()),
                         member: Ident::new("italic", elem.span),
                         span: elem.span,
                     }),
@@ -323,7 +323,7 @@ impl BuiltinPrimitive for FontPrimitive {
                     .is_some_and(|fn_node| fn_node.authored_ports.contains_key("line_height"));
                 if base_has_authored_lh {
                     let lh_expr = Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(base_target),
+                        target: std::sync::Arc::new(base_target),
                         member: Ident::new("line_height", elem.span),
                         span: elem.span,
                     });
@@ -365,17 +365,17 @@ impl BuiltinPrimitive for FontPrimitive {
 
         let self_ident = Expr::Ident(Ident::from_node(node_id, elem.span));
         let size_ref = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::new("size", elem.span),
             span: elem.span,
         });
         let weight_ref = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::new("weight", elem.span),
             span: elem.span,
         });
         let family_ref = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::new("family", elem.span),
             span: elem.span,
         });
@@ -410,15 +410,15 @@ impl BuiltinPrimitive for FontPrimitive {
             })
         });
         let descent_ref = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident.clone()),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::new("descent", elem.span),
             span: elem.span,
         });
         state.ports.entry("em_top".to_string()).or_insert_with(|| {
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Sub,
-                left: Box::new(size_ref.clone()),
-                right: Box::new(descent_ref.clone()),
+                left: std::sync::Arc::new(size_ref.clone()),
+                right: std::sync::Arc::new(descent_ref.clone()),
                 span: elem.span,
             })
         });
@@ -430,15 +430,15 @@ impl BuiltinPrimitive for FontPrimitive {
             })
         });
         let line_gap_ref = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(self_ident),
+            target: std::sync::Arc::new(self_ident),
             member: Ident::new("line_gap", elem.span),
             span: elem.span,
         });
         state.ports.entry("gap_bottom".to_string()).or_insert_with(|| {
             Expr::Binary(BinaryExpr {
                 op: BinaryOp::Add,
-                left: Box::new(descent_ref),
-                right: Box::new(line_gap_ref),
+                left: std::sync::Arc::new(descent_ref),
+                right: std::sync::Arc::new(line_gap_ref),
                 span: elem.span,
             })
         });

@@ -23,7 +23,7 @@ pub(super) fn resolve_forward_scope_refs(
                     LexicalBinding::Member {
                         node_id, member, ..
                     } => Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::from_node(*node_id, id.span))),
+                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(*node_id, id.span))),
                         member: Ident::from_symbol(member.name, id.span),
                         span: id.span,
                     }),
@@ -41,7 +41,7 @@ pub(super) fn resolve_forward_scope_refs(
             if let Some(target_name) = target_sym {
                 if let Some(LexicalBinding::Node(node_id)) = scope.get(&target_name) {
                     return Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::from_node(
+                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                             *node_id,
                             m.target.span(),
                         ))),
@@ -51,30 +51,30 @@ pub(super) fn resolve_forward_scope_refs(
                 }
             }
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(resolve_forward_scope_refs(&m.target, scope)),
+                target: std::sync::Arc::new(resolve_forward_scope_refs(&m.target, scope)),
                 member: m.member,
                 span: m.span,
             })
         }
         Expr::Binary(b) => Expr::Binary(BinaryExpr {
             op: b.op,
-            left: Box::new(resolve_forward_scope_refs(&b.left, scope)),
-            right: Box::new(resolve_forward_scope_refs(&b.right, scope)),
+            left: std::sync::Arc::new(resolve_forward_scope_refs(&b.left, scope)),
+            right: std::sync::Arc::new(resolve_forward_scope_refs(&b.right, scope)),
             span: b.span,
         }),
         Expr::Unary(u) => Expr::Unary(UnaryExpr {
             op: u.op,
-            operand: Box::new(resolve_forward_scope_refs(&u.operand, scope)),
+            operand: std::sync::Arc::new(resolve_forward_scope_refs(&u.operand, scope)),
             span: u.span,
         }),
         Expr::Ternary(t) => Expr::Ternary(TernaryExpr {
-            condition: Box::new(resolve_forward_scope_refs(&t.condition, scope)),
-            then_expr: Box::new(resolve_forward_scope_refs(&t.then_expr, scope)),
-            else_expr: Box::new(resolve_forward_scope_refs(&t.else_expr, scope)),
+            condition: std::sync::Arc::new(resolve_forward_scope_refs(&t.condition, scope)),
+            then_expr: std::sync::Arc::new(resolve_forward_scope_refs(&t.then_expr, scope)),
+            else_expr: std::sync::Arc::new(resolve_forward_scope_refs(&t.else_expr, scope)),
             span: t.span,
         }),
         Expr::Paren(inner, span) => {
-            Expr::Paren(Box::new(resolve_forward_scope_refs(inner, scope)), *span)
+            Expr::Paren(std::sync::Arc::new(resolve_forward_scope_refs(inner, scope)), *span)
         }
         Expr::Call(c) => Expr::Call(CallExpr {
             callee: c.callee.clone(),
@@ -86,7 +86,7 @@ pub(super) fn resolve_forward_scope_refs(
             span: c.span,
         }),
         Expr::MethodCall(m) => Expr::MethodCall(MethodCallExpr {
-            target: Box::new(resolve_forward_scope_refs(&m.target, scope)),
+            target: std::sync::Arc::new(resolve_forward_scope_refs(&m.target, scope)),
             method: m.method.clone(),
             args: m
                 .args
@@ -102,11 +102,11 @@ pub(super) fn resolve_forward_scope_refs(
             }
             Expr::Node(cloned)
         }
-        Expr::Match(m) => Expr::Match(Box::new(MatchExpr {
+        Expr::Match(m) => Expr::Match(std::sync::Arc::new(MatchExpr {
             scrutinee: m
                 .scrutinee
                 .as_ref()
-                .map(|s| Box::new(resolve_forward_scope_refs(s, scope))),
+                .map(|s| std::sync::Arc::new(resolve_forward_scope_refs(s, scope))),
             arms: m
                 .arms
                 .iter()
@@ -256,7 +256,7 @@ pub(in crate::compiler::expand) fn materialize_expr_instance(
         name
     });
     Expr::MemberAccess(MemberAccessExpr {
-        target: Box::new(Expr::Ident(Ident::from_node(owner_node, call_span))),
+        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(owner_node, call_span))),
         member: Ident::new(port_name, call_span),
         span: call_span,
     })
@@ -463,8 +463,9 @@ pub(super) fn try_preresolve_expr_binding(
 
 /// Checks whether `expr` only references variables present in `env` (or no variables at all),
 /// avoiding heap string formatting inside `eval_expr` when variables are missing.
-pub(super) fn expr_vars_in_env(
+pub(super) fn expr_vars_in_env_for_node(
     expr: &Expr,
+    self_node: NodeId,
     env: &HashMap<crate::compiler::graph::VarId, crate::compiler::value::Value>,
 ) -> bool {
     match expr {
@@ -472,7 +473,12 @@ pub(super) fn expr_vars_in_env(
         Expr::Ident(id) => id.name == Symbol::TRUE || id.name == Symbol::FALSE,
         Expr::MemberAccess(m) => {
             if let Expr::Ident(target_id) = m.target.as_ref() {
-                if let Some(nid) = target_id.node_id() {
+                if let Some(raw_nid) = target_id.node_id() {
+                    let nid = if raw_nid.is_template_self() {
+                        self_node
+                    } else {
+                        raw_nid
+                    };
                     return env.contains_key(&crate::compiler::graph::VarId::from_symbol(
                         nid,
                         m.member.name,
@@ -481,17 +487,26 @@ pub(super) fn expr_vars_in_env(
             }
             false
         }
-        Expr::Binary(b) => expr_vars_in_env(&b.left, env) && expr_vars_in_env(&b.right, env),
-        Expr::Unary(u) => expr_vars_in_env(&u.operand, env),
-        Expr::Paren(inner, _) => expr_vars_in_env(inner, env),
-        Expr::Ternary(t) => {
-            expr_vars_in_env(&t.condition, env)
-                && expr_vars_in_env(&t.then_expr, env)
-                && expr_vars_in_env(&t.else_expr, env)
+        Expr::Binary(b) => {
+            expr_vars_in_env_for_node(&b.left, self_node, env)
+                && expr_vars_in_env_for_node(&b.right, self_node, env)
         }
-        Expr::Call(c) => c.args.iter().all(|a| expr_vars_in_env(a, env)),
+        Expr::Unary(u) => expr_vars_in_env_for_node(&u.operand, self_node, env),
+        Expr::Paren(inner, _) => expr_vars_in_env_for_node(inner, self_node, env),
+        Expr::Ternary(t) => {
+            expr_vars_in_env_for_node(&t.condition, self_node, env)
+                && expr_vars_in_env_for_node(&t.then_expr, self_node, env)
+                && expr_vars_in_env_for_node(&t.else_expr, self_node, env)
+        }
+        Expr::Call(c) => c
+            .args
+            .iter()
+            .all(|a| expr_vars_in_env_for_node(a, self_node, env)),
         Expr::MethodCall(m) => {
-            expr_vars_in_env(&m.target, env) && m.args.iter().all(|a| expr_vars_in_env(a, env))
+            expr_vars_in_env_for_node(&m.target, self_node, env)
+                && m.args
+                    .iter()
+                    .all(|a| expr_vars_in_env_for_node(a, self_node, env))
         }
         Expr::Node(_) | Expr::ExprDef(_) | Expr::Match(_) => false,
     }
@@ -510,7 +525,10 @@ pub(super) fn populate_const_env_for_cond(
         Expr::MemberAccess(m) => {
             if let Expr::Ident(target_id) = m.target.as_ref() {
                 if let Some(nid) = target_id.node_id() {
-                    if nid == cond_ctx.current_node || Some(nid) == cond_ctx.parent_node {
+                    if nid == cond_ctx.current_node
+                        || Some(nid) == cond_ctx.parent_node
+                        || nid.is_template_self()
+                    {
                         let port_name = m.member.as_str();
                         let var_id = crate::compiler::graph::VarId::from_symbol(
                             cond_ctx.current_node,
@@ -522,7 +540,7 @@ pub(super) fn populate_const_env_for_cond(
                                 .is_some_and(|s| s.contains(port_name))
                         {
                             if let Some(port_expr) = comp_ports.get(port_name) {
-                                let empty_env = HashMap::new();
+                                populate_const_env_for_cond(port_expr, cond_ctx, const_env);
                                 let resolved_val = if let Some(lit) =
                                     resolve_ident_or_member_to_literal(port_expr, cond_ctx)
                                 {
@@ -558,9 +576,17 @@ pub(super) fn populate_const_env_for_cond(
                                             }
                                         }
                                     })
-                                } else if expr_vars_in_env(port_expr, &empty_env) {
+                                } else if expr_vars_in_env_for_node(
+                                    port_expr,
+                                    cond_ctx.current_node,
+                                    const_env,
+                                ) {
                                     if let Ok(val) =
-                                        crate::compiler::eval::eval_expr(port_expr, &empty_env)
+                                        crate::compiler::eval::eval_expr_for_node(
+                                            port_expr,
+                                            cond_ctx.current_node,
+                                            const_env,
+                                        )
                                     {
                                         if !matches!(
                                             val,
@@ -762,7 +788,7 @@ fn resolve_active_font_size_expr(
     if let Some(&fid) = ctx.node_fonts.get(&ctx.current_node) {
         if fid != ctx.current_node {
             return Ok(Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(Expr::Ident(Ident::from_node(fid, span))),
+                target: std::sync::Arc::new(Expr::Ident(Ident::from_node(fid, span))),
                 member: Ident::from_symbol(Symbol::SIZE, span),
                 span,
             }));
@@ -772,7 +798,7 @@ fn resolve_active_font_size_expr(
         Some(EnvEntry::Bound(font_expr)) => {
             let rewritten_font = rewrite_expr(font_expr, ctx)?;
             Ok(Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(rewritten_font),
+                target: std::sync::Arc::new(rewritten_font),
                 member: Ident::from_symbol(Symbol::SIZE, span),
                 span,
             }))
@@ -818,7 +844,7 @@ fn build_member_chain(chain: &[Ident], full_span: Span) -> Expr {
             member.span
         };
         expr = Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(expr),
+            target: std::sync::Arc::new(expr),
             member: *member,
             span,
         });
@@ -937,7 +963,7 @@ fn rewrite_outer_in_expr(
                 return Ok(expr.clone());
             }
             Ok(Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(rewrite_outer_in_expr(&m.target, depth, creation_ctx)?),
+                target: std::sync::Arc::new(rewrite_outer_in_expr(&m.target, depth, creation_ctx)?),
                 member: m.member,
                 span: m.span,
             }))
@@ -958,7 +984,7 @@ fn rewrite_outer_in_expr(
                                 }
                                 for idx in 0..creation_ctx.num_children {
                                     rewritten_args.push(Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::agg_child_of(
+                                        target: std::sync::Arc::new(Expr::Ident(Ident::agg_child_of(
                                             comp_id,
                                             idx,
                                             chain[k].span,
@@ -971,7 +997,7 @@ fn rewrite_outer_in_expr(
                             } else if creation_ctx.child_ids.len() == creation_ctx.num_children {
                                 for &child_id in creation_ctx.child_ids {
                                     rewritten_args.push(Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::from_node(
+                                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                                             child_id,
                                             chain[k].span,
                                         ))),
@@ -1017,7 +1043,7 @@ fn rewrite_outer_in_expr(
                         let rewritten_callee =
                             resolve_outer_chain(&full_chain, k, mc.span, creation_ctx)?;
                         return Ok(Expr::MethodCall(MethodCallExpr {
-                            target: Box::new(rewritten_callee),
+                            target: std::sync::Arc::new(rewritten_callee),
                             method: Ident::from_symbol(Symbol::EMPTY, mc.method.span),
                             args: rewritten_args,
                             span: mc.span,
@@ -1032,7 +1058,7 @@ fn rewrite_outer_in_expr(
                 }
             }
             Ok(Expr::MethodCall(MethodCallExpr {
-                target: Box::new(rewrite_outer_in_expr(&mc.target, depth, creation_ctx)?),
+                target: std::sync::Arc::new(rewrite_outer_in_expr(&mc.target, depth, creation_ctx)?),
                 method: mc.method,
                 args: rewritten_args,
                 span: mc.span,
@@ -1040,23 +1066,23 @@ fn rewrite_outer_in_expr(
         }
         Expr::Binary(b) => Ok(Expr::Binary(BinaryExpr {
             op: b.op,
-            left: Box::new(rewrite_outer_in_expr(&b.left, depth, creation_ctx)?),
-            right: Box::new(rewrite_outer_in_expr(&b.right, depth, creation_ctx)?),
+            left: std::sync::Arc::new(rewrite_outer_in_expr(&b.left, depth, creation_ctx)?),
+            right: std::sync::Arc::new(rewrite_outer_in_expr(&b.right, depth, creation_ctx)?),
             span: b.span,
         })),
         Expr::Unary(u) => Ok(Expr::Unary(UnaryExpr {
             op: u.op,
-            operand: Box::new(rewrite_outer_in_expr(&u.operand, depth, creation_ctx)?),
+            operand: std::sync::Arc::new(rewrite_outer_in_expr(&u.operand, depth, creation_ctx)?),
             span: u.span,
         })),
         Expr::Ternary(t) => Ok(Expr::Ternary(TernaryExpr {
-            condition: Box::new(rewrite_outer_in_expr(&t.condition, depth, creation_ctx)?),
-            then_expr: Box::new(rewrite_outer_in_expr(&t.then_expr, depth, creation_ctx)?),
-            else_expr: Box::new(rewrite_outer_in_expr(&t.else_expr, depth, creation_ctx)?),
+            condition: std::sync::Arc::new(rewrite_outer_in_expr(&t.condition, depth, creation_ctx)?),
+            then_expr: std::sync::Arc::new(rewrite_outer_in_expr(&t.then_expr, depth, creation_ctx)?),
+            else_expr: std::sync::Arc::new(rewrite_outer_in_expr(&t.else_expr, depth, creation_ctx)?),
             span: t.span,
         })),
         Expr::Paren(inner, span) => Ok(Expr::Paren(
-            Box::new(rewrite_outer_in_expr(inner, depth, creation_ctx)?),
+            std::sync::Arc::new(rewrite_outer_in_expr(inner, depth, creation_ctx)?),
             *span,
         )),
         Expr::Node(n) => {
@@ -1082,15 +1108,15 @@ fn rewrite_outer_in_expr(
                 });
             }
             let body = rewrite_outer_in_expr(&nested.body, depth + 1, creation_ctx)?;
-            Ok(Expr::ExprDef(Box::new(ExprDef {
+            Ok(Expr::ExprDef(std::sync::Arc::new(ExprDef {
                 params,
-                body: Box::new(body),
+                body: std::sync::Arc::new(body),
                 span: nested.span,
             })))
         }
         Expr::Match(m) => {
             let scrutinee = match &m.scrutinee {
-                Some(s) => Some(Box::new(rewrite_outer_in_expr(s, depth, creation_ctx)?)),
+                Some(s) => Some(std::sync::Arc::new(rewrite_outer_in_expr(s, depth, creation_ctx)?)),
                 None => None,
             };
             let mut arms = Vec::with_capacity(m.arms.len());
@@ -1108,7 +1134,7 @@ fn rewrite_outer_in_expr(
                     span: arm.span,
                 });
             }
-            Ok(Expr::Match(Box::new(MatchExpr {
+            Ok(Expr::Match(std::sync::Arc::new(MatchExpr {
                 scrutinee,
                 arms,
                 span: m.span,
@@ -1144,9 +1170,9 @@ pub(super) fn rewrite_expr_def_at_creation(
         });
     }
     let body = rewrite_outer_in_expr(&def.body, 0, creation_ctx)?;
-    Ok(Expr::ExprDef(Box::new(ExprDef {
+    Ok(Expr::ExprDef(std::sync::Arc::new(ExprDef {
         params,
-        body: Box::new(body),
+        body: std::sync::Arc::new(body),
         span: def.span,
     })))
 }
@@ -1155,7 +1181,7 @@ fn lookup_expr_def_on_node(
     node_id: NodeId,
     member_name: &str,
     ctx: &ScopeContext<'_>,
-) -> Option<Box<ExprDef>> {
+) -> Option<std::sync::Arc<ExprDef>> {
     if Some(node_id) == ctx.enclosing_component || node_id == ctx.current_node {
         if let Some(comp_ports) = ctx.comp_ports {
             if let Some(Expr::ExprDef(def)) = comp_ports.get(member_name) {
@@ -1416,7 +1442,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                                 return Ok(Expr::ExprDef(def));
                             }
                             return Ok(Expr::MemberAccess(MemberAccessExpr {
-                                target: Box::new(Expr::Ident(Ident::from_node(*node_id, id.span))),
+                                target: std::sync::Arc::new(Expr::Ident(Ident::from_node(*node_id, id.span))),
                                 member: Ident::from_symbol(member.name, id.span),
                                 span: id.span,
                             }));
@@ -1449,7 +1475,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             {
                 let target_id = ctx.enclosing_component.unwrap_or(ctx.current_node);
                 return Ok(Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(Expr::Ident(Ident::from_node(target_id, id.span))),
+                    target: std::sync::Arc::new(Expr::Ident(Ident::from_node(target_id, id.span))),
                     member: *id,
                     span: id.span,
                 }));
@@ -1586,9 +1612,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
             }
             Ok(Expr::Ternary(TernaryExpr {
-                condition: Box::new(rewritten_cond),
-                then_expr: Box::new(then_rewritten),
-                else_expr: Box::new(else_rewritten),
+                condition: std::sync::Arc::new(rewritten_cond),
+                then_expr: std::sync::Arc::new(then_rewritten),
+                else_expr: std::sync::Arc::new(else_rewritten),
                 span: tern.span,
             }))
         }
@@ -1603,7 +1629,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     if inner.member.as_str() == "font" {
                         let text_target = rewrite_expr(&inner.target, ctx)?;
                         return Ok(Expr::MemberAccess(MemberAccessExpr {
-                            target: Box::new(text_target),
+                            target: std::sync::Arc::new(text_target),
                             member: Ident::new("baseline", m.span),
                             span: m.span,
                         }));
@@ -1686,7 +1712,13 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                                         if expr_has_unresolved_ident(port_expr) {
                                             record_pending_fwd_node(ctx.current_node);
                                         }
-                                        return Ok(port_expr.clone());
+                                        let target_node_id =
+                                            ctx.enclosing_component.unwrap_or(ctx.current_node);
+                                        return Ok(if expr_has_template_self_ref(port_expr) {
+                                            instantiate_template_expr(port_expr, target_node_id)
+                                        } else {
+                                            port_expr.clone()
+                                        });
                                     }
                                 }
                             }
@@ -1832,7 +1864,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
 
             Ok(Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(resolved_target),
+                target: std::sync::Arc::new(resolved_target),
                 member: m.member,
                 span: m.span,
             }))
@@ -1997,7 +2029,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                                 }
                                 for idx in 0..ctx.num_children {
                                     let child_access = Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::agg_child_of(
+                                        target: std::sync::Arc::new(Expr::Ident(Ident::agg_child_of(
                                             comp_id,
                                             idx,
                                             target_id.span,
@@ -2010,7 +2042,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                             } else if ctx.child_ids.len() == ctx.num_children {
                                 for &child_id in ctx.child_ids {
                                     let child_access = Expr::MemberAccess(MemberAccessExpr {
-                                        target: Box::new(Expr::Ident(Ident::from_node(
+                                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                                             child_id,
                                             target_id.span,
                                         ))),
@@ -2146,7 +2178,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 rewritten_args.push(rewrite_expr(arg, ctx)?);
             }
             Ok(Expr::MethodCall(MethodCallExpr {
-                target: Box::new(rewrite_expr(&mc.target, ctx)?),
+                target: std::sync::Arc::new(rewrite_expr(&mc.target, ctx)?),
                 method: mc.method.clone(),
                 args: rewritten_args,
                 span: mc.span,
@@ -2197,15 +2229,15 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 };
                 return Ok(Expr::Binary(BinaryExpr {
                     op: bin.op,
-                    left: Box::new(left),
-                    right: Box::new(right),
+                    left: std::sync::Arc::new(left),
+                    right: std::sync::Arc::new(right),
                     span: bin.span,
                 }));
             }
             Ok(Expr::Binary(BinaryExpr {
                 op: bin.op,
-                left: Box::new(rewrite_expr(&bin.left, ctx)?),
-                right: Box::new(rewrite_expr(&bin.right, ctx)?),
+                left: std::sync::Arc::new(rewrite_expr(&bin.left, ctx)?),
+                right: std::sync::Arc::new(rewrite_expr(&bin.right, ctx)?),
                 span: bin.span,
             }))
         }
@@ -2223,30 +2255,30 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
             }
             Ok(Expr::Unary(UnaryExpr {
                 op: u.op,
-                operand: Box::new(rewrite_expr(&u.operand, ctx)?),
+                operand: std::sync::Arc::new(rewrite_expr(&u.operand, ctx)?),
                 span: u.span,
             }))
         }
 
-        Expr::Paren(inner, span) => Ok(Expr::Paren(Box::new(rewrite_expr(inner, ctx)?), *span)),
+        Expr::Paren(inner, span) => Ok(Expr::Paren(std::sync::Arc::new(rewrite_expr(inner, ctx)?), *span)),
 
         Expr::Literal(Literal::Distance(val, unit, span)) => match unit {
             DistanceUnit::Px => Ok(expr.clone()),
             DistanceUnit::Pt => Ok(Expr::Binary(BinaryExpr {
                 op: BinaryOp::Mul,
-                left: Box::new(Expr::Literal(Literal::Distance(
+                left: std::sync::Arc::new(Expr::Literal(Literal::Distance(
                     *val,
                     DistanceUnit::Px,
                     *span,
                 ))),
-                right: Box::new(Expr::Binary(BinaryExpr {
+                right: std::sync::Arc::new(Expr::Binary(BinaryExpr {
                     op: BinaryOp::Div,
-                    left: Box::new(Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, *span))),
+                    left: std::sync::Arc::new(Expr::MemberAccess(MemberAccessExpr {
+                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, *span))),
                         member: Ident::from_symbol(Symbol::DPI, *span),
                         span: *span,
                     })),
-                    right: Box::new(Expr::Literal(Literal::Float(72.0, *span))),
+                    right: std::sync::Arc::new(Expr::Literal(Literal::Float(72.0, *span))),
                     span: *span,
                 })),
                 span: *span,
@@ -2255,8 +2287,8 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 let font_size_expr = resolve_active_font_size_expr(ctx, *span)?;
                 Ok(Expr::Binary(BinaryExpr {
                     op: BinaryOp::Mul,
-                    left: Box::new(Expr::Literal(Literal::Float(*val, *span))),
-                    right: Box::new(font_size_expr),
+                    left: std::sync::Arc::new(Expr::Literal(Literal::Float(*val, *span))),
+                    right: std::sync::Arc::new(font_size_expr),
                     span: *span,
                 }))
             }
@@ -2320,7 +2352,12 @@ fn infer_rewritten_expr_type_name(
                 if !tid.is_canonical_node_ref() && ctx.enums.contains_key(tid.as_str()) {
                     return Some(tid.as_str().to_string());
                 }
-                if let Some(nid) = tid.node_id() {
+                if let Some(raw_nid) = tid.node_id() {
+                    let nid = if raw_nid.is_template_self() {
+                        ctx.enclosing_component.unwrap_or(ctx.current_node)
+                    } else {
+                        raw_nid
+                    };
                     let member_str = m.member.as_str();
                     if nid.is_window() {
                         if let Some(ty) =
@@ -2357,8 +2394,10 @@ fn infer_rewritten_expr_type_name(
                         }
                         if let Some(node) = ctx.nodes.get(nid.0) {
                             if let Some(p_expr) = node.ports.get(member_str) {
+                                let mut sub_ctx = ctx.clone();
+                                sub_ctx.enclosing_component = Some(nid);
                                 if let Some(ty) =
-                                    infer_rewritten_expr_type_name(p_expr, ctx, depth + 1)
+                                    infer_rewritten_expr_type_name(p_expr, &sub_ctx, depth + 1)
                                 {
                                     return Some(ty);
                                 }
@@ -2738,8 +2777,8 @@ fn rewrite_match_expr(m: &MatchExpr, ctx: &ScopeContext<'_>) -> Result<Expr, Com
             for v in vars {
                 let eq_expr = Expr::Binary(BinaryExpr {
                     op: BinaryOp::Eq,
-                    left: Box::new(rewritten_scrutinee.clone()),
-                    right: Box::new(Expr::Literal(Literal::Enum(
+                    left: std::sync::Arc::new(rewritten_scrutinee.clone()),
+                    right: std::sync::Arc::new(Expr::Literal(Literal::Enum(
                         enum_name.to_string(),
                         v.variant.as_str().to_string(),
                         v.span,
@@ -2751,15 +2790,15 @@ fn rewrite_match_expr(m: &MatchExpr, ctx: &ScopeContext<'_>) -> Result<Expr, Com
                     Some(prev) => Expr::Binary(BinaryExpr {
                         op: BinaryOp::Or,
                         span: prev.span().merge(v.span),
-                        left: Box::new(prev),
-                        right: Box::new(eq_expr),
+                        left: std::sync::Arc::new(prev),
+                        right: std::sync::Arc::new(eq_expr),
                     }),
                 });
             }
             acc_expr = Expr::Ternary(TernaryExpr {
-                condition: Box::new(cond_expr.unwrap()),
-                then_expr: Box::new(then_expr),
-                else_expr: Box::new(acc_expr),
+                condition: std::sync::Arc::new(cond_expr.unwrap()),
+                then_expr: std::sync::Arc::new(then_expr),
+                else_expr: std::sync::Arc::new(acc_expr),
                 span: m.span,
             });
         }
@@ -2890,9 +2929,9 @@ fn rewrite_match_expr(m: &MatchExpr, ctx: &ScopeContext<'_>) -> Result<Expr, Com
                     } else if let Some(unchosen_body) = &rewritten_bodies[idx] {
                         if !expr_has_unresolved_sibling_ident(unchosen_body) {
                             let guarded = Expr::Ternary(TernaryExpr {
-                                condition: Box::new(cond_expr),
-                                then_expr: Box::new(unchosen_body.clone()),
-                                else_expr: Box::new(unchosen_body.clone()),
+                                condition: std::sync::Arc::new(cond_expr),
+                                then_expr: std::sync::Arc::new(unchosen_body.clone()),
+                                else_expr: std::sync::Arc::new(unchosen_body.clone()),
                                 span: arm_spans[idx],
                             });
                             PENDING_EXPR_TYPECHECKS.with(|cell| {
@@ -2911,9 +2950,9 @@ fn rewrite_match_expr(m: &MatchExpr, ctx: &ScopeContext<'_>) -> Result<Expr, Com
         let mut acc_expr = final_else_expr.expect("boolean match guaranteed to have wildcard arm");
         for (cond_expr, then_expr) in active_runtime_arms.into_iter().rev() {
             acc_expr = Expr::Ternary(TernaryExpr {
-                condition: Box::new(cond_expr),
-                then_expr: Box::new(then_expr),
-                else_expr: Box::new(acc_expr),
+                condition: std::sync::Arc::new(cond_expr),
+                then_expr: std::sync::Arc::new(then_expr),
+                else_expr: std::sync::Arc::new(acc_expr),
                 span: m.span,
             });
         }
@@ -3038,6 +3077,39 @@ pub(crate) fn extract_event_binding_with_values(
     }
 }
 
+/// Returns `true` if `expr` references `NodeId::TEMPLATE_SELF`.
+pub(in crate::compiler::expand) fn expr_has_template_self_ref(expr: &Expr) -> bool {
+    match expr {
+        Expr::Literal(_) => false,
+        Expr::Ident(id) => id.node_id().is_some_and(|n| n.is_template_self()),
+        Expr::MemberAccess(m) => expr_has_template_self_ref(&m.target),
+        Expr::Binary(b) => {
+            expr_has_template_self_ref(&b.left) || expr_has_template_self_ref(&b.right)
+        }
+        Expr::Unary(u) => expr_has_template_self_ref(&u.operand),
+        Expr::Paren(inner, _) => expr_has_template_self_ref(inner),
+        Expr::Ternary(t) => {
+            expr_has_template_self_ref(&t.condition)
+                || expr_has_template_self_ref(&t.then_expr)
+                || expr_has_template_self_ref(&t.else_expr)
+        }
+        Expr::Call(c) => c.args.iter().any(expr_has_template_self_ref),
+        Expr::MethodCall(mc) => {
+            expr_has_template_self_ref(&mc.target) || mc.args.iter().any(expr_has_template_self_ref)
+        }
+        Expr::Node(_) | Expr::ExprDef(_) => false,
+        Expr::Match(m) => {
+            m.scrutinee
+                .as_ref()
+                .is_some_and(|s| expr_has_template_self_ref(s))
+                || m.arms.iter().any(|arm| {
+                    matches!(&arm.pattern, MatchPattern::Condition(c) if expr_has_template_self_ref(c))
+                        || expr_has_template_self_ref(&arm.body)
+                })
+        }
+    }
+}
+
 /// Instantiates a pre-compiled `NodeId::TEMPLATE_SELF` expression for `comp_node_id`.
 pub(super) fn instantiate_template_expr(expr: &Expr, comp_node_id: NodeId) -> Expr {
     match expr {
@@ -3053,37 +3125,37 @@ pub(super) fn instantiate_template_expr(expr: &Expr, comp_node_id: NodeId) -> Ex
             if let Expr::Ident(id) = m.target.as_ref() {
                 if id.node_id().is_some_and(|n| n.is_template_self()) {
                     return Expr::MemberAccess(MemberAccessExpr {
-                        target: Box::new(Expr::Ident(Ident::from_node(comp_node_id, id.span))),
+                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(comp_node_id, id.span))),
                         member: m.member,
                         span: m.span,
                     });
                 }
             }
             Expr::MemberAccess(MemberAccessExpr {
-                target: Box::new(instantiate_template_expr(&m.target, comp_node_id)),
+                target: std::sync::Arc::new(instantiate_template_expr(&m.target, comp_node_id)),
                 member: m.member,
                 span: m.span,
             })
         }
         Expr::Ternary(t) => Expr::Ternary(TernaryExpr {
-            condition: Box::new(instantiate_template_expr(&t.condition, comp_node_id)),
-            then_expr: Box::new(instantiate_template_expr(&t.then_expr, comp_node_id)),
-            else_expr: Box::new(instantiate_template_expr(&t.else_expr, comp_node_id)),
+            condition: std::sync::Arc::new(instantiate_template_expr(&t.condition, comp_node_id)),
+            then_expr: std::sync::Arc::new(instantiate_template_expr(&t.then_expr, comp_node_id)),
+            else_expr: std::sync::Arc::new(instantiate_template_expr(&t.else_expr, comp_node_id)),
             span: t.span,
         }),
         Expr::Binary(b) => Expr::Binary(BinaryExpr {
             op: b.op,
-            left: Box::new(instantiate_template_expr(&b.left, comp_node_id)),
-            right: Box::new(instantiate_template_expr(&b.right, comp_node_id)),
+            left: std::sync::Arc::new(instantiate_template_expr(&b.left, comp_node_id)),
+            right: std::sync::Arc::new(instantiate_template_expr(&b.right, comp_node_id)),
             span: b.span,
         }),
         Expr::Unary(u) => Expr::Unary(UnaryExpr {
             op: u.op,
-            operand: Box::new(instantiate_template_expr(&u.operand, comp_node_id)),
+            operand: std::sync::Arc::new(instantiate_template_expr(&u.operand, comp_node_id)),
             span: u.span,
         }),
         Expr::Paren(inner, span) => {
-            Expr::Paren(Box::new(instantiate_template_expr(inner, comp_node_id)), *span)
+            Expr::Paren(std::sync::Arc::new(instantiate_template_expr(inner, comp_node_id)), *span)
         }
         Expr::Call(c) => {
             let mut args = Vec::with_capacity(c.args.len());
@@ -3102,7 +3174,7 @@ pub(super) fn instantiate_template_expr(expr: &Expr, comp_node_id: NodeId) -> Ex
                 args.push(instantiate_template_expr(arg, comp_node_id));
             }
             Expr::MethodCall(MethodCallExpr {
-                target: Box::new(instantiate_template_expr(&mc.target, comp_node_id)),
+                target: std::sync::Arc::new(instantiate_template_expr(&mc.target, comp_node_id)),
                 method: mc.method,
                 args,
                 span: mc.span,

@@ -32,13 +32,13 @@ pub(in crate::compiler::expand) fn default_inherited_clip_expr(
             parent
         };
         Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(Expr::Ident(Ident::from_node(target_node, span))),
+            target: std::sync::Arc::new(Expr::Ident(Ident::from_node(target_node, span))),
             member: Ident::new("clip", span),
             span,
         })
     } else {
         Expr::MemberAccess(MemberAccessExpr {
-            target: Box::new(Expr::Ident(Ident::from_node(
+            target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
                 NodeId::WINDOW,
                 span,
             ))),
@@ -91,28 +91,28 @@ impl BuiltinPrimitive for ClipPrimitive {
         if let Some(box_expr) = state.ports.get("box").cloned() {
             state.ports.entry("x".to_string()).or_insert_with(|| {
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(box_expr.clone()),
+                    target: std::sync::Arc::new(box_expr.clone()),
                     member: Ident::new("x", elem.span),
                     span: elem.span,
                 })
             });
             state.ports.entry("y".to_string()).or_insert_with(|| {
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(box_expr.clone()),
+                    target: std::sync::Arc::new(box_expr.clone()),
                     member: Ident::new("y", elem.span),
                     span: elem.span,
                 })
             });
             state.ports.entry("width".to_string()).or_insert_with(|| {
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(box_expr.clone()),
+                    target: std::sync::Arc::new(box_expr.clone()),
                     member: Ident::new("width", elem.span),
                     span: elem.span,
                 })
             });
             state.ports.entry("height".to_string()).or_insert_with(|| {
                 Expr::MemberAccess(MemberAccessExpr {
-                    target: Box::new(box_expr),
+                    target: std::sync::Arc::new(box_expr),
                     member: Ident::new("height", elem.span),
                     span: elem.span,
                 })
