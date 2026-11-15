@@ -32,7 +32,7 @@ fn test_material_card_explicit_width_with_header_content_and_actions() {
         ) {
             \Button("hdr_action"; size: ButtonSize.Small) { Follow }
         }
-        \Divider("hdr_div";)
+        \HDivider("hdr_div";)
         \CardContent("content";) {
             \Overline("card_overline"; color: material_text_secondary) { WORD OF THE DAY }
             \H5("card_title"; gutter_bottom: true) { Benevolent }
@@ -245,7 +245,7 @@ fn test_material_card_intrinsic_bottom_up_sizing() {
 
     \Card("intrinsic_card"; x: 16px, y: 16px) {
         \CardHeader("i_hdr"; title: "Compact Header", subheader: "Secondary")
-        \Divider("i_div";)
+        \HDivider("i_div";)
         \CardContent("i_content";) {
             \Body1 { This intrinsic body line is wider than the header above it. }
         }

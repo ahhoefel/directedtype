@@ -1,0 +1,46 @@
+// DirectedType Standard Component Library: VDivider
+// Clean 1px vertical hairline separator rule for dividing side-by-side elements in horizontal layouts.
+
+// 1. Fluid VDivider: spans full height of parent container
+\Component VDivider(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    color: Color = #334155,
+    thickness: Distance = 1px
+) {
+    \let resolved_height = parent.height;
+
+    \alias width = thickness;
+    \alias right = x + thickness;
+    \alias bottom = y + resolved_height;
+    \alias height = resolved_height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: thickness,
+        height: resolved_height,
+        color: color
+    )
+}
+
+// 2. Fixed Height VDivider: renders vertical hairline with explicit height
+\Component VDivider(
+    height: Distance,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    color: Color = #334155,
+    thickness: Distance = 1px
+) {
+    \alias width = thickness;
+    \alias right = x + thickness;
+    \alias bottom = y + height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: thickness,
+        height: height,
+        color: color
+    )
+}

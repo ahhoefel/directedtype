@@ -5,7 +5,7 @@
 \use "components/Card.dt"
 \use "components/CardStyle.dt"
 \use "components/Button.dt"
-\use "components/Divider.dt"
+\use "components/HDivider.dt"
 \use "components/Spacer.dt"
 \use "theme/default.dt"
 
@@ -55,7 +55,7 @@
         }
 
         \Spacer(height: 6px)
-        \Divider(thickness: 2px, color: #e2e8f0)
+        \HDivider(thickness: 2px, color: #e2e8f0)
 
         // Footer Note
         \Text(font: \Font(size: 14px), color: #64748b) {

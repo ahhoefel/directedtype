@@ -83,13 +83,13 @@ fn test_horizontal_spacer_in_hstack() {
 fn test_divider_in_vstack() {
     let input = r#"
     \use "components/VStack.dt"
-    \use "components/Divider.dt"
+    \use "components/HDivider.dt"
 
     \VStack(x: 0, y: 0, width: 300px, gap: 8px) {
         \Rect(width: 100px, height: 20px, color: #3b82f6)
-        \Divider()
+        \HDivider()
         \Rect(width: 100px, height: 20px, color: #10b981)
-        \Divider(width: 120px, color: #ef4444, thickness: 2px)
+        \HDivider(width: 120px, color: #ef4444, thickness: 2px)
     }
     "#;
 
@@ -125,6 +125,46 @@ fn test_divider_in_vstack() {
     assert_eq!(rects[3].rect.y, 65.0); // 37 + 20 + 8
     assert_eq!(rects[3].rect.height, 2.0);
     assert_eq!(rects[3].rect.width, 120.0);
+}
+
+#[test]
+fn test_vdivider_in_hstack() {
+    let input = r#"
+    \use "components/HStack.dt"
+    \use "components/VDivider.dt"
+
+    \HStack(x: 0, y: 0, height: 100px, gap: 8px) {
+        \Rect(width: 20px, height: 60px, color: #3b82f6)
+        \VDivider()
+        \Rect(width: 20px, height: 60px, color: #10b981)
+        \VDivider(height: 40px, color: #ef4444, thickness: 2px)
+    }
+    "#;
+
+    let doc = parse(input).expect("parse ok");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry(
+        &doc,
+        800.0,
+        600.0,
+        Path::new("."),
+        &directedtype::compiler::FsResolver,
+        &registry,
+    )
+    .expect("compile ok");
+
+    let rects: Vec<_> = compiled.layout.nodes.iter().filter(|n| n.name == "Rect").collect();
+    assert_eq!(rects.len(), 4);
+
+    // Fluid VDivider 1: height matches parent (100), width = 1
+    assert_eq!(rects[1].rect.x, 28.0); // 20 + 8
+    assert_eq!(rects[1].rect.width, 1.0);
+    assert_eq!(rects[1].rect.height, 100.0);
+
+    // Fixed VDivider 2: height = 40, thickness = 2
+    assert_eq!(rects[3].rect.x, 65.0); // 37 + 20 + 8
+    assert_eq!(rects[3].rect.width, 2.0);
+    assert_eq!(rects[3].rect.height, 40.0);
 }
 
 #[test]

@@ -8,6 +8,7 @@
 * **Ternary Compile-time Specialization**: Is this necessary? What does it allow? Could we do without it? (See [docs/designs/compiler_modularity.md](file:///Users/hoefel/dev/directedtype/docs/designs/compiler_modularity.md#3-phase-3-simplify-compile-time-ternary-specialization-in-expand))
 * Remove duplicate : and = default assignment style. Just pick one. (DONE???)
 * Maybe `Timer` and `Handler` should be wrapped in optional: `Option<Timer>`, `Option<Handler>`.
+* Create separate output types for windows and print mediums. Print should be able to span multiple pages. We need to develop PDF output. We also need to discuss how to control page numbers, headers, etc. How much of this is simple DT markup, and how much requires application logic. For instance, if we add a header, we need application logic to collect all of those to make a table of contents. 
 
 
 ### 2. Compiler Architecture & Modularity ([docs/designs/compiler_modularity.md](file:///Users/hoefel/dev/directedtype/docs/designs/compiler_modularity.md))

@@ -5,7 +5,7 @@
 \use "components/Card.dt"
 \use "components/CardStyle.dt"
 \use "components/Button.dt"
-\use "components/Divider.dt"
+\use "components/HDivider.dt"
 \use "components/Spacer.dt"
 \use "components/LinkStyle.dt"
 \use "components/Link.dt"
@@ -130,7 +130,7 @@
             }
         }
 
-        \Divider(thickness: 1px, color: #e2e8f0)
+        \HDivider(thickness: 1px, color: #e2e8f0)
 
         // Section 1
         \Card(
@@ -209,7 +209,7 @@
             }
         }
 
-        \Divider(thickness: 1px, color: #e2e8f0)
+        \HDivider(thickness: 1px, color: #e2e8f0)
 
         // Footer Note
         \Text(font: \Font(size: 13px), color: #94a3b8) {

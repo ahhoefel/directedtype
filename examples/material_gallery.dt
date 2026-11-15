@@ -50,7 +50,7 @@
         Interactive showcase of @mui/material components — hover, focus, and click components to see state transitions.
     }
 
-    \Divider
+    \HDivider
     \Spacer(height: 4px)
 
     // Section 1: Basic Button Variants
@@ -258,19 +258,19 @@
                             \Body2 { FullWidth Divider below }
                             \Spacer(width: 48px)
                         }
-                        \Divider("div_full"; variant: DividerVariant.FullWidth)
+                        \HDivider("div_full"; variant: DividerVariant.FullWidth)
                         \HStack(gap: 16px) {
                             \Spacer(width: 16px)
                             \Body2 { Inset Divider below (72px left) }
                             \Spacer(width: 24px)
                         }
-                        \Divider("div_inset"; variant: DividerVariant.Inset)
+                        \HDivider("div_inset"; variant: DividerVariant.Inset)
                         \HStack(gap: 16px) {
                             \Spacer(width: 16px)
                             \Body2 { Middle Divider below (16px sides) }
                             \Spacer(width: 16px)
                         }
-                        \Divider("div_middle"; variant: DividerVariant.Middle)
+                        \HDivider("div_middle"; variant: DividerVariant.Middle)
                         \HStack(gap: 16px) {
                             \Spacer(width: 16px)
                             \Body2(color: material_text_secondary) { Bottom item in intrinsic VStack }
@@ -285,16 +285,16 @@
                         \Caption(color: material_text_secondary) {
                             Dividers with Children (Center, Left, Right)
                         }
-                        \Divider("div_text_center";) {
+                        \HDivider("div_text_center";) {
                             \Caption(color: material_text_secondary) { CENTER }
                         }
-                        \Divider("div_text_left"; text_align: Align.Left) {
+                        \HDivider("div_text_left"; text_align: Align.Left) {
                             \Caption(color: material_text_secondary) { LEFT }
                         }
-                        \Divider("div_text_right"; text_align: Align.Right) {
+                        \HDivider("div_text_right"; text_align: Align.Right) {
                             \Caption(color: material_text_secondary) { RIGHT }
                         }
-                        \Divider("div_with_button";) {
+                        \HDivider("div_with_button";) {
                             \Button(size: ButtonSize.Small, variant: ButtonVariant.Outlined) { Action }
                         }
                     }
@@ -308,9 +308,9 @@
                         }
                         \HStack(gap: 12px, align: Align.Center) {
                             \Button(size: ButtonSize.Small) { Cut }
-                            \Divider("div_vert_full"; orientation: DividerOrientation.Vertical)
+                            \VDivider("div_vert_full";)
                             \Button(size: ButtonSize.Small) { Copy }
-                            \Divider("div_vert_middle"; orientation: DividerOrientation.Vertical, variant: DividerVariant.Middle)
+                            \VDivider("div_vert_middle"; variant: DividerVariant.Middle)
                             \Button(size: ButtonSize.Small) { Paste }
                         }
                     }
@@ -356,7 +356,7 @@
                         title: "Shrimp and Chorizo Paella",
                         subheader: "September 14, 2016"
                     )
-                    \Divider
+                    \HDivider
                     \CardContent {
                         \Body2(color: material_text_secondary) {
                             This impressive paella is a perfect party dish and a fun meal to cook together with your guests.
@@ -399,7 +399,7 @@
                     ) {
                         \Button(size: ButtonSize.Small, variant: ButtonVariant.Outlined) { Info }
                     }
-                    \Divider
+                    \HDivider
                     \CardContent {
                         \Body2(color: material_text_secondary) {
                             Includes Material Design typography, elevated surfaces, and card layout primitives.
@@ -434,7 +434,7 @@
                 \Avatar("av_lg"; size: 56px, bg: material_error.main) { L }
             }
 
-            \Divider
+            \HDivider
 
             // 11b. Chips: Basic, Clickable, Disabled & Leading Avatar
             \HStack(gap: 12px, align: Align.Center) {
@@ -489,7 +489,7 @@
                 \Switch("sw_disabled_on"; checked: true, disabled: true) { Disabled On }
             }
 
-            \Divider
+            \HDivider
 
             // 12b. Checkboxes: Unchecked, Checked, Indeterminate, Semantic Colors, Sizes & Disabled
             \HStack(gap: 16px, align: Align.Center) {
@@ -503,7 +503,7 @@
                 \Checkbox("cb_disabled"; checked: true, disabled: true) { Disabled }
             }
 
-            \Divider
+            \HDivider
 
             // 12c. Radio Buttons: Unchecked, Checked, Semantic Colors, Sizes & Disabled
             \HStack(gap: 16px, align: Align.Center) {
@@ -540,7 +540,7 @@
                             }
                             \ListItemText(primary: "Drafts", secondary: "Updated 5m ago")
                         }
-                        \Divider(variant: DividerVariant.Inset)
+                        \HDivider(variant: DividerVariant.Inset)
                         \ListItemButton("list_btn_starred";) {
                             \ListItemText(inset: true, primary: "Starred (Inset)")
                         }
@@ -559,14 +559,14 @@
                             }
                             \ListItemText(primary: "Photos", secondary: "Jan 9, 2026")
                         }
-                        \Divider(variant: DividerVariant.Inset)
+                        \HDivider(variant: DividerVariant.Inset)
                         \ListItem("list_item_work";) {
                             \ListItemAvatar {
                                 \Avatar(bg: material_info.main) { W }
                             }
                             \ListItemText(primary: "Work", secondary: "Jan 7, 2026")
                         }
-                        \Divider(variant: DividerVariant.Inset)
+                        \HDivider(variant: DividerVariant.Inset)
                         \ListItem("list_item_vacation";) {
                             \ListItemAvatar {
                                 \Avatar(bg: material_warning.main) { V }
@@ -765,7 +765,7 @@
                 }
             }
 
-            \Divider
+            \HDivider
 
             // 16b. Semantic Palette Colors (Secondary, Success, Warning, Error, Info)
             \HStack(gap: 20px, align: Align.Center) {
@@ -776,7 +776,7 @@
                 \Slider("sl_info"; width: 150px, value: 90, color: MaterialColor.Info)
             }
 
-            \Divider
+            \HDivider
 
             // 16c. Discrete Step Marks, Custom Labeled Marks & Inverted Track
             \HStack(gap: 32px, align: Align.Top) {

@@ -546,18 +546,18 @@ fn test_material_divider_in_bottom_up_vstack_and_hstack() {
     \Paper("outer_paper"; padding_x: 16px, padding_y: 12px) {
         \VStack("inner_stack"; gap: 8px) {
             \Rect("item_a"; width: 200px, height: 30px, color: #3b82f6)
-            \Divider("div_full"; variant: DividerVariant.FullWidth)
+            \HDivider("div_full"; variant: DividerVariant.FullWidth)
             \Rect("item_b"; width: 140px, height: 30px, color: #10b981)
-            \Divider("div_inset"; variant: DividerVariant.Inset)
-            \Divider("div_middle"; variant: DividerVariant.Middle)
-            \Divider("div_text";) {
+            \HDivider("div_inset"; variant: DividerVariant.Inset)
+            \HDivider("div_middle"; variant: DividerVariant.Middle)
+            \HDivider("div_text";) {
                 \Text(font: \Font(size: 12px)) { OR }
             }
             \Button("stretched_btn"; width: parent.width) { Full Width Action }
             \HStack("row_stack"; gap: 10px, align: Align.Center) {
                 \Rect(width: 50px, height: 36px, color: #ef4444)
-                \Divider("div_vert"; orientation: DividerOrientation.Vertical)
-                \Divider("div_vert_mid"; orientation: DividerOrientation.Vertical, variant: DividerVariant.Middle)
+                \VDivider("div_vert";)
+                \VDivider("div_vert_mid"; variant: DividerVariant.Middle)
                 \Rect(width: 60px, height: 24px, color: #f59e0b)
             }
         }
@@ -691,7 +691,7 @@ fn test_all_children_depending_on_parent_width_or_multi_level_cycle_rejected() {
     \use "components/material/Divider.dt"
 
     \VStack {
-        \Divider
+        \HDivider
     }
     "#;
     let doc1 = parse(all_top_down).expect("parse ok");

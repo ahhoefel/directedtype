@@ -1805,8 +1805,8 @@ fn test_inspector_skipped_upstream_and_strikethrough_spans() {
 
 \VStack("stack"; min_width: 260px) {
     \Text("label";) { "Intrinsic Label" }
-    \Divider("div_center";) { "CENTER" }
-    \Divider("div_left"; text_align: Align.Left) { "LEFT" }
+    \HDivider("div_center";) { "CENTER" }
+    \HDivider("div_left"; text_align: Align.Left) { "LEFT" }
 }
 "#;
     let doc = directedtype::parse(source).expect("parse ok");
@@ -1814,7 +1814,7 @@ fn test_inspector_skipped_upstream_and_strikethrough_spans() {
 
     let stack_node = layout.nodes.iter().find(|n| n.name == "VStack").expect("VStack found");
     let label_node = layout.nodes.iter().find(|n| n.name == "Text").expect("Text found");
-    let div_nodes: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Divider").collect();
+    let div_nodes: Vec<_> = layout.nodes.iter().filter(|n| n.name == "HDivider").collect();
     assert_eq!(div_nodes.len(), 2);
 
     let trace = directedtype::inspector::build_property_dag_trace(&layout, stack_node.id, "width")
@@ -1827,7 +1827,7 @@ fn test_inspector_skipped_upstream_and_strikethrough_spans() {
         trace.equation_spans
     );
 
-    // 2. Equation spans should contain the included Text.width (not struck through) and the two Divider.width args (struck through)
+    // 2. Equation spans should contain the included Text.width (not struck through) and the two HDivider.width args (struck through)
     assert!(
         trace.equation_spans.iter().any(|s| !s.strikethrough && s.text.contains("\\Text#label.width")),
         "Expected non-strikethrough span containing \\Text#label.width, got: {:?}",
@@ -1835,8 +1835,8 @@ fn test_inspector_skipped_upstream_and_strikethrough_spans() {
     );
     let struck_spans: Vec<_> = trace.equation_spans.iter().filter(|s| s.strikethrough).collect();
     assert_eq!(struck_spans.len(), 2, "Expected 2 strikethrough spans for skipped dividers: {:?}", trace.equation_spans);
-    assert_eq!(struck_spans[0].text, "\\Divider#div_center.width");
-    assert_eq!(struck_spans[1].text, "\\Divider#div_left.width");
+    assert_eq!(struck_spans[0].text, "\\HDivider#div_center.width");
+    assert_eq!(struck_spans[1].text, "\\HDivider#div_left.width");
 
     // 3. Upstream dependencies vs Skipped upstream dependencies
     assert_eq!(trace.upstream_dependencies.len(), 2);

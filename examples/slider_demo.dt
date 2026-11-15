@@ -7,7 +7,7 @@
 \use "../components/HStack.dt"
 \use "../components/Card.dt"
 \use "../components/Slider.dt"
-\use "../components/Divider.dt"
+\use "../components/HDivider.dt"
 \use "../components/Spacer.dt"
 \use "../theme/default.dt"
 
@@ -43,7 +43,7 @@
             Hardware pointer capture, smooth dragging, and strongly-typed callbacks.
         }
 
-        \Divider(color: #334155)
+        \HDivider(color: #334155)
 
         // Master Volume
         \VStack(gap: 6px) {
@@ -99,7 +99,7 @@
             )
         }
 
-        \Divider(color: #334155)
+        \HDivider(color: #334155)
 
         // Dynamic Output Monitor
         \VStack(gap: 8px) {

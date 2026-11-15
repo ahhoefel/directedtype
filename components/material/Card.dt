@@ -22,7 +22,7 @@
 // Card
 // ============================================================================
 
-// 1. Explicit Width Card: pushes inner_width down to child sections (CardHeader, CardContent, CardActions, Divider)
+// 1. Explicit Width Card: pushes inner_width down to child sections (CardHeader, CardContent, CardActions, HDivider)
 \Component Card(
     width: Distance,
     x: Distance = parent.left,

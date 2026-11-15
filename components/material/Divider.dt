@@ -1,7 +1,7 @@
 // Material UI Component Library: Divider
 // Thin, unobtrusive line for grouping elements in lists and layouts.
-// Supports Horizontal and Vertical orientations, FullWidth/Inset/Middle variants,
-// light opacity mode, and optional child content (text, chip, or button) with Left/Center/Right alignment.
+// Provides HDivider (horizontal rule with FullWidth/Inset/Middle variants, light opacity mode,
+// and optional Left/Center/Right aligned child content) and VDivider (vertical rule with FullWidth/Middle variants).
 
 \use "components/Align.dt"
 
@@ -11,40 +11,29 @@
     Middle
 }
 
-\Enum DividerOrientation {
-    Horizontal,
-    Vertical
-}
-
-\Component Divider(
+\Component HDivider(
     x: Distance = parent.left,
     y: Distance = parent.top,
-    orientation: DividerOrientation = DividerOrientation.Horizontal,
     variant: DividerVariant = DividerVariant.FullWidth,
     text_align: Align = Align.Center,
     light: Boolean = false,
     color: Color = #0000001f,
     thickness: Distance = 1px,
-    width: Distance = (orientation == DividerOrientation.Vertical) ? thickness : parent.width,
-    height: Distance = (orientation == DividerOrientation.Vertical) ? parent.height : (children.len > 0 ? max(thickness, max(children.height)) : thickness)
+    width: Distance = parent.width,
+    height: Distance = children.len > 0 ? max(thickness, max(children.height)) : thickness
 ) {
-    \assert children.len <= 1 as "Divider accepts at most one child.";
+    \assert children.len <= 1 as "HDivider accepts at most one child.";
 
-    \let is_vertical = orientation == DividerOrientation.Vertical;
-    \let has_children = (children.len > 0) && !is_vertical;
+    \let has_children = children.len > 0;
     \let is_inset = variant == DividerVariant.Inset;
     \let is_middle = variant == DividerVariant.Middle;
     \let resolved_color: Color = light ? #00000014 : color;
 
-    \let left_inset: Distance = is_vertical ? 0px : (is_inset ? 72px : (is_middle ? 16px : 0px));
-    \let right_inset: Distance = is_vertical ? 0px : (is_middle ? 16px : 0px);
-    \let top_inset: Distance = is_vertical ? (is_middle ? 8px : 0px) : 0px;
-    \let bottom_inset: Distance = is_vertical ? (is_middle ? 8px : 0px) : 0px;
+    \let left_inset: Distance = is_inset ? 72px : (is_middle ? 16px : 0px);
+    \let right_inset: Distance = is_middle ? 16px : 0px;
 
     \let line_x: Distance = x + left_inset;
     \let line_w: Distance = max(0px, width - left_inset - right_inset);
-    \let line_y: Distance = y + top_inset;
-    \let line_h: Distance = max(0px, height - top_inset - bottom_inset);
 
     \let child_w: Distance = has_children ? max(children.width) : 0px;
     \let child_h: Distance = has_children ? max(children.height) : 0px;
@@ -58,8 +47,7 @@
     \let left_rule_w: Distance = has_children ? (avail_line_w * left_ratio) : line_w;
     \let right_rule_w: Distance = has_children ? (avail_line_w - left_rule_w) : 0px;
 
-    \let rule_y: Distance = is_vertical ? line_y : (y + (height - thickness) / 2);
-    \let rule_h: Distance = is_vertical ? line_h : thickness;
+    \let rule_y: Distance = y + (height - thickness) / 2;
 
     \alias right = x + width;
     \alias bottom = y + height;
@@ -68,7 +56,7 @@
         x: line_x,
         y: rule_y,
         width: left_rule_w,
-        height: rule_h,
+        height: thickness,
         color: resolved_color
     )
 
@@ -83,6 +71,39 @@
         width: right_rule_w,
         height: has_children ? thickness : 0px,
         color: has_children ? resolved_color : #00000000
+    )
+}
+
+\Component VDivider(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    variant: DividerVariant = DividerVariant.FullWidth,
+    light: Boolean = false,
+    color: Color = #0000001f,
+    thickness: Distance = 1px,
+    width: Distance = thickness,
+    height: Distance = parent.height
+) {
+    \assert children.len == 0 as "VDivider does not accept children.";
+
+    \let is_middle = variant == DividerVariant.Middle;
+    \let resolved_color: Color = light ? #00000014 : color;
+
+    \let top_inset: Distance = is_middle ? 8px : 0px;
+    \let bottom_inset: Distance = is_middle ? 8px : 0px;
+
+    \let line_y: Distance = y + top_inset;
+    \let line_h: Distance = max(0px, height - top_inset - bottom_inset);
+
+    \alias right = x + width;
+    \alias bottom = y + height;
+
+    \Rect(
+        x: x,
+        y: line_y,
+        width: thickness,
+        height: line_h,
+        color: resolved_color
     )
 }
 

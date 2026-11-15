@@ -7,7 +7,7 @@
 \use "../components/Card.dt"
 \use "../components/Button.dt"
 \use "../components/ButtonVariant.dt"
-\use "../components/Divider.dt"
+\use "../components/HDivider.dt"
 \use "../components/Spacer.dt"
 \use "../theme/default.dt"
 
@@ -42,7 +42,7 @@
         Standard \\Card and \\Button with intrinsic typography sizing, 6 variants, and direct text support.
     }
 
-    \Divider(color: #334155)
+    \HDivider(color: #334155)
     \Spacer(height: 6px)
 
     // Section 1: Visual Variants

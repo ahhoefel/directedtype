@@ -28,7 +28,7 @@ fn test_material_list_geometry_single_and_two_line_dense_inset_and_avatars() {
             }
             \ListItemText("text_2line"; primary: "Photos", secondary: "Jan 9, 2026")
         }
-        \Divider("div_inset"; variant: DividerVariant.Inset)
+        \HDivider("div_inset"; variant: DividerVariant.Inset)
         \ListItem("item_inset"; divider: true) {
             \ListItemText("text_inset"; inset: true) { Starred (Inset) }
         }

@@ -1,10 +1,10 @@
-// DirectedType Standard Component Library: Divider
-// Clean 1px hairline separator rule for dividing sections, headers, and list items.
+// DirectedType Standard Component Library: HDivider
+// Clean 1px horizontal hairline separator rule for dividing sections, headers, and list items.
 
-// 1. Fluid Divider: spans full width of parent container
-\Component Divider(
-    x: Distance,
-    y: Distance,
+// 1. Fluid HDivider: spans full width of parent container
+\Component HDivider(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
     color: Color = #334155,
     thickness: Distance = 1px
 ) {
@@ -24,11 +24,11 @@
     )
 }
 
-// 2. Fixed Width Divider: renders hairline with explicit width
-\Component Divider(
+// 2. Fixed Width HDivider: renders horizontal hairline with explicit width
+\Component HDivider(
     width: Distance,
-    x: Distance,
-    y: Distance,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
     color: Color = #334155,
     thickness: Distance = 1px
 ) {

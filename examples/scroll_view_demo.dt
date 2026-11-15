@@ -8,7 +8,7 @@
 \use "components/Card.dt"
 \use "components/CardStyle.dt"
 \use "components/Button.dt"
-\use "components/Divider.dt"
+\use "components/HDivider.dt"
 \use "components/Spacer.dt"
 \use "components/LinkStyle.dt"
 \use "components/Link.dt"

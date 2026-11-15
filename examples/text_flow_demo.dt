@@ -13,7 +13,7 @@
 \use "components/Align.dt"
 \use "components/Card.dt"
 \use "components/CardStyle.dt"
-\use "components/Divider.dt"
+\use "components/HDivider.dt"
 \use "components/LinkStyle.dt"
 \use "components/Link.dt"
 \use "components/Bold.dt"
@@ -107,7 +107,7 @@
     collapse to a single space, whereas ending a line with a \Code{\/\/} comment joins
     tokens flush without a space.
 
-    \Divider(color: #e2e8f0)
+    \HDivider(color: #e2e8f0)
 
     \H2 {
         Post-Shaping \Code{\\Span} & \Code{\\InlineBox} Geometry
@@ -135,7 +135,7 @@
             \Kbd{I}
         }
 
-        \Divider(color: #e2e8f0)
+        \HDivider(color: #e2e8f0)
 
         \Text(align: Align.Center, color: #334155) {
             \Italic{"Typography is a two-dimensional architecture, based on experience and imagination."}

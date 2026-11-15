@@ -23,7 +23,7 @@
 // List
 // ============================================================================
 
-// 1. Explicit Width List: pushes inner_width down to child items (ListItem, ListItemButton, Divider)
+// 1. Explicit Width List: pushes inner_width down to child items (ListItem, ListItemButton, HDivider)
 \Component List(
     width: Distance,
     env font: Font = \Font(size: 16px),
