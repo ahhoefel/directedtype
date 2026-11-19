@@ -225,6 +225,7 @@ fn shape_resolved_text_node(node: &ResolvedNode, layout: &ResolvedLayout) -> Sha
             first_top_coord: 0.0,
             last_bottom_coord: 0.0,
             full_y_offset: 0.0,
+            byte_deltas: Vec::new(),
         };
     };
     let fnode = node

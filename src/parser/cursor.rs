@@ -407,6 +407,14 @@ impl<'a> ParserCursor<'a> {
                         raw_buf.push('*');
                         self.pos += 2;
                         continue;
+                    } else if after_backslash.starts_with('-') {
+                        raw_buf.push('\u{00AD}');
+                        self.pos += 2;
+                        continue;
+                    } else if after_backslash.starts_with('=') {
+                        raw_buf.push_str("\u{2060}-\u{2060}");
+                        self.pos += 2;
+                        continue;
                     }
                 }
 
@@ -480,6 +488,14 @@ impl<'a> ParserCursor<'a> {
             if rem.starts_with('~') {
                 raw_buf.push('\u{00A0}');
                 self.pos += 1;
+                continue;
+            }
+
+            // Literal U+2011 non-breaking hyphen normalizes to Word-Joiner-glued ASCII '-'
+            // so fonts without U+2011 in their cmap render their native hyphen glyph without breaking.
+            if rem.starts_with('\u{2011}') {
+                raw_buf.push_str("\u{2060}-\u{2060}");
+                self.pos += '\u{2011}'.len_utf8();
                 continue;
             }
 

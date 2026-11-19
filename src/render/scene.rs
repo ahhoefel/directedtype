@@ -874,6 +874,31 @@ pub fn build_scene(
                 // CACHE MISS: Build local scene at origin (0.0, 0.0)
                 let mut local_scene = Scene::new();
 
+                let mat = crate::compiler::text::materialize_soft_hyphens_with_font_cx(
+                    font_cx,
+                    text,
+                    font_size,
+                    font_weight,
+                    font_family,
+                    font_italic,
+                    line_height_prop,
+                    (node.rect.width > 0.0).then_some(node.rect.width),
+                    &node.text_spans,
+                    &node.inline_boxes,
+                );
+                let (text, spans_slice, boxes_slice) = match &mat {
+                    Some(m_rt) => (
+                        m_rt.text.as_str(),
+                        m_rt.spans.as_slice(),
+                        m_rt.inline_boxes.as_slice(),
+                    ),
+                    None => (
+                        text.as_str(),
+                        node.text_spans.as_slice(),
+                        node.inline_boxes.as_slice(),
+                    ),
+                };
+
                 let mut builder = text_layout_cx.ranged_builder(font_cx, text, 1.0, true);
                 builder.push_default(StyleProperty::FontSize(font_size));
                 builder.push_default(StyleProperty::Brush(color_to_rgba8(&text_color)));
@@ -893,7 +918,7 @@ pub fn build_scene(
                 }
 
                 // Push span styles (fonts, colors, italic, underlines) to range builder
-                for span in &node.text_spans {
+                for span in spans_slice {
                     let mut color_str = span.style.color.as_deref();
                     let mut underline = span.style.underline;
 
@@ -945,7 +970,7 @@ pub fn build_scene(
                     }
                 }
 
-                for ib in &node.inline_boxes {
+                for ib in boxes_slice {
                     builder.push_inline_box(parley::InlineBox {
                         id: ib.node_id.0 as u64,
                         kind: parley::InlineBoxKind::InFlow,
@@ -1108,8 +1133,7 @@ pub fn build_scene(
                             run_cursor = Some((run.index(), start_idx + cluster_ranges.len()));
 
                             let run_range = run.text_range();
-                            let y_shift = node
-                                .text_spans
+                            let y_shift = spans_slice
                                 .iter()
                                 .find(|s| !s.range.is_empty() && s.range.start <= run_range.start && run_range.end <= s.range.end)
                                 .map(|s| s.style.baseline_shift as f32)

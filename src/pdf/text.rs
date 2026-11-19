@@ -174,6 +174,31 @@ pub(super) fn draw_text_node(
         .and_then(|v| v.as_f64())
         .filter(|&h| h > 0.0);
 
+    let mat = crate::compiler::text::materialize_soft_hyphens_with_font_cx(
+        &mut font_cache.font_cx,
+        active_text,
+        font_size,
+        font_weight,
+        font_family,
+        font_italic,
+        line_height_prop,
+        (node.rect.width > 0.0).then_some(node.rect.width),
+        &resolved_spans,
+        &resolved_boxes,
+    );
+    let (active_text, resolved_spans_slice, resolved_boxes_slice) = match &mat {
+        Some(m_rt) => (
+            m_rt.text.as_str(),
+            m_rt.spans.as_slice(),
+            m_rt.inline_boxes.as_slice(),
+        ),
+        None => (
+            active_text,
+            resolved_spans.as_slice(),
+            resolved_boxes.as_slice(),
+        ),
+    };
+
     let mut builder =
         font_cache
             .layout_cx
@@ -197,7 +222,7 @@ pub(super) fn draw_text_node(
         ));
     }
 
-    for span in &resolved_spans {
+    for span in resolved_spans_slice {
         if span.range.is_empty() || span.range.end > active_text.len() {
             continue;
         }
@@ -261,7 +286,7 @@ pub(super) fn draw_text_node(
         }
     }
 
-    for ib in &resolved_boxes {
+    for ib in resolved_boxes_slice {
         builder.push_inline_box(parley::InlineBox {
             id: ib.node_id.0 as u64,
             kind: parley::InlineBoxKind::InFlow,
@@ -519,8 +544,7 @@ pub(super) fn draw_text_node(
             let mut underline_gy = 0.0f32;
 
             for (g, cluster_range) in glyphs_with_ranges {
-                let cluster_y_shift = node
-                    .text_spans
+                let cluster_y_shift = resolved_spans_slice
                     .iter()
                     .rfind(|s| {
                         !s.range.is_empty()

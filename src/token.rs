@@ -164,9 +164,13 @@ pub enum Token {
                     Some('r') => unescaped.push('\r'),
                     Some('\\') => unescaped.push('\\'),
                     Some('"') => unescaped.push('"'),
+                    Some('-') => unescaped.push('\u{00AD}'),
+                    Some('=') => unescaped.push_str("\u{2060}-\u{2060}"),
                     Some(other) => unescaped.push(other),
                     None => unescaped.push('\\'),
                 }
+            } else if c == '\u{2011}' {
+                unescaped.push_str("\u{2060}-\u{2060}");
             } else {
                 unescaped.push(c);
             }

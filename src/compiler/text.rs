@@ -274,6 +274,290 @@ pub fn measure_rich_text_bounds(
     )
 }
 
+const SOFT_HYPHEN: char = '\u{00AD}';
+const SOFT_HYPHEN_LEN: usize = SOFT_HYPHEN.len_utf8(); // 2 UTF-8 bytes
+
+/// Result of resolving soft hyphens (`U+00AD`) for a given `max_width`:
+/// taken line-ending breaks become literal `'-'`, while untaken soft hyphens are stripped.
+#[derive(Debug, Clone)]
+pub struct MaterializedRichText {
+    pub text: String,
+    pub spans: Vec<TextSpan>,
+    pub inline_boxes: Vec<InlineBoxSpan>,
+    /// Sorted `(orig_shy_byte_pos, byte_delta)` pairs (`-1` when replaced by `'-'`, `-2` when stripped).
+    pub byte_deltas: Vec<(usize, isize)>,
+}
+
+impl MaterializedRichText {
+    #[inline]
+    pub fn map_offset(&self, orig_offset: usize) -> usize {
+        map_byte_offset_with_deltas(orig_offset, &self.byte_deltas)
+    }
+
+    #[inline]
+    pub fn map_range(&self, orig_range: Range<usize>) -> Range<usize> {
+        let s = self.map_offset(orig_range.start);
+        let e = self.map_offset(orig_range.end);
+        s..e.max(s)
+    }
+}
+
+#[inline]
+pub fn map_byte_offset_with_deltas(orig_offset: usize, byte_deltas: &[(usize, isize)]) -> usize {
+    if byte_deltas.is_empty() {
+        return orig_offset;
+    }
+    let mut delta_sum: isize = 0;
+    for &(shy_pos, delta) in byte_deltas {
+        if shy_pos + SOFT_HYPHEN_LEN <= orig_offset {
+            delta_sum += delta;
+        } else if shy_pos < orig_offset {
+            // Mid-soft-hyphen offset clamps to the start of that soft hyphen
+            return ((shy_pos as isize) + delta_sum).max(0) as usize;
+        } else {
+            break;
+        }
+    }
+    ((orig_offset as isize) + delta_sum).max(0) as usize
+}
+
+#[inline]
+fn adjust_offset_for_splice(offset: usize, pos: usize, old_len: usize, new_len: usize) -> usize {
+    if offset <= pos {
+        offset
+    } else if offset >= pos + old_len {
+        (offset - old_len) + new_len
+    } else {
+        pos
+    }
+}
+
+fn splice_rich_text(
+    text: &mut String,
+    spans: &mut [TextSpan],
+    boxes: &mut [InlineBoxSpan],
+    pos: usize,
+    old_len: usize,
+    replacement: &str,
+) {
+    let new_len = replacement.len();
+    text.replace_range(pos..pos + old_len, replacement);
+    for span in spans.iter_mut() {
+        let s = adjust_offset_for_splice(span.range.start, pos, old_len, new_len);
+        let e = adjust_offset_for_splice(span.range.end, pos, old_len, new_len);
+        span.range = s..e.max(s);
+    }
+    for ib in boxes.iter_mut() {
+        ib.index = adjust_offset_for_splice(ib.index, pos, old_len, new_len);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_probe_layout(
+    font_cx: &mut FontContext,
+    layout_cx: &mut LayoutContext<()>,
+    text: &str,
+    font_size: f32,
+    font_weight: f32,
+    font_family: Option<&str>,
+    font_italic: bool,
+    line_height: Option<f64>,
+    max_width: f32,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+) -> parley::Layout<()> {
+    let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
+    builder.push_default(StyleProperty::FontSize(font_size));
+    if (font_weight - 400.0).abs() > 1.0 {
+        builder.push_default(StyleProperty::FontWeight(FontWeight::new(font_weight)));
+    }
+    if let Some(family) = font_family {
+        if !family.is_empty() {
+            builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
+        }
+    }
+    if font_italic {
+        builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+    }
+    if let Some(lh) = line_height {
+        if lh > 0.0 {
+            builder.push_default(StyleProperty::LineHeight(
+                parley::style::LineHeight::Absolute(lh as f32),
+            ));
+        }
+    }
+    for span in spans {
+        if !span.range.is_empty() && span.range.end <= text.len() {
+            if let Some(sz) = span.style.font_size {
+                if sz > 0.0 {
+                    builder.push(StyleProperty::FontSize(sz as f32), span.range.clone());
+                }
+            }
+            if let Some(wt) = span.style.font_weight {
+                if wt > 0.0 {
+                    builder.push(
+                        StyleProperty::FontWeight(FontWeight::new(wt as f32)),
+                        span.range.clone(),
+                    );
+                }
+            }
+            if let Some(fam) = &span.style.font_family {
+                if !fam.is_empty() {
+                    builder.push(
+                        StyleProperty::FontFamily(FontFamily::from(fam.as_str())),
+                        span.range.clone(),
+                    );
+                }
+            }
+            if span.style.italic {
+                builder.push(StyleProperty::FontStyle(FontStyle::Italic), span.range.clone());
+            }
+        }
+    }
+    for ib in inline_boxes {
+        builder.push_inline_box(parley::InlineBox {
+            id: ib.node_id.0 as u64,
+            kind: parley::InlineBoxKind::InFlow,
+            index: ib.index.min(text.len()),
+            width: ib.width.max(0.0) as f32,
+            height: ib.baseline_offset.max(0.0) as f32,
+        });
+    }
+    let mut layout = builder.build(text);
+    layout.break_all_lines(Some(max_width));
+    layout
+}
+
+/// Resolves discretionary soft hyphens (`U+00AD`) for `max_width` using `font_cx`.
+/// Returns `None` on the zero-cost fast path when `text` contains no `U+00AD`.
+#[allow(clippy::too_many_arguments)]
+pub fn materialize_soft_hyphens_with_font_cx(
+    font_cx: &mut FontContext,
+    text: &str,
+    font_size: f32,
+    font_weight: f32,
+    font_family: Option<&str>,
+    font_italic: bool,
+    line_height: Option<f64>,
+    max_width: Option<f64>,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+) -> Option<MaterializedRichText> {
+    if !text.contains(SOFT_HYPHEN) {
+        return None;
+    }
+
+    let mut cur_text = text.to_string();
+    let mut cur_spans = spans.to_vec();
+    let mut cur_boxes = inline_boxes.to_vec();
+    let mut shy_orig_positions: Vec<usize> = text
+        .match_indices(SOFT_HYPHEN)
+        .map(|(idx, _)| idx)
+        .collect();
+    let mut byte_deltas: Vec<(usize, isize)> = Vec::with_capacity(shy_orig_positions.len());
+
+    if let Some(w) = max_width.filter(|&w| w > 0.0) {
+        let mut probe_layout_cx = LayoutContext::<()>::new();
+        let w_f32 = w as f32;
+
+        while cur_text.contains(SOFT_HYPHEN) {
+            let layout = build_probe_layout(
+                font_cx,
+                &mut probe_layout_cx,
+                &cur_text,
+                font_size,
+                font_weight,
+                font_family,
+                font_italic,
+                line_height,
+                w_f32,
+                &cur_spans,
+                &cur_boxes,
+            );
+            let lines: Vec<_> = layout.lines().collect();
+            let num_lines = lines.len();
+            let mut found_break: Option<(usize, usize)> = None;
+            for (idx, line) in lines.iter().enumerate() {
+                if idx + 1 >= num_lines {
+                    break;
+                }
+                let r = line.text_range();
+                if r.end >= SOFT_HYPHEN_LEN && cur_text[..r.end].ends_with(SOFT_HYPHEN) {
+                    found_break = Some((idx, r.end - SOFT_HYPHEN_LEN));
+                    break;
+                }
+            }
+
+            let Some((line_idx, shy_pos)) = found_break else {
+                break;
+            };
+
+            let k = cur_text[..shy_pos].matches(SOFT_HYPHEN).count();
+            let orig_pos = shy_orig_positions.remove(k);
+
+            // Tentatively materialize this broken U+00AD as ASCII '-'
+            splice_rich_text(
+                &mut cur_text,
+                &mut cur_spans,
+                &mut cur_boxes,
+                shy_pos,
+                SOFT_HYPHEN_LEN,
+                "-",
+            );
+
+            // Verify that the syllable plus real '-' glyph still fits on `line_idx`
+            let verify_layout = build_probe_layout(
+                font_cx,
+                &mut probe_layout_cx,
+                &cur_text,
+                font_size,
+                font_weight,
+                font_family,
+                font_italic,
+                line_height,
+                w_f32,
+                &cur_spans,
+                &cur_boxes,
+            );
+            let fits_with_hyphen = verify_layout.lines().nth(line_idx).is_some_and(|l| {
+                let nr = l.text_range();
+                nr.start <= shy_pos && shy_pos < nr.end
+            });
+
+            if fits_with_hyphen {
+                byte_deltas.push((orig_pos, -1));
+            } else {
+                // Adding '-' overflowed `max_width`; remove this break candidate so Parley breaks earlier
+                splice_rich_text(&mut cur_text, &mut cur_spans, &mut cur_boxes, shy_pos, 1, "");
+                byte_deltas.push((orig_pos, -(SOFT_HYPHEN_LEN as isize)));
+            }
+        }
+    }
+
+    // Strip all remaining untaken soft hyphens so renderers never emit U+00AD or .notdef glyphs
+    while let Some(shy_pos) = cur_text.find(SOFT_HYPHEN) {
+        let orig_pos = shy_orig_positions.remove(0);
+        splice_rich_text(
+            &mut cur_text,
+            &mut cur_spans,
+            &mut cur_boxes,
+            shy_pos,
+            SOFT_HYPHEN_LEN,
+            "",
+        );
+        byte_deltas.push((orig_pos, -(SOFT_HYPHEN_LEN as isize)));
+    }
+
+    byte_deltas.sort_by_key(|&(pos, _)| pos);
+
+    Some(MaterializedRichText {
+        text: cur_text,
+        spans: cur_spans,
+        inline_boxes: cur_boxes,
+        byte_deltas,
+    })
+}
+
 /// Measures the layout boundaries `(width, height)` of rich text with styled inline spans and inline boxes using Parley.
 pub fn measure_rich_text_bounds_with_boxes(
     text: &str,
@@ -300,7 +584,24 @@ pub fn measure_rich_text_bounds_with_boxes(
             let mut font_cx = font_cx_cell.borrow_mut();
             let mut layout_cx = layout_cx_cell.borrow_mut();
 
-            let mut builder = layout_cx.ranged_builder(&mut font_cx, text, 1.0, true);
+            let mat = materialize_soft_hyphens_with_font_cx(
+                &mut font_cx,
+                text,
+                size,
+                weight,
+                font_family,
+                false,
+                line_height,
+                max_width,
+                spans,
+                inline_boxes,
+            );
+            let (eff_text, eff_spans, eff_boxes) = match &mat {
+                Some(m_rt) => (m_rt.text.as_str(), m_rt.spans.as_slice(), m_rt.inline_boxes.as_slice()),
+                None => (text, spans, inline_boxes),
+            };
+
+            let mut builder = layout_cx.ranged_builder(&mut font_cx, eff_text, 1.0, true);
             builder.push_default(StyleProperty::FontSize(size));
             if (weight - 400.0).abs() > 1.0 {
                 builder.push_default(StyleProperty::FontWeight(FontWeight::new(weight)));
@@ -315,8 +616,8 @@ pub fn measure_rich_text_bounds_with_boxes(
                     builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
                 }
             }
-            for span in spans {
-                if !span.range.is_empty() && span.range.end <= text.len() {
+            for span in eff_spans {
+                if !span.range.is_empty() && span.range.end <= eff_text.len() {
                     if let Some(sz) = span.style.font_size {
                         if sz > 0.0 {
                             builder.push(StyleProperty::FontSize(sz as f32), span.range.clone());
@@ -337,17 +638,17 @@ pub fn measure_rich_text_bounds_with_boxes(
                     }
                 }
             }
-            for ib in inline_boxes {
+            for ib in eff_boxes {
                 builder.push_inline_box(parley::InlineBox {
                     id: ib.node_id.0 as u64,
                     kind: parley::InlineBoxKind::InFlow,
-                    index: ib.index.min(text.len()),
+                    index: ib.index.min(eff_text.len()),
                     width: ib.width.max(0.0) as f32,
                     height: ib.baseline_offset.max(0.0) as f32,
                 });
             }
 
-            let mut layout = builder.build(text);
+            let mut layout = builder.build(eff_text);
             layout.break_all_lines(max_width.and_then(|w| if w > 0.0 { Some(w as f32) } else { None }));
 
             let width = if max_width.is_some() {
@@ -471,6 +772,7 @@ pub struct ShapedParagraph {
     pub first_top_coord: f64,
     pub last_bottom_coord: f64,
     pub full_y_offset: f64,
+    pub byte_deltas: Vec<(usize, isize)>,
 }
 
 impl ShapedParagraph {
@@ -521,8 +823,8 @@ impl ShapedParagraph {
         let target_byte = text[..clamped]
             .char_indices()
             .rev()
-            .find(|&(_, ch)| !ch.is_whitespace())
-            .map(|(idx, _)| idx);
+            .find(|&(_, ch)| !ch.is_whitespace() && ch != SOFT_HYPHEN)
+            .map(|(idx, _)| map_byte_offset_with_deltas(idx, &self.byte_deltas));
         let Some(anchor_byte) = target_byte else {
             return 0;
         };
@@ -564,6 +866,7 @@ pub fn shape_paragraph_lines(
             first_top_coord: 0.0,
             last_bottom_coord: 0.0,
             full_y_offset: 0.0,
+            byte_deltas: Vec::new(),
         };
     }
 
@@ -576,7 +879,29 @@ pub fn shape_paragraph_lines(
             let mut font_cx = font_cx_cell.borrow_mut();
             let mut layout_cx = layout_cx_cell.borrow_mut();
 
-            let mut builder = layout_cx.ranged_builder(&mut font_cx, text, 1.0, true);
+            let mat = materialize_soft_hyphens_with_font_cx(
+                &mut font_cx,
+                text,
+                size,
+                weight,
+                font_family,
+                false,
+                line_height,
+                max_width,
+                spans,
+                inline_boxes,
+            );
+            let (eff_text, eff_spans, eff_boxes, byte_deltas) = match &mat {
+                Some(m_rt) => (
+                    m_rt.text.as_str(),
+                    m_rt.spans.as_slice(),
+                    m_rt.inline_boxes.as_slice(),
+                    m_rt.byte_deltas.clone(),
+                ),
+                None => (text, spans, inline_boxes, Vec::new()),
+            };
+
+            let mut builder = layout_cx.ranged_builder(&mut font_cx, eff_text, 1.0, true);
             builder.push_default(StyleProperty::FontSize(size));
             if (weight - 400.0).abs() > 1.0 {
                 builder.push_default(StyleProperty::FontWeight(FontWeight::new(weight)));
@@ -593,8 +918,8 @@ pub fn shape_paragraph_lines(
                     ));
                 }
             }
-            for span in spans {
-                if !span.range.is_empty() && span.range.end <= text.len() {
+            for span in eff_spans {
+                if !span.range.is_empty() && span.range.end <= eff_text.len() {
                     if let Some(sz) = span.style.font_size {
                         if sz > 0.0 {
                             builder.push(StyleProperty::FontSize(sz as f32), span.range.clone());
@@ -615,17 +940,17 @@ pub fn shape_paragraph_lines(
                     }
                 }
             }
-            for ib in inline_boxes {
+            for ib in eff_boxes {
                 builder.push_inline_box(parley::InlineBox {
                     id: ib.node_id.0 as u64,
                     kind: parley::InlineBoxKind::InFlow,
-                    index: ib.index.min(text.len()),
+                    index: ib.index.min(eff_text.len()),
                     width: ib.width.max(0.0) as f32,
                     height: ib.baseline_offset.max(0.0) as f32,
                 });
             }
 
-            let mut layout = builder.build(text);
+            let mut layout = builder.build(eff_text);
             layout.break_all_lines(max_width.and_then(|w| if w > 0.0 { Some(w as f32) } else { None }));
             let alignment = match align {
                 Some("center") | Some("Center") => parley::Alignment::Center,
@@ -741,7 +1066,7 @@ pub fn shape_paragraph_lines(
                             byte_end = byte_end.max(r.end);
                         }
                         parley::layout::PositionedLayoutItem::InlineBox(pib) => {
-                            if let Some((ib_idx, ib)) = inline_boxes
+                            if let Some((ib_idx, ib)) = eff_boxes
                                 .iter()
                                 .enumerate()
                                 .find(|(_, b)| b.node_id.0 as u64 == pib.id)
@@ -793,6 +1118,7 @@ pub fn shape_paragraph_lines(
                 first_top_coord: top_coord,
                 last_bottom_coord: bottom_coord,
                 full_y_offset: -top_coord,
+                byte_deltas,
             }
         })
     })
@@ -1129,7 +1455,24 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
         let mut font_cx = font_cx_cell.borrow_mut();
         let mut layout_cx = LayoutContext::<[u8; 4]>::new();
 
-        let mut builder = layout_cx.ranged_builder(&mut font_cx, text, 1.0, true);
+        let mat = materialize_soft_hyphens_with_font_cx(
+            &mut font_cx,
+            text,
+            size,
+            weight,
+            font_family,
+            false,
+            line_height,
+            max_width,
+            spans,
+            inline_boxes,
+        );
+        let (eff_text, eff_spans, eff_boxes) = match &mat {
+            Some(m_rt) => (m_rt.text.as_str(), m_rt.spans.as_slice(), m_rt.inline_boxes.as_slice()),
+            None => (text, spans, inline_boxes),
+        };
+
+        let mut builder = layout_cx.ranged_builder(&mut font_cx, eff_text, 1.0, true);
         builder.push_default(StyleProperty::FontSize(size));
         builder.push_default(StyleProperty::Brush([0u8, 0u8, 0u8, 255u8]));
         if (weight - 400.0).abs() > 1.0 {
@@ -1145,8 +1488,8 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
                 builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
             }
         }
-        for (idx, span) in spans.iter().enumerate() {
-            if !span.range.is_empty() && span.range.end <= text.len() {
+        for (idx, span) in eff_spans.iter().enumerate() {
+            if !span.range.is_empty() && span.range.end <= eff_text.len() {
                 let brush_id = ((idx + 1) % 250 + 1) as u8;
                 builder.push(StyleProperty::Brush([brush_id, 0, 0, 255]), span.range.clone());
                 if let Some(sz) = span.style.font_size {
@@ -1172,17 +1515,17 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
                 }
             }
         }
-        for ib in inline_boxes {
+        for ib in eff_boxes {
             builder.push_inline_box(parley::InlineBox {
                 id: ib.node_id.0 as u64,
                 kind: parley::InlineBoxKind::InFlow,
-                index: ib.index.min(text.len()),
+                index: ib.index.min(eff_text.len()),
                 width: ib.width.max(0.0) as f32,
                 height: ib.baseline_offset.max(0.0) as f32,
             });
         }
 
-        let mut layout = builder.build(text);
+        let mut layout = builder.build(eff_text);
         if let Some(w) = max_width {
             if w > 0.0 {
                 layout.break_all_lines(Some(w as f32));
@@ -1398,7 +1741,24 @@ pub fn compute_span_range_metrics_with_boxes(
         let mut font_cx = font_cx_cell.borrow_mut();
         let mut layout_cx = LayoutContext::<[u8; 4]>::new();
 
-        let mut builder = layout_cx.ranged_builder(&mut font_cx, text, 1.0, true);
+        let mat = materialize_soft_hyphens_with_font_cx(
+            &mut font_cx,
+            text,
+            size,
+            weight,
+            font_family,
+            false,
+            line_height,
+            max_width,
+            spans,
+            inline_boxes,
+        );
+        let (eff_text, eff_spans, eff_boxes) = match &mat {
+            Some(m_rt) => (m_rt.text.as_str(), m_rt.spans.as_slice(), m_rt.inline_boxes.as_slice()),
+            None => (text, spans, inline_boxes),
+        };
+
+        let mut builder = layout_cx.ranged_builder(&mut font_cx, eff_text, 1.0, true);
         builder.push_default(StyleProperty::FontSize(size));
         builder.push_default(StyleProperty::Brush([0u8, 0u8, 0u8, 255u8]));
         if (weight - 400.0).abs() > 1.0 {
@@ -1414,8 +1774,8 @@ pub fn compute_span_range_metrics_with_boxes(
                 builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
             }
         }
-        for (idx, span) in spans.iter().enumerate() {
-            if !span.range.is_empty() && span.range.end <= text.len() {
+        for (idx, span) in eff_spans.iter().enumerate() {
+            if !span.range.is_empty() && span.range.end <= eff_text.len() {
                 let brush_id = ((idx + 1) % 250 + 1) as u8;
                 builder.push(StyleProperty::Brush([brush_id, 0, 0, 255]), span.range.clone());
                 if let Some(sz) = span.style.font_size {
@@ -1441,17 +1801,17 @@ pub fn compute_span_range_metrics_with_boxes(
                 }
             }
         }
-        for ib in inline_boxes {
+        for ib in eff_boxes {
             builder.push_inline_box(parley::InlineBox {
                 id: ib.node_id.0 as u64,
                 kind: parley::InlineBoxKind::InFlow,
-                index: ib.index.min(text.len()),
+                index: ib.index.min(eff_text.len()),
                 width: ib.width.max(0.0) as f32,
                 height: ib.baseline_offset.max(0.0) as f32,
             });
         }
 
-        let mut layout = builder.build(text);
+        let mut layout = builder.build(eff_text);
         if let Some(w) = max_width {
             if w > 0.0 {
                 layout.break_all_lines(Some(w as f32));
@@ -1491,7 +1851,7 @@ pub fn compute_span_range_metrics_with_boxes(
                 for item in line.items() {
                     if let parley::layout::PositionedLayoutItem::InlineBox(pib) = item {
                         if pib.id == box_node_id.0 as u64 {
-                            let ib_info = inline_boxes.iter().find(|b| b.node_id == box_node_id);
+                            let ib_info = eff_boxes.iter().find(|b| b.node_id == box_node_id);
                             let b_w = ib_info.map(|b| b.width).unwrap_or(pib.width as f64);
                             let b_h = ib_info.map(|b| b.height).unwrap_or(pib.height as f64);
                             let b_off = ib_info.map(|b| b.baseline_offset).unwrap_or(b_h);
@@ -1507,13 +1867,17 @@ pub fn compute_span_range_metrics_with_boxes(
                 continue;
             }
 
+            let eff_span_range = match &mat {
+                Some(m_rt) => m_rt.map_range(span_range.clone()),
+                None => span_range.clone(),
+            };
             let mut min_gx = f32::MAX;
             let mut max_gx = f32::MIN;
 
-            for (idx, span) in spans.iter().enumerate() {
+            for (idx, span) in eff_spans.iter().enumerate() {
                 if !span.range.is_empty()
-                    && span.range.start >= span_range.start
-                    && span.range.end <= span_range.end
+                    && span.range.start >= eff_span_range.start
+                    && span.range.end <= eff_span_range.end
                 {
                     let expected_brush_id = ((idx + 1) % 250 + 1) as u8;
                     for item in line.items() {
@@ -1939,6 +2303,129 @@ mod tests {
             "Expected span-level monospace to have equal width for 10 'W's ({}) and 10 'i's ({})",
             span_w,
             span_i
+        );
+    }
+
+    #[test]
+    fn test_manual_soft_hyphen_and_nonbreaking_hyphen() {
+        // 1. Parser escapes `\-` -> U+00AD and `\=` -> "\u{2060}-\u{2060}" in both content slots and strings
+        let doc = crate::parse(
+            r#"
+            \Text(text: "cu\-ri\=ouser") {
+                Curiouser and cu\-ri\-ouser with bread\=and\=butter!
+            }
+            "#,
+        )
+        .expect("should parse hyphen escapes");
+        let crate::ast::Item::Node(el) = &doc.items[0] else {
+            panic!("expected element node");
+        };
+        let crate::ast::Expr::Literal(crate::ast::Literal::String(port_str, _)) = &el.ports[0].expr else {
+            panic!("expected string expr");
+        };
+        assert_eq!(port_str, "cu\u{00AD}ri\u{2060}-\u{2060}ouser");
+        let crate::ast::ContentItem::Text(chunk) = &el.content.as_ref().unwrap().items[0] else {
+            panic!("expected text chunk");
+        };
+        assert_eq!(
+            chunk.text,
+            "Curiouser and cu\u{00AD}ri\u{00AD}ouser with bread\u{2060}-\u{2060}and\u{2060}-\u{2060}butter!"
+        );
+
+        // 2. Soft hyphen materialization:
+        //    - Taken break becomes '-' and fits within max_width
+        //    - Untaken soft hyphens are stripped completely
+        //    - Boundary overflow (where syllable fits without '-' but overflows with '-') falls back to earlier syllable
+        let prefix_w = measure_text_width("alpha cu", 16.0, 400.0, Some("Arial"));
+        let prefix_ri_no_hyph = measure_text_width("alpha curi", 16.0, 400.0, Some("Arial"));
+        let prefix_ri_with_hyph = measure_text_width("alpha curi-", 16.0, 400.0, Some("Arial"));
+        assert!(prefix_ri_with_hyph > prefix_ri_no_hyph + 1.0);
+
+        // Width tight enough that "alpha curi" fits WITHOUT '-', but "alpha curi-" overflows -> must fall back to "alpha cu-"!
+        let tight_w = (prefix_ri_no_hyph + prefix_ri_with_hyph) * 0.5;
+        assert!(tight_w > prefix_w + 4.0);
+
+        let raw = "alpha cu\u{00AD}ri\u{00AD}ouser b\u{00AD}c";
+        // Span covering "b\u{00AD}c" at the end (fits on line 1 alongside "riouser ", so untaken!)
+        let bc_start = raw.find("b\u{00AD}c").unwrap();
+        let spans = vec![TextSpan::new(bc_start..raw.len()).with_style(SpanStyle {
+            italic: true,
+            ..Default::default()
+        })];
+
+        FONT_CONTEXT.with(|fc| {
+            let mut font_cx = fc.borrow_mut();
+            let mat = materialize_soft_hyphens_with_font_cx(
+                &mut font_cx,
+                raw,
+                16.0,
+                400.0,
+                Some("Arial"),
+                false,
+                None,
+                Some(tight_w),
+                &spans,
+                &[],
+            )
+            .expect("should materialize soft hyphens");
+
+            assert!(
+                !mat.text.contains('\u{00AD}'),
+                "No raw U+00AD should remain in materialized text: {:?}",
+                mat.text
+            );
+            assert_eq!(
+                mat.text, "alpha cu-riouser bc",
+                "Expected fallback to 'cu-' when 'curi-' overflows tight_w, and untaken soft hyphens stripped"
+            );
+            assert_eq!(
+                &mat.text[mat.spans[0].range.clone()],
+                "bc",
+                "Subsequent span byte range must adjust accurately after taken and stripped soft hyphens"
+            );
+        });
+
+        // 3. Non-breaking hyphen (`\=`) prevents breaking where regular `-` breaks
+        let breakable = "eating bread-and-butter";
+        let nonbreaking = "eating bread\u{2060}-\u{2060}and\u{2060}-\u{2060}butter";
+        let eating_bread_w = measure_text_width("eating bread-", 16.0, 400.0, Some("Arial"));
+        let full_w = measure_text_width(breakable, 16.0, 400.0, Some("Arial"));
+        let mid_w = (eating_bread_w + full_w) * 0.5;
+
+        let shaped_break = shape_paragraph_lines(
+            breakable,
+            16.0,
+            400.0,
+            Some("Arial"),
+            Some(mid_w),
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &[],
+        );
+        let shaped_nb = shape_paragraph_lines(
+            nonbreaking,
+            16.0,
+            400.0,
+            Some("Arial"),
+            Some(mid_w),
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &[],
+        );
+        // `breakable` keeps "eating bread-" on line 0 (`> "eating".len()`), whereas `nonbreaking` pushes the whole compound to line 1
+        assert!(
+            shaped_break.lines[0].byte_range.end > "eating ".len(),
+            "Regular hyphen should break after 'bread-' or 'and-' on line 0"
+        );
+        assert!(
+            shaped_nb.lines[0].byte_range.end <= "eating ".len(),
+            "Non-breaking hyphen must keep 'bread-and-butter' intact on line 1"
         );
     }
 }
