@@ -22,7 +22,7 @@
     env font: Font
 ) {
     \Text(
-        x: x + 215pt,
+        x: x + 225pt,
         y: y + 14pt,
         font: \Font(font: font, size: 7.5pt, line_height: 9pt),
         color: #111111,
@@ -67,7 +67,7 @@
         // ============================================================
         // Page 176 (Verso): Chapter XII Opener (12 lines)
         // ============================================================
-        \FlushPara(font_size: 11.75pt) {
+        \FlushPara {
             “\DropInitial{H}//
             \SmallCaps{ERE}!” cried Alice, quite forgetting in the flurry of the
             moment how large she had grown in the last few minutes, and she
@@ -78,7 +78,7 @@
             before.
         }
 
-        \Para(font_size: 11.75pt, align: Align.JustifyAll) {
+        \Para(align: Align.JustifyAll) {
             “Oh, I \Italic{beg} your pardon!” she exclaimed in a tone of great
             dismay, and began picking them up again as quickly as she could, for
             the acci-
@@ -114,7 +114,7 @@
             \Italic{quite} as much use in the trial one way up as the other.”
         }
 
-        \Para(font_size: 11.3pt) {
+        \Para {
             As soon as the jury had a little recovered from the shock of being
             upset, and their slates and pencils had been found and handed back
             to them, they set to work very diligently to write out a history of
@@ -139,7 +139,7 @@
             “Nothing whatever,” said Alice.
         }
 
-        \Para(font_size: 11.3pt) {
+        \Para {
             “That’s very important,” the King said, turn\-ing to the jury. They
             were just beginning to write this down on their slates, when the
             White Rabbit interrupted: “\Italic{Un}important, your Majesty means,
@@ -160,7 +160,7 @@
             slates; “but it doesn’t matter a bit,” she thought to herself.
         }
 
-        \Para(font_size: 11.3pt) {
+        \Para {
             At this moment the King, who had been for some time busily writing
             in his note\=book, called out “Silence!” and read out from his book,
             “Rule Forty\=two. \Italic{All persons more than a mile high to leave
@@ -225,7 +225,7 @@
             “Who is it directed to?” said one of the jurymen.
         }
 
-        \Para(font_size: 11.3pt) {
+        \Para {
             “It isn’t directed at all,” said the White Rabbit; “in fact, there’s
             nothing written on the \Italic{outside.}” He unfolded the paper as
             he spoke, and added “It isn’t a letter, after all: it’s a set of
@@ -252,7 +252,7 @@
             can’t prove I did: there’s no name signed at the end.”
         }
 
-        \Para(font_size: 11.3pt) {
+        \Para {
             “If you didn’t sign it,” said the King, “that only makes the matter
             worse. You \Italic{must} have meant some mischief, or else you’d
             have signed your name like an honest man.”
@@ -286,7 +286,7 @@
             come to the end: then stop.”
         }
 
-        \Para(font_size: 11.1pt) {
+        \Para {
             These were the verses the White Rabbit read:—
         }
 
@@ -374,8 +374,8 @@
         }
 
         \Para {
-            “All right, so far,” said the King, and he went on muttering over
-            the verses to himself: “‘\Italic{We know it to be true—}’ that’s the
+            “All right, so far,” said the King, and he went on mut\-ter\-ing over
+            the verses to him\-self: “‘\Italic{We know it to be true—}’ that’s the
             jury, of course—‘\Italic{I gave her one, they gave him two—}’ why,
             that must be what he did with the tarts, you know——”
         }
@@ -391,19 +391,19 @@
         // ============================================================
         \WrapLeftStack(
             src: "images/tenniel_41.png",
-            img_offset_x: -3.75pt,
+            img_offset_x: -9.5pt,
             img_offset_y: 9pt,
-            narrow_x: 126pt,
+            narrow_x: 129pt,
             min_grid_lines: 19.0,
             break_before: Break.Page
         ) {
-            \Para(font_size: 11.2pt) {
+            \Para {
                 “Why, there they are!” said the King tri\-um\-phantly, point\-ing to
                 the tarts on the table. “Noth\-ing can be clear\-er than
                 \Italic{that.} Then again—‘\Italic{before she had this fit—}’
                 you never had fits, my dear, I think?” he said to the Queen.
             }
-            \Para(font_size: 11.2pt, align: Align.JustifyAll) {
+            \Para(align: Align.JustifyAll) {
                 “Never!” said the Queen fu\-ri\-ously, throw-
             }
         }
@@ -518,7 +518,7 @@
             alive with the strange creatures of her little sister’s dream.
         }
 
-        \Para(font_size: 11.65pt) {
+        \Para {
             The long grass rustled at her feet as the White Rabbit hurried
             by—the frightened Mouse splashed his way through the neighbouring
             pool—she could hear the rattle of the teacups as the March Hare and

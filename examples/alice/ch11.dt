@@ -265,18 +265,18 @@
 
         \WrapLeftStack(
             src: "images/tenniel_38.png",
-            img_offset_x: -0.4pt,
+            img_offset_x: -3pt,
             img_offset_y: 12pt,
-            narrow_x: 147pt
+            narrow_x: 151pt
         ) {
-            \FlushPara(font_size: 10.9pt) {
+            \FlushPara {
                 trembled so, that he shook both his shoes off.
             }
-            \Para(font_size: 10.9pt) {
+            \Para {
                 “Give your evi\-dence,” the King re\-peated an\-grily, “or I’ll have
                 you execu\-ted, wheth\-er you’re ner\-vous or not.”
             }
-            \Para(font_size: 10.9pt, align: Align.JustifyAll) {
+            \Para(align: Align.JustifyAll) {
                 “I’m a poor man, your Maj\-esty,” the Hatter began, in a trem\-bling
                 voice,
             }
@@ -284,7 +284,7 @@
 
         \FlushPara {
             “and I hadn’t but just begun my tea—not above a week or so—and what
-            with the bread-and\=butter getting so thin—and the twinkling of the
+            with the bread-and\=butter get\-ting so thin—and the twin\-kling of the
             tea——”
         }
 

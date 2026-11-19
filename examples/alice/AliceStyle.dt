@@ -1,6 +1,6 @@
 // Alice's Adventures in Wonderland — 1865 Macmillan Crown Octavo Stylesheet
-// Page trim: 348pt x 514pt (4.833in x 7.139in)
-// Type block: 250pt measure x 22 lines at 17.1pt leading (zero paragraph gap, 16pt first-line indent)
+// Page trim: 365pt x 540pt (5.07in x 7.50in Crown Octavo)
+// Type block: 257.5pt (+3.0%) measure x 22 lines at 18.0pt leading (12pt Old Standard TT, 190 DPI engravings)
 
 \use "components/Align.dt"
 \use "components/TextBounds.dt"
@@ -74,10 +74,10 @@
     \Children
 }
 
-// Centered DPI-sized illustration block compatible with VStackStretch (preserves intrinsic 200 DPI size)
+// Centered DPI-sized illustration block compatible with VStackStretch (preserves intrinsic 190 DPI size)
 \Component CenteredPlate(
     src: Path,
-    dpi: Float = 200.0,
+    dpi: Float = 190.0,
     top_pad: Distance = 0pt,
     bottom_pad: Distance = 0pt,
     shift_x: Distance = 0pt,
@@ -98,7 +98,7 @@
     \alias bottom: Distance = y + height;
 }
 
-// Top-of-page wood-engraving locked to an integer number of 17.1pt grid lines
+// Top-of-page wood-engraving locked to an integer number of 18.0pt grid lines
 \Component TopPlate(
     src: Path,
     grid_lines: Float,
@@ -114,15 +114,15 @@
         src: src,
         x: x + (width - img.width) * 0.5 + shift_x,
         y: y + img_top,
-        dpi: 200.0
+        dpi: 190.0
     );
 
     \alias right: Distance = x + width;
-    \alias height: Distance = grid_lines * 17.1pt;
+    \alias height: Distance = grid_lines * 18.0pt;
     \alias bottom: Distance = y + height;
 }
 
-// Mid-page wood-engraving locked to an integer number of 17.1pt grid lines
+// Mid-page wood-engraving locked to an integer number of 18.0pt grid lines
 \Component MidPlate(
     src: Path,
     grid_lines: Float,
@@ -137,11 +137,11 @@
         src: src,
         x: x + (width - img.width) * 0.5 + shift_x,
         y: y + img_top,
-        dpi: 200.0
+        dpi: 190.0
     );
 
     \alias right: Distance = x + width;
-    \alias height: Distance = grid_lines * 17.1pt;
+    \alias height: Distance = grid_lines * 18.0pt;
     \alias bottom: Distance = y + height;
 }
 
@@ -150,7 +150,7 @@
     src: Path,
     img_offset_x: Distance = 1pt,
     img_offset_y: Distance = 9pt,
-    narrow_x: Distance = 175pt,
+    narrow_x: Distance = 180pt,
     align: Align = Align.JustifyAll,
     x: Distance = parent.left,
     y: Distance = parent.top,
@@ -163,7 +163,7 @@
         src: src,
         x: x + img_offset_x,
         y: y + img_offset_y,
-        dpi: 200.0
+        dpi: 190.0
     )
 
     \let t = \Text(
@@ -191,7 +191,7 @@
     src: Path,
     img_offset_x: Distance = 0pt,
     img_offset_y: Distance = 6pt,
-    narrow_x: Distance = 150pt,
+    narrow_x: Distance = 156pt,
     top_blank_lines: Float = 0.0,
     min_grid_lines: Float = 0.0,
     break_before: Break = Break.Auto,
@@ -205,10 +205,10 @@
         src: src,
         x: x + img_offset_x,
         y: y + img_offset_y,
-        dpi: 200.0
+        dpi: 190.0
     )
 
-    \let top_pad = top_blank_lines * 17.1pt;
+    \let top_pad = top_blank_lines * 18.0pt;
     \let col = \VStackStretch(
         x: x + narrow_x,
         y: y + top_pad,
@@ -220,7 +220,7 @@
     };
 
     \let natural_h = top_pad + col.height;
-    \let min_h = min_grid_lines * 17.1pt;
+    \let min_h = min_grid_lines * 18.0pt;
 
     \alias right: Distance = x + width;
     \alias height: Distance = natural_h > min_h ? natural_h : min_h;
@@ -230,9 +230,9 @@
 // Right-aligned wood-engraving with narrow justified text wrapped along its left side
 \Component WrapRight(
     src: Path,
-    img_right_bleed: Distance = 3.5pt,
+    img_right_bleed: Distance = 4pt,
     img_offset_y: Distance = 7pt,
-    narrow_width: Distance = 96pt,
+    narrow_width: Distance = 113pt,
     align: Align = Align.JustifyAll,
     x: Distance = parent.left,
     y: Distance = parent.top,
@@ -245,7 +245,7 @@
         src: src,
         x: x + width + img_right_bleed - img.width,
         y: y + img_offset_y,
-        dpi: 200.0
+        dpi: 190.0
     );
 
     \let t = \Text(
@@ -265,10 +265,10 @@
     \alias bottom: Distance = y + height;
 }
 
-// Staggered 4-3-4 asterisk transformation break occupying exact 3 grid lines (3 * 17.1pt = 51.3pt)
+// Staggered 4-3-4 asterisk transformation break occupying exact 3 grid lines (3 * 18.0pt = 54.0pt)
 \Component Asterism(
-    step: Distance = 54pt,
-    line_step: Distance = 17.1pt,
+    step: Distance = 56pt,
+    line_step: Distance = 18.0pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
@@ -305,8 +305,8 @@
 
 // Staggered 5-4-5 asterisk break on p. 69 occupying exact 3 grid lines
 \Component Asterism545(
-    step: Distance = 48pt,
-    line_step: Distance = 17.1pt,
+    step: Distance = 50pt,
+    line_step: Distance = 18.0pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
@@ -344,24 +344,22 @@
     \alias bottom: Distance = y + height;
 }
 
-// Standard justified body paragraph locked to the 17.1pt baseline grid with 16pt first-line indent
+// Standard justified body paragraph locked to the 18.0pt baseline grid with 16pt first-line indent
 \Component Para(
     indent: Distance = 16pt,
     align: Align = Align.Justify,
-    font_size: Distance = 0pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true),
     env font: Font
 ) {
-    \env font = \Font(font: self.font, size: font_size > 0pt ? font_size : self.font.size, line_height: self.font.line_height);
     \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let t = \Text(
         x: x,
         y: y,
         width: width,
-        font: \Font(font: self.font, size: font_size > 0pt ? font_size : self.font.size, line_height: self.font.line_height),
+        font: font,
         color: #111111,
         align: align,
         text_bounds: grid_bounds,
@@ -379,20 +377,18 @@
 // Flush-left paragraph (used for chapter openings and continuations after display/wrap blocks)
 \Component FlushPara(
     align: Align = Align.Justify,
-    font_size: Distance = 0pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true),
     env font: Font
 ) {
-    \env font = \Font(font: self.font, size: font_size > 0pt ? font_size : self.font.size, line_height: self.font.line_height);
     \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let t = \Text(
         x: x,
         y: y,
         width: width,
-        font: \Font(font: self.font, size: font_size > 0pt ? font_size : self.font.size, line_height: self.font.line_height),
+        font: font,
         color: #111111,
         align: align,
         text_bounds: grid_bounds,
@@ -425,10 +421,10 @@
     \alias bottom: Distance = y + height;
 }
 
-// Unbreakable poem page container that scopes a custom font size/leading to its children
+// Unbreakable poem page container that scopes 10pt verse font and leading to its children
 \Component PoemBlock(
-    size: Distance = 9.5pt,
-    leading: Distance = 16.2pt,
+    size: Distance = 10pt,
+    leading: Distance = 16.5pt,
     italic: Boolean = false,
     break_before: Break = Break.Auto,
     x: Distance = parent.left,
@@ -479,10 +475,10 @@
     number: String,
     title: String,
     img_src: Path,
-    total_height: Distance = 290.7pt,
-    img_top: Distance = 7.5pt,
-    ch_gap: Distance = 15.5pt,
-    sub_gap: Distance = 21pt,
+    total_height: Distance = 306.0pt,
+    img_top: Distance = 8pt,
+    ch_gap: Distance = 16pt,
+    sub_gap: Distance = 22pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
@@ -493,7 +489,7 @@
         src: img_src,
         x: x + (width - art.width) * 0.5,
         y: y + img_top,
-        dpi: 200.0
+        dpi: 190.0
     );
 
     \let ch_label = \Text(
@@ -527,8 +523,8 @@
     title: String,
     title_punct: String = ".",
     grid_lines: Float = 10.0,
-    ch_top: Distance = 112pt,
-    sub_gap: Distance = 18pt,
+    ch_top: Distance = 118pt,
+    sub_gap: Distance = 19pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
@@ -556,7 +552,7 @@
     )
 
     \alias right: Distance = x + width;
-    \alias height: Distance = grid_lines * 17.1pt;
+    \alias height: Distance = grid_lines * 18.0pt;
     \alias bottom: Distance = y + height;
 }
 
@@ -565,7 +561,8 @@
     number: String,
     title: String,
     img_src: Path,
-    narrow_x: Distance = 142.25pt,
+    img_offset_x: Distance = -4pt,
+    narrow_x: Distance = 149pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
@@ -577,14 +574,14 @@
 
     \Image(
         src: img_src,
-        x: x + 1pt,
-        y: y + 20pt,
-        dpi: 200.0
+        x: x + img_offset_x,
+        y: y + 21pt,
+        dpi: 190.0
     )
 
     \Text(
         x: x + narrow_x,
-        y: y + 16pt,
+        y: y + 17pt,
         width: col_w,
         font: \Font(font: font, size: 12.5pt),
         color: #111111,
@@ -594,7 +591,7 @@
 
     \Text(
         x: x + narrow_x,
-        y: y + 52pt,
+        y: y + 55pt,
         width: col_w,
         font: \Font(font: font, size: 8.25pt),
         color: #111111,
@@ -602,12 +599,11 @@
         text: title + "."
     )
 
-    \let opener_font = \Font(font: font, size: 10.65pt, line_height: font.line_height);
     \let t = \Text(
         x: x + narrow_x,
-        y: y + 85.5pt,
+        y: y + 90.0pt,
         width: col_w,
-        font: opener_font,
+        font: font,
         color: #111111,
         align: Align.JustifyAll,
         text_bounds: grid_bounds
@@ -617,7 +613,7 @@
     };
 
     \alias right: Distance = x + width;
-    \alias height: Distance = 22.0 * 17.1pt;
+    \alias height: Distance = 22.0 * 18.0pt;
     \alias bottom: Distance = y + height;
 }
 
@@ -669,10 +665,10 @@
     verso_header: String,
     recto_header: String,
     img_src: Path,
-    header_height: Distance = 290.7pt,
-    img_top: Distance = 7.5pt,
-    ch_gap: Distance = 15.5pt,
-    sub_gap: Distance = 21pt,
+    header_height: Distance = 306.0pt,
+    img_top: Distance = 8pt,
+    ch_gap: Distance = 16pt,
+    sub_gap: Distance = 22pt,
     break_before: Break = Break.Page,
     x: Distance = parent.left,
     y: Distance = parent.top,
@@ -728,8 +724,8 @@
     recto_header: String,
     full_header: String = "",
     header_lines: Float = 10.0,
-    ch_top: Distance = 112pt,
-    sub_gap: Distance = 18pt,
+    ch_top: Distance = 118pt,
+    sub_gap: Distance = 19pt,
     break_before: Break = Break.Page,
     x: Distance = parent.left,
     y: Distance = parent.top,
@@ -778,15 +774,15 @@
 
 // 1865 Macmillan Crown Octavo Page Template
 \Component AlicePage(
-    width: Distance = 348pt,
-    height: Distance = 514pt,
+    width: Distance = 365pt,
+    height: Distance = 540pt,
     x: Distance = page.left,
     y: Distance = page.top,
-    margin_inner: Distance = 48.25pt,
-    margin_outer: Distance = 49.75pt,
-    header_y: Distance = 47.5pt,
-    body_top: Distance = 64.0pt,
-    flow_height: Distance = 377.2pt,
+    margin_inner: Distance = 53.0pt,
+    margin_outer: Distance = 54.5pt,
+    header_y: Distance = 50.0pt,
+    body_top: Distance = 67.4pt,
+    flow_height: Distance = 397.0pt,
     folio_offset: Integer = 10,
     page_bg: Color = #fdfcf8,
     env font: Font,
@@ -866,7 +862,7 @@
         text: folio_text
     )
 
-    // 22-line body region (22 * 17.1pt = 376.2pt)
+    // 22-line body region (22 * 18.0pt = 396.0pt)
     \FlowBody(
         x: body_x,
         y: y + body_top,
@@ -895,7 +891,7 @@
 
     \Text(
         x: body_x,
-        y: y + body_top + 376.2pt + 8pt,
+        y: y + body_top + 396.0pt + 8.5pt,
         width: body_width,
         font: folio_font,
         color: #111111,
@@ -911,8 +907,8 @@
     page_gap: Distance = 12pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    font_size: Distance = 11.95pt,
-    line_height: Distance = 17.1pt
+    font_size: Distance = 12.0pt,
+    line_height: Distance = 18.0pt
 ) {
     \let body_font = \Font(family: "Old Standard TT", size: font_size, line_height: line_height);
     \env font = body_font;
@@ -929,7 +925,7 @@
         page: \AlicePage(folio_offset: folio_offset)
     ) {
         \VStackStretch(
-            width: 250pt,
+            width: 257.5pt,
             gap: 0pt,
             pagination: \Pagination(breakable: true)
         ) {

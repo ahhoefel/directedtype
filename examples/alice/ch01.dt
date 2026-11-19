@@ -174,7 +174,7 @@
             the second time round, she came
         }
 
-        \WrapLeft(src: "images/tenniel_03.png", narrow_x: 170.5pt, img_offset_y: 9pt) {
+        \WrapLeft(src: "images/tenniel_03.png", img_offset_x: -6pt, narrow_x: 176pt, img_offset_y: 9pt) {
             upon a low cur\-tain she had not no\-ticed be\-fore, and be\-hind it was a
             lit\-tle door about fif\-teen inches high: she tried the lit\-tle gold\-en key in
             the
@@ -225,11 +225,11 @@
             in a hurry: “no, I’ll look first,” she said,
         }
 
-        \WrapRight(src: "images/tenniel_04.png", narrow_width: 109.5pt, img_right_bleed: 8pt, img_offset_y: 7pt) {
+        \WrapRight(src: "images/tenniel_04.png", narrow_width: 108pt, img_right_bleed: 11pt, img_offset_y: 7pt) {
             “and see wheth\-er it’s marked ‘\Italic{poison}’ or not:” for she had read
-            sev\-eral nice lit\-tle sto\-ries about chil\-dren who had got burnt, and eaten
+            sev\-eral nice lit\-tle sto\-ries about chil\-dren who had got burnt, and eat\-en
             up by wild beasts, and other un\-pleas\-ant things, all be\-cause they
-            \Italic{would} not re\-member the sim\-ple rules their friends
+            \Italic{would} not re\-mem\-ber the sim\-ple rules their friends
         }
 
         \FlushPara {

@@ -58,7 +58,7 @@
         // ============================================================
         // Page 76 (Verso): Chapter VI Opener (12 lines)
         // ============================================================
-        \FlushPara(align: Align.JustifyAll, font_size: 11.75pt) {
+        \FlushPara(align: Align.JustifyAll) {
             \DropInitial{F}//
             \SmallCaps{OR} a minute or two she stood looking at the house, and
             wondering what to do next, when suddenly a footman in livery came
@@ -392,17 +392,17 @@
 
         \WrapLeftStack(
             src: "images/tenniel_22.png",
-            img_offset_x: -3pt,
+            img_offset_x: -5.5pt,
             img_offset_y: 4pt,
-            narrow_x: 147pt
+            narrow_x: 151pt
         ) {
-            \FlushPara(font_size: 11.4pt) {
+            \FlushPara {
                 so vio\-lently, that she looked down into its face in some alarm.
                 This time there could be \Italic{no} mis\-take about it: it was
                 nei\-ther more nor less than a pig, and she felt that it would be
                 quite ab\-surd for her to car\-ry it any fur\-ther.
             }
-            \Para(font_size: 11.4pt, align: Align.JustifyAll) {
+            \Para(align: Align.JustifyAll) {
                 So she set the
             }
         }
@@ -505,22 +505,22 @@
         // ============================================================
         \WrapLeftStack(
             src: "images/tenniel_23.png",
-            img_offset_x: -4pt,
+            img_offset_x: -6pt,
             img_offset_y: 7pt,
-            narrow_x: 111.5pt,
+            narrow_x: 114pt,
             top_blank_lines: 10.0,
             break_before: Break.Page
         ) {
-            \Para(font_size: 11.1pt) {
+            \Para {
                 “Well, then,” the Cat went on, “you see, a dog growls when it’s
                 angry, and wags its tail when it’s pleased. Now \Italic{I} growl
                 when I’m pleased, and wag my tail when I’m angry. There\-fore I’m
                 mad.”
             }
-            \Para(font_size: 11.1pt) {
+            \Para {
                 “\Italic{I} call it pur\-ring, not growl\-ing,” said Alice.
             }
-            \Para(font_size: 11.1pt, align: Align.JustifyAll) {
+            \Para(align: Align.JustifyAll) {
                 “Call it what you like,” said the Cat. “Do you
             }
         }

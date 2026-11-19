@@ -192,7 +192,7 @@
             src: "images/tenniel_12.png",
             img_offset_x: -1pt,
             img_offset_y: 4pt,
-            narrow_x: 147pt,
+            narrow_x: 154.5pt,
             align: Align.Justify
         ) {
             out her hand, and made a snatch in the air. She did not get hold of
@@ -237,7 +237,7 @@
             away!”
         }
 
-        \Para(font_size: 11.1pt) {
+        \Para {
             There was a long silence after this, and Alice could only hear
             whispers now and then; such as, “Sure, I don’t like it, yer honour,
             at all, at all!” “Do as I tell you, you coward!” and at last she
@@ -249,7 +249,7 @@
             don’t want to stay in here any longer!”
         }
 
-        \Para(font_size: 11.1pt) {
+        \Para {
             She waited for some time without hearing anything more: at last came
             a rumbling of little cartwheels, and the sound of a good many voices
             all talking together: she made out the words: “Where’s the other
@@ -277,21 +277,21 @@
             src: "images/tenniel_13.png",
             img_offset_x: -6pt,
             img_offset_y: 12pt,
-            narrow_x: 122pt,
+            narrow_x: 128.5pt,
             break_before: Break.Page
         ) {
-            \FlushPara(font_size: 11.0pt) {
+            \FlushPara {
                 this fire\-place is nar\-row, to be sure; but I \Italic{think} I can
                 kick a lit\-tle!”
             }
-            \Para(font_size: 11.0pt) {
+            \Para {
                 She drew her foot as far down the chim\-ney as she could, and
                 wait\-ed till she heard a lit\-tle ani\-mal (she couldn’t guess of
                 what sort it was) scratch\-ing and scram\-bling about in the chim\-ney
                 close above her: then, say\-ing to her\-self, “This is Bill,” she
                 gave one sharp kick, and wait\-ed to see what would hap\-pen next.
             }
-            \Para(font_size: 11.0pt, align: Align.JustifyAll) {
+            \Para(align: Align.JustifyAll) {
                 The first thing she heard was a gen\-eral cho\-rus of “There goes
                 Bill!” then the Rab\-bit’s voice alone—“Catch him, you by the
                 hedge!” then

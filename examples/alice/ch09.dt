@@ -85,14 +85,14 @@
             src: "images/tenniel_32.png",
             img_offset_x: -1.6pt,
             img_offset_y: 4pt,
-            narrow_x: 161pt
+            narrow_x: 169.5pt
         ) {
-            \FlushPara(font_size: 11.3pt) {
+            \FlushPara {
                 right height to rest her chin upon Alice’s shoul\-der, and it was
                 an un\-comfortably sharp chin. How\-ever, she did not like to be
                 rude, so she bore it as well as she could.
             }
-            \Para(font_size: 11.3pt, align: Align.JustifyAll) {
+            \Para(align: Align.JustifyAll) {
                 “The game’s going on rather better now,” she said, by way of
             }
         }
@@ -168,7 +168,7 @@
             remark, “it’s a veget\-able. It doesn’t look like one, but it is.”
         }
 
-        \Para(font_size: 11.2pt) {
+        \Para {
             “I quite agree with you,” said the Duchess; “and the moral of that
             is—‘Be what you would seem to be’—or if you’d like it put more
             simply—‘Never imagine yourself not to be otherwise than what it
@@ -219,7 +219,7 @@
             and the m——”
         }
 
-        \Para(font_size: 11.2pt) {
+        \Para {
             But here, to Alice’s great surprise, the Duchess’s voice died away,
             even in the middle of her favourite word ‘moral,’ and the arm that
             was linked into hers began to tremble. Alice looked up, and there
@@ -254,7 +254,7 @@
             delay would cost them their lives.
         }
 
-        \Para(font_size: 11.15pt) {
+        \Para {
             All the time they were playing the Queen never left off quarrelling
             with the other players, and shouting “Off with his head!” or “Off
             with her head!” Those whom she sentenced were taken into custody by
@@ -286,7 +286,7 @@
             history.”
         }
 
-        \Para(font_size: 11.2pt) {
+        \Para {
             As they walked off together, Alice heard the King say in a low
             voice, to the company gener\-ally, “You are all pardoned.” “Come,
             \Italic{that’s} a good thing!” she said to herself, for she had felt
@@ -298,7 +298,7 @@
         // ============================================================
         \TopPlate(src: "images/tenniel_33.png", grid_lines: 12.0, img_top: 16pt)
 
-        \Para(font_size: 11.4pt) {
+        \Para {
             They very soon came upon a Gryphon, lying fast asleep in the sun.
             (If you don’t know what a Gryphon is, look at the picture.) “Up,
             lazy thing!” said the Queen, “and take this young lady to see the

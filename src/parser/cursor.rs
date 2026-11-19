@@ -499,6 +499,24 @@ impl<'a> ParserCursor<'a> {
                 continue;
             }
 
+            // Prevent UAX #14 (`B2`) from breaking before a trailing em-dash run immediately
+            // followed by closing quotation marks (e.g. `Off——”` or `Northumbria—’”`),
+            // while still allowing `word— / word` breaks after internal em-dashes.
+            if rem.starts_with('\u{2014}') {
+                let prev_non_ws = raw_buf
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| !c.is_whitespace() && c != '\u{2014}' && c != '\u{2060}');
+                let after_dashes = rem.trim_start_matches('\u{2014}');
+                let followed_by_close_quote = after_dashes
+                    .chars()
+                    .next()
+                    .is_some_and(|c| matches!(c, '”' | '’' | '"' | '\''));
+                if prev_non_ws && followed_by_close_quote {
+                    raw_buf.push('\u{2060}');
+                }
+            }
+
             // Regular text character (in ContentSlot mode)
             let ch = rem.chars().next().unwrap();
             raw_buf.push(ch);

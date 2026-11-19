@@ -36,7 +36,7 @@
             narrow_x: 141.5pt
         ) {
             “Cu\-ri\-ouser and cu\-riouser!” cried Alice (she was so much sur\-prised,
-            that for the moment she quite for\-got how to speak good Eng\-lish);
+            that for the mo\-ment she quite for\-got how to speak good Eng\-lish);
             “now I’m open\-ing out like the larg\-est tele\-scope that ever was!
             Good\=bye, feet!” (for when she looked down at her feet, they seemed
             to be al\-most out of sight, they were get\-ting so far off) “Oh, my
@@ -46,40 +46,40 @@
         // ============================================================
         // Page 16 (Verso): Continuation + Stepped Foot Address
         // ============================================================
-        \FlushPara(font_size: 11.7pt) {
-            who will put on your shoes and stockings for you now, dears? I’m
+        \FlushPara {
+            who will put on your shoes and stock\-ings for you now, dears? I’m
             sure \Italic{I} shan’t be able! I shall be a great deal too far off
-            to trouble my\-self about you: you must manage the best way you
-            can;—but I must be kind to them,” thought Alice, “or perhaps they
+            to trou\-ble my\-self about you: you must man\-age the best way you
+            can;—but I must be kind to them,” thought Alice, “or per\-haps they
             won’t walk the way I want to go! Let me see: I’ll give them a new
-            pair of boots every Christmas.”
+            pair of boots every Christ\-mas.”
         }
 
         \Para {
-            And she went on planning to herself how she would manage it. “They
-            must go by the carrier,” she thought; “and how funny it’ll seem,
-            sending presents to one’s own feet! And how odd the directions will
+            And she went on plan\-ning to her\-self how she would man\-age it. “They
+            must go by the car\-rier,” she thought; “and how funny it’ll seem,
+            send\-ing pres\-ents to one’s own feet! And how odd the di\-rec\-tions will
             look!
         }
 
-        // Stepped 4-line address occupying exact 4 grid lines (4 * 17.1pt = 68.4pt)
-        \PoemBlock(size: 10pt, leading: 14pt, italic: true) {
-            \Spacer(height: 6.2pt)
-            \VerseLine(left_margin: 61.5pt) { Alice’s Right Foot, Esq., }
-            \VerseLine(left_margin: 95pt) { Hearthrug, }
-            \VerseLine(left_margin: 113.3pt) { near the Fender, }
-            \VerseLine(left_margin: 132pt) { (with Alice’s love). }
-            \Spacer(height: 6.2pt)
+        // Stepped 4-line address occupying exact 3 grid lines (3 * 18.0pt = 54.0pt)
+        \PoemBlock(size: 10pt, leading: 13pt, italic: true) {
+            \Spacer(height: 1pt)
+            \VerseLine(left_margin: 64pt) { Alice’s Right Foot, Esq., }
+            \VerseLine(left_margin: 99pt) { Hearthrug, }
+            \VerseLine(left_margin: 118pt) { near the Fender, }
+            \VerseLine(left_margin: 138pt) { (with Alice’s love). }
+            \Spacer(height: 1pt)
         }
 
         \FlushPara {
-            Oh dear, what nonsense I’m talking!”
+            Oh dear, what non\-sense I’m talk\-ing!”
         }
 
-        \Para(font_size: 11.3pt) {
-            Just at this moment her head struck against the roof of the hall: in
+        \Para {
+            Just at this mo\-ment her head struck against the roof of the hall: in
             fact she was now rather more than nine feet high, and she at once
-            took up the little golden key and hurried off to the garden door.
+            took up the lit\-tle golden key and hur\-ried off to the gar\-den door.
         }
 
         // ============================================================
@@ -87,26 +87,26 @@
         // ============================================================
         \Para {
             Poor Alice! It was as much as she could do, lying down on one side,
-            to look through into the garden with one eye; but to get through was
-            more hopeless than ever: she sat down and began to cry again.
+            to look through into the gar\-den with one eye; but to get through was
+            more hope\-less than ever: she sat down and began to cry again.
         }
 
         \Para {
-            “You ought to be ashamed of yourself,” said Alice, “a great girl
-            like you,” (she might well say this,) “to go on crying in this way!
-            Stop this moment, I tell you!” But she went on all the same,
-            shedding gallons of tears, until there was a large pool all round
-            her, about four inches deep and reaching half down the hall.
+            “You ought to be ashamed of your\-self,” said Alice, “a great girl
+            like you,” (she might well say this,) “to go on cry\-ing in this way!
+            Stop this mo\-ment, I tell you!” But she went on all the same,
+            shed\-ding gal\-lons of tears, until there was a large pool all round
+            her, about four inches deep and reach\-ing half down the hall.
         }
 
         \Para(align: Align.JustifyAll) {
-            After a time she heard a little pattering of feet in the distance,
-            and she hastily dried her eyes to see what was coming. It was the
-            White Rabbit returning, splendidly dressed, with a pair of white kid
-            gloves in one hand and a large fan in the other: he came trotting
-            along in a great hurry, muttering to himself as he came, “Oh! the
-            Duchess, the Duchess! Oh! won’t she be savage if I’ve kept her
-            waiting!” Alice felt so desperate that she was ready to ask help
+            After a time she heard a lit\-tle pat\-ter\-ing of feet in the dis\-tance,
+            and she has\-tily dried her eyes to see what was com\-ing. It was the
+            White Rab\-bit re\-turn\-ing, splen\-didly dressed, with a pair of white kid
+            gloves in one hand and a large fan in the other: he came trot\-ting
+            along in a great hurry, mut\-ter\-ing to him\-self as he came, “Oh! the
+            Duch\-ess, the Duch\-ess! Oh! won’t she be sav\-age if I’ve kept her
+            wait\-ing!” Alice felt so des\-per\-ate that she was ready to ask help
         }
 
         // ============================================================

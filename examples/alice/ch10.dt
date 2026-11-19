@@ -154,7 +154,7 @@
         // ============================================================
         // Page 151 (Recto): "Will you walk a little faster?" (Stanzas 1 & 2)
         // ============================================================
-        \PoemBlock(size: 9.2pt, leading: 15.8pt, italic: true, break_before: Break.Page) {
+        \PoemBlock(size: 10pt, leading: 16.4pt, italic: true, break_before: Break.Page) {
             \Spacer(height: 3pt)
             \VerseLine(left_margin: 0pt, indent: 0pt) { “Will you walk a little faster?” said a whiting to a snail, }
             \VerseLine(left_margin: 0pt, indent: 0pt) { “There’s a porpoise close behind us, and he’s treading on }
@@ -185,7 +185,7 @@
         // ============================================================
         // Page 152 (Verso): Stanza 3 + Whiting & Porpoise dialogue (pp. 152–156)
         // ============================================================
-        \PoemBlock(size: 9.1pt, leading: 15.8pt, italic: true, break_before: Break.Page) {
+        \PoemBlock(size: 10pt, leading: 16.4pt, italic: true, break_before: Break.Page) {
             \VerseLine(left_margin: 0pt, indent: 0pt) { “What matters it how far we go?” his scaly friend replied. }
             \VerseLine(left_margin: 0pt, indent: 0pt) { “There is another shore, you know, upon the other side. }
             \VerseLine(left_margin: 0pt, indent: 0pt) { The further off from England the nearer is to France— }
@@ -368,11 +368,11 @@
             src: "images/tenniel_36.png",
             img_offset_x: -10.5pt,
             img_offset_y: 3.4pt,
-            narrow_x: 140pt,
+            narrow_x: 147.5pt,
             min_grid_lines: 15.2,
             break_before: Break.Page
         ) {
-            \Para(font_size: 10.9pt) {
+            \Para {
                 “How the crea\-tures order one about, and make one re\-peat
                 les\-sons!” thought Alice; “I might just as well be at school at
                 once.” How\-ever, she got up, and began to re\-peat it, but her head
@@ -381,7 +381,7 @@
             }
         }
 
-        \PoemBlock(size: 9.5pt, leading: 15.2pt, italic: true) {
+        \PoemBlock(size: 10pt, leading: 16.0pt, italic: true) {
             \VerseLine(left_margin: 10pt, indent: 0pt) { “’Tis the voice of the lobster; I heard him declare, }
             \VerseLine(left_margin: 10pt, indent: 0pt) { ‘You have baked me too brown, I must sugar my hair.’ }
             \VerseLine(left_margin: 10pt, indent: 0pt) { As a duck with its eyelids, so he with his nose }

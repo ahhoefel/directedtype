@@ -37,59 +37,59 @@
     env font: Font
 ) {
     // Coordinates mapped directly from 1865 Macmillan Book Page 37 (relative to y after line 2 = 34.2pt)
-    \TailLine(x: x, y: y, dx:  76.7pt, dy:   1.5pt, size: 11.0pt) { a mouse, That }
-    \TailLine(x: x, y: y, dx: 118.7pt, dy:  12.0pt, size: 11.0pt) { he met }
-    \TailLine(x: x, y: y, dx: 130.7pt, dy:  22.5pt, size: 11.0pt) { in the }
-    \TailLine(x: x, y: y, dx: 137.7pt, dy:  33.0pt, size: 11.0pt) { house, }
-    \TailLine(x: x, y: y, dx: 132.7pt, dy:  42.8pt, size: 10.0pt) { ‘Let us }
-    \TailLine(x: x, y: y, dx: 124.7pt, dy:  52.3pt, size: 10.0pt) { both go }
-    \TailLine(x: x, y: y, dx: 114.7pt, dy:  61.8pt, size: 10.0pt) { to law: }
-    \TailLine(x: x, y: y, dx: 105.7pt, dy:  71.3pt, size: 10.0pt) { \Italic{I} will }
-    \TailLine(x: x, y: y, dx:  81.7pt, dy:  80.8pt, size: 10.0pt) { prosecute }
-    \TailLine(x: x, y: y, dx:  76.7pt, dy:  90.3pt, size: 10.0pt) { \Italic{you.}— }
-    \TailLine(x: x, y: y, dx:  80.7pt, dy: 100.3pt, size:  8.2pt) { Come, I’ll }
-    \TailLine(x: x, y: y, dx:  93.7pt, dy: 108.8pt, size:  8.2pt) { take no }
-    \TailLine(x: x, y: y, dx: 102.7pt, dy: 117.3pt, size:  8.2pt) { denial; }
-    \TailLine(x: x, y: y, dx: 115.7pt, dy: 125.8pt, size:  8.2pt) { We must }
-    \TailLine(x: x, y: y, dx: 140.7pt, dy: 134.3pt, size:  8.2pt) { have a }
-    \TailLine(x: x, y: y, dx: 158.7pt, dy: 142.8pt, size:  8.2pt) { trial: }
-    \TailLine(x: x, y: y, dx: 168.7pt, dy: 150.7pt, size:  7.5pt) { For }
-    \TailLine(x: x, y: y, dx: 157.7pt, dy: 158.0pt, size:  7.5pt) { really }
-    \TailLine(x: x, y: y, dx: 151.7pt, dy: 165.3pt, size:  7.5pt) { this }
-    \TailLine(x: x, y: y, dx: 155.7pt, dy: 172.6pt, size:  7.5pt) { morning }
-    \TailLine(x: x, y: y, dx: 171.7pt, dy: 179.9pt, size:  7.5pt) { I’ve }
-    \TailLine(x: x, y: y, dx: 156.7pt, dy: 187.2pt, size:  7.5pt) { nothing }
-    \TailLine(x: x, y: y, dx: 146.7pt, dy: 194.5pt, size:  7.5pt) { to do.’ }
-    \TailLine(x: x, y: y, dx: 132.7pt, dy: 201.5pt, size:  5.8pt) { Said the }
-    \TailLine(x: x, y: y, dx: 124.7pt, dy: 207.3pt, size:  5.8pt) { mouse to }
-    \TailLine(x: x, y: y, dx: 120.7pt, dy: 213.1pt, size:  5.8pt) { the cur, }
-    \TailLine(x: x, y: y, dx: 124.7pt, dy: 218.9pt, size:  5.8pt) { ‘Such a }
-    \TailLine(x: x, y: y, dx: 137.7pt, dy: 224.7pt, size:  5.8pt) { trial, }
-    \TailLine(x: x, y: y, dx: 126.7pt, dy: 230.5pt, size:  5.8pt) { dear sir, }
-    \TailLine(x: x, y: y, dx: 112.7pt, dy: 236.3pt, size:  5.8pt) { With no }
-    \TailLine(x: x, y: y, dx: 103.7pt, dy: 241.8pt, size:  5.8pt) { jury or }
-    \TailLine(x: x, y: y, dx:  98.7pt, dy: 247.3pt, size:  5.8pt) { judge, }
-    \TailLine(x: x, y: y, dx: 103.7pt, dy: 252.8pt, size:  5.8pt) { would be }
-    \TailLine(x: x, y: y, dx: 113.7pt, dy: 258.3pt, size:  5.8pt) { wasting }
-    \TailLine(x: x, y: y, dx: 125.7pt, dy: 263.8pt, size:  5.8pt) { our breath.’ }
-    \TailLine(x: x, y: y, dx: 137.7pt, dy: 269.0pt, size:  5.0pt) { ‘I’ll be }
-    \TailLine(x: x, y: y, dx: 135.7pt, dy: 274.0pt, size:  5.0pt) { judge, }
-    \TailLine(x: x, y: y, dx: 128.2pt, dy: 279.0pt, size:  5.0pt) { I’ll be }
-    \TailLine(x: x, y: y, dx: 120.7pt, dy: 284.0pt, size:  5.0pt) { jury,’ }
-    \TailLine(x: x, y: y, dx: 118.7pt, dy: 289.0pt, size:  5.0pt) { Said }
-    \TailLine(x: x, y: y, dx: 122.7pt, dy: 294.0pt, size:  5.0pt) { cunning }
-    \TailLine(x: x, y: y, dx: 132.2pt, dy: 299.0pt, size:  5.0pt) { old Fury; }
-    \TailLine(x: x, y: y, dx: 141.7pt, dy: 304.0pt, size:  4.6pt) { ‘I’ll try }
-    \TailLine(x: x, y: y, dx: 150.7pt, dy: 309.0pt, size:  4.3pt) { the whole }
-    \TailLine(x: x, y: y, dx: 161.7pt, dy: 313.5pt, size:  4.3pt) { cause, }
-    \TailLine(x: x, y: y, dx: 166.7pt, dy: 318.0pt, size:  4.3pt) { and }
-    \TailLine(x: x, y: y, dx: 156.2pt, dy: 322.5pt, size:  4.3pt) { condemn }
-    \TailLine(x: x, y: y, dx: 154.7pt, dy: 327.0pt, size:  4.3pt) { you }
-    \TailLine(x: x, y: y, dx: 153.2pt, dy: 331.5pt, size:  4.3pt) { to }
-    \TailLine(x: x, y: y, dx: 156.2pt, dy: 336.0pt, size:  4.3pt) { death.’” }
+    \TailLine(x: x, y: y, dx:  80.4pt, dy:   1.6pt, size: 11.0pt) { a mouse, That }
+    \TailLine(x: x, y: y, dx: 124.4pt, dy:  12.6pt, size: 11.0pt) { he met }
+    \TailLine(x: x, y: y, dx: 137.0pt, dy:  23.7pt, size: 11.0pt) { in the }
+    \TailLine(x: x, y: y, dx: 144.3pt, dy:  34.7pt, size: 11.0pt) { house, }
+    \TailLine(x: x, y: y, dx: 139.1pt, dy:  45.1pt, size: 10.0pt) { ‘Let us }
+    \TailLine(x: x, y: y, dx: 130.7pt, dy:  55.1pt, size: 10.0pt) { both go }
+    \TailLine(x: x, y: y, dx: 120.2pt, dy:  65.1pt, size: 10.0pt) { to law: }
+    \TailLine(x: x, y: y, dx: 110.8pt, dy:  75.1pt, size: 10.0pt) { \Italic{I} will }
+    \TailLine(x: x, y: y, dx:  85.6pt, dy:  85.1pt, size: 10.0pt) { prosecute }
+    \TailLine(x: x, y: y, dx:  80.4pt, dy:  95.1pt, size: 10.0pt) { \Italic{you.}— }
+    \TailLine(x: x, y: y, dx:  84.6pt, dy: 105.6pt, size:  8.2pt) { Come, I’ll }
+    \TailLine(x: x, y: y, dx:  98.2pt, dy: 114.5pt, size:  8.2pt) { take no }
+    \TailLine(x: x, y: y, dx: 107.6pt, dy: 123.5pt, size:  8.2pt) { denial; }
+    \TailLine(x: x, y: y, dx: 121.3pt, dy: 132.4pt, size:  8.2pt) { We must }
+    \TailLine(x: x, y: y, dx: 147.5pt, dy: 141.4pt, size:  8.2pt) { have a }
+    \TailLine(x: x, y: y, dx: 166.3pt, dy: 150.3pt, size:  8.2pt) { trial: }
+    \TailLine(x: x, y: y, dx: 176.8pt, dy: 158.6pt, size:  7.5pt) { For }
+    \TailLine(x: x, y: y, dx: 165.3pt, dy: 166.3pt, size:  7.5pt) { really }
+    \TailLine(x: x, y: y, dx: 159.0pt, dy: 174.0pt, size:  7.5pt) { this }
+    \TailLine(x: x, y: y, dx: 163.2pt, dy: 181.7pt, size:  7.5pt) { morning }
+    \TailLine(x: x, y: y, dx: 179.9pt, dy: 189.4pt, size:  7.5pt) { I’ve }
+    \TailLine(x: x, y: y, dx: 164.2pt, dy: 197.1pt, size:  7.5pt) { nothing }
+    \TailLine(x: x, y: y, dx: 153.7pt, dy: 204.7pt, size:  7.5pt) { to do.’ }
+    \TailLine(x: x, y: y, dx: 139.1pt, dy: 212.1pt, size:  5.8pt) { Said the }
+    \TailLine(x: x, y: y, dx: 130.7pt, dy: 218.2pt, size:  5.8pt) { mouse to }
+    \TailLine(x: x, y: y, dx: 126.5pt, dy: 224.3pt, size:  5.8pt) { the cur, }
+    \TailLine(x: x, y: y, dx: 130.7pt, dy: 230.4pt, size:  5.8pt) { ‘Such a }
+    \TailLine(x: x, y: y, dx: 144.3pt, dy: 236.5pt, size:  5.8pt) { trial, }
+    \TailLine(x: x, y: y, dx: 132.8pt, dy: 242.6pt, size:  5.8pt) { dear sir, }
+    \TailLine(x: x, y: y, dx: 118.1pt, dy: 248.7pt, size:  5.8pt) { With no }
+    \TailLine(x: x, y: y, dx: 108.7pt, dy: 254.5pt, size:  5.8pt) { jury or }
+    \TailLine(x: x, y: y, dx: 103.4pt, dy: 260.3pt, size:  5.8pt) { judge, }
+    \TailLine(x: x, y: y, dx: 108.7pt, dy: 266.1pt, size:  5.8pt) { would be }
+    \TailLine(x: x, y: y, dx: 119.2pt, dy: 271.9pt, size:  5.8pt) { wasting }
+    \TailLine(x: x, y: y, dx: 131.7pt, dy: 277.7pt, size:  5.8pt) { our breath.’ }
+    \TailLine(x: x, y: y, dx: 144.3pt, dy: 283.2pt, size:  5.0pt) { ‘I’ll be }
+    \TailLine(x: x, y: y, dx: 142.2pt, dy: 288.4pt, size:  5.0pt) { judge, }
+    \TailLine(x: x, y: y, dx: 134.4pt, dy: 293.7pt, size:  5.0pt) { I’ll be }
+    \TailLine(x: x, y: y, dx: 126.5pt, dy: 298.9pt, size:  5.0pt) { jury,’ }
+    \TailLine(x: x, y: y, dx: 124.4pt, dy: 304.2pt, size:  5.0pt) { Said }
+    \TailLine(x: x, y: y, dx: 128.6pt, dy: 309.5pt, size:  5.0pt) { cunning }
+    \TailLine(x: x, y: y, dx: 138.5pt, dy: 314.7pt, size:  5.0pt) { old Fury; }
+    \TailLine(x: x, y: y, dx: 148.5pt, dy: 320.0pt, size:  4.6pt) { ‘I’ll try }
+    \TailLine(x: x, y: y, dx: 157.9pt, dy: 325.3pt, size:  4.3pt) { the whole }
+    \TailLine(x: x, y: y, dx: 169.5pt, dy: 330.0pt, size:  4.3pt) { cause, }
+    \TailLine(x: x, y: y, dx: 174.7pt, dy: 334.7pt, size:  4.3pt) { and }
+    \TailLine(x: x, y: y, dx: 163.7pt, dy: 339.5pt, size:  4.3pt) { condemn }
+    \TailLine(x: x, y: y, dx: 162.1pt, dy: 344.2pt, size:  4.3pt) { you }
+    \TailLine(x: x, y: y, dx: 160.6pt, dy: 348.9pt, size:  4.3pt) { to }
+    \TailLine(x: x, y: y, dx: 163.7pt, dy: 353.7pt, size:  4.3pt) { death.’” }
 
     \alias right: Distance = x + width;
-    \alias height: Distance = 20.0 * 17.1pt;
+    \alias height: Distance = 20.0 * 18.0pt;
     \alias bottom: Distance = y + height;
 }
 
@@ -112,7 +112,7 @@
         verso_header: "A CAUCUS-RACE",
         recto_header: "AND A LONG TALE.",
         img_src: "images/tenniel_09.png",
-        header_height: 256.5pt,
+        header_height: 270.0pt,
         img_top: -4pt,
         ch_gap: 11pt,
         sub_gap: 16pt,

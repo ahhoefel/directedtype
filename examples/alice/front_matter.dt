@@ -24,16 +24,16 @@
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false, break_before: Break.Verso)
 ) {
-    // 746x1077px at 200 DPI = 268.56pt x 387.72pt, centered optically across the 250pt measure
+    // 746x1077px at 190 DPI = 282.7pt x 408.1pt, centered optically across the 262pt measure
     \let img = \Image(
         src: src,
         x: x + (width - img.width) * 0.5,
-        y: y - 5pt,
-        dpi: 200.0
+        y: y - 6pt,
+        dpi: 190.0
     );
 
     \alias right: Distance = x + width;
-    \alias height: Distance = 372pt;
+    \alias height: Distance = 392pt;
     \alias bottom: Distance = y + height;
 }
 
@@ -233,7 +233,7 @@
         // Page [iv] (Verso): Replacing the 1865 Printer's Imprint
         // ============================================================
         \Center(
-            height: 377.2pt,
+            height: 396pt,
             pagination: \Pagination(breakable: false, break_before: Break.Verso)
         ) {
             \Text(
