@@ -6,7 +6,12 @@ use crate::interaction::Event;
 use std::collections::HashMap;
 
 pub mod wasm;
-pub use wasm::WasmComponent;
+pub use directedtype_guest::dom::{
+    DomError as GuestDomError, DomLinkInfo, HostDomBridge, NodeHandle as GuestNodeHandle,
+    PrepareContext,
+};
+pub use directedtype_guest::Value as GuestValue;
+pub use wasm::{run_wasm_prepare, wasm_has_prepare, PrepareHostState, WasmComponent};
 
 /// The target entity receiving an event dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +47,12 @@ pub enum DispatchError {
     UnsupportedTarget(String),
     #[error("Custom dispatch error: {0}")]
     Custom(String),
+}
+
+impl From<GuestDomError> for DispatchError {
+    fn from(err: GuestDomError) -> Self {
+        DispatchError::Custom(err.to_string())
+    }
 }
 
 /// An action emitted by a component method (e.g. navigation, scrolling, external URL opening).
@@ -553,6 +564,16 @@ impl<'a> Context<'a> {
 /// Encapsulates private state and behavioral methods, communicating with layout
 /// strictly through the One-Way Pipeline (reading ports & emitting state mutations).
 pub trait Component: Send + 'static {
+    /// Returns `true` if this component overrides `on_prepare`.
+    fn has_prepare(&self) -> bool {
+        false
+    }
+
+    /// Pre-layout Component DOM inspection and structural transform pass.
+    fn on_prepare(&mut self, _ctx: &mut PrepareContext<'_>) -> Result<(), DispatchError> {
+        Ok(())
+    }
+
     /// Lifecycle hook invoked when the component is mounted into the document layout.
     fn on_mount(&mut self, _ctx: &mut Context<'_>) {}
 
@@ -604,6 +625,8 @@ pub struct ComponentRegistry {
     path_factories: HashMap<String, ComponentFactory>,
     companion_files: HashMap<String, String>,
     path_companion_files: HashMap<String, String>,
+    wasm_companions: HashMap<String, std::sync::Arc<[u8]>>,
+    wasm_bundles: Vec<(String, std::sync::Arc<[u8]>)>,
 }
 
 impl ComponentRegistry {
@@ -667,8 +690,11 @@ impl ComponentRegistry {
     /// Registers a WebAssembly companion component by reading its `.wasm` bytes.
     pub fn register_wasm(&mut self, name: impl Into<String>, wasm_bytes: Vec<u8>) {
         let name_str = name.into();
+        let bytes_arc: std::sync::Arc<[u8]> = std::sync::Arc::from(wasm_bytes);
+        self.wasm_companions
+            .insert(name_str.clone(), std::sync::Arc::clone(&bytes_arc));
         self.register(name_str, move || {
-            match WasmComponent::from_bytes(&wasm_bytes) {
+            match WasmComponent::from_bytes(&bytes_arc) {
                 Ok(c) => Box::new(c),
                 Err(e) => panic!("Failed to instantiate WASM component: {}", e),
             }
@@ -684,12 +710,66 @@ impl ComponentRegistry {
     ) {
         let name_str = name.into();
         let path_str = companion_path.into();
+        let stem = canonical_companion_stem(&path_str);
+        let qualified = format!("{}::{}", stem, name_str);
+        let bytes_arc: std::sync::Arc<[u8]> = std::sync::Arc::from(wasm_bytes);
+        self.wasm_companions
+            .entry(name_str.clone())
+            .or_insert_with(|| std::sync::Arc::clone(&bytes_arc));
+        self.wasm_companions
+            .insert(stem, std::sync::Arc::clone(&bytes_arc));
+        self.wasm_companions
+            .insert(qualified, std::sync::Arc::clone(&bytes_arc));
         self.register_companion(name_str, path_str, move || {
-            match WasmComponent::from_bytes(&wasm_bytes) {
+            match WasmComponent::from_bytes(&bytes_arc) {
                 Ok(c) => Box::new(c),
                 Err(e) => panic!("Failed to instantiate WASM component: {}", e),
             }
         });
+    }
+
+    /// Registers a document-level `.wasm` transform bundle (e.g., from `\use "bundle.wasm"`).
+    pub fn register_wasm_bundle(&mut self, path: impl Into<String>, wasm_bytes: Vec<u8>) {
+        let path_str = path.into();
+        if !self.wasm_bundles.iter().any(|(p, _)| p == &path_str) {
+            self.wasm_bundles
+                .push((path_str, std::sync::Arc::from(wasm_bytes)));
+        }
+    }
+
+    /// Returns registered `.wasm` bytes matching a component tag and optional source `.dt` path.
+    pub fn get_wasm_for_node(&self, name: &str, component_path: Option<&str>) -> Option<&[u8]> {
+        if let Some(comp_path) = component_path {
+            let stem = canonical_companion_stem(comp_path);
+            let qualified = format!("{}::{}", stem, name);
+            if let Some(b) = self.wasm_companions.get(&qualified) {
+                return Some(b.as_ref());
+            }
+            for (k, b) in &self.wasm_companions {
+                if let Some((k_stem, k_name)) = k.split_once("::") {
+                    if k_name == name && stems_match(k_stem, &stem) {
+                        return Some(b.as_ref());
+                    }
+                }
+            }
+            let stem_matches_name = stem == name || stem.ends_with(&format!("/{}", name));
+            if stem_matches_name {
+                if let Some(b) = self.wasm_companions.get(&stem) {
+                    return Some(b.as_ref());
+                }
+                for (k, b) in &self.wasm_companions {
+                    if !k.contains("::") && stems_match(k, &stem) {
+                        return Some(b.as_ref());
+                    }
+                }
+            }
+        }
+        self.wasm_companions.get(name).map(|b| b.as_ref())
+    }
+
+    /// Returns all registered `.wasm` bundles.
+    pub fn wasm_bundles(&self) -> &[(String, std::sync::Arc<[u8]>)] {
+        &self.wasm_bundles
     }
 
     /// Instantiates a fresh `Component` instance for the given component name or path.
@@ -721,9 +801,6 @@ impl ComponentRegistry {
             if let Some(f) = self.path_factories.get(&qualified) {
                 return Some(f());
             }
-            if let Some(f) = self.path_factories.get(&stem) {
-                return Some(f());
-            }
             for (k, f) in &self.path_factories {
                 if let Some((k_stem, k_name)) = k.split_once("::") {
                     if k_name == name && stems_match(k_stem, &stem) {
@@ -731,9 +808,15 @@ impl ComponentRegistry {
                     }
                 }
             }
-            for (k, f) in &self.path_factories {
-                if !k.contains("::") && stems_match(k, &stem) {
+            let stem_matches_name = stem == name || stem.ends_with(&format!("/{}", name));
+            if stem_matches_name {
+                if let Some(f) = self.path_factories.get(&stem) {
                     return Some(f());
+                }
+                for (k, f) in &self.path_factories {
+                    if !k.contains("::") && stems_match(k, &stem) {
+                        return Some(f());
+                    }
                 }
             }
             return None;
@@ -843,6 +926,15 @@ impl ComponentRegistry {
                     } else {
                         base_dir.join(raw_path)
                     };
+                    if u.path.ends_with(".wasm") {
+                        let bytes = resolver
+                            .read_bytes(&resolved)
+                            .or_else(|_| resolver.read_bytes(raw_path));
+                        if let Ok(bytes) = bytes {
+                            self.register_wasm_bundle(resolved.display().to_string(), bytes);
+                        }
+                        continue;
+                    }
                     if let Some(wasm_path) = resolver.find_companion_wasm(&resolved) {
                         if let Some(stem) = wasm_path.file_stem().and_then(|s| s.to_str()) {
                             if !self.has_companion_path(&wasm_path) {

@@ -1,4 +1,5 @@
-use crate::ast::{ComponentKey, Expr, Symbol};
+use crate::ast::{ComponentDef, ComponentKey, ElementNode, EnumDef, Expr, Symbol, TextChunk};
+use crate::compiler::expand::context::{EnvEntry, LexicalBinding};
 use crate::compiler::expand::schema::{PortMask, PortTable};
 use crate::compiler::expand::StaticType;
 use crate::dom::NodeHandle;
@@ -189,6 +190,8 @@ impl NodeId {
     pub const WINDOW: NodeId = NodeId(usize::MAX);
     /// Sentinel NodeId representing the component instance (`self`) in pre-compiled port templates.
     pub const TEMPLATE_SELF: NodeId = NodeId(usize::MAX - 1);
+    /// Sentinel NodeId representing the ambient `page` context inside `\PagedFlow` templates.
+    pub const PAGE: NodeId = NodeId(usize::MAX - 2);
 
     #[inline]
     pub const fn is_window(&self) -> bool {
@@ -201,11 +204,18 @@ impl NodeId {
     }
 
     #[inline]
+    pub const fn is_page(&self) -> bool {
+        self.0 == usize::MAX - 2
+    }
+
+    #[inline]
     pub fn canonical_str(&self) -> &'static str {
         if self.is_window() {
             "__window"
         } else if self.is_template_self() {
             "__template_self"
+        } else if self.is_page() {
+            "__page"
         } else {
             interned_canonical_node_name(self.0)
         }
@@ -220,6 +230,8 @@ impl NodeId {
     pub fn matches_str(&self, name: &str) -> bool {
         if self.is_window() {
             name == "__window" || name == "window"
+        } else if self.is_page() {
+            name == "__page" || name == "page"
         } else {
             Self::from_canonical_name(name) == Some(*self)
         }
@@ -238,6 +250,9 @@ impl NodeId {
             if name == "__template_self" {
                 return Some(NodeId::TEMPLATE_SELF);
             }
+            if name == "__page" {
+                return Some(NodeId::PAGE);
+            }
             None
         } else if name == "window" {
             Some(NodeId::WINDOW)
@@ -248,6 +263,62 @@ impl NodeId {
 }
 
 use crate::compiler::text::{InlineBoxSpan, TextSpan};
+
+/// Break target for `\Pagination(break_before: ...)` and `\PageBreak(to: ...)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PageBreakTarget {
+    #[default]
+    Auto,
+    Page,
+    Recto,
+    Verso,
+}
+
+/// Shallow per-box pagination configuration resolved from `pagination` port and `\let pagination`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PaginationSpec {
+    pub breakable: bool,
+    pub keep_with_next: bool,
+    pub break_before: PageBreakTarget,
+}
+
+/// Owned snapshot of an unexpanded element and its lexical/environment capture
+/// for deferred instantiation (such as `\PagedFlow(page: ...)` templates and `\Deposit` payloads).
+#[derive(Debug, Clone, PartialEq)]
+pub struct OwnedConsumerChild {
+    pub elem: ElementNode,
+    pub var_name: Option<String>,
+    pub raw_text: Option<TextChunk>,
+    pub caller_lexical_scope: HashMap<Symbol, LexicalBinding>,
+    pub caller_env_scope: HashMap<String, EnvEntry>,
+    pub caller_enclosing_component_id: Option<NodeId>,
+    pub caller_enclosing_num_children: usize,
+    pub caller_shadowed_ports: HashSet<String>,
+    pub outer_consumer_children: Vec<OwnedConsumerChild>,
+}
+
+/// Recorded `\PagedFlow` instance metadata for Phase 1–3 pagination.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PagedFlowRecord {
+    pub node_id: NodeId,
+    pub page_template_elem: OwnedConsumerChild,
+    pub probe_doc: ExpandedDocument,
+    pub probe_base_node_len: usize,
+    pub flow_body_node_id: NodeId,
+    pub width_depends_on_window: bool,
+    pub span: Span,
+}
+
+/// Recorded `\Deposit(into: bucket) { <SingleComponent> }` call site.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DepositRecord {
+    pub deposit_id: NodeId,
+    pub bucket_id: NodeId,
+    pub host_node_id: Option<NodeId>,
+    pub inline_byte_index: Option<usize>,
+    pub payload: OwnedConsumerChild,
+    pub span: Span,
+}
 
 /// An expanded layout element with concrete node identity, hierarchy, and port equations.
 use crate::compiler::scope::{ScopeId, ScopeTree};
@@ -290,6 +361,8 @@ pub struct ExpandedNode {
     pub aggregated_ports: HashSet<String>,
     pub unfiltered_ports: HashMap<String, Expr>,
     pub skipped_upstream: HashMap<String, Vec<crate::compiler::graph::VarId>>,
+    pub pagination: PaginationSpec,
+    pub inline_deposits: Vec<(NodeId, usize)>,
 }
 
 impl ExpandedNode {
@@ -331,6 +404,8 @@ impl ExpandedNode {
             aggregated_ports: HashSet::new(),
             unfiltered_ports: HashMap::new(),
             skipped_upstream: HashMap::new(),
+            pagination: PaginationSpec::default(),
+            inline_deposits: Vec::new(),
         }
     }
 
@@ -369,8 +444,19 @@ pub struct ExpandedDocument {
     pub window_ports: HashMap<String, Expr>,
     pub window_port_types: HashMap<String, String>,
     pub window_state_vars: HashMap<String, Option<String>>,
+    pub page_ports: HashMap<String, Expr>,
+    pub page_template_component: Option<String>,
+    pub page_template_private_ports: HashSet<String>,
+    pub paged_flows: Vec<PagedFlowRecord>,
+    pub deposits: Vec<DepositRecord>,
+    pub paged_registry: Option<Arc<HashMap<String, Vec<ComponentDef>>>>,
+    pub paged_enums: Option<Arc<HashMap<String, EnumDef>>>,
+    pub active_page_deposits: HashMap<NodeId, Vec<usize>>,
+    pub active_page_deposit_nodes: Vec<(usize, NodeId)>,
+    pub dom_handles: HashMap<crate::dom::NodeHandle, NodeId>,
     pub local_bindings: Vec<(Expr, Option<String>, crate::span::Span)>,
     pub scope_tree: ScopeTree,
+    pub default_dpi: f64,
 }
 
 impl ExpandedDocument {
@@ -381,8 +467,19 @@ impl ExpandedDocument {
             window_ports: HashMap::new(),
             window_port_types: HashMap::new(),
             window_state_vars: HashMap::new(),
+            page_ports: HashMap::new(),
+            page_template_component: None,
+            page_template_private_ports: HashSet::new(),
+            paged_flows: Vec::new(),
+            deposits: Vec::new(),
+            paged_registry: None,
+            paged_enums: None,
+            active_page_deposits: HashMap::new(),
+            active_page_deposit_nodes: Vec::new(),
+            dom_handles: HashMap::new(),
             local_bindings: Vec::new(),
             scope_tree: ScopeTree::new(),
+            default_dpi: 96.0,
         }
     }
 

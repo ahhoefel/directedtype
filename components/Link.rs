@@ -19,6 +19,11 @@ impl Link {
 #[component]
 impl Link {
     pub fn click(&mut self, ctx: &mut Context<'_>) -> Result<(), DispatchError> {
+        if let Some(target_id) = ctx.ports().get("to").and_then(|v| v.as_node()) {
+            let mut view = ctx.view_or_window("view");
+            view.scroll_to(target_id);
+            return Ok(());
+        }
         if let Some(url) = ctx.get_port_string("url") {
             let url = url.to_string();
             if let Some(target_id) = ctx.resolve_anchor(&url) {

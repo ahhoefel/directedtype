@@ -190,6 +190,87 @@ pub enum CompileError {
         span: Span,
     },
 
+    #[error("Ambient 'page' reference is only valid inside a \\PagedFlow page template{}", .span.format_location_suffix())]
+    PageOutsidePagedFlow {
+        span: Span,
+    },
+
+    #[error("Nested \\PagedFlow inside another \\PagedFlow is not supported in V1{}", .span.format_location_suffix())]
+    NestedPagedFlow {
+        span: Span,
+    },
+
+    #[error("Page template in \\PagedFlow must instantiate exactly 1 \\FlowBody (found {found}){}", .span.format_location_suffix())]
+    InvalidFlowBodyCount {
+        found: usize,
+        span: Span,
+    },
+
+    #[error("\\FlowBody.width cannot depend on page.* or bucket[page] (page column width must remain constant across pages){}", .span.format_location_suffix())]
+    FlowBodyWidthDependsOnPage {
+        span: Span,
+    },
+
+    #[error("\\FlowBody.height cannot depend on page.count or page.is_last (which are only known after page packing){}", .span.format_location_suffix())]
+    FlowBodyHeightDependsOnTotalPageCount {
+        span: Span,
+    },
+
+    #[error("Component '{component}' has breakable chrome (e.g. a height-dependent \\Rect or \\Line) which is unsupported in V1; use a transparent container or mark it breakable: false{}", .span.format_location_suffix())]
+    UnsupportedBreakableChrome {
+        component: String,
+        span: Span,
+    },
+
+    #[error("Pagination overflow: {message}{}", .span.format_location_suffix())]
+    PaginationOverflowError {
+        message: String,
+        span: Span,
+    },
+
+    #[error("Pagination cross-reference convergence failed after 3 passes: {message}{}", .span.format_location_suffix())]
+    PaginationConvergenceError {
+        message: String,
+        span: Span,
+    },
+
+    #[error("\\PageBreak cannot appear inside unbreakable component '{component}'{}", .span.format_location_suffix())]
+    PageBreakInUnbreakableContainer {
+        component: String,
+        span: Span,
+    },
+
+    #[error("Cannot access property '{port}' on unguarded 'page.prev'; guard with 'page.prev ? ... : ...' or 'page.number > 1'{}", .span.format_location_suffix())]
+    UnguardedPagePrevAccess {
+        port: String,
+        span: Span,
+    },
+
+    #[error("Cannot access '{access}' on unguarded page bucket; guard with '{expected_guard}'{}", .span.format_location_suffix())]
+    UnguardedBucketAccess {
+        access: String,
+        expected_guard: String,
+        span: Span,
+    },
+
+    #[error("\\Deposit(into: ...) requires a PageValue or PageList bucket handle, found '{found}'{}", .span.format_location_suffix())]
+    InvalidDepositTarget {
+        found: String,
+        span: Span,
+    },
+
+    #[error("\\Deposit {{ ... }} must expand to strictly 1 root child component (found {found}){}", .span.format_location_suffix())]
+    InvalidDepositChildCount {
+        found: usize,
+        span: Span,
+    },
+
+    #[error("\\Collect(from: ...) requires an indexed current-page bucket 'bucket[page]', found '{found}'{}", .span.format_location_suffix())]
+    InvalidCollectTarget {
+        found: String,
+        span: Span,
+    },
+
     #[error("{message}{}", .span.format_location_suffix())]
     Custom {
         message: String,
@@ -246,6 +327,20 @@ impl CompileError {
             | CompileError::DisallowedWindowPort { span, .. }
             | CompileError::AssertionFailed { span, .. }
             | CompileError::UnresolvedIdentifier { span, .. }
+            | CompileError::PageOutsidePagedFlow { span, .. }
+            | CompileError::NestedPagedFlow { span, .. }
+            | CompileError::InvalidFlowBodyCount { span, .. }
+            | CompileError::FlowBodyWidthDependsOnPage { span, .. }
+            | CompileError::FlowBodyHeightDependsOnTotalPageCount { span, .. }
+            | CompileError::UnsupportedBreakableChrome { span, .. }
+            | CompileError::PaginationOverflowError { span, .. }
+            | CompileError::PaginationConvergenceError { span, .. }
+            | CompileError::PageBreakInUnbreakableContainer { span, .. }
+            | CompileError::UnguardedPagePrevAccess { span, .. }
+            | CompileError::UnguardedBucketAccess { span, .. }
+            | CompileError::InvalidDepositTarget { span, .. }
+            | CompileError::InvalidDepositChildCount { span, .. }
+            | CompileError::InvalidCollectTarget { span, .. }
             | CompileError::Custom { span, .. } => *span,
             CompileError::PotentiallyAmbiguousOverloads(details) => details.span,
             CompileError::NoMatchingOverload(details) => details.span,
@@ -262,7 +357,7 @@ fn format_cycle_path(cycle: &[VarId], node_info: &HashMap<NodeId, GraphNodeInfo>
             match node_info.get(&v.node) {
                 Some(info) => {
                     let var_label = if !info.name.is_empty() {
-                        if v.node.is_window() {
+                        if v.node.is_window() || v.node.is_page() {
                             format!("{}.{}", info.name, v.port)
                         } else {
                             format!("{}#{}.{}", info.name, v.node.0, v.port)

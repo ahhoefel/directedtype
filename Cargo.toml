@@ -14,23 +14,60 @@ members = [
     "xtask",
 ]
 
+[features]
+default = ["vello-renderer", "pdf"]
+vello-renderer = [
+    "dep:vello",
+    "dep:winit",
+    "dep:objc2",
+    "dep:raw-window-handle",
+    "dep:pollster",
+    "dep:image",
+]
+pdf = ["dep:krilla"]
+
+[[bin]]
+name = "viewer"
+path = "src/bin/viewer.rs"
+required-features = ["vello-renderer"]
+
+[[bin]]
+name = "docgen"
+path = "src/bin/docgen.rs"
+required-features = ["vello-renderer"]
+
+[[bin]]
+name = "vello_testbed"
+path = "src/bin/vello_testbed.rs"
+required-features = ["vello-renderer"]
+
+[[bin]]
+name = "dt2pdf"
+path = "src/bin/dt2pdf.rs"
+required-features = ["pdf"]
+
 [dependencies]
 directedtype-guest = { path = "directedtype-guest" }
 directedtype-macros = { path = "directedtype-macros" }
-image = "0.25.10"
 logos = "0.14"
 notify = "8.2.0"
-objc2 = "0.5.2"
 parley = "0.11.1"
-pollster = "1.0.1"
-raw-window-handle = "0.6.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 skrifa = "0.44.0"
 thiserror = "2.0"
-vello = "0.10.0"
 wasmi = "2.0.0"
-winit = "0.30.13"
+
+# Optional vector PDF backend
+krilla = { version = "0.8", features = ["raster-images"], optional = true }
+
+# Optional Vello GPU / interactive window stack
+image = { version = "0.25.10", optional = true }
+objc2 = { version = "0.5.2", optional = true }
+pollster = { version = "1.0.1", optional = true }
+raw-window-handle = { version = "0.6.2", optional = true }
+vello = { version = "0.10.0", optional = true }
+winit = { version = "0.30.13", optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1.4"

@@ -6396,6 +6396,71 @@ fn test_compile_time_guard_checks_for_timers_and_siblings() {
         .expect("Should compile valid guarded timers and siblings");
 }
 
+#[test]
+fn test_physical_print_units_and_72_dpi() {
+    use directedtype::compiler::CompiledDocument;
+    use directedtype::compiler::module::FsResolver;
+    use std::path::Path;
+
+    let src = r#"
+    \let r_in = \Rect(x: 0pt, y: 0pt, width: 1in, height: 1pc, color: #000000);
+    \let r_mm = \Rect(x: 0pt, y: 0pt, width: 25.4mm, height: 2.54cm, color: #000000);
+    \let conv = (8.5in).to_pt() + (12pt).to_pc() + (72pt).to_in() + (25.4mm).to_cm();
+    \Rect(x: 0pt, y: 0pt, width: conv * 1px, height: 72pt, color: #112233)
+    "#;
+    let doc = parse(src).expect("Physical print units should parse");
+
+    // 72.0 DPI (PDF / print native): 1in == 72.0, 1pc == 12.0, 25.4mm == 72.0, 2.54cm == 72.0
+    let compiled_72 = CompiledDocument::compile_with_resolver_and_dpi(
+        &doc,
+        612.0,
+        792.0,
+        72.0,
+        Path::new("."),
+        &FsResolver,
+    )
+    .expect("72 DPI compilation should succeed");
+
+    let rects_72: Vec<_> = compiled_72
+        .layout()
+        .nodes
+        .iter()
+        .filter(|n| n.name == "Rect")
+        .collect();
+    assert_eq!(rects_72.len(), 3);
+    assert!((rects_72[0].rect.width - 72.0).abs() < 1e-6);
+    assert!((rects_72[0].rect.height - 12.0).abs() < 1e-6);
+    assert!((rects_72[1].rect.width - 72.0).abs() < 1e-6);
+    assert!((rects_72[1].rect.height - 72.0).abs() < 1e-6);
+    // 8.5in -> 612pt, 12pt -> 1pc, 72pt -> 1in, 25.4mm -> 2.54cm => 612 + 1 + 1 + 2.54 = 616.54
+    assert!((rects_72[2].rect.width - 616.54).abs() < 1e-4);
+    assert!((rects_72[2].rect.height - 72.0).abs() < 1e-6);
+
+    // 96.0 DPI (Screen viewer): 1in == 96.0, 72pt == 96.0, while to_pt()/to_in()/to_cm()/to_pc() invariants hold
+    let compiled_96 = CompiledDocument::compile_with_resolver_and_dpi(
+        &doc,
+        800.0,
+        600.0,
+        96.0,
+        Path::new("."),
+        &FsResolver,
+    )
+    .expect("96 DPI compilation should succeed");
+    let rects_96: Vec<_> = compiled_96
+        .layout()
+        .nodes
+        .iter()
+        .filter(|n| n.name == "Rect")
+        .collect();
+    assert!((rects_96[0].rect.width - 96.0).abs() < 1e-6);
+    assert!((rects_96[0].rect.height - 16.0).abs() < 1e-6);
+    assert!((rects_96[1].rect.width - 96.0).abs() < 1e-6);
+    assert!((rects_96[1].rect.height - 96.0).abs() < 1e-6);
+    assert!((rects_96[2].rect.width - 616.54).abs() < 1e-4);
+    assert!((rects_96[2].rect.height - 96.0).abs() < 1e-6);
+}
+
+
 
 
 

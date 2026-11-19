@@ -66,6 +66,7 @@ pub struct ScopeContext<'a> {
     pub comp_ports: Option<&'a HashMap<String, Expr>>,
     pub declared_state_names: Option<&'a HashSet<String>>,
     pub enums: &'a HashMap<String, EnumDef>,
+    pub in_page_template: bool,
 }
 
 impl<'a> ScopeContext<'a> {
@@ -97,6 +98,7 @@ impl<'a> ScopeContext<'a> {
             comp_ports: None,
             declared_state_names: None,
             enums,
+            in_page_template: false,
         }
     }
 
@@ -129,6 +131,7 @@ impl<'a> ScopeContext<'a> {
             comp_ports: None,
             declared_state_names: None,
             enums: ctx.enums,
+            in_page_template: ctx.in_page_template,
         }
     }
 
@@ -161,6 +164,7 @@ impl<'a> ScopeContext<'a> {
             comp_ports: None,
             declared_state_names: None,
             enums: ctx.enums,
+            in_page_template: ctx.in_page_template,
         }
     }
 
@@ -222,10 +226,15 @@ impl<'a> ScopeContext<'a> {
         self.env_scope = env_scope;
         self
     }
+
+    pub fn with_page_template(mut self, in_page_template: bool) -> Self {
+        self.in_page_template = in_page_template;
+        self
+    }
 }
 
 #[derive(Clone)]
-pub(super) struct ForwardedChildrenDirective<'a> {
+pub(crate) struct ForwardedChildrenDirective<'a> {
     pub ports: &'a [PortBinding],
     pub parent_id: NodeId,
     pub parent_name: &'a str,
@@ -241,18 +250,38 @@ pub(super) struct ForwardedChildrenDirective<'a> {
 }
 
 #[derive(Clone)]
-pub(super) struct ConsumerChildEntry<'a> {
+pub(crate) struct ConsumerChildEntry<'a> {
     pub elem: ElementNode,
     pub var_name: Option<String>,
     pub raw_text: Option<TextChunk>,
     pub caller_lexical_scope: &'a RefCell<HashMap<Symbol, LexicalBinding>>,
+    pub owned_caller_lexical_scope: Option<std::rc::Rc<RefCell<HashMap<Symbol, LexicalBinding>>>>,
     pub caller_env_scope: HashMap<String, EnvEntry>,
     pub caller_enclosing_component_id: Option<NodeId>,
     pub caller_enclosing_num_children: usize,
     pub caller_enclosing_instantiated_children: Option<&'a RefCell<Vec<NodeId>>>,
     pub caller_shadowed_ports: Option<&'a HashSet<String>>,
+    pub owned_shadowed_ports: Option<HashSet<String>>,
     pub instantiated_ids: Vec<&'a RefCell<Vec<NodeId>>>,
     pub forwarded_directives: Vec<ForwardedChildrenDirective<'a>>,
+    pub deposit_payload_idx: Option<usize>,
+    pub owned_children: Vec<crate::compiler::expanded::OwnedConsumerChild>,
+}
+
+impl<'a> ConsumerChildEntry<'a> {
+    #[inline]
+    pub fn effective_lexical_scope(&self) -> &RefCell<HashMap<Symbol, LexicalBinding>> {
+        self.owned_caller_lexical_scope
+            .as_deref()
+            .unwrap_or(self.caller_lexical_scope)
+    }
+
+    #[inline]
+    pub fn effective_shadowed_ports(&self) -> Option<&HashSet<String>> {
+        self.owned_shadowed_ports
+            .as_ref()
+            .or(self.caller_shadowed_ports)
+    }
 }
 
 pub(super) struct InstanceContext<'a> {
@@ -270,9 +299,12 @@ pub(super) struct InstanceContext<'a> {
     pub enums: &'a HashMap<String, EnumDef>,
     pub active_scope_id: ScopeId,
     pub consumer_children: Option<&'a [ConsumerChildEntry<'a>]>,
+    pub in_page_template: bool,
+    pub in_paged_flow: bool,
+    pub in_unbreakable_flow_container: Option<&'a str>,
 }
 
-pub(super) struct ElementContext<'a> {
+pub(crate) struct ElementContext<'a> {
     pub parent_id: Option<NodeId>,
     pub parent_name: Option<&'a str>,
     pub prev_sibling_id: Option<NodeId>,
@@ -289,5 +321,9 @@ pub(super) struct ElementContext<'a> {
     pub enums: &'a HashMap<String, EnumDef>,
     pub active_scope_id: ScopeId,
     pub consumer_children: Option<&'a [ConsumerChildEntry<'a>]>,
+    pub in_paged_flow: bool,
+    pub in_page_template: bool,
+    pub in_unbreakable_flow_container: Option<&'a str>,
+    pub enclosing_comp_ports: Option<&'a HashMap<String, Expr>>,
 }
 

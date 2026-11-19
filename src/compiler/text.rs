@@ -368,6 +368,354 @@ pub fn measure_rich_text_bounds_with_boxes(
     })
 }
 
+/// Metrics and byte/box associations for a single laid-out line inside a `ShapedParagraph`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShapedLine {
+    pub line_index: usize,
+    pub byte_range: std::ops::Range<usize>,
+    pub top_y: f64,
+    pub bottom_y: f64,
+    pub height: f64,
+    pub baseline_y: f64,
+    pub parley_min_y: f64,
+    pub parley_max_y: f64,
+    pub inline_box_indices: Vec<usize>,
+}
+
+/// Pre-shaped multi-line paragraph computed once at constant column width for O(1) page packing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShapedParagraph {
+    pub lines: Vec<ShapedLine>,
+    pub total_width: f64,
+    pub total_height: f64,
+    pub first_top_coord: f64,
+    pub last_bottom_coord: f64,
+    pub full_y_offset: f64,
+}
+
+impl ShapedParagraph {
+    /// Returns the visual top coordinate (in Parley layout space) of line `start`.
+    #[inline]
+    pub fn slice_top(&self, start: usize) -> f64 {
+        if self.lines.is_empty() || start == 0 {
+            self.first_top_coord
+        } else {
+            self.lines[start.min(self.lines.len() - 1)].top_y
+        }
+    }
+
+    /// Returns the visual bottom coordinate (in Parley layout space) of line `end - 1`.
+    #[inline]
+    pub fn slice_bottom(&self, end: usize) -> f64 {
+        if self.lines.is_empty() {
+            return self.last_bottom_coord;
+        }
+        if end >= self.lines.len() {
+            self.last_bottom_coord
+        } else if end == 0 {
+            self.first_top_coord
+        } else {
+            self.lines[end - 1].bottom_y
+        }
+    }
+
+    /// Returns the vertical extent of `lines[start..end]`, matching `Text.height` bit-for-bit when `0..len`.
+    #[inline]
+    pub fn slice_height(&self, start: usize, end: usize) -> f64 {
+        if self.lines.is_empty() || start >= end {
+            return 0.0;
+        }
+        if start == 0 && end >= self.lines.len() {
+            return self.total_height;
+        }
+        (self.slice_bottom(end) - self.slice_top(start)).max(0.0)
+    }
+
+    /// Maps an inline `\Deposit` byte offset in `text` to the line index carrying its immediately
+    /// preceding non-whitespace character (or line `0` at paragraph start).
+    pub fn line_for_deposit_byte(&self, byte_index: usize, text: &str) -> usize {
+        if self.lines.len() <= 1 || byte_index == 0 {
+            return 0;
+        }
+        let clamped = byte_index.min(text.len());
+        let target_byte = text[..clamped]
+            .char_indices()
+            .rev()
+            .find(|&(_, ch)| !ch.is_whitespace())
+            .map(|(idx, _)| idx);
+        let Some(anchor_byte) = target_byte else {
+            return 0;
+        };
+        for line in &self.lines {
+            if line.byte_range.start <= anchor_byte && anchor_byte < line.byte_range.end {
+                return line.line_index;
+            }
+        }
+        // Fallback: latest line whose start <= anchor_byte
+        self.lines
+            .iter()
+            .rev()
+            .find(|l| l.byte_range.start <= anchor_byte)
+            .map(|l| l.line_index)
+            .unwrap_or(0)
+    }
+}
+
+/// Shapes a paragraph at constant `max_width` once into line slices using exact `Text` landmark geometry.
+#[allow(clippy::too_many_arguments)]
+pub fn shape_paragraph_lines(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    max_width: Option<f64>,
+    end_at: Option<&str>,
+    start_at: Option<&str>,
+    line_height: Option<f64>,
+    align: Option<&str>,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+) -> ShapedParagraph {
+    if text.is_empty() && inline_boxes.is_empty() {
+        return ShapedParagraph {
+            lines: Vec::new(),
+            total_width: 0.0,
+            total_height: 0.0,
+            first_top_coord: 0.0,
+            last_bottom_coord: 0.0,
+            full_y_offset: 0.0,
+        };
+    }
+
+    let size = if font_size > 0.0 { font_size as f32 } else { 16.0 };
+    let weight = if font_weight > 0.0 { font_weight as f32 } else { 400.0 };
+    let m = measure_font_metrics(font_size, font_weight, font_family);
+
+    FONT_CONTEXT.with(|font_cx_cell| {
+        LAYOUT_CONTEXT.with(|layout_cx_cell| {
+            let mut font_cx = font_cx_cell.borrow_mut();
+            let mut layout_cx = layout_cx_cell.borrow_mut();
+
+            let mut builder = layout_cx.ranged_builder(&mut font_cx, text, 1.0, true);
+            builder.push_default(StyleProperty::FontSize(size));
+            if (weight - 400.0).abs() > 1.0 {
+                builder.push_default(StyleProperty::FontWeight(FontWeight::new(weight)));
+            }
+            if let Some(family) = font_family {
+                if !family.is_empty() {
+                    builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
+                }
+            }
+            if let Some(lh) = line_height {
+                if lh > 0.0 {
+                    builder.push_default(StyleProperty::LineHeight(
+                        parley::style::LineHeight::Absolute(lh as f32),
+                    ));
+                }
+            }
+            for span in spans {
+                if !span.range.is_empty() && span.range.end <= text.len() {
+                    if let Some(sz) = span.style.font_size {
+                        if sz > 0.0 {
+                            builder.push(StyleProperty::FontSize(sz as f32), span.range.clone());
+                        }
+                    }
+                    if let Some(wt) = span.style.font_weight {
+                        if wt > 0.0 {
+                            builder.push(StyleProperty::FontWeight(FontWeight::new(wt as f32)), span.range.clone());
+                        }
+                    }
+                    if let Some(fam) = &span.style.font_family {
+                        if !fam.is_empty() {
+                            builder.push(StyleProperty::FontFamily(FontFamily::from(fam.as_str())), span.range.clone());
+                        }
+                    }
+                    if span.style.italic {
+                        builder.push(StyleProperty::FontStyle(FontStyle::Italic), span.range.clone());
+                    }
+                }
+            }
+            for ib in inline_boxes {
+                builder.push_inline_box(parley::InlineBox {
+                    id: ib.node_id.0 as u64,
+                    kind: parley::InlineBoxKind::InFlow,
+                    index: ib.index.min(text.len()),
+                    width: ib.width.max(0.0) as f32,
+                    height: ib.baseline_offset.max(0.0) as f32,
+                });
+            }
+
+            let mut layout = builder.build(text);
+            layout.break_all_lines(max_width.and_then(|w| if w > 0.0 { Some(w as f32) } else { None }));
+            let alignment = match align {
+                Some("center") | Some("Center") => parley::Alignment::Center,
+                Some("right") | Some("Right") | Some("end") | Some("End") => parley::Alignment::End,
+                Some("justify") | Some("Justify") => parley::Alignment::Justify,
+                _ => parley::Alignment::Start,
+            };
+            layout.align(alignment, parley::layout::AlignmentOptions::default());
+
+            let total_width = if max_width.is_some() {
+                layout.width() as f64
+            } else {
+                layout.full_width() as f64
+            };
+
+            let first_line = layout.lines().next();
+            let last_line = layout.lines().last();
+            let first_baseline = first_line
+                .map(|l| l.metrics().baseline as f64)
+                .unwrap_or(m.baseline);
+
+            let mut top_coord = match start_at {
+                Some(s) if s.eq_ignore_ascii_case("ascender") => first_baseline - m.ascent,
+                Some(s) if s.eq_ignore_ascii_case("emtop") || s.eq_ignore_ascii_case("em_top") => {
+                    first_baseline - m.em_top
+                }
+                Some(s) if s.eq_ignore_ascii_case("capital") => first_baseline - m.cap_height,
+                Some(s)
+                    if s.eq_ignore_ascii_case("lineheight")
+                        || s.eq_ignore_ascii_case("line_height")
+                        || s.eq_ignore_ascii_case("full") =>
+                {
+                    0.0
+                }
+                _ => first_baseline - m.cap_height,
+            };
+
+            let mut bottom_coord = match end_at {
+                Some(s) if s.eq_ignore_ascii_case("descender") => {
+                    if let Some(last_line) = last_line {
+                        last_line.metrics().baseline as f64 + m.descent
+                    } else {
+                        layout.height() as f64
+                    }
+                }
+                Some(s)
+                    if s.eq_ignore_ascii_case("gapbottom") || s.eq_ignore_ascii_case("gap_bottom") =>
+                {
+                    if let Some(last_line) = last_line {
+                        last_line.metrics().baseline as f64 + m.gap_bottom
+                    } else {
+                        layout.height() as f64
+                    }
+                }
+                Some(s)
+                    if s.eq_ignore_ascii_case("lineheight")
+                        || s.eq_ignore_ascii_case("line_height")
+                        || s.eq_ignore_ascii_case("full") =>
+                {
+                    layout.height() as f64
+                }
+                _ => {
+                    if let Some(last_line) = last_line {
+                        last_line.metrics().baseline as f64
+                    } else {
+                        layout.height() as f64
+                    }
+                }
+            };
+
+            let base_top_coord = top_coord;
+            let base_last_bottom_offset = if let Some(last_line) = last_line {
+                bottom_coord - last_line.metrics().baseline as f64
+            } else {
+                0.0
+            };
+            let top_advance = first_baseline - base_top_coord;
+
+            let parley_lines: Vec<_> = layout.lines().collect();
+            let num_lines = parley_lines.len();
+            let mut shaped_lines = Vec::with_capacity(num_lines);
+
+            for (i, line) in parley_lines.iter().enumerate() {
+                let lm = line.metrics();
+                let baseline_y = lm.baseline as f64;
+                let parley_min_y = lm.block_min_coord as f64;
+                let parley_max_y = lm.block_max_coord as f64;
+
+                let mut line_top = if i == 0 {
+                    base_top_coord
+                } else {
+                    baseline_y - top_advance
+                };
+                let mut line_bottom = if i + 1 == num_lines {
+                    bottom_coord
+                } else {
+                    (baseline_y + m.descent)
+                        .max(parley_max_y)
+                        .max(baseline_y + base_last_bottom_offset)
+                };
+
+                let mut byte_start = usize::MAX;
+                let mut byte_end = 0usize;
+                let mut box_indices = Vec::new();
+
+                for item in line.items() {
+                    match item {
+                        parley::layout::PositionedLayoutItem::GlyphRun(glyph_run) => {
+                            let r = glyph_run.run().text_range();
+                            byte_start = byte_start.min(r.start);
+                            byte_end = byte_end.max(r.end);
+                        }
+                        parley::layout::PositionedLayoutItem::InlineBox(pib) => {
+                            if let Some((ib_idx, ib)) = inline_boxes
+                                .iter()
+                                .enumerate()
+                                .find(|(_, b)| b.node_id.0 as u64 == pib.id)
+                            {
+                                box_indices.push(ib_idx);
+                                byte_start = byte_start.min(ib.index);
+                                byte_end = byte_end.max(ib.index);
+                                let box_top = baseline_y - ib.baseline_offset;
+                                let box_bottom = baseline_y + (ib.height - ib.baseline_offset).max(0.0);
+                                line_top = line_top.min(box_top);
+                                line_bottom = line_bottom.max(box_bottom);
+                                top_coord = top_coord.min(box_top);
+                                bottom_coord = bottom_coord.max(box_bottom);
+                            }
+                        }
+                    }
+                }
+
+                if byte_start == usize::MAX {
+                    byte_start = 0;
+                }
+                shaped_lines.push(ShapedLine {
+                    line_index: i,
+                    byte_range: byte_start..byte_end,
+                    top_y: line_top,
+                    bottom_y: line_bottom,
+                    height: (line_bottom - line_top).max(0.0),
+                    baseline_y,
+                    parley_min_y,
+                    parley_max_y,
+                    inline_box_indices: box_indices,
+                });
+            }
+
+            if let Some(first) = shaped_lines.first_mut() {
+                first.top_y = top_coord;
+                first.height = (first.bottom_y - first.top_y).max(0.0);
+            }
+            if let Some(last) = shaped_lines.last_mut() {
+                last.bottom_y = bottom_coord;
+                last.height = (last.bottom_y - last.top_y).max(0.0);
+            }
+
+            let total_height = (bottom_coord - top_coord).max(0.0);
+            ShapedParagraph {
+                lines: shaped_lines,
+                total_width,
+                total_height,
+                first_top_coord: top_coord,
+                last_bottom_coord: bottom_coord,
+                full_y_offset: -top_coord,
+            }
+        })
+    })
+}
+
 /// Font metrics describing vertical typographic landmarks for layout equations.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FontMetrics {
@@ -1225,6 +1573,124 @@ pub enum CursorKind {
     Default,
     Pointer,
     Text,
+}
+
+pub(crate) fn format_text_port_value(v: &crate::compiler::value::Value) -> Option<String> {
+    match v {
+        crate::compiler::value::Value::String(s) => Some(s.clone()),
+        crate::compiler::value::Value::Integer(i) => Some(format!("{i}")),
+        crate::compiler::value::Value::Float(n) | crate::compiler::value::Value::Distance(n) => {
+            Some(format!("{n}"))
+        }
+        crate::compiler::value::Value::Bool(b) => Some(format!("{b}")),
+        _ => None,
+    }
+}
+
+/// Resolves a text node's effective text string, adjusted `TextSpan` ranges, `InlineBoxSpan` byte
+/// indices, and `(orig_pos, inserted_len)` shifts after splicing any inline dynamic `text:` child
+/// placeholders (`range.is_empty()` pointing to a child with `text_content == None` and `properties["text"]`).
+pub(crate) fn resolve_active_rich_text(
+    node: &crate::compiler::layout::ResolvedNode,
+    layout: &crate::compiler::layout::ResolvedLayout,
+) -> (
+    Option<String>,
+    Vec<TextSpan>,
+    Vec<InlineBoxSpan>,
+    Vec<(usize, usize)>,
+) {
+    let mut placeholders: Vec<(usize, usize, String)> = Vec::new();
+    for (s_idx, ts) in node.text_spans.iter().enumerate() {
+        if ts.range.is_empty() {
+            if let Some(cid) = ts.node_id {
+                if let Some(cnode) = layout.get_node(cid) {
+                    if cnode.text_content.is_none() {
+                        if let Some(s) =
+                            cnode.properties.get("text").and_then(format_text_port_value)
+                        {
+                            placeholders.push((s_idx, ts.range.start, s));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if placeholders.is_empty() {
+        let active = node
+            .properties
+            .get("text")
+            .and_then(format_text_port_value)
+            .or_else(|| node.text_content.clone());
+        return (
+            active,
+            node.text_spans.clone(),
+            node.inline_boxes.clone(),
+            Vec::new(),
+        );
+    }
+
+    let base = node.text_content.as_deref().unwrap_or("");
+    let total_ins: usize = placeholders.iter().map(|p| p.2.len()).sum();
+    let mut result = String::with_capacity(base.len() + total_ins);
+    let mut cursor = 0usize;
+    let mut placeholder_new_ranges: Vec<(usize, std::ops::Range<usize>)> =
+        Vec::with_capacity(placeholders.len());
+    let mut shifts: Vec<(usize, usize)> = Vec::with_capacity(placeholders.len());
+
+    for &(s_idx, orig_pos, ref ins) in &placeholders {
+        let clamped = orig_pos.min(base.len()).max(cursor);
+        result.push_str(&base[cursor..clamped]);
+        cursor = clamped;
+        let new_start = result.len();
+        result.push_str(ins);
+        let new_end = result.len();
+        placeholder_new_ranges.push((s_idx, new_start..new_end));
+        shifts.push((clamped, ins.len()));
+    }
+    if cursor < base.len() {
+        result.push_str(&base[cursor..]);
+    }
+
+    let mut adjusted_spans = Vec::with_capacity(node.text_spans.len());
+    let mut p_cursor = 0usize;
+    for (s_idx, ts) in node.text_spans.iter().enumerate() {
+        let mut cloned = ts.clone();
+        if p_cursor < placeholder_new_ranges.len() && placeholder_new_ranges[p_cursor].0 == s_idx {
+            cloned.range = placeholder_new_ranges[p_cursor].1.clone();
+            p_cursor += 1;
+        } else {
+            let start_shift: usize = placeholders
+                .iter()
+                .filter(|&&(p_idx, p_pos, _)| {
+                    p_pos < ts.range.start || (p_pos == ts.range.start && p_idx < s_idx)
+                })
+                .map(|(_, _, ins)| ins.len())
+                .sum();
+            let end_shift: usize = placeholders
+                .iter()
+                .filter(|&&(p_idx, p_pos, _)| {
+                    p_pos < ts.range.end || (p_pos == ts.range.end && p_idx < s_idx)
+                })
+                .map(|(_, _, ins)| ins.len())
+                .sum();
+            cloned.range = (ts.range.start + start_shift)..(ts.range.end + end_shift);
+        }
+        adjusted_spans.push(cloned);
+    }
+
+    let mut adjusted_boxes = Vec::with_capacity(node.inline_boxes.len());
+    for mut ib in node.inline_boxes.clone() {
+        let box_shift: usize = shifts
+            .iter()
+            .filter(|&&(p_pos, _)| p_pos <= ib.index)
+            .map(|&(_, len)| len)
+            .sum();
+        ib.index += box_shift;
+        adjusted_boxes.push(ib);
+    }
+
+    (Some(result), adjusted_spans, adjusted_boxes, shifts)
 }
 
 #[cfg(test)]

@@ -8,6 +8,29 @@ use crate::compiler::expanded::NodeId;
 use crate::span::Span;
 use std::collections::HashMap;
 
+/// Lowers a physical distance measured in PostScript points (`pt`) into logical `px` scaled by `window.dpi / 72.0`.
+pub(crate) fn lower_points_to_px_expr(points: f64, span: Span) -> Expr {
+    Expr::Binary(BinaryExpr {
+        op: BinaryOp::Mul,
+        left: std::sync::Arc::new(Expr::Literal(Literal::Distance(
+            points,
+            DistanceUnit::Px,
+            span,
+        ))),
+        right: std::sync::Arc::new(Expr::Binary(BinaryExpr {
+            op: BinaryOp::Div,
+            left: std::sync::Arc::new(Expr::MemberAccess(MemberAccessExpr {
+                target: std::sync::Arc::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, span))),
+                member: Ident::from_symbol(Symbol::DPI, span),
+                span,
+            })),
+            right: std::sync::Arc::new(Expr::Literal(Literal::Float(72.0, span))),
+            span,
+        })),
+        span,
+    })
+}
+
 pub(super) fn resolve_forward_scope_refs(
     expr: &Expr,
     scope: &HashMap<Symbol, LexicalBinding>,
@@ -76,6 +99,11 @@ pub(super) fn resolve_forward_scope_refs(
         Expr::Paren(inner, span) => {
             Expr::Paren(std::sync::Arc::new(resolve_forward_scope_refs(inner, scope)), *span)
         }
+        Expr::Index(idx) => Expr::Index(IndexExpr {
+            target: std::sync::Arc::new(resolve_forward_scope_refs(&idx.target, scope)),
+            index: std::sync::Arc::new(resolve_forward_scope_refs(&idx.index, scope)),
+            span: idx.span,
+        }),
         Expr::Call(c) => Expr::Call(CallExpr {
             callee: c.callee.clone(),
             args: c
@@ -141,6 +169,9 @@ pub(super) fn expr_has_scope_ref(expr: &Expr, scope: &HashMap<Symbol, LexicalBin
                 || expr_has_scope_ref(&t.else_expr, scope)
         }
         Expr::Paren(inner, _) => expr_has_scope_ref(inner, scope),
+        Expr::Index(idx) => {
+            expr_has_scope_ref(&idx.target, scope) || expr_has_scope_ref(&idx.index, scope)
+        }
         Expr::Call(c) => c.args.iter().any(|a| expr_has_scope_ref(a, scope)),
         Expr::MethodCall(m) => {
             expr_has_scope_ref(&m.target, scope)
@@ -184,6 +215,9 @@ pub(in crate::compiler::expand) fn expr_has_unresolved_ident(expr: &Expr) -> boo
                 || expr_has_unresolved_ident(&t.else_expr)
         }
         Expr::Paren(inner, _) => expr_has_unresolved_ident(inner),
+        Expr::Index(idx) => {
+            expr_has_unresolved_ident(&idx.target) || expr_has_unresolved_ident(&idx.index)
+        }
         Expr::Call(c) => c.args.iter().any(expr_has_unresolved_ident),
         Expr::MethodCall(m) => {
             expr_has_unresolved_ident(&m.target) || m.args.iter().any(expr_has_unresolved_ident)
@@ -215,6 +249,38 @@ thread_local! {
     static WINDOW_PORT_TYPES: std::cell::RefCell<HashMap<String, String>> = std::cell::RefCell::new(HashMap::new());
 }
 
+pub struct RewriteTrackingSnapshot {
+    pending_fwd_nodes: Vec<NodeId>,
+    pending_fwd_bindings: Vec<usize>,
+    fwd_ref_count: u32,
+    materialized_expr_ports: HashMap<NodeId, Vec<(String, Expr)>>,
+    pending_expr_typechecks: Vec<(Expr, Option<String>, Span)>,
+}
+
+/// Saves the 5 document-scoped rewrite tracking thread-locals and resets them to empty
+/// so an isolated scratch expansion (e.g. `\PagedFlow` template probe or page instantiation)
+/// does not pollute the outer document's pending forward-ref / materialized-port state.
+pub fn save_rewrite_tracking() -> RewriteTrackingSnapshot {
+    RewriteTrackingSnapshot {
+        pending_fwd_nodes: PENDING_FWD_NODES.with(|c| std::mem::take(&mut *c.borrow_mut())),
+        pending_fwd_bindings: PENDING_FWD_BINDINGS.with(|c| std::mem::take(&mut *c.borrow_mut())),
+        fwd_ref_count: FWD_REF_COUNT.with(|c| c.replace(0)),
+        materialized_expr_ports: MATERIALIZED_EXPR_PORTS
+            .with(|c| std::mem::take(&mut *c.borrow_mut())),
+        pending_expr_typechecks: PENDING_EXPR_TYPECHECKS
+            .with(|c| std::mem::take(&mut *c.borrow_mut())),
+    }
+}
+
+/// Restores previously saved document-scoped rewrite tracking thread-locals.
+pub fn restore_rewrite_tracking(snapshot: RewriteTrackingSnapshot) {
+    PENDING_FWD_NODES.with(|c| *c.borrow_mut() = snapshot.pending_fwd_nodes);
+    PENDING_FWD_BINDINGS.with(|c| *c.borrow_mut() = snapshot.pending_fwd_bindings);
+    FWD_REF_COUNT.with(|c| c.set(snapshot.fwd_ref_count));
+    MATERIALIZED_EXPR_PORTS.with(|c| *c.borrow_mut() = snapshot.materialized_expr_ports);
+    PENDING_EXPR_TYPECHECKS.with(|c| *c.borrow_mut() = snapshot.pending_expr_typechecks);
+}
+
 pub(in crate::compiler::expand) fn reset_rewrite_tracking() {
     PENDING_FWD_NODES.with(|c| c.borrow_mut().clear());
     PENDING_FWD_BINDINGS.with(|c| c.borrow_mut().clear());
@@ -226,7 +292,7 @@ pub(in crate::compiler::expand) fn reset_rewrite_tracking() {
     WINDOW_PORT_TYPES.with(|c| c.borrow_mut().clear());
 }
 
-pub(in crate::compiler::expand) fn set_window_port_types(types: &HashMap<String, String>) {
+pub(crate) fn set_window_port_types(types: &HashMap<String, String>) {
     WINDOW_PORT_TYPES.with(|c| {
         *c.borrow_mut() = types.clone();
     });
@@ -291,7 +357,7 @@ pub(in crate::compiler::expand) fn lookup_materialized_expr_port(
     port_name: &str,
     nodes: &[crate::compiler::expanded::ExpandedNode],
 ) -> Option<Expr> {
-    if !node_id.is_window() && !node_id.is_template_self() {
+    if !node_id.is_window() && !node_id.is_template_self() && !node_id.is_page() {
         if let Some(expr) = nodes.get(node_id.0).and_then(|n| n.ports.get(port_name)) {
             return Some(expr.clone());
         }
@@ -313,7 +379,7 @@ pub(in crate::compiler::expand) fn sync_materialized_expr_ports_for_node(
     });
 }
 
-pub(in crate::compiler::expand) fn flush_all_materialized_expr_ports(
+pub(crate) fn flush_all_materialized_expr_ports(
     doc: &mut crate::compiler::expanded::ExpandedDocument,
 ) {
     MATERIALIZED_EXPR_PORTS.with(|cell| {
@@ -322,6 +388,12 @@ pub(in crate::compiler::expand) fn flush_all_materialized_expr_ports(
             if node_id.is_window() {
                 for (k, v) in list {
                     doc.window_ports
+                        .entry(k.clone())
+                        .or_insert_with(|| v.clone());
+                }
+            } else if node_id.is_page() {
+                for (k, v) in list {
+                    doc.page_ports
                         .entry(k.clone())
                         .or_insert_with(|| v.clone());
                 }
@@ -348,7 +420,7 @@ pub(in crate::compiler::expand) fn has_any_pending_fwd_refs() -> bool {
 #[inline]
 pub(in crate::compiler::expand) fn record_pending_fwd_node(node_id: NodeId) {
     FWD_REF_COUNT.with(|c| c.set(c.get().wrapping_add(1)));
-    if node_id.is_window() || node_id.is_template_self() {
+    if node_id.is_window() || node_id.is_template_self() || node_id.is_page() {
         return;
     }
     PENDING_FWD_NODES.with(|cell| {
@@ -372,7 +444,7 @@ pub(crate) fn check_and_record_pending_fwd_binding(idx: usize, expr: &Expr) {
 }
 
 /// Resolves forward lexical scope references in node ports and local bindings starting from the given indices.
-pub(super) fn resolve_forward_refs_in_range(
+pub(crate) fn resolve_forward_refs_in_range(
     doc: &mut crate::compiler::expanded::ExpandedDocument,
     start_node_idx: usize,
     start_binding_idx: usize,
@@ -411,7 +483,7 @@ pub(super) fn resolve_forward_refs_in_range(
     MATERIALIZED_EXPR_PORTS.with(|cell| {
         let mut map = cell.borrow_mut();
         for (&node_id, list) in map.iter_mut() {
-            if !node_id.is_window() && node_id.0 < start_node_idx {
+            if !node_id.is_window() && !node_id.is_page() && node_id.0 < start_node_idx {
                 continue;
             }
             for (_, expr) in list.iter_mut() {
@@ -493,6 +565,7 @@ pub(super) fn expr_vars_in_env_for_node(
         }
         Expr::Unary(u) => expr_vars_in_env_for_node(&u.operand, self_node, env),
         Expr::Paren(inner, _) => expr_vars_in_env_for_node(inner, self_node, env),
+        Expr::Index(_) => false,
         Expr::Ternary(t) => {
             expr_vars_in_env_for_node(&t.condition, self_node, env)
                 && expr_vars_in_env_for_node(&t.then_expr, self_node, env)
@@ -508,7 +581,7 @@ pub(super) fn expr_vars_in_env_for_node(
                     .iter()
                     .all(|a| expr_vars_in_env_for_node(a, self_node, env))
         }
-        Expr::Node(_) | Expr::ExprDef(_) | Expr::Match(_) => false,
+        Expr::Node(_) | Expr::ExprDef(_) | Expr::Match(_) | Expr::DomNodeRef(_, _) => false,
     }
 }
 
@@ -875,6 +948,8 @@ fn first_unresolved_lexical_ident(expr: &Expr) -> Option<Ident> {
             .or_else(|| first_unresolved_lexical_ident(&t.then_expr))
             .or_else(|| first_unresolved_lexical_ident(&t.else_expr)),
         Expr::Paren(inner, _) => first_unresolved_lexical_ident(inner),
+        Expr::Index(idx) => first_unresolved_lexical_ident(&idx.target)
+            .or_else(|| first_unresolved_lexical_ident(&idx.index)),
         Expr::Call(c) => c.args.iter().find_map(first_unresolved_lexical_ident),
         Expr::MethodCall(mc) => first_unresolved_lexical_ident(&mc.target)
             .or_else(|| mc.args.iter().find_map(first_unresolved_lexical_ident)),
@@ -891,7 +966,7 @@ fn first_unresolved_lexical_ident(expr: &Expr) -> Option<Ident> {
                     .or_else(|| first_unresolved_lexical_ident(&arm.body))
                 })
             }),
-        Expr::Node(_) | Expr::ExprDef(_) | Expr::Literal(_) => None,
+        Expr::Node(_) | Expr::ExprDef(_) | Expr::Literal(_) | Expr::DomNodeRef(_, _) => None,
     }
 }
 
@@ -1085,6 +1160,11 @@ fn rewrite_outer_in_expr(
             std::sync::Arc::new(rewrite_outer_in_expr(inner, depth, creation_ctx)?),
             *span,
         )),
+        Expr::Index(idx) => Ok(Expr::Index(IndexExpr {
+            target: std::sync::Arc::new(rewrite_outer_in_expr(&idx.target, depth, creation_ctx)?),
+            index: std::sync::Arc::new(rewrite_outer_in_expr(&idx.index, depth, creation_ctx)?),
+            span: idx.span,
+        })),
         Expr::Node(n) => {
             let mut cloned = n.clone();
             for port in &mut cloned.ports {
@@ -1140,7 +1220,7 @@ fn rewrite_outer_in_expr(
                 span: m.span,
             })))
         }
-        Expr::Literal(_) => Ok(expr.clone()),
+        Expr::Literal(_) | Expr::DomNodeRef(_, _) => Ok(expr.clone()),
     }
 }
 
@@ -1189,7 +1269,7 @@ fn lookup_expr_def_on_node(
             }
         }
     }
-    if !node_id.is_window() && !node_id.is_template_self() {
+    if !node_id.is_window() && !node_id.is_template_self() && !node_id.is_page() {
         if let Some(node) = ctx.nodes.get(node_id.0) {
             if let Some(Expr::ExprDef(def)) = node.ports.get(member_name) {
                 return Some(def.clone());
@@ -1483,6 +1563,9 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
 
             if id.name == Symbol::WINDOW {
                 return Ok(Expr::Ident(Ident::from_node(NodeId::WINDOW, id.span)));
+            }
+            if id.name == Symbol::PAGE && ctx.in_page_template {
+                return Ok(Expr::Ident(Ident::from_node(NodeId::PAGE, id.span)));
             }
             if id.name == Symbol::SELF {
                 return Err(CompileError::Custom {
@@ -1897,6 +1980,10 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     | "to_precision"
                     | "to_px"
                     | "to_pt"
+                    | "to_in"
+                    | "to_pc"
+                    | "to_mm"
+                    | "to_cm"
                     | "to_float"
                     | "to_number"
                     | "to_integer"
@@ -1987,7 +2074,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                         let Some(unit) = DistanceUnit::from_str(unit_id.as_str()) else {
                             return Err(CompileError::Custom {
                                 message: format!(
-                                    "Second argument to distance_to_float() must be a unit ('px', 'pt', or 'em'), got '{}'",
+                                    "Second argument to distance_to_float() must be a unit ('px', 'pt', 'em', 'in', 'pc', 'mm', or 'cm'), got '{}'",
                                     unit_id.as_str()
                                 ),
                                 span: unit_id.span,
@@ -2002,7 +2089,7 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     | Expr::Binary(_)) => rewrite_expr(already_lowered, ctx)?,
                     other => {
                         return Err(CompileError::Custom {
-                            message: "Second argument to distance_to_float() must be a unit ('px', 'pt', or 'em')".to_string(),
+                            message: "Second argument to distance_to_float() must be a unit ('px', 'pt', 'em', 'in', 'pc', 'mm', or 'cm')".to_string(),
                             span: other.span(),
                         });
                     }
@@ -2119,19 +2206,18 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                 }
             }
 
-            let is_builtin_method = matches!(
-                mc.method.as_str(),
-                "append"
-                    | "to_fixed"
-                    | "to_precision"
-                    | "to_px"
-                    | "to_pt"
-                    | "to_float"
-                    | "to_number"
-                    | "to_seconds"
-                    | "to_ms"
-                    | "to_integer"
-            );
+            let is_builtin_method = DistanceUnit::from_conversion_fn(mc.method.as_str()).is_some()
+                || matches!(
+                    mc.method.as_str(),
+                    "append"
+                        | "to_fixed"
+                        | "to_precision"
+                        | "to_float"
+                        | "to_number"
+                        | "to_seconds"
+                        | "to_ms"
+                        | "to_integer"
+                );
             if !ctx.is_event_port && !is_builtin_method {
                 let member_expr = Expr::MemberAccess(MemberAccessExpr {
                     target: mc.target.clone(),
@@ -2262,38 +2348,32 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
 
         Expr::Paren(inner, span) => Ok(Expr::Paren(std::sync::Arc::new(rewrite_expr(inner, ctx)?), *span)),
 
-        Expr::Literal(Literal::Distance(val, unit, span)) => match unit {
-            DistanceUnit::Px => Ok(expr.clone()),
-            DistanceUnit::Pt => Ok(Expr::Binary(BinaryExpr {
-                op: BinaryOp::Mul,
-                left: std::sync::Arc::new(Expr::Literal(Literal::Distance(
-                    *val,
-                    DistanceUnit::Px,
-                    *span,
-                ))),
-                right: std::sync::Arc::new(Expr::Binary(BinaryExpr {
-                    op: BinaryOp::Div,
-                    left: std::sync::Arc::new(Expr::MemberAccess(MemberAccessExpr {
-                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, *span))),
-                        member: Ident::from_symbol(Symbol::DPI, *span),
-                        span: *span,
-                    })),
-                    right: std::sync::Arc::new(Expr::Literal(Literal::Float(72.0, *span))),
-                    span: *span,
-                })),
-                span: *span,
-            })),
-            DistanceUnit::Em => {
-                let font_size_expr = resolve_active_font_size_expr(ctx, *span)?;
-                Ok(Expr::Binary(BinaryExpr {
-                    op: BinaryOp::Mul,
-                    left: std::sync::Arc::new(Expr::Literal(Literal::Float(*val, *span))),
-                    right: std::sync::Arc::new(font_size_expr),
-                    span: *span,
-                }))
+        Expr::Index(idx) => Ok(Expr::Index(IndexExpr {
+            target: std::sync::Arc::new(rewrite_expr(&idx.target, ctx)?),
+            index: std::sync::Arc::new(rewrite_expr(&idx.index, ctx)?),
+            span: idx.span,
+        })),
+
+        Expr::Literal(Literal::Distance(val, unit, span)) => {
+            if let Some(pts_per_unit) = unit.points_per_unit() {
+                Ok(lower_points_to_px_expr(*val * pts_per_unit, *span))
+            } else {
+                match unit {
+                    DistanceUnit::Px => Ok(expr.clone()),
+                    DistanceUnit::Em => {
+                        let font_size_expr = resolve_active_font_size_expr(ctx, *span)?;
+                        Ok(Expr::Binary(BinaryExpr {
+                            op: BinaryOp::Mul,
+                            left: std::sync::Arc::new(Expr::Literal(Literal::Float(*val, *span))),
+                            right: std::sync::Arc::new(font_size_expr),
+                            span: *span,
+                        }))
+                    }
+                    _ => unreachable!("all physical units handled by points_per_unit()"),
+                }
             }
-        },
-        Expr::Literal(_) => Ok(expr.clone()),
+        }
+        Expr::Literal(_) | Expr::DomNodeRef(_, _) => Ok(expr.clone()),
         Expr::Node(n) => {
             let mut cloned = n.clone();
             for port in &mut cloned.ports {
@@ -2347,6 +2427,7 @@ fn infer_rewritten_expr_type_name(
                 None
             }
         }
+        Expr::DomNodeRef(_, _) => Some("Node".to_string()),
         Expr::MemberAccess(m) => {
             if let Expr::Ident(tid) = m.target.as_ref() {
                 if !tid.is_canonical_node_ref() && ctx.enums.contains_key(tid.as_str()) {
@@ -2375,7 +2456,7 @@ fn infer_rewritten_expr_type_name(
                                 return infer_rewritten_expr_type_name(&mat_expr, ctx, depth + 1);
                             }
                         }
-                    } else if !nid.is_template_self() {
+                    } else if !nid.is_template_self() && !nid.is_page() {
                         if let Some(node) = ctx.nodes.get(nid.0) {
                             if let Some(ty) = node.port_types.get(member_str) {
                                 return Some(ty.clone());
@@ -2502,7 +2583,9 @@ fn infer_rewritten_expr_type_name(
         }
         Expr::Call(c) => match c.callee.as_str() {
             "to_integer" => Some("Integer".to_string()),
-            "to_float" | "to_number" | "to_px" | "to_pt" | "distance_to_float" => {
+            name if DistanceUnit::from_conversion_fn(name).is_some()
+                || matches!(name, "to_float" | "to_number" | "distance_to_float") =>
+            {
                 Some("Float".to_string())
             }
             "to_fixed" | "to_precision" => Some("String".to_string()),
@@ -2525,7 +2608,9 @@ fn infer_rewritten_expr_type_name(
         },
         Expr::MethodCall(mc) => match mc.method.as_str() {
             "append" | "to_fixed" | "to_precision" => Some("String".to_string()),
-            "to_px" | "to_pt" | "to_float" | "to_number" | "to_seconds" | "to_ms" => {
+            name if DistanceUnit::from_conversion_fn(name).is_some()
+                || matches!(name, "to_float" | "to_number" | "to_seconds" | "to_ms") =>
+            {
                 Some("Float".to_string())
             }
             "to_integer" => Some("Integer".to_string()),
@@ -3088,6 +3173,9 @@ pub(in crate::compiler::expand) fn expr_has_template_self_ref(expr: &Expr) -> bo
         }
         Expr::Unary(u) => expr_has_template_self_ref(&u.operand),
         Expr::Paren(inner, _) => expr_has_template_self_ref(inner),
+        Expr::Index(idx) => {
+            expr_has_template_self_ref(&idx.target) || expr_has_template_self_ref(&idx.index)
+        }
         Expr::Ternary(t) => {
             expr_has_template_self_ref(&t.condition)
                 || expr_has_template_self_ref(&t.then_expr)
@@ -3097,7 +3185,7 @@ pub(in crate::compiler::expand) fn expr_has_template_self_ref(expr: &Expr) -> bo
         Expr::MethodCall(mc) => {
             expr_has_template_self_ref(&mc.target) || mc.args.iter().any(expr_has_template_self_ref)
         }
-        Expr::Node(_) | Expr::ExprDef(_) => false,
+        Expr::Node(_) | Expr::ExprDef(_) | Expr::DomNodeRef(_, _) => false,
         Expr::Match(m) => {
             m.scrutinee
                 .as_ref()
@@ -3157,6 +3245,11 @@ pub(super) fn instantiate_template_expr(expr: &Expr, comp_node_id: NodeId) -> Ex
         Expr::Paren(inner, span) => {
             Expr::Paren(std::sync::Arc::new(instantiate_template_expr(inner, comp_node_id)), *span)
         }
+        Expr::Index(idx) => Expr::Index(IndexExpr {
+            target: std::sync::Arc::new(instantiate_template_expr(&idx.target, comp_node_id)),
+            index: std::sync::Arc::new(instantiate_template_expr(&idx.index, comp_node_id)),
+            span: idx.span,
+        }),
         Expr::Call(c) => {
             let mut args = Vec::with_capacity(c.args.len());
             for arg in &c.args {
@@ -3183,6 +3276,7 @@ pub(super) fn instantiate_template_expr(expr: &Expr, comp_node_id: NodeId) -> Ex
         Expr::Node(n) => Expr::Node(n.clone()),
         Expr::ExprDef(def) => Expr::ExprDef(def.clone()),
         Expr::Match(m) => Expr::Match(m.clone()),
+        Expr::DomNodeRef(h, s) => Expr::DomNodeRef(*h, *s),
     }
 }
 

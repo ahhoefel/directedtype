@@ -10,6 +10,7 @@
     y: Distance = parent.top,
     gap: Distance = 0
 ) {
+    \let pagination = \Pagination(breakable: true);
     \alias right = x + width;
     \alias bottom = y + height;
 
@@ -27,6 +28,7 @@
     y: Distance = parent.top,
     gap: Distance = 0
 ) {
+    \let pagination = \Pagination(breakable: true);
     \alias right = x + width;
     \alias height = sum(children.height) + max(0, children.len - 1) * gap;
     \alias bottom = y + height;

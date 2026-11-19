@@ -35,6 +35,7 @@ impl BuiltinPrimitive for LinePrimitive {
                 | "color"
                 | "cap"
                 | "clip"
+                | "pagination"
                 | "cursor"
                 | "opacity"
                 | "id"

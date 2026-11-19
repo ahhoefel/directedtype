@@ -116,6 +116,7 @@ impl BuiltinPrimitive for TextPrimitive {
                 | "underline"
                 | "text_bounds"
                 | "clip"
+                | "pagination"
                 | "cursor"
                 | "opacity"
                 | "name"
@@ -170,6 +171,7 @@ impl BuiltinPrimitive for TextPrimitive {
     fn on_content_child(
         &self,
         doc: &mut ExpandedDocument,
+        node_id: NodeId,
         child_id: NodeId,
         child_elem: &ElementNode,
         full_text: &mut String,
@@ -180,6 +182,7 @@ impl BuiltinPrimitive for TextPrimitive {
         if child_elem.name.as_str() != "Font" {
             accumulate_text_child(
                 doc,
+                node_id,
                 child_id,
                 child_elem,
                 full_text,
@@ -198,7 +201,7 @@ impl BuiltinPrimitive for TextPrimitive {
         text_spans: Vec<TextSpan>,
         inline_boxes: Vec<InlineBoxSpan>,
     ) {
-        if !full_text.is_empty() || !inline_boxes.is_empty() {
+        if !full_text.is_empty() || !inline_boxes.is_empty() || !text_spans.is_empty() {
             doc.nodes[node_id.0].text_content = Some(full_text);
             doc.nodes[node_id.0].text_spans = text_spans;
             doc.nodes[node_id.0].inline_boxes = inline_boxes;
@@ -251,6 +254,12 @@ impl BuiltinPrimitive for TextPrimitive {
         );
         apply_inline_origin_defaults(state);
 
+        if !state.ports.contains_key("text") {
+            if let Some(synth_expr) = synthesize_dynamic_inline_text_expr(state.doc, node_id, elem.span) {
+                state.ports.insert("text".to_string(), synth_expr);
+            }
+        }
+
         let (span_style_args, unique_span_nodes) = collect_span_and_inline_box_style_args(
             state,
             &size_expr,
@@ -288,7 +297,77 @@ impl BuiltinPrimitive for TextPrimitive {
     }
 }
 
-/// Validates `font` port type on `\Text` and resolves `text_bounds` -> `start_at`/`end_at`.
+/// Builds a concatenated string `text` expression when a `\Text` node embeds inline
+/// `\Text(text: ...)` or `\Span(text: ...)` dynamic children inside mixed content.
+fn synthesize_dynamic_inline_text_expr(
+    doc: &ExpandedDocument,
+    node_id: NodeId,
+    span: Span,
+) -> Option<Expr> {
+    let node = doc.get_node(node_id)?;
+    let mut placeholders: Vec<(usize, NodeId)> = Vec::new();
+    for ts in &node.text_spans {
+        if ts.range.is_empty() {
+            if let Some(cid) = ts.node_id {
+                if let Some(cnode) = doc.get_node(cid) {
+                    if cnode.text_content.is_none() && cnode.ports.contains_key("text") {
+                        placeholders.push((ts.range.start, cid));
+                    }
+                }
+            }
+        }
+    }
+    if placeholders.is_empty() {
+        return None;
+    }
+
+    let base = node.text_content.as_deref().unwrap_or("");
+    let mut acc: Option<Expr> = None;
+    let mut push_part = |part: Expr| {
+        acc = Some(match acc.take() {
+            None => part,
+            Some(prev) => Expr::Binary(BinaryExpr {
+                op: BinaryOp::Add,
+                left: std::sync::Arc::new(prev),
+                right: std::sync::Arc::new(part),
+                span,
+            }),
+        });
+    };
+
+    let mut cursor = 0usize;
+    for (pos, cid) in placeholders {
+        let clamped = pos.min(base.len()).max(cursor);
+        if clamped > cursor {
+            push_part(Expr::Literal(Literal::String(
+                base[cursor..clamped].to_string(),
+                span,
+            )));
+        }
+        cursor = clamped;
+        let child_text_access = Expr::MemberAccess(MemberAccessExpr {
+            target: std::sync::Arc::new(Expr::Ident(Ident::from_node(cid, span))),
+            member: Ident::new("text", span),
+            span,
+        });
+        let coerced = Expr::Binary(BinaryExpr {
+            op: BinaryOp::Add,
+            left: std::sync::Arc::new(Expr::Literal(Literal::String(String::new(), span))),
+            right: std::sync::Arc::new(child_text_access),
+            span,
+        });
+        push_part(coerced);
+    }
+    if cursor < base.len() {
+        push_part(Expr::Literal(Literal::String(
+            base[cursor..].to_string(),
+            span,
+        )));
+    }
+    Some(acc.unwrap_or_else(|| Expr::Literal(Literal::String(String::new(), span))))
+}
+
+/// Resolves `font` port type on `\Text` and resolves `text_bounds` -> `start_at`/`end_at`.
 fn validate_and_resolve_text_bounds(
     state: &mut PrimitiveExpandState<'_, '_>,
 ) -> Result<(), CompileError> {

@@ -378,6 +378,9 @@ fn resolve_use_decl<R: FileResolver>(
     module_exports: &mut HashMap<PathBuf, HashMap<String, Vec<ComponentDef>>>,
     all_module_enums: &mut HashMap<String, crate::ast::EnumDef>,
 ) -> Result<(), CompileError> {
+    if u.path.ends_with(".wasm") {
+        return Ok(());
+    }
     let raw_path = Path::new(&u.path);
     let mut resolved_path = if raw_path.is_absolute() {
         raw_path.to_path_buf()
@@ -957,6 +960,10 @@ fn collect_from_expr(expr: &Expr, out: &mut HashSet<String>) {
     match expr {
         Expr::Node(node) => collect_from_element_node(node, out),
         Expr::MemberAccess(m) => collect_from_expr(&m.target, out),
+        Expr::Index(idx) => {
+            collect_from_expr(&idx.target, out);
+            collect_from_expr(&idx.index, out);
+        }
         Expr::Ternary(t) => {
             collect_from_expr(&t.condition, out);
             collect_from_expr(&t.then_expr, out);
@@ -1001,7 +1008,7 @@ fn collect_from_expr(expr: &Expr, out: &mut HashSet<String>) {
                 collect_from_expr(&arm.body, out);
             }
         }
-        Expr::Literal(_) | Expr::Ident(_) => {}
+        Expr::Literal(_) | Expr::Ident(_) | Expr::DomNodeRef(_, _) => {}
     }
 }
 
@@ -1109,6 +1116,10 @@ fn rewrite_expr(expr: &mut Expr, renames: &HashMap<String, String>) {
     match expr {
         Expr::Node(node) => rewrite_element_node(node, renames),
         Expr::MemberAccess(m) => rewrite_expr(std::sync::Arc::make_mut(&mut m.target), renames),
+        Expr::Index(idx) => {
+            rewrite_expr(std::sync::Arc::make_mut(&mut idx.target), renames);
+            rewrite_expr(std::sync::Arc::make_mut(&mut idx.index), renames);
+        }
         Expr::Ternary(t) => {
             rewrite_expr(std::sync::Arc::make_mut(&mut t.condition), renames);
             rewrite_expr(std::sync::Arc::make_mut(&mut t.then_expr), renames);
@@ -1159,7 +1170,7 @@ fn rewrite_expr(expr: &mut Expr, renames: &HashMap<String, String>) {
                 rewrite_expr(&mut arm.body, renames);
             }
         }
-        Expr::Literal(_) | Expr::Ident(_) => {}
+        Expr::Literal(_) | Expr::Ident(_) | Expr::DomNodeRef(_, _) => {}
     }
 }
 
@@ -1296,7 +1307,11 @@ fn resolve_expr_enum_literals(
                 resolve_expr_enum_literals(&mut arm.body, enums);
             }
         }
-        Expr::Literal(_) | Expr::Ident(_) => {}
+        Expr::Literal(_) | Expr::Ident(_) | Expr::DomNodeRef(_, _) => {}
+        Expr::Index(idx) => {
+            resolve_expr_enum_literals(std::sync::Arc::make_mut(&mut idx.target), enums);
+            resolve_expr_enum_literals(std::sync::Arc::make_mut(&mut idx.index), enums);
+        }
     }
 }
 

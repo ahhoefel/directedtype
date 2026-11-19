@@ -374,6 +374,9 @@ pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
         (Expr::MemberAccess(m1), Expr::MemberAccess(m2)) => {
             m1.member.as_str() == m2.member.as_str() && expr_eq_ignore_span(&m1.target, &m2.target)
         }
+        (Expr::Index(i1), Expr::Index(i2)) => {
+            expr_eq_ignore_span(&i1.target, &i2.target) && expr_eq_ignore_span(&i1.index, &i2.index)
+        }
         (Expr::Binary(b1), Expr::Binary(b2)) => {
             b1.op == b2.op
                 && expr_eq_ignore_span(&b1.left, &b2.left)
@@ -453,6 +456,7 @@ pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
                     pat_eq && expr_eq_ignore_span(&a1.body, &a2.body)
                 })
         }
+        (Expr::DomNodeRef(h1, _), Expr::DomNodeRef(h2, _)) => h1 == h2,
         _ => false,
     }
 }
@@ -601,6 +605,7 @@ pub enum Expr {
     Literal(Literal),
     Ident(Ident),
     MemberAccess(MemberAccessExpr),
+    Index(IndexExpr),
     Ternary(TernaryExpr),
     Call(CallExpr),
     MethodCall(MethodCallExpr),
@@ -610,6 +615,7 @@ pub enum Expr {
     Node(Box<ElementNode>),
     ExprDef(std::sync::Arc<ExprDef>),
     Match(std::sync::Arc<MatchExpr>),
+    DomNodeRef(crate::dom::NodeHandle, Span),
 }
 
 /// Reusable expression literal: `\Expr(param1: Type1, ...) { <body_expr> }` or `\Expr { <body_expr> }`.
@@ -679,6 +685,7 @@ impl Expr {
             Expr::Literal(lit) => lit.span(),
             Expr::Ident(id) => id.span,
             Expr::MemberAccess(m) => m.span,
+            Expr::Index(ix) => ix.span,
             Expr::Ternary(t) => t.span,
             Expr::Call(c) => c.span,
             Expr::MethodCall(m) => m.span,
@@ -688,6 +695,7 @@ impl Expr {
             Expr::Node(n) => n.span,
             Expr::ExprDef(e) => e.span,
             Expr::Match(m) => m.span,
+            Expr::DomNodeRef(_, span) => *span,
         }
     }
 
@@ -748,6 +756,13 @@ impl Expr {
 pub struct MemberAccessExpr {
     pub target: std::sync::Arc<Expr>,
     pub member: Ident,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IndexExpr {
+    pub target: std::sync::Arc<Expr>,
+    pub index: std::sync::Arc<Expr>,
     pub span: Span,
 }
 
@@ -817,6 +832,10 @@ pub enum DistanceUnit {
     Px,
     Pt,
     Em,
+    In,
+    Pc,
+    Mm,
+    Cm,
 }
 
 impl DistanceUnit {
@@ -825,6 +844,10 @@ impl DistanceUnit {
             "px" => Some(Self::Px),
             "pt" => Some(Self::Pt),
             "em" => Some(Self::Em),
+            "in" => Some(Self::In),
+            "pc" => Some(Self::Pc),
+            "mm" => Some(Self::Mm),
+            "cm" => Some(Self::Cm),
             _ => None,
         }
     }
@@ -834,6 +857,35 @@ impl DistanceUnit {
             Self::Px => "px",
             Self::Pt => "pt",
             Self::Em => "em",
+            Self::In => "in",
+            Self::Pc => "pc",
+            Self::Mm => "mm",
+            Self::Cm => "cm",
+        }
+    }
+
+    /// Exact PostScript point multiplier for DPI-scaled physical print units (`pt`, `in`, `pc`, `mm`, `cm`).
+    pub const fn points_per_unit(&self) -> Option<f64> {
+        match self {
+            Self::Pt => Some(1.0),
+            Self::In => Some(72.0),
+            Self::Pc => Some(12.0),
+            Self::Mm => Some(72.0 / 25.4),
+            Self::Cm => Some(72.0 / 2.54),
+            Self::Px | Self::Em => None,
+        }
+    }
+
+    /// Resolves a distance conversion function or method name (`to_px`, `to_pt`, `to_in`, `to_pc`, `to_mm`, `to_cm`).
+    pub fn from_conversion_fn(name: &str) -> Option<Self> {
+        match name {
+            "to_px" => Some(Self::Px),
+            "to_pt" => Some(Self::Pt),
+            "to_in" => Some(Self::In),
+            "to_pc" => Some(Self::Pc),
+            "to_mm" => Some(Self::Mm),
+            "to_cm" => Some(Self::Cm),
+            _ => None,
         }
     }
 }
@@ -1091,6 +1143,7 @@ impl fmt::Display for Expr {
             Expr::Literal(lit) => write!(f, "{}", lit),
             Expr::Ident(id) => write!(f, "{}", id),
             Expr::MemberAccess(m) => write!(f, "{}.{}", m.target, m.member),
+            Expr::Index(ix) => write!(f, "{}[{}]", ix.target, ix.index),
             Expr::Ternary(t) => write!(f, "{} ? {} : {}", t.condition, t.then_expr, t.else_expr),
             Expr::Call(c) => {
                 write!(f, "{}(", c.callee)?;
@@ -1166,6 +1219,7 @@ impl fmt::Display for Expr {
                 }
                 write!(f, " }}")
             }
+            Expr::DomNodeRef(h, _) => write!(f, "__dom_node({}:{})", h.index(), h.generation()),
         }
     }
 }

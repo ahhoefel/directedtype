@@ -150,7 +150,7 @@ impl Value {
         match self {
             Value::Bool(b) => Some(*b),
             Value::Timer { time, duration, .. } => Some(*duration > 0 && *time < *duration),
-            Value::IndefiniteTimer { .. } => Some(true),
+            Value::IndefiniteTimer { .. } | Value::Node(_) => Some(true),
             Value::Unset => Some(false),
             _ => None,
         }

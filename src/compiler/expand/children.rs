@@ -5,7 +5,8 @@ use super::context::{
 use super::expand_element;
 use super::rewrite::rewrite_expr;
 use super::text_flow::{
-    is_allowed_in_single_text, is_inline_box_element, is_inline_element, is_span_element,
+    is_allowed_in_single_text, is_inline_box_element, is_inline_element,
+    is_non_flow_decl_name, is_non_layout_pagination_directive, is_span_element,
 };
 use super::typecheck::{coerce_typed_binding_expr, validate_node_type_annotation};
 use crate::ast::*;
@@ -16,10 +17,80 @@ use crate::span::Span;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
+fn resolve_collect_deposit_indices<'a>(
+    collect_elem: &ElementNode,
+    ctx: &InstanceContext<'_>,
+    lexical_scope: &RefCell<HashMap<Symbol, LexicalBinding>>,
+    caller_env_scope: &HashMap<String, EnvEntry>,
+    doc: &'a ExpandedDocument,
+    node_fonts: &HashMap<NodeId, NodeId>,
+) -> Result<&'a [usize], CompileError> {
+    if !ctx.in_page_template {
+        return Err(CompileError::Custom {
+            message: "\\Collect can only appear inside a \\PagedFlow page template".to_string(),
+            span: collect_elem.span,
+        });
+    }
+    if collect_elem.content.is_some() {
+        return Err(CompileError::Custom {
+            message: "\\Collect does not accept a { ... } content block".to_string(),
+            span: collect_elem.span,
+        });
+    }
+    for p in &collect_elem.ports {
+        if p.name.as_str() != "from" {
+            return Err(CompileError::Custom {
+                message: format!("Node 'Collect' does not accept property '{}'", p.name.as_str()),
+                span: p.name.span,
+            });
+        }
+    }
+    let from_port = collect_elem
+        .ports
+        .iter()
+        .find(|p| p.name.as_str() == "from")
+        .ok_or_else(|| CompileError::MissingPort {
+            node: "Collect".to_string(),
+            port: "from".to_string(),
+            span: collect_elem.span,
+        })?;
+    let empty_children: [NodeId; 0] = [];
+    let lex_borrow = lexical_scope.borrow();
+    let scope_ctx = ScopeContext::from_instance(
+        ctx,
+        &doc.nodes,
+        &lex_borrow,
+        caller_env_scope,
+        node_fonts,
+        &empty_children,
+    );
+    let rewritten = rewrite_expr(&from_port.expr, &scope_ctx)?;
+    let Some((bucket_id, is_list)) =
+        super::builtins::pagination::extract_collect_bucket_target(&rewritten, doc)
+    else {
+        return Err(CompileError::InvalidCollectTarget {
+            found: format!("{rewritten}"),
+            span: from_port.expr.span(),
+        });
+    };
+    let slice: &'a [usize] = match doc.active_page_deposits.get(&bucket_id) {
+        Some(list) if is_list => list.as_slice(),
+        Some(list) if !list.is_empty() => &list[list.len() - 1..],
+        _ => &[],
+    };
+    Ok(slice)
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(super) fn count_consumer_children(
+    ctx: &InstanceContext<'_>,
     slot: Option<&ContentSlot>,
     is_inline_context: bool,
     outer_children_len: usize,
+    lexical_scope: &RefCell<HashMap<Symbol, LexicalBinding>>,
+    caller_env_scope: &HashMap<String, EnvEntry>,
+    doc: &ExpandedDocument,
+    node_fonts: &HashMap<NodeId, NodeId>,
     registry: &HashMap<String, Vec<ComponentDef>>,
 ) -> usize {
     let Some(slot) = slot else {
@@ -60,7 +131,35 @@ pub(super) fn count_consumer_children(
                 }
             }
             ContentItem::Node(child_elem) => {
-                if is_span_element(child_elem, registry) {
+                if child_elem.name.as_str() == "Deposit" {
+                    // Inline deposit is absorbed into enclosing paragraph if present, or emitted alone otherwise.
+                    pending_inline_boxes += 1;
+                } else if child_elem.name.as_str() == "Collect" {
+                    flush(
+                        &mut count,
+                        &mut pending_has_text_or_span,
+                        &mut pending_inline_boxes,
+                    );
+                    if let Ok(slice) = resolve_collect_deposit_indices(
+                        child_elem,
+                        ctx,
+                        lexical_scope,
+                        caller_env_scope,
+                        doc,
+                        node_fonts,
+                    ) {
+                        count += slice.len();
+                    }
+                } else if is_non_layout_pagination_directive(child_elem.name.as_str()) {
+                    flush(
+                        &mut count,
+                        &mut pending_has_text_or_span,
+                        &mut pending_inline_boxes,
+                    );
+                    if child_elem.name.as_str() == "PageBreak" {
+                        count += 1;
+                    }
+                } else if is_span_element(child_elem, registry) {
                     pending_has_text_or_span = true;
                 } else if is_inline_box_element(child_elem, registry) {
                     pending_inline_boxes += 1;
@@ -75,7 +174,36 @@ pub(super) fn count_consumer_children(
             }
             ContentItem::Let(l) => {
                 if let Some(LetValue::Node(child_elem)) = &l.value {
-                    if is_span_element(child_elem, registry) {
+                    if is_non_flow_decl_name(child_elem.name.as_str()) {
+                        // Bucket/pagination declarations do not emit consumer children.
+                    } else if child_elem.name.as_str() == "Deposit" {
+                        pending_inline_boxes += 1;
+                    } else if child_elem.name.as_str() == "Collect" {
+                        flush(
+                            &mut count,
+                            &mut pending_has_text_or_span,
+                            &mut pending_inline_boxes,
+                        );
+                        if let Ok(slice) = resolve_collect_deposit_indices(
+                            child_elem,
+                            ctx,
+                            lexical_scope,
+                            caller_env_scope,
+                            doc,
+                            node_fonts,
+                        ) {
+                            count += slice.len();
+                        }
+                    } else if is_non_layout_pagination_directive(child_elem.name.as_str()) {
+                        flush(
+                            &mut count,
+                            &mut pending_has_text_or_span,
+                            &mut pending_inline_boxes,
+                        );
+                        if child_elem.name.as_str() == "PageBreak" {
+                            count += 1;
+                        }
+                    } else if is_span_element(child_elem, registry) {
                         pending_has_text_or_span = true;
                     } else if is_inline_box_element(child_elem, registry) {
                         pending_inline_boxes += 1;
@@ -132,6 +260,8 @@ pub(super) fn collect_consumer_children<'a>(
     caller_env_scope: &HashMap<String, EnvEntry>,
     instantiated_children_ids: &'a RefCell<Vec<NodeId>>,
     registry: &HashMap<String, Vec<ComponentDef>>,
+    doc: &ExpandedDocument,
+    node_fonts: &HashMap<NodeId, NodeId>,
 ) -> Result<Vec<ConsumerChildEntry<'a>>, CompileError> {
     let mut consumer_child_entries: Vec<ConsumerChildEntry<'a>> = Vec::new();
     let Some(slot) = &instance.content else {
@@ -157,14 +287,18 @@ pub(super) fn collect_consumer_children<'a>(
                         var_name: None,
                         raw_text: None,
                         caller_lexical_scope: lexical_scope,
+                        owned_caller_lexical_scope: None,
                         caller_env_scope: caller_env_scope.clone(),
                         caller_enclosing_component_id: ctx.enclosing_component_id,
                         caller_enclosing_num_children: ctx.enclosing_num_children,
                         caller_enclosing_instantiated_children: ctx
                             .enclosing_instantiated_children,
                         caller_shadowed_ports: ctx.shadowed_ports,
+                        owned_shadowed_ports: None,
                         instantiated_ids: vec![instantiated_children_ids],
                         forwarded_directives: Vec::new(),
+                        deposit_payload_idx: None,
+                        owned_children: Vec::new(),
                     });
                 }
                 ContentItem::Text(chunk) => {
@@ -185,14 +319,18 @@ pub(super) fn collect_consumer_children<'a>(
                             var_name: None,
                             raw_text: Some(chunk.clone()),
                             caller_lexical_scope: lexical_scope,
+                            owned_caller_lexical_scope: None,
                             caller_env_scope: caller_env_scope.clone(),
                             caller_enclosing_component_id: ctx.enclosing_component_id,
                             caller_enclosing_num_children: ctx.enclosing_num_children,
                             caller_enclosing_instantiated_children: ctx
                                 .enclosing_instantiated_children,
                             caller_shadowed_ports: ctx.shadowed_ports,
+                            owned_shadowed_ports: None,
                             instantiated_ids: vec![instantiated_children_ids],
                             forwarded_directives: Vec::new(),
+                            deposit_payload_idx: None,
+                            owned_children: Vec::new(),
                         });
                     }
                 }
@@ -255,14 +393,18 @@ pub(super) fn collect_consumer_children<'a>(
                             var_name: Some(l.name.as_str().to_string()),
                             raw_text: None,
                             caller_lexical_scope: lexical_scope,
+                            owned_caller_lexical_scope: None,
                             caller_env_scope: caller_env_scope.clone(),
                             caller_enclosing_component_id: ctx.enclosing_component_id,
                             caller_enclosing_num_children: ctx.enclosing_num_children,
                             caller_enclosing_instantiated_children: ctx
                                 .enclosing_instantiated_children,
                             caller_shadowed_ports: ctx.shadowed_ports,
+                            owned_shadowed_ports: None,
                             instantiated_ids: vec![instantiated_children_ids],
                             forwarded_directives: Vec::new(),
+                            deposit_payload_idx: None,
+                            owned_children: Vec::new(),
                         });
                     }
                 }
@@ -387,8 +529,68 @@ pub(super) fn collect_consumer_children<'a>(
                     pending_inline_items.push(ContentItem::Text(chunk.clone()));
                 }
                 ContentItem::Node(child_elem) => {
-                    if is_inline_element(child_elem, registry) {
+                    if is_inline_element(child_elem, registry)
+                        || child_elem.name.as_str() == "Deposit"
+                    {
                         pending_inline_items.push(ContentItem::Node(child_elem.clone()));
+                    } else if child_elem.name.as_str() == "Collect" {
+                        for (elem, var_name, raw_text) in
+                            drain_flushed_inline_items(&mut pending_inline_items)
+                        {
+                            consumer_child_entries.push(ConsumerChildEntry {
+                                elem,
+                                var_name,
+                                raw_text,
+                                caller_lexical_scope: lexical_scope,
+                                owned_caller_lexical_scope: None,
+                                caller_env_scope: caller_env_scope.clone(),
+                                caller_enclosing_component_id: ctx.enclosing_component_id,
+                                caller_enclosing_num_children: ctx.enclosing_num_children,
+                                caller_enclosing_instantiated_children: ctx
+                                    .enclosing_instantiated_children,
+                                caller_shadowed_ports: ctx.shadowed_ports,
+                                owned_shadowed_ports: None,
+                                instantiated_ids: vec![instantiated_children_ids],
+                                forwarded_directives: Vec::new(),
+                                deposit_payload_idx: None,
+                                owned_children: Vec::new(),
+                            });
+                        }
+                        let dep_indices = resolve_collect_deposit_indices(
+                            child_elem,
+                            ctx,
+                            lexical_scope,
+                            caller_env_scope,
+                            doc,
+                            node_fonts,
+                        )?;
+                        for &dep_idx in dep_indices {
+                            let payload = &doc.deposits[dep_idx].payload;
+                            consumer_child_entries.push(ConsumerChildEntry {
+                                elem: payload.elem.clone(),
+                                var_name: payload.var_name.clone(),
+                                raw_text: payload.raw_text.clone(),
+                                caller_lexical_scope: lexical_scope,
+                                owned_caller_lexical_scope: Some(std::rc::Rc::new(RefCell::new(
+                                    payload.caller_lexical_scope.clone(),
+                                ))),
+                                caller_env_scope: payload.caller_env_scope.clone(),
+                                caller_enclosing_component_id: payload
+                                    .caller_enclosing_component_id,
+                                caller_enclosing_num_children: payload
+                                    .caller_enclosing_num_children,
+                                caller_enclosing_instantiated_children: None,
+                                caller_shadowed_ports: None,
+                                owned_shadowed_ports: (!payload
+                                    .caller_shadowed_ports
+                                    .is_empty())
+                                    .then(|| payload.caller_shadowed_ports.clone()),
+                                instantiated_ids: vec![instantiated_children_ids],
+                                forwarded_directives: Vec::new(),
+                                deposit_payload_idx: Some(dep_idx),
+                                owned_children: payload.outer_consumer_children.clone(),
+                            });
+                        }
                     } else {
                         for (elem, var_name, raw_text) in
                             drain_flushed_inline_items(&mut pending_inline_items)
@@ -398,14 +600,18 @@ pub(super) fn collect_consumer_children<'a>(
                                 var_name,
                                 raw_text,
                                 caller_lexical_scope: lexical_scope,
+                                owned_caller_lexical_scope: None,
                                 caller_env_scope: caller_env_scope.clone(),
                                 caller_enclosing_component_id: ctx.enclosing_component_id,
                                 caller_enclosing_num_children: ctx.enclosing_num_children,
                                 caller_enclosing_instantiated_children: ctx
                                     .enclosing_instantiated_children,
                                 caller_shadowed_ports: ctx.shadowed_ports,
+                                owned_shadowed_ports: None,
                                 instantiated_ids: vec![instantiated_children_ids],
                                 forwarded_directives: Vec::new(),
+                                deposit_payload_idx: None,
+                                owned_children: Vec::new(),
                             });
                         }
                         consumer_child_entries.push(ConsumerChildEntry {
@@ -413,14 +619,18 @@ pub(super) fn collect_consumer_children<'a>(
                             var_name: None,
                             raw_text: None,
                             caller_lexical_scope: lexical_scope,
+                            owned_caller_lexical_scope: None,
                             caller_env_scope: caller_env_scope.clone(),
                             caller_enclosing_component_id: ctx.enclosing_component_id,
                             caller_enclosing_num_children: ctx.enclosing_num_children,
                             caller_enclosing_instantiated_children: ctx
                                 .enclosing_instantiated_children,
                             caller_shadowed_ports: ctx.shadowed_ports,
+                            owned_shadowed_ports: None,
                             instantiated_ids: vec![instantiated_children_ids],
                             forwarded_directives: Vec::new(),
+                            deposit_payload_idx: None,
+                            owned_children: Vec::new(),
                         });
                     }
                 }
@@ -433,8 +643,70 @@ pub(super) fn collect_consumer_children<'a>(
                             ctx.enums,
                             registry,
                         )?;
-                        if is_inline_element(child_elem, registry) {
+                        if is_non_flow_decl_name(child_elem.name.as_str()) {
+                            // Expanded into caller lexical_scope in expand_caller_slot_envs.
+                        } else if is_inline_element(child_elem, registry)
+                            || child_elem.name.as_str() == "Deposit"
+                        {
                             pending_inline_items.push(ContentItem::Let(l.clone()));
+                        } else if child_elem.name.as_str() == "Collect" {
+                            for (elem, var_name, raw_text) in
+                                drain_flushed_inline_items(&mut pending_inline_items)
+                            {
+                                consumer_child_entries.push(ConsumerChildEntry {
+                                    elem,
+                                    var_name,
+                                    raw_text,
+                                    caller_lexical_scope: lexical_scope,
+                                    owned_caller_lexical_scope: None,
+                                    caller_env_scope: caller_env_scope.clone(),
+                                    caller_enclosing_component_id: ctx.enclosing_component_id,
+                                    caller_enclosing_num_children: ctx.enclosing_num_children,
+                                    caller_enclosing_instantiated_children: ctx
+                                        .enclosing_instantiated_children,
+                                    caller_shadowed_ports: ctx.shadowed_ports,
+                                    owned_shadowed_ports: None,
+                                    instantiated_ids: vec![instantiated_children_ids],
+                                    forwarded_directives: Vec::new(),
+                                    deposit_payload_idx: None,
+                                    owned_children: Vec::new(),
+                                });
+                            }
+                            let dep_indices = resolve_collect_deposit_indices(
+                                child_elem,
+                                ctx,
+                                lexical_scope,
+                                caller_env_scope,
+                                doc,
+                                node_fonts,
+                            )?;
+                            for &dep_idx in dep_indices {
+                                let payload = &doc.deposits[dep_idx].payload;
+                                consumer_child_entries.push(ConsumerChildEntry {
+                                    elem: payload.elem.clone(),
+                                    var_name: payload.var_name.clone(),
+                                    raw_text: payload.raw_text.clone(),
+                                    caller_lexical_scope: lexical_scope,
+                                    owned_caller_lexical_scope: Some(std::rc::Rc::new(
+                                        RefCell::new(payload.caller_lexical_scope.clone()),
+                                    )),
+                                    caller_env_scope: payload.caller_env_scope.clone(),
+                                    caller_enclosing_component_id: payload
+                                        .caller_enclosing_component_id,
+                                    caller_enclosing_num_children: payload
+                                        .caller_enclosing_num_children,
+                                    caller_enclosing_instantiated_children: None,
+                                    caller_shadowed_ports: None,
+                                    owned_shadowed_ports: (!payload
+                                        .caller_shadowed_ports
+                                        .is_empty())
+                                        .then(|| payload.caller_shadowed_ports.clone()),
+                                    instantiated_ids: vec![instantiated_children_ids],
+                                    forwarded_directives: Vec::new(),
+                                    deposit_payload_idx: Some(dep_idx),
+                                    owned_children: payload.outer_consumer_children.clone(),
+                                });
+                            }
                         } else {
                             for (elem, var_name, raw_text) in
                                 drain_flushed_inline_items(&mut pending_inline_items)
@@ -444,14 +716,18 @@ pub(super) fn collect_consumer_children<'a>(
                                     var_name,
                                     raw_text,
                                     caller_lexical_scope: lexical_scope,
+                                    owned_caller_lexical_scope: None,
                                     caller_env_scope: caller_env_scope.clone(),
                                     caller_enclosing_component_id: ctx.enclosing_component_id,
                                     caller_enclosing_num_children: ctx.enclosing_num_children,
                                     caller_enclosing_instantiated_children: ctx
                                         .enclosing_instantiated_children,
                                     caller_shadowed_ports: ctx.shadowed_ports,
+                                    owned_shadowed_ports: None,
                                     instantiated_ids: vec![instantiated_children_ids],
                                     forwarded_directives: Vec::new(),
+                                    deposit_payload_idx: None,
+                                    owned_children: Vec::new(),
                                 });
                             }
                             consumer_child_entries.push(ConsumerChildEntry {
@@ -459,14 +735,18 @@ pub(super) fn collect_consumer_children<'a>(
                                 var_name: Some(l.name.as_str().to_string()),
                                 raw_text: None,
                                 caller_lexical_scope: lexical_scope,
+                                owned_caller_lexical_scope: None,
                                 caller_env_scope: caller_env_scope.clone(),
                                 caller_enclosing_component_id: ctx.enclosing_component_id,
                                 caller_enclosing_num_children: ctx.enclosing_num_children,
                                 caller_enclosing_instantiated_children: ctx
                                     .enclosing_instantiated_children,
                                 caller_shadowed_ports: ctx.shadowed_ports,
+                                owned_shadowed_ports: None,
                                 instantiated_ids: vec![instantiated_children_ids],
                                 forwarded_directives: Vec::new(),
+                                deposit_payload_idx: None,
+                                owned_children: Vec::new(),
                             });
                         }
                     }
@@ -480,14 +760,18 @@ pub(super) fn collect_consumer_children<'a>(
                             var_name,
                             raw_text,
                             caller_lexical_scope: lexical_scope,
+                            owned_caller_lexical_scope: None,
                             caller_env_scope: caller_env_scope.clone(),
                             caller_enclosing_component_id: ctx.enclosing_component_id,
                             caller_enclosing_num_children: ctx.enclosing_num_children,
                             caller_enclosing_instantiated_children: ctx
                                 .enclosing_instantiated_children,
                             caller_shadowed_ports: ctx.shadowed_ports,
+                            owned_shadowed_ports: None,
                             instantiated_ids: vec![instantiated_children_ids],
                             forwarded_directives: Vec::new(),
+                            deposit_payload_idx: None,
+                            owned_children: Vec::new(),
                         });
                     }
                 }
@@ -500,14 +784,18 @@ pub(super) fn collect_consumer_children<'a>(
                             var_name,
                             raw_text,
                             caller_lexical_scope: lexical_scope,
+                            owned_caller_lexical_scope: None,
                             caller_env_scope: caller_env_scope.clone(),
                             caller_enclosing_component_id: ctx.enclosing_component_id,
                             caller_enclosing_num_children: ctx.enclosing_num_children,
                             caller_enclosing_instantiated_children: ctx
                                 .enclosing_instantiated_children,
                             caller_shadowed_ports: ctx.shadowed_ports,
+                            owned_shadowed_ports: None,
                             instantiated_ids: vec![instantiated_children_ids],
                             forwarded_directives: Vec::new(),
+                            deposit_payload_idx: None,
+                            owned_children: Vec::new(),
                         });
                     }
                     for port in &forward_dir.ports {
@@ -558,14 +846,18 @@ pub(super) fn collect_consumer_children<'a>(
                 var_name,
                 raw_text,
                 caller_lexical_scope: lexical_scope,
+                owned_caller_lexical_scope: None,
                 caller_env_scope: caller_env_scope.clone(),
                 caller_enclosing_component_id: ctx.enclosing_component_id,
                 caller_enclosing_num_children: ctx.enclosing_num_children,
                 caller_enclosing_instantiated_children: ctx
                     .enclosing_instantiated_children,
                 caller_shadowed_ports: ctx.shadowed_ports,
+                owned_shadowed_ports: None,
                 instantiated_ids: vec![instantiated_children_ids],
                 forwarded_directives: Vec::new(),
+                deposit_payload_idx: None,
+                owned_children: Vec::new(),
             });
         }
     }
@@ -614,6 +906,7 @@ pub(super) fn apply_forwarded_directives(
             comp_ports: fwd.comp_ports,
             declared_state_names: fwd.declared_state_names,
             enums,
+            in_page_template: false,
         };
         for ambient in fwd.ports {
             fwd_scope_ctx.is_event_port = ambient.name.as_str().starts_with("on_");
@@ -672,6 +965,10 @@ pub(super) fn expand_caller_slot_envs(
                             enums: ctx.enums,
                             active_scope_id: ctx.active_scope_id,
                             consumer_children: None,
+                            in_paged_flow: ctx.in_paged_flow,
+                            in_page_template: ctx.in_page_template,
+                            in_unbreakable_flow_container: ctx.in_unbreakable_flow_container,
+                            enclosing_comp_ports: None,
                         };
                         let env_node_id =
                             expand_element(elem, &elem_ctx, registry, doc, node_fonts)?;
@@ -792,6 +1089,39 @@ pub(super) fn expand_caller_slot_envs(
                         LexicalBinding::Expr(rewritten),
                     );
                 }
+            } else if let Some(LetValue::Node(elem)) = &let_binding.value {
+                if is_non_flow_decl_name(elem.name.as_str()) {
+                    let elem_ctx = ElementContext {
+                        parent_id: Some(ctx.comp_node_id),
+                        parent_name: Some(comp_def.name.as_str()),
+                        prev_sibling_id: None,
+                        has_next_sibling: false,
+                        parent_ports: comp_scope_ports,
+                        lexical_scope,
+                        env_scope: children_env_scope,
+                        enclosing_component_id: ctx.enclosing_component_id,
+                        enclosing_num_children: ctx.enclosing_num_children,
+                        enclosing_instantiated_children: ctx.enclosing_instantiated_children,
+                        shadowed_ports: ctx.shadowed_ports,
+                        is_let: true,
+                        ambient_authored_ports: None,
+                        enums: ctx.enums,
+                        active_scope_id: ctx.active_scope_id,
+                        consumer_children: None,
+                        in_paged_flow: ctx.in_paged_flow,
+                        in_page_template: ctx.in_page_template,
+                        in_unbreakable_flow_container: ctx.in_unbreakable_flow_container,
+                        enclosing_comp_ports: None,
+                    };
+                    let decl_node_id =
+                        expand_element(elem, &elem_ctx, registry, doc, node_fonts)?;
+                    doc.get_node_mut(decl_node_id).unwrap().var_name =
+                        Some(let_binding.name.as_str().to_string());
+                    lexical_scope.borrow_mut().insert(
+                        let_binding.name.name,
+                        LexicalBinding::Node(decl_node_id),
+                    );
+                }
             }
         }
     }
@@ -822,16 +1152,62 @@ pub(super) fn expand_block_consumer_children(
     let mut last_consumer_child_id = None;
     let mut dir_children_ids = Vec::with_capacity(num_consumer_children);
     for (child_idx, entry) in consumer_child_entries.iter().enumerate() {
-        let has_next_consumer_child = child_idx + 1 < num_consumer_children;
         let child_elem = &entry.elem;
         let var_name = &entry.var_name;
-        let mut merged_ports = HashMap::new();
-        let mut authored_ambient_ports = HashMap::new();
+        let is_directive = is_non_layout_pagination_directive(child_elem.name.as_str());
+        let has_next_consumer_child = !is_directive
+            && consumer_child_entries[child_idx + 1..]
+                .iter()
+                .any(|e| !is_non_layout_pagination_directive(e.elem.name.as_str()));
 
         let mut entry_env_scope = entry.caller_env_scope.clone();
         for (k, v) in children_env_scope.iter() {
+            if entry.deposit_payload_idx.is_some()
+                && k != "clip"
+                && entry_env_scope.contains_key(k)
+            {
+                continue;
+            }
             entry_env_scope.insert(k.clone(), v.clone());
         }
+
+        if is_directive {
+            let elem_ctx = ElementContext {
+                parent_id: Some(ctx.comp_node_id),
+                parent_name: Some(comp_def.name.as_str()),
+                prev_sibling_id: last_consumer_child_id,
+                has_next_sibling: false,
+                parent_ports: comp_scope_ports,
+                lexical_scope: entry.effective_lexical_scope(),
+                env_scope: &entry_env_scope,
+                enclosing_component_id: entry.caller_enclosing_component_id,
+                enclosing_num_children: entry.caller_enclosing_num_children,
+                enclosing_instantiated_children: entry.caller_enclosing_instantiated_children,
+                shadowed_ports: entry.effective_shadowed_ports(),
+                is_let: var_name.is_some(),
+                ambient_authored_ports: None,
+                enums: ctx.enums,
+                active_scope_id: ctx.active_scope_id,
+                consumer_children: None,
+                in_paged_flow: ctx.in_paged_flow,
+                in_page_template: ctx.in_page_template,
+                in_unbreakable_flow_container: ctx.in_unbreakable_flow_container,
+                enclosing_comp_ports: None,
+            };
+            let child_id = expand_element(child_elem, &elem_ctx, registry, doc, node_fonts)?;
+            if let Some(v_name) = var_name {
+                doc.get_node_mut(child_id).unwrap().var_name = Some(v_name.clone());
+                entry
+                    .effective_lexical_scope()
+                    .borrow_mut()
+                    .insert(Symbol::new(v_name), LexicalBinding::Node(child_id));
+            }
+            all_children_ids.push(child_id);
+            continue;
+        }
+
+        let mut merged_ports = HashMap::new();
+        let mut authored_ambient_ports = HashMap::new();
 
         // Ambient rules from \Children are authored inside the component (Tier 3)
         let child_node_id = NodeId(doc.nodes.len());
@@ -897,30 +1273,66 @@ pub(super) fn expand_block_consumer_children(
             })
             .collect();
 
+        let sub_lex_cells: Vec<std::rc::Rc<RefCell<HashMap<Symbol, LexicalBinding>>>> = entry
+            .owned_children
+            .iter()
+            .map(|oc| std::rc::Rc::new(RefCell::new(oc.caller_lexical_scope.clone())))
+            .collect();
+        let sub_entries: Vec<ConsumerChildEntry<'_>> = entry
+            .owned_children
+            .iter()
+            .zip(sub_lex_cells.iter())
+            .map(|(oc, lex_rc)| ConsumerChildEntry {
+                elem: oc.elem.clone(),
+                var_name: oc.var_name.clone(),
+                raw_text: oc.raw_text.clone(),
+                caller_lexical_scope: entry.effective_lexical_scope(),
+                owned_caller_lexical_scope: Some(std::rc::Rc::clone(lex_rc)),
+                caller_env_scope: oc.caller_env_scope.clone(),
+                caller_enclosing_component_id: oc.caller_enclosing_component_id,
+                caller_enclosing_num_children: oc.caller_enclosing_num_children,
+                caller_enclosing_instantiated_children: None,
+                caller_shadowed_ports: None,
+                owned_shadowed_ports: (!oc.caller_shadowed_ports.is_empty())
+                    .then(|| oc.caller_shadowed_ports.clone()),
+                instantiated_ids: Vec::new(),
+                forwarded_directives: Vec::new(),
+                deposit_payload_idx: None,
+                owned_children: oc.outer_consumer_children.clone(),
+            })
+            .collect();
+
         let elem_ctx = ElementContext {
             parent_id: Some(ctx.comp_node_id),
             parent_name: Some(comp_def.name.as_str()),
             prev_sibling_id: last_consumer_child_id,
             has_next_sibling: has_next_consumer_child,
             parent_ports: comp_scope_ports,
-            lexical_scope: entry.caller_lexical_scope,
+            lexical_scope: entry.effective_lexical_scope(),
             env_scope: &entry_env_scope,
             enclosing_component_id: entry.caller_enclosing_component_id,
             enclosing_num_children: entry.caller_enclosing_num_children,
             enclosing_instantiated_children: entry.caller_enclosing_instantiated_children,
-            shadowed_ports: entry.caller_shadowed_ports,
+            shadowed_ports: entry.effective_shadowed_ports(),
             is_let: var_name.is_some(),
             ambient_authored_ports: Some(&authored_ambient_ports),
             enums: ctx.enums,
             active_scope_id: ctx.active_scope_id,
-            consumer_children: None,
+            consumer_children: (!sub_entries.is_empty()).then_some(sub_entries.as_slice()),
+            in_paged_flow: ctx.in_paged_flow,
+            in_page_template: ctx.in_page_template,
+            in_unbreakable_flow_container: ctx.in_unbreakable_flow_container,
+            enclosing_comp_ports: None,
         };
         let child_id = expand_element(&wired_elem, &elem_ctx, registry, doc, node_fonts)?;
+        if let Some(dep_idx) = entry.deposit_payload_idx {
+            doc.active_page_deposit_nodes.push((dep_idx, child_id));
+        }
 
         if let Some(v_name) = var_name {
             doc.get_node_mut(child_id).unwrap().var_name = Some(v_name.clone());
             entry
-                .caller_lexical_scope
+                .effective_lexical_scope()
                 .borrow_mut()
                 .insert(Symbol::new(v_name), LexicalBinding::Node(child_id));
         }
@@ -982,7 +1394,10 @@ pub(super) fn expand_span_consumer_children(
         let is_child_inline_box = registry
             .get(child_elem.name.as_str())
             .is_some_and(|defs| defs.iter().any(|d| d.kind == ComponentKind::InlineBox));
-        if !is_child_span && !is_child_inline_box && child_elem.name.as_str() != "Font" {
+        if !is_child_span
+            && !is_child_inline_box
+            && !matches!(child_elem.name.as_str(), "Font" | "Deposit" | "Text")
+        {
             return Err(CompileError::Custom {
                 message: format!(
                     "Cannot place non-span component '{}' inside inline \\Span '{}'; only plain text, nested \\Span, and \\InlineBox components are allowed",
@@ -1002,23 +1417,27 @@ pub(super) fn expand_span_consumer_children(
             prev_sibling_id: last_consumer_child_id,
             has_next_sibling: has_next_consumer_child,
             parent_ports: comp_scope_ports,
-            lexical_scope: entry.caller_lexical_scope,
+            lexical_scope: entry.effective_lexical_scope(),
             env_scope: &entry_env_scope,
             enclosing_component_id: entry.caller_enclosing_component_id,
             enclosing_num_children: entry.caller_enclosing_num_children,
             enclosing_instantiated_children: entry.caller_enclosing_instantiated_children,
-            shadowed_ports: entry.caller_shadowed_ports,
+            shadowed_ports: entry.effective_shadowed_ports(),
             is_let: var_name.is_some(),
             ambient_authored_ports: None,
             enums: ctx.enums,
             active_scope_id: ctx.active_scope_id,
             consumer_children: None,
+            in_paged_flow: ctx.in_paged_flow,
+            in_page_template: ctx.in_page_template,
+            in_unbreakable_flow_container: ctx.in_unbreakable_flow_container,
+            enclosing_comp_ports: None,
         };
         let child_id = expand_element(child_elem, &elem_ctx, registry, doc, node_fonts)?;
         if let Some(v_name) = var_name {
             doc.get_node_mut(child_id).unwrap().var_name = Some(v_name.clone());
             entry
-                .caller_lexical_scope
+                .effective_lexical_scope()
                 .borrow_mut()
                 .insert(Symbol::new(v_name), LexicalBinding::Node(child_id));
         }
@@ -1028,6 +1447,13 @@ pub(super) fn expand_span_consumer_children(
             last_consumer_child_id = Some(child_id);
             continue;
         }
+        if child_elem.name.as_str() == "Deposit" {
+            doc.nodes[ctx.comp_node_id.0]
+                .inline_deposits
+                .push((child_id, full_text.len()));
+            all_children_ids.push(child_id);
+            continue;
+        }
         for inst_list in &entry.instantiated_ids {
             inst_list.borrow_mut().push(child_id);
         }
@@ -1035,13 +1461,19 @@ pub(super) fn expand_span_consumer_children(
         last_consumer_child_id = Some(child_id);
 
         if doc.nodes[child_id.0].is_inline_box {
+            let ib_byte = full_text.len();
             span_inline_boxes.push(InlineBoxSpan {
                 node_id: child_id,
-                index: full_text.len(),
+                index: ib_byte,
                 width: 0.0,
                 height: 0.0,
                 baseline_offset: 0.0,
             });
+            for dep_id in super::text_flow::collect_subtree_deposit_ids(doc, child_id) {
+                doc.nodes[ctx.comp_node_id.0]
+                    .inline_deposits
+                    .push((dep_id, ib_byte));
+            }
             continue;
         }
 
@@ -1057,6 +1489,12 @@ pub(super) fn expand_span_consumer_children(
             sub_ib.index += start;
             span_inline_boxes.push(sub_ib);
         }
+        let child_deposits = doc.nodes[child_id.0].inline_deposits.clone();
+        for (dep_id, off) in child_deposits {
+            doc.nodes[ctx.comp_node_id.0]
+                .inline_deposits
+                .push((dep_id, start + off));
+        }
 
         if !doc.nodes[child_id.0].text_spans.is_empty() {
             let sub_spans = doc.nodes[child_id.0].text_spans.clone();
@@ -1065,7 +1503,10 @@ pub(super) fn expand_span_consumer_children(
                 sub_span.push_parent_node(ctx.comp_node_id);
                 span_text_spans.push(sub_span);
             }
-        } else if start < end {
+        } else if start < end
+            || (doc.nodes[child_id.0].text_content.is_none()
+                && doc.nodes[child_id.0].ports.contains_key("text"))
+        {
             let mut sub_span = TextSpan::new(start..end).with_node(child_id);
             sub_span.push_parent_node(ctx.comp_node_id);
             span_text_spans.push(sub_span);

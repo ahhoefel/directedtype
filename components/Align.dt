@@ -4,6 +4,7 @@
     Left,
     Center,
     Right,
+    Justify,
     Top,
     Bottom,
     Stretch,

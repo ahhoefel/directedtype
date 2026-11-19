@@ -58,6 +58,45 @@ impl<'a> EvalEnv for NodeMapEnv<'a> {
     }
 }
 
+#[inline]
+fn window_dpi(env: &impl EvalEnv) -> f64 {
+    env.get_var_sym(NodeId::WINDOW, Symbol::DPI)
+        .and_then(|v| v.as_f64())
+        .unwrap_or(96.0)
+}
+
+fn convert_distance_to_unit(
+    val: &Value,
+    target_unit: crate::ast::DistanceUnit,
+    env: &impl EvalEnv,
+    fn_name: &str,
+    err_verb: &str,
+    span: crate::span::Span,
+) -> Result<Value, CompileError> {
+    let d_px = match val {
+        Value::Distance(d) => *d,
+        Value::Integer(0) => return Ok(Value::Float(0.0)),
+        other => {
+            return Err(CompileError::Custom {
+                message: format!("{fn_name}() {err_verb} Distance, got {}", other.type_name()),
+                span,
+            });
+        }
+    };
+    if let Some(pts_per_unit) = target_unit.points_per_unit() {
+        Ok(Value::Float(d_px / (pts_per_unit * (window_dpi(env) / 72.0))))
+    } else {
+        match target_unit {
+            crate::ast::DistanceUnit::Px => Ok(Value::Float(d_px)),
+            crate::ast::DistanceUnit::Em => Err(CompileError::UndefinedEnvVariable {
+                name: "font".to_string(),
+                span,
+            }),
+            _ => unreachable!("all physical units handled by points_per_unit()"),
+        }
+    }
+}
+
 /// Evaluates all variables in the graph according to the topological schedule,
 /// returning an environment mapping each `VarId` to its computed `Value`.
 pub fn evaluate_graph(
@@ -341,35 +380,37 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
         Expr::Literal(lit) => match lit {
             Literal::Integer(n, _) => Ok(Value::Integer(*n)),
             Literal::Float(n, _) => Ok(Value::Float(*n)),
-            Literal::Distance(d, unit, span) => match unit {
-                crate::ast::DistanceUnit::Px => Ok(Value::Distance(*d)),
-                crate::ast::DistanceUnit::Pt => {
-                    let dpi = env
-                        .get_var_sym(NodeId::WINDOW, Symbol::DPI)
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(96.0);
-                    Ok(Value::Distance(*d * (dpi / 72.0)))
+            Literal::Distance(d, unit, span) => {
+                if let Some(pts_per_unit) = unit.points_per_unit() {
+                    let dpi = window_dpi(env);
+                    Ok(Value::Distance(*d * pts_per_unit * (dpi / 72.0)))
+                } else {
+                    match unit {
+                        crate::ast::DistanceUnit::Px => Ok(Value::Distance(*d)),
+                        crate::ast::DistanceUnit::Em => Err(CompileError::UndefinedEnvVariable {
+                            name: "font".to_string(),
+                            span: *span,
+                        }),
+                        _ => unreachable!("all physical units handled by points_per_unit()"),
+                    }
                 }
-                crate::ast::DistanceUnit::Em => Err(CompileError::UndefinedEnvVariable {
-                    name: "font".to_string(),
-                    span: *span,
-                }),
-            },
-            Literal::Area(a, unit, span) => match unit {
-                crate::ast::DistanceUnit::Px => Ok(Value::Area(*a)),
-                crate::ast::DistanceUnit::Pt => {
-                    let dpi = env
-                        .get_var_sym(NodeId::WINDOW, Symbol::DPI)
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(96.0);
-                    let factor = dpi / 72.0;
+            }
+            Literal::Area(a, unit, span) => {
+                if let Some(pts_per_unit) = unit.points_per_unit() {
+                    let dpi = window_dpi(env);
+                    let factor = (dpi / 72.0) * pts_per_unit;
                     Ok(Value::Area(*a * factor * factor))
+                } else {
+                    match unit {
+                        crate::ast::DistanceUnit::Px => Ok(Value::Area(*a)),
+                        crate::ast::DistanceUnit::Em => Err(CompileError::UndefinedEnvVariable {
+                            name: "font".to_string(),
+                            span: *span,
+                        }),
+                        _ => unreachable!("all physical units handled by points_per_unit()"),
+                    }
                 }
-                crate::ast::DistanceUnit::Em => Err(CompileError::UndefinedEnvVariable {
-                    name: "font".to_string(),
-                    span: *span,
-                }),
-            },
+            }
             Literal::Duration(d, _, _) => Ok(Value::Duration(*d)),
             Literal::String(s, _) => Ok(Value::String(s.clone())),
             Literal::Bool(b, _) => Ok(Value::Bool(*b)),
@@ -384,6 +425,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
             Symbol::TRUE => Ok(Value::Bool(true)),
             Symbol::FALSE => Ok(Value::Bool(false)),
             Symbol::UNSET | Symbol::NONE => Ok(Value::Unset),
+            Symbol::PAGE => Err(CompileError::PageOutsidePagedFlow { span: id.span }),
             sym => {
                 if let Some(node_id) = sym.node_id() {
                     return Ok(Value::Node(node_id));
@@ -394,6 +436,10 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                 })
             }
         },
+        Expr::DomNodeRef(h, span) => Err(CompileError::Custom {
+            message: format!("Unlowered DOM node handle reference #{}", h.to_u64()),
+            span: *span,
+        }),
 
         Expr::MemberAccess(m) => {
             if let Expr::Ident(target_id) = m.target.as_ref() {
@@ -411,6 +457,74 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         });
                     }
                 }
+            }
+
+            let mut target_unwrap = m.target.as_ref();
+            while let Expr::Paren(inner, _) = target_unwrap {
+                target_unwrap = inner.as_ref();
+            }
+            if let Expr::Index(idx) = target_unwrap {
+                let bucket_val = eval_expr_with_env(&idx.target, env)?;
+                let bucket_id = match bucket_val {
+                    Value::Node(id) => id,
+                    other => {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Cannot index non-bucket value of type '{}'",
+                                other.type_name()
+                            ),
+                            span: idx.target.span(),
+                        });
+                    }
+                };
+                let idx_val = eval_expr_with_env(&idx.index, env)?;
+                let page_num: Option<i64> = match idx_val {
+                    Value::Integer(n) => Some(n),
+                    Value::Unset => None,
+                    Value::Node(nid) => {
+                        if nid.is_page() {
+                            env.get_var_sym(NodeId::PAGE, Symbol::NUMBER)
+                                .and_then(|v| v.as_i64())
+                        } else {
+                            env.get_var(nid, "__page_number").and_then(|v| v.as_i64())
+                        }
+                    }
+                    other => {
+                        return Err(CompileError::TypeMismatch {
+                            expected: "Integer or Page".to_string(),
+                            actual: other.type_name().to_string(),
+                            span: idx.index.span(),
+                        });
+                    }
+                };
+                let member_name = m.member.as_str();
+                return match page_num {
+                    Some(p) => {
+                        let synth_port = format!("{member_name}_p_{p}");
+                        if let Some(val) = env.get_var(bucket_id, &synth_port) {
+                            Ok(val.clone())
+                        } else {
+                            match member_name {
+                                "has_value" => Ok(Value::Bool(false)),
+                                "len" => Ok(Value::Integer(0)),
+                                "value" | "first" | "last" => Ok(Value::Unset),
+                                other => Err(CompileError::Custom {
+                                    message: format!("Bucket slice has no property '{other}'"),
+                                    span: m.span,
+                                }),
+                            }
+                        }
+                    }
+                    None => match member_name {
+                        "has_value" => Ok(Value::Bool(false)),
+                        "len" => Ok(Value::Integer(0)),
+                        "value" | "first" | "last" => Ok(Value::Unset),
+                        other => Err(CompileError::Custom {
+                            message: format!("Bucket slice has no property '{other}'"),
+                            span: m.span,
+                        }),
+                    },
+                };
             }
 
             let target_val = eval_expr_with_env(&m.target, env)?;
@@ -862,26 +976,22 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                     }
                 };
                 let unit_px = match &c.args[1] {
-                    Expr::Ident(unit_id) => match unit_id.as_str() {
-                        "px" => 1.0,
-                        "pt" => {
-                            let dpi = env
-                                .get_var(NodeId::WINDOW, "dpi")
-                                .and_then(|v| v.as_f64())
-                                .unwrap_or(96.0);
-                            dpi / 72.0
+                    Expr::Ident(unit_id) => match crate::ast::DistanceUnit::from_str(unit_id.as_str()) {
+                        Some(unit) if unit.points_per_unit().is_some() => {
+                            unit.points_per_unit().unwrap() * (window_dpi(env) / 72.0)
                         }
-                        "em" => {
+                        Some(crate::ast::DistanceUnit::Px) => 1.0,
+                        Some(crate::ast::DistanceUnit::Em) => {
                             return Err(CompileError::UndefinedEnvVariable {
                                 name: "font".to_string(),
                                 span: unit_id.span,
                             });
                         }
-                        other => {
+                        _ => {
                             return Err(CompileError::Custom {
                                 message: format!(
-                                    "Unknown unit '{}' in distance_to_float(). Supported units are 'px', 'pt', and 'em'",
-                                    other
+                                    "Unknown unit '{}' in distance_to_float(). Supported units are 'px', 'pt', 'em', 'in', 'pc', 'mm', and 'cm'",
+                                    unit_id.as_str()
                                 ),
                                 span: unit_id.span,
                             });
@@ -1057,36 +1167,16 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                     let sigfigs = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or(1.0).max(1.0) as usize;
                     Ok(Value::String(format_sigfigs(val, sigfigs)))
                 }
-                "to_px" => match evaluated_args.first() {
-                    Some(Value::Distance(d)) => Ok(Value::Float(*d)),
-                    Some(Value::Integer(0)) => Ok(Value::Float(0.0)),
-                    Some(other) => Err(CompileError::Custom {
-                        message: format!("to_px() expects a Distance, found {}", other.type_name()),
-                        span: c.span,
-                    }),
-                    None => Err(CompileError::Custom {
-                        message: "to_px() expects 1 argument".to_string(),
-                        span: c.span,
-                    }),
-                },
-                "to_pt" => match evaluated_args.first() {
-                    Some(Value::Distance(d)) => {
-                        let dpi = env
-                            .get_var(NodeId::WINDOW, "dpi")
-                            .and_then(|v| v.as_f64())
-                            .unwrap_or(96.0);
-                        Ok(Value::Float(*d / (dpi / 72.0)))
-                    }
-                    Some(Value::Integer(0)) => Ok(Value::Float(0.0)),
-                    Some(other) => Err(CompileError::Custom {
-                        message: format!("to_pt() expects a Distance, found {}", other.type_name()),
-                        span: c.span,
-                    }),
-                    None => Err(CompileError::Custom {
-                        message: "to_pt() expects 1 argument".to_string(),
-                        span: c.span,
-                    }),
-                },
+                name if crate::ast::DistanceUnit::from_conversion_fn(name).is_some() => {
+                    let target_unit = crate::ast::DistanceUnit::from_conversion_fn(name).unwrap();
+                    let Some(arg) = evaluated_args.first() else {
+                        return Err(CompileError::Custom {
+                            message: format!("{name}() expects 1 argument"),
+                            span: c.span,
+                        });
+                    };
+                    convert_distance_to_unit(arg, target_unit, env, name, "expects a", c.span)
+                }
                 "to_float" | "to_number" => match evaluated_args.first() {
                     Some(Value::Integer(i)) => Ok(Value::Float(*i as f64)),
                     Some(Value::Float(f)) => Ok(Value::Float(*f)),
@@ -1492,28 +1582,17 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         }),
                     }
                 }
-                "to_px" => match target_val {
-                    Value::Distance(d) => Ok(Value::Float(d)),
-                    Value::Integer(0) => Ok(Value::Float(0.0)),
-                    other => Err(CompileError::Custom {
-                        message: format!("to_px() can only be called on Distance, got {}", other.type_name()),
-                        span: mc.span,
-                    }),
-                },
-                "to_pt" => match target_val {
-                    Value::Distance(d) => {
-                        let dpi = env
-                            .get_var(NodeId::WINDOW, "dpi")
-                            .and_then(|v| v.as_f64())
-                            .unwrap_or(96.0);
-                        Ok(Value::Float(d / (dpi / 72.0)))
-                    }
-                    Value::Integer(0) => Ok(Value::Float(0.0)),
-                    other => Err(CompileError::Custom {
-                        message: format!("to_pt() can only be called on Distance, got {}", other.type_name()),
-                        span: mc.span,
-                    }),
-                },
+                name if crate::ast::DistanceUnit::from_conversion_fn(name).is_some() => {
+                    let target_unit = crate::ast::DistanceUnit::from_conversion_fn(name).unwrap();
+                    convert_distance_to_unit(
+                        &target_val,
+                        target_unit,
+                        env,
+                        name,
+                        "can only be called on",
+                        mc.span,
+                    )
+                }
                 "to_seconds" => match target_val {
                     Value::Duration(d) => Ok(Value::Float(d as f64 / 1_000_000.0)),
                     Value::Integer(0) => Ok(Value::Float(0.0)),
@@ -1631,6 +1710,10 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
         Expr::Match(m) => Err(CompileError::Custom {
             message: "Unlowered 'match' expression in evaluator".to_string(),
             span: m.span,
+        }),
+        Expr::Index(idx) => Err(CompileError::Custom {
+            message: "Bucket slice expression must be indexed with '.has_value', '.len', '.value', '.first', '.last', or used inside \\Collect(from: ...)".to_string(),
+            span: idx.span,
         }),
     }
 }

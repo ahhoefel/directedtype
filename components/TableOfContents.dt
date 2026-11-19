@@ -1,0 +1,99 @@
+// DirectedType Standard Component Library: TableOfContents
+// Automatic table of contents populated prior to layout by `TableOfContents::on_prepare`,
+// binding clickable internal `\Link(to: target)` entries with converging forward `.page` numbers.
+
+\use "components/VStackStretch.dt"
+\use "components/HDivider.dt"
+\use "components/Link.dt"
+
+\Component TocEntry(
+    number: String = "",
+    title: String,
+    level: Integer = 1,
+    target: Anchor,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font
+) {
+    \let indent = (level - 1) * 18px;
+    \let is_top = level == 1;
+    \let entry_font = \Font(
+        font: font,
+        size: is_top ? font.size : (font.size * 0.9),
+        weight: is_top ? 700 : 400
+    );
+    \let display_title = number != "" ? (number + "  " + title) : title;
+
+    \let title_link = \Text(
+        x: x + indent,
+        y: y,
+        font: entry_font,
+        color: #0f172a
+    ) {
+        \Link(to: target, text: display_title)
+    };
+
+    \let page_label = \Text(
+        x: x + width - page_label.width,
+        y: y,
+        font: entry_font,
+        color: #334155
+    ) {
+        \Link(to: target, text: "" + target.page)
+    };
+
+    \let leader_start = title_link.right + 8px;
+    \let leader_end = max(leader_start, page_label.left - 8px);
+    \Line(
+        x1: leader_start,
+        y1: title_link.bottom - 3px,
+        x2: leader_end,
+        y2: title_link.bottom - 3px,
+        thickness: 0.75px,
+        color: #cbd5e1
+    )
+
+    \alias height: Distance = max(title_link.height, page_label.height);
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+}
+
+\Component TableOfContents(
+    title: String = "Table of Contents",
+    max_depth: Integer = 2,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: true),
+    env font: Font
+) {
+    \let heading_font = \Font(
+        font: font,
+        size: font.size * 1.5,
+        weight: 700,
+        line_height: font.line_height * 1.4
+    );
+
+    \let stack = \VStackStretch(
+        x: x,
+        y: y,
+        width: width,
+        gap: 8px,
+        pagination: \Pagination(breakable: true)
+    ) {
+        \Text(
+            font: heading_font,
+            color: #0f172a,
+            text: title,
+            pagination: \Pagination(breakable: false, keep_with_next: true)
+        )
+        \HDivider(color: #cbd5e1)
+        \Children
+    };
+
+    \alias height: Distance = stack.height;
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+}

@@ -12,6 +12,7 @@ const TAG_AGG_CHILD: u64 = 3 << TAG_SHIFT;
 
 const NODE_WINDOW_RAW: u64 = u32::MAX as u64;
 const NODE_TEMPLATE_SELF_RAW: u64 = (u32::MAX - 1) as u64;
+const NODE_PAGE_RAW: u64 = (u32::MAX - 2) as u64;
 
 /// Pre-interned static strings for zero-lock, compile-time constant `Symbol` lookup.
 const PREINTERNED: &[&str] = &[
@@ -103,6 +104,40 @@ const PREINTERNED: &[&str] = &[
     "Expression",
     "match",
     "_",
+    "page",
+    "pagination",
+    "PagedFlow",
+    "FlowBody",
+    "Pagination",
+    "PageBreak",
+    "PageValue",
+    "PageList",
+    "Deposit",
+    "Collect",
+    "Break",
+    "breakable",
+    "keep_with_next",
+    "break_before",
+    "orphans",
+    "widows",
+    "count",
+    "number",
+    "is_odd",
+    "is_even",
+    "is_recto",
+    "is_verso",
+    "is_first",
+    "is_last",
+    "into",
+    "from",
+    "has_value",
+    "value",
+    "first",
+    "last",
+    "end_page",
+    "page_count",
+    "start_page",
+    "anchor_y",
 ];
 
 struct SymbolInterner {
@@ -240,11 +275,47 @@ impl Symbol {
     pub const EXPRESSION_KW: Self = Self(85);
     pub const MATCH_KW: Self = Self(86);
     pub const UNDERSCORE: Self = Self(87);
+    pub const PAGE: Self = Self(88);
+    pub const PAGINATION: Self = Self(89);
+    pub const PAGED_FLOW_PRIM: Self = Self(90);
+    pub const FLOW_BODY_PRIM: Self = Self(91);
+    pub const PAGINATION_PRIM: Self = Self(92);
+    pub const PAGE_BREAK_PRIM: Self = Self(93);
+    pub const PAGE_VALUE_PRIM: Self = Self(94);
+    pub const PAGE_LIST_PRIM: Self = Self(95);
+    pub const DEPOSIT_PRIM: Self = Self(96);
+    pub const COLLECT_PRIM: Self = Self(97);
+    pub const TYPE_BREAK: Self = Self(98);
+    pub const BREAKABLE: Self = Self(99);
+    pub const KEEP_WITH_NEXT: Self = Self(100);
+    pub const BREAK_BEFORE: Self = Self(101);
+    pub const ORPHANS: Self = Self(102);
+    pub const WIDOWS: Self = Self(103);
+    pub const COUNT: Self = Self(104);
+    pub const NUMBER: Self = Self(105);
+    pub const IS_ODD: Self = Self(106);
+    pub const IS_EVEN: Self = Self(107);
+    pub const IS_RECTO: Self = Self(108);
+    pub const IS_VERSO: Self = Self(109);
+    pub const IS_FIRST: Self = Self(110);
+    pub const IS_LAST: Self = Self(111);
+    pub const INTO: Self = Self(112);
+    pub const FROM: Self = Self(113);
+    pub const HAS_VALUE: Self = Self(114);
+    pub const VALUE: Self = Self(115);
+    pub const FIRST: Self = Self(116);
+    pub const LAST: Self = Self(117);
+    pub const END_PAGE: Self = Self(118);
+    pub const PAGE_COUNT: Self = Self(119);
+    pub const START_PAGE: Self = Self(120);
+    pub const ANCHOR_Y: Self = Self(121);
 
     /// Canonical node symbol for `NodeId::WINDOW` (`"__window"`).
     pub const WINDOW_NODE: Self = Self(TAG_NODE | NODE_WINDOW_RAW);
     /// Canonical node symbol for `NodeId::TEMPLATE_SELF` (`"__template_self"`).
     pub const TEMPLATE_SELF_NODE: Self = Self(TAG_NODE | NODE_TEMPLATE_SELF_RAW);
+    /// Canonical node symbol for `NodeId::PAGE` (`"__page"`).
+    pub const PAGE_NODE: Self = Self(TAG_NODE | NODE_PAGE_RAW);
 
     /// Creates a `Symbol` directly representing a concrete `NodeId` in O(1) with zero allocation.
     #[inline]
@@ -253,6 +324,8 @@ impl Symbol {
             Self::WINDOW_NODE
         } else if id.is_template_self() {
             Self::TEMPLATE_SELF_NODE
+        } else if id.is_page() {
+            Self::PAGE_NODE
         } else {
             Self(TAG_NODE | (id.0 as u64))
         }
@@ -263,6 +336,8 @@ impl Symbol {
     pub const fn next_of(id: NodeId) -> Self {
         let raw = if id.is_window() {
             NODE_WINDOW_RAW
+        } else if id.is_page() {
+            NODE_PAGE_RAW
         } else {
             id.0 as u64
         };
@@ -274,13 +349,15 @@ impl Symbol {
     pub const fn agg_child_of(parent: NodeId, idx: usize) -> Self {
         let raw_parent = if parent.is_window() {
             NODE_WINDOW_RAW
+        } else if parent.is_page() {
+            NODE_PAGE_RAW
         } else {
             parent.0 as u64
         };
         Self(TAG_AGG_CHILD | (raw_parent << 30) | ((idx as u64) & 0x3FFF_FFFF))
     }
 
-    /// Returns `Some(NodeId)` if this symbol is a concrete node reference (`__node_N`, `__window`, or `window`).
+    /// Returns `Some(NodeId)` if this symbol is a concrete node reference (`__node_N`, `__window`, `__page`, or `window`).
     #[inline]
     pub const fn node_id(self) -> Option<NodeId> {
         let tag = self.0 & (3 << TAG_SHIFT);
@@ -290,6 +367,8 @@ impl Symbol {
                 Some(NodeId::WINDOW)
             } else if raw == NODE_TEMPLATE_SELF_RAW {
                 Some(NodeId::TEMPLATE_SELF)
+            } else if raw == NODE_PAGE_RAW {
+                Some(NodeId::PAGE)
             } else {
                 Some(NodeId(raw as usize))
             }
@@ -346,6 +425,9 @@ impl Symbol {
         if s.as_bytes().first() == Some(&b'_') {
             if s == "__window" {
                 return Self::WINDOW_NODE;
+            }
+            if s == "__page" {
+                return Self::PAGE_NODE;
             }
             if s == "__baseline_offset" {
                 return Self::BASELINE_OFFSET;
@@ -457,6 +539,40 @@ impl Symbol {
             "Expression" => Self::EXPRESSION_KW,
             "match" => Self::MATCH_KW,
             "_" => Self::UNDERSCORE,
+            "page" => Self::PAGE,
+            "pagination" => Self::PAGINATION,
+            "PagedFlow" => Self::PAGED_FLOW_PRIM,
+            "FlowBody" => Self::FLOW_BODY_PRIM,
+            "Pagination" => Self::PAGINATION_PRIM,
+            "PageBreak" => Self::PAGE_BREAK_PRIM,
+            "PageValue" => Self::PAGE_VALUE_PRIM,
+            "PageList" => Self::PAGE_LIST_PRIM,
+            "Deposit" => Self::DEPOSIT_PRIM,
+            "Collect" => Self::COLLECT_PRIM,
+            "Break" => Self::TYPE_BREAK,
+            "breakable" => Self::BREAKABLE,
+            "keep_with_next" => Self::KEEP_WITH_NEXT,
+            "break_before" => Self::BREAK_BEFORE,
+            "orphans" => Self::ORPHANS,
+            "widows" => Self::WIDOWS,
+            "count" => Self::COUNT,
+            "number" => Self::NUMBER,
+            "is_odd" => Self::IS_ODD,
+            "is_even" => Self::IS_EVEN,
+            "is_recto" => Self::IS_RECTO,
+            "is_verso" => Self::IS_VERSO,
+            "is_first" => Self::IS_FIRST,
+            "is_last" => Self::IS_LAST,
+            "into" => Self::INTO,
+            "from" => Self::FROM,
+            "has_value" => Self::HAS_VALUE,
+            "value" => Self::VALUE,
+            "first" => Self::FIRST,
+            "last" => Self::LAST,
+            "end_page" => Self::END_PAGE,
+            "page_count" => Self::PAGE_COUNT,
+            "start_page" => Self::START_PAGE,
+            "anchor_y" => Self::ANCHOR_Y,
             other => intern_dynamic_str(other),
         }
     }
@@ -480,6 +596,8 @@ impl Symbol {
                     "__window"
                 } else if raw == NODE_TEMPLATE_SELF_RAW {
                     "__template_self"
+                } else if raw == NODE_PAGE_RAW {
+                    "__page"
                 } else {
                     NodeId(raw as usize).canonical_str()
                 }

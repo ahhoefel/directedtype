@@ -1,0 +1,86 @@
+// Multi-page editorial showcase using `\Book`, `\Chapter`, `\Footnote`, `\Sidenote`, and `\Bookmark`.
+\use "components/Align.dt"
+\use "components/Book.dt"
+\use "components/Bold.dt"
+\use "components/Italic.dt"
+
+\Book(
+    title: "Elements of Reactive Typography",
+    two_sided: true,
+    page_width: 8.5in,
+    page_height: 11in,
+    margin_inner: 0.9in,
+    margin_outer: 2.3in,
+    margin_top: 0.95in,
+    margin_bottom: 0.95in,
+    sidenote_width: 1.55in,
+    sidenote_gutter: 0.25in,
+    footnote_rule_width: 1.4in,
+    show_total_pages: true
+) {
+    \Bookmark(title: "Chapter 1: Single-Pass Pagination")
+    \Chapter(number: "1", title: "Single-Pass Pagination") {
+        \Text(align: Align.Justify, width: parent.width) {
+            Every page in DirectedType is a pure node inside a single declarative dataflow graph.\Footnote(marker: "1") {
+                See \Italic{pagination_and_buckets.md} for why \Bold{alias} ports are exported on cross-page reads.
+            } Rather than imperatively pausing layout in an external script, running headers roll forward cleanly from \Italic{page.prev} across consecutive pages without creating any cyclic dependencies.
+        }
+
+        \Text(align: Align.Justify, width: parent.width) {
+            Margin commentary aligns directly to the anchor line's baseline.\Sidenote(marker: "a") {
+                This margin note anchors to the prose callout line baseline and stays in the outer margin.
+            } Nearby sidenotes push downward automatically inside \Bold{SidenoteColumn}\Sidenote(marker: "b") {
+                A second note on a close line never overlaps the first note.
+            } without requiring manual spacing constants from the author.
+        }
+
+        \Text(align: Align.Justify, width: parent.width) {
+            When prose extends past the bottom margin, the pagination engine slices paragraphs line by line across page boundaries while honoring orphan and widow minimums. Consider how traditional book layout couples bottom-anchored footnotes to line breaking: as soon as a line containing a footnote callout lands on page one, that page's available flow body height contracts upward by the height of the footnote block and separator rule. If the contraction pushes the callout line onto page two, the footnote itself rolls back cleanly off page one and reappears at the bottom of page two where the reader actually encounters the superscript marker.
+        }
+
+        \Text(align: Align.Justify, width: parent.width) {
+            The same transactionally safe packing discipline guarantees that chapter openers begin cleanly on recto pages when two-sided book typography is active. Even when an empty verso page is left between chapters to preserve recto alignment, its running header continues cleanly or suppresses without prematurely absorbing the upcoming chapter's metadata deposit. Typography becomes composable because Book, BookPage, Chapter, Footnote, and Sidenote are all authored in standard DirectedType components built atop minimal kernel buckets.
+        }
+
+        \Text(align: Align.Justify, width: parent.width) {
+            Typography is at its clearest when structural separation and visual rhythm work together across every page spread. Inner margins stay balanced along the spine while outer margins frame footnotes, sidenotes, and crisp vector hairline rules. Because every element reduces to geometric primitives, text glyphs, and internal destination links in pure vector PDF streams, magnification preserves razor-sharp outlines at every zoom factor. In addition, embedded \Text(text: "dynamic expressions") participate inline in line breaking without breaking justification or baseline alignment.
+        }
+
+        \Text(align: Align.Justify, width: parent.width) {
+            Additional narrative flow ensures this opening chapter spans comfortably onto the verso page so readers can observe both the mirrored outer margin on page two and the running chapter title set cleanly across the top rule. Every detail from leading and measure to orphan bounds and footer counters obeys the exact constraints declared in the standard library stylesheet.
+        }
+
+        \Text(align: Align.Justify, width: parent.width) {
+            By keeping the kernel minimal and putting book conventions into editable component libraries, designers remain free to replace footnote rules with full-width ornaments, switch between centered and alternating folios, or invent bespoke margin annotations without touching compiler internals. Let us also include one extra paragraph of closing discussion here so that even with generous vertical spacing, Chapter One reliably crosses onto page two and demonstrates live running headers and verso sidenote placement.\Footnote(marker: "2") {
+                Verso footnotes appear at the bottom of page two alongside mirrored outer margin geometry.
+            }
+        }
+
+        \Text(align: Align.Justify, width: parent.width) {
+            One final closing paragraph rounds out the verso sheet cleanly before Chapter Two advances to the next odd-numbered recto page. In classic book design, giving every major chapter a fresh recto opening creates a calm visual pause for the reader between major sections of a technical monograph.
+        }
+
+        \Text(align: Align.Justify, width: parent.width) {
+            Continuing just a bit further on the opening spread gives ample body height for multi-page paragraph splitting and tests widow control across page transitions.\Sidenote(marker: "c") {
+                Verso sidenotes sit in the left outer margin automatically when two_sided is true.
+            } Readers appreciate consistent optical margins regardless of whether a note lands on an even or odd sheet.
+        }
+
+        \Text(align: Align.Justify, width: parent.width) {
+            With those foundations in place, we are ready to move on to the second chapter of this demonstration manuscript and inspect cross-chapter running header transitions on both opener and continuation pages.
+        }
+    }
+
+    \Bookmark(title: "Chapter 2: Composable Page Buckets")
+    \Chapter(number: "2", title: "Composable Page Buckets") {
+        \Text(align: Align.Justify, width: parent.width) {
+            Notice that Chapter Two opens on a fresh recto page, suppresses the running header on the opener page, centers the folio below, and updates \Italic{running_chapter} immediately for any subsequent continuation pages.\Footnote(marker: "3") {
+                Deposited via Deposit into chapter_meta and read back via chapter_meta[page].value.title.
+            }
+        }
+
+        \Text(align: Align.Justify, width: parent.width) {
+            Every footnote rule, sidenote stack, running header, and page counter in this document is implemented purely in \Bold{components/Book.dt} using PageValue, PageList, Deposit, and Collect.
+        }
+    }
+}

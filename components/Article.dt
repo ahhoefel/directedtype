@@ -1,0 +1,312 @@
+// DirectedType Standard Component Library: Article
+// Single-sided article and academic paper layout sharing note primitives from `Book.dt`.
+
+\use "components/Align.dt"
+\use "components/VStackStretch.dt"
+\use { Footnote, FootnoteEntry, Sidenote, SidenoteEntry, SidenoteColumn } from "components/Book.dt";
+
+// Breakable section heading + body container (`keep_with_next: true` prevents orphaned headings).
+\Component Section(
+    title: String,
+    number: String = "",
+    env font: Font,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    gap: Distance = 10pt,
+    heading_gap: Distance = 8pt,
+    heading_scale: Float = 1.35,
+    heading_color: Color = #0f172a,
+    pagination: Pagination = \Pagination(breakable: true)
+) {
+    \let full_title = number != "" ? (number + "  " + title) : title;
+    \let heading = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: \Font(
+            font: font,
+            size: font.size * heading_scale,
+            weight: 700,
+            line_height: font.line_height * heading_scale
+        ),
+        color: heading_color,
+        text: full_title,
+        pagination: \Pagination(breakable: false, keep_with_next: true)
+    );
+
+    \let body = \VStackStretch(
+        x: x,
+        y: heading.bottom + heading_gap,
+        width: width,
+        gap: gap,
+        pagination: \Pagination(breakable: true)
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = (heading.bottom + heading_gap + body.height) - y;
+    \alias bottom: Distance = y + height;
+}
+
+// Optional flowing article title & byline block (collapses to 0pt height when all fields are empty).
+\Component ArticleHeader(
+    title: String = "",
+    author: String = "",
+    date: String = "",
+    env font: Font,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    title_color: Color = #0f172a,
+    meta_color: Color = #64748b,
+    bottom_gap: Distance = 18pt,
+    pagination: Pagination = \Pagination(breakable: false, keep_with_next: true)
+) {
+    \let has_title = title != "";
+    \let has_meta = author != "" || date != "";
+    \let has_any = has_title || has_meta;
+    \let meta_line = (author != "" && date != "")
+        ? (author + "  •  " + date)
+        : (author != "" ? author : date);
+
+    \let title_node = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: \Font(
+            font: font,
+            size: font.size * 1.9,
+            weight: 700,
+            line_height: font.line_height * 1.7
+        ),
+        color: title_color,
+        text: title
+    );
+
+    \let meta_y = has_title ? (title_node.bottom + 8pt) : y;
+    \let meta_node = \Text(
+        x: x,
+        y: meta_y,
+        width: width,
+        font: \Font(font: font, size: font.size * 0.92, weight: 400, italic: false),
+        color: meta_color,
+        text: meta_line
+    );
+
+    \let content_bottom = has_meta
+        ? meta_node.bottom
+        : (has_title ? title_node.bottom : y);
+    \let rule_y = content_bottom + 12pt;
+
+    \Rect(
+        x: x,
+        y: rule_y,
+        width: has_any ? width : 0pt,
+        height: has_any ? 0.75pt : 0pt,
+        color: #cbd5e1,
+        opacity: has_any ? 1.0 : 0.0
+    )
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = has_any ? ((rule_y + 0.75pt + bottom_gap) - y) : 0pt;
+    \alias bottom: Distance = y + height;
+}
+
+// Single-sided article page template with running header on pages 2+, bottom footnotes,
+// optional right-margin sidenotes, and "Page X of Y" footer via post-packing `page.count`.
+\Component ArticlePage(
+    width: Distance = 8.5in,
+    height: Distance = 11in,
+    x: Distance = page.left,
+    y: Distance = page.top,
+    margin_left: Distance = 1in,
+    margin_right: Distance = 1in,
+    margin_top: Distance = 0.85in,
+    margin_bottom: Distance = 0.85in,
+    header_offset: Distance = 0.42in,
+    footer_offset: Distance = 0.42in,
+    sidenote_width: Distance = 0pt,
+    sidenote_gutter: Distance = 0.25in,
+    sidenote_gap: Distance = 10pt,
+    footnote_gap: Distance = 6pt,
+    footnote_rule_width: Distance = 1.5in,
+    footnote_rule_thickness: Distance = 0.5pt,
+    footnote_rule_color: Color = #64748b,
+    footnote_rule_top_gap: Distance = 10pt,
+    footnote_rule_bottom_gap: Distance = 6pt,
+    page_bg: Color = #ffffff,
+    chrome_color: Color = #64748b,
+    article_title: String = "",
+    env font: Font,
+    env footnotes: PageList,
+    env sidenotes: PageList
+) {
+    \let body_x = x + margin_left;
+    \let body_width = width - margin_left - margin_right;
+    \let body_top = y + margin_top;
+    \let body_bottom_limit = y + height - margin_bottom;
+    \let body_max_height = body_bottom_limit - body_top;
+
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: page_bg
+    )
+
+    // Running title header on pages 2+ (suppressed on page 1)
+    \let chrome_font = \Font(font: font, size: font.size * 0.82, weight: 400, italic: false);
+    \let show_header = !page.is_first && article_title != "";
+    \Text(
+        x: body_x,
+        y: y + header_offset,
+        width: body_width,
+        font: chrome_font,
+        color: chrome_color,
+        align: Align.Right,
+        text: show_header ? article_title : ""
+    )
+
+    // Bottom-anchored footnotes & customizable separator rule
+    \let has_footnotes = footnotes[page].len > 0;
+    \let footnote_stack = \VStackStretch(
+        x: body_x,
+        y: body_bottom_limit - footnote_stack.height,
+        width: body_width,
+        gap: footnote_gap
+    ) {
+        \Collect(from: footnotes[page])
+    };
+
+    \Rect(
+        x: body_x,
+        y: footnote_stack.top - footnote_rule_bottom_gap - footnote_rule_thickness,
+        width: footnote_rule_width,
+        height: footnote_rule_thickness,
+        color: footnote_rule_color,
+        opacity: has_footnotes ? 1.0 : 0.0
+    )
+
+    \let fn_reserved = has_footnotes
+        ? (footnote_stack.height + footnote_rule_top_gap + footnote_rule_thickness + footnote_rule_bottom_gap)
+        : 0pt;
+
+    \FlowBody(
+        x: body_x,
+        y: body_top,
+        width: body_width,
+        height: body_max_height - fn_reserved
+    )
+
+    \SidenoteColumn(
+        x: body_x + body_width + sidenote_gutter,
+        y: body_top,
+        width: sidenote_width,
+        max_bottom: body_bottom_limit,
+        gap: sidenote_gap
+    ) {
+        \Collect(from: sidenotes[page])
+    }
+
+    // Post-packing Phase C footer: "Page X of Y"
+    \Text(
+        x: body_x,
+        y: y + height - footer_offset,
+        width: body_width,
+        font: chrome_font,
+        color: chrome_color,
+        align: Align.Center,
+        text: "Page " + page.number + " of " + page.count
+    )
+}
+
+// Top-level Article component packaging `ArticlePage`, header, and buckets into `\PagedFlow`.
+\Component Article(
+    title: String = "",
+    author: String = "",
+    date: String = "",
+    page_width: Distance = 8.5in,
+    page_height: Distance = 11in,
+    margin_left: Distance = 1in,
+    margin_right: Distance = 1in,
+    margin_top: Distance = 0.85in,
+    margin_bottom: Distance = 0.85in,
+    header_offset: Distance = 0.42in,
+    footer_offset: Distance = 0.42in,
+    sidenote_width: Distance = 0pt,
+    sidenote_gutter: Distance = 0.25in,
+    sidenote_gap: Distance = 10pt,
+    paragraph_gap: Distance = 10pt,
+    footnote_gap: Distance = 6pt,
+    footnote_rule_width: Distance = 1.5in,
+    footnote_rule_thickness: Distance = 0.5pt,
+    footnote_rule_color: Color = #64748b,
+    footnote_rule_top_gap: Distance = 10pt,
+    footnote_rule_bottom_gap: Distance = 6pt,
+    page_bg: Color = #ffffff,
+    orphans: Integer = 2,
+    widows: Integer = 2,
+    start_page: Integer = 1,
+    page_gap: Distance = 0pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    env font: Font = \Font(family: "Arial", size: 10.5pt, line_height: 15pt)
+) {
+    \env font = self.font;
+    \env footnotes = \PageList();
+    \env sidenotes = \PageList();
+
+    \let body_width = page_width - margin_left - margin_right;
+
+    \let flow = \PagedFlow(
+        x: x,
+        y: y,
+        gap: page_gap,
+        orphans: orphans,
+        widows: widows,
+        start_page: start_page,
+        page: \ArticlePage(
+            width: page_width,
+            height: page_height,
+            margin_left: margin_left,
+            margin_right: margin_right,
+            margin_top: margin_top,
+            margin_bottom: margin_bottom,
+            header_offset: header_offset,
+            footer_offset: footer_offset,
+            sidenote_width: sidenote_width,
+            sidenote_gutter: sidenote_gutter,
+            sidenote_gap: sidenote_gap,
+            footnote_gap: footnote_gap,
+            footnote_rule_width: footnote_rule_width,
+            footnote_rule_thickness: footnote_rule_thickness,
+            footnote_rule_color: footnote_rule_color,
+            footnote_rule_top_gap: footnote_rule_top_gap,
+            footnote_rule_bottom_gap: footnote_rule_bottom_gap,
+            page_bg: page_bg,
+            article_title: title
+        )
+    ) {
+        \ArticleHeader(title: title, author: author, date: date, width: body_width)
+        \VStackStretch(
+            width: body_width,
+            gap: paragraph_gap,
+            pagination: \Pagination(breakable: true)
+        ) {
+            \Children
+        }
+    };
+
+    \alias page_count: Integer = flow.page_count;
+    \alias end_page: Integer = flow.end_page;
+    \alias width: Distance = flow.width;
+    \alias height: Distance = flow.height;
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+}

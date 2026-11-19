@@ -1,0 +1,680 @@
+// DirectedType Standard Component Library: Book
+// Composable book typography built on kernel pagination primitives:
+//   - Two-sided recto/verso mirrored margins (`two_sided`, `margin_inner`, `margin_outer`)
+//   - Cross-page running headers via public `\alias running_chapter` + `page.prev`
+//   - Running headers suppressed on chapter opener pages
+//   - Bottom-anchored footnotes with customizable separator rule
+//   - Collision-avoiding outer-margin Tufte sidenotes
+
+\use "components/Align.dt"
+\use "components/VStackStretch.dt"
+
+// Pure metadata payload deposited into `chapter_meta` (\PageValue) at each chapter start.
+\Component ChapterMeta(
+    title: String,
+    number: String = ""
+) {}
+
+// Breakable chapter container:
+// 1. Advances to a recto (odd) page by default (`break_before: Break.Recto`).
+// 2. Deposits `\ChapterMeta` into `env chapter_meta` on the opener page.
+// 3. Keeps label + title glued to the first opening block (`keep_with_next: true`).
+\Component Chapter(
+    title: String,
+    number: String = "",
+    unnumbered: Boolean = false,
+    env font: Font,
+    env chapter_meta: PageValue,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    gap: Distance = 12pt,
+    title_gap: Distance = 20pt,
+    heading_color: Color = #0f172a,
+    label_color: Color = #64748b,
+    break_before: Break = Break.Recto,
+    pagination: Pagination = \Pagination(breakable: true, break_before: break_before)
+) {
+    \Deposit(into: chapter_meta) {
+        \ChapterMeta(title: title, number: number)
+    }
+
+    \let has_number = number != "";
+    \let label_node = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: \Font(font: font, size: font.size * 0.85, weight: 600),
+        color: label_color,
+        text: has_number ? ("CHAPTER " + number) : "",
+        pagination: \Pagination(breakable: false, keep_with_next: true)
+    );
+
+    \let title_y = has_number ? (label_node.bottom + 6pt) : y;
+    \let title_node = \Text(
+        x: x,
+        y: title_y,
+        width: width,
+        font: \Font(
+            font: font,
+            size: font.size * 1.9,
+            weight: 700,
+            line_height: font.line_height * 1.75
+        ),
+        color: heading_color,
+        text: title,
+        pagination: \Pagination(breakable: false, keep_with_next: true)
+    );
+
+    \let body = \VStackStretch(
+        x: x,
+        y: title_node.bottom + title_gap,
+        width: width,
+        gap: gap,
+        pagination: \Pagination(breakable: true)
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = (title_node.bottom + title_gap + body.height) - y;
+    \alias bottom: Distance = y + height;
+}
+
+// Breakable numbered level-1 heading container (`keep_with_next: true` prevents orphaned titles).
+\Component H1(
+    title: String,
+    number: String = "",
+    unnumbered: Boolean = false,
+    env font: Font,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    gap: Distance = 10pt,
+    heading_gap: Distance = 8pt,
+    heading_scale: Float = 1.38,
+    heading_color: Color = #0f172a,
+    pagination: Pagination = \Pagination(breakable: true)
+) {
+    \let full_title = number != "" ? (number + "  " + title) : title;
+    \let title_node = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: \Font(
+            font: font,
+            size: font.size * heading_scale,
+            weight: 700,
+            line_height: font.line_height * heading_scale
+        ),
+        color: heading_color,
+        text: full_title,
+        pagination: \Pagination(breakable: false, keep_with_next: true)
+    );
+
+    \let body = \VStackStretch(
+        x: x,
+        y: title_node.bottom + heading_gap,
+        width: width,
+        gap: gap,
+        pagination: \Pagination(breakable: true)
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = (children.len > 0 ? (title_node.bottom + heading_gap + body.height) : title_node.bottom) - y;
+    \alias bottom: Distance = y + height;
+}
+
+// Breakable numbered level-2 subheading container.
+\Component H2(
+    title: String,
+    number: String = "",
+    unnumbered: Boolean = false,
+    env font: Font,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    gap: Distance = 8pt,
+    heading_gap: Distance = 6pt,
+    heading_scale: Float = 1.18,
+    heading_color: Color = #1e293b,
+    pagination: Pagination = \Pagination(breakable: true)
+) {
+    \let full_title = number != "" ? (number + "  " + title) : title;
+    \let title_node = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: \Font(
+            font: font,
+            size: font.size * heading_scale,
+            weight: 600,
+            line_height: font.line_height * heading_scale
+        ),
+        color: heading_color,
+        text: full_title,
+        pagination: \Pagination(breakable: false, keep_with_next: true)
+    );
+
+    \let body = \VStackStretch(
+        x: x,
+        y: title_node.bottom + heading_gap,
+        width: width,
+        gap: gap,
+        pagination: \Pagination(breakable: true)
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = (children.len > 0 ? (title_node.bottom + heading_gap + body.height) : title_node.bottom) - y;
+    \alias bottom: Distance = y + height;
+}
+
+// Breakable level-3 subheading container.
+\Component H3(
+    title: String,
+    number: String = "",
+    unnumbered: Boolean = false,
+    env font: Font,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    gap: Distance = 8pt,
+    heading_gap: Distance = 4pt,
+    heading_scale: Float = 1.05,
+    heading_color: Color = #334155,
+    pagination: Pagination = \Pagination(breakable: true)
+) {
+    \let full_title = number != "" ? (number + "  " + title) : title;
+    \let title_node = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: \Font(
+            font: font,
+            size: font.size * heading_scale,
+            weight: 600,
+            line_height: font.line_height * heading_scale
+        ),
+        color: heading_color,
+        text: full_title,
+        pagination: \Pagination(breakable: false, keep_with_next: true)
+    );
+
+    \let body = \VStackStretch(
+        x: x,
+        y: title_node.bottom + heading_gap,
+        width: width,
+        gap: gap,
+        pagination: \Pagination(breakable: true)
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = (children.len > 0 ? (title_node.bottom + heading_gap + body.height) : title_node.bottom) - y;
+    \alias bottom: Distance = y + height;
+}
+
+// Atomic numbered figure container keeping artwork glued to its caption.
+\Component Figure(
+    caption: String = "",
+    number: String = "",
+    unnumbered: Boolean = false,
+    env font: Font,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    gap: Distance = 6pt,
+    caption_color: Color = #475569,
+    pagination: Pagination = \Pagination(breakable: false)
+) {
+    \let body = \VStackStretch(
+        x: x,
+        y: y,
+        width: width,
+        gap: gap,
+        pagination: \Pagination(breakable: false)
+    ) {
+        \Children
+    };
+
+    \let has_caption = caption != "" || number != "";
+    \let full_caption = number != ""
+        ? (caption != "" ? (number + ": " + caption) : number)
+        : caption;
+    \let cap_font = \Font(
+        font: font,
+        size: font.size * 0.88,
+        italic: true,
+        line_height: font.line_height * 0.88
+    );
+    \let cap_node = \Text(
+        x: x,
+        y: body.bottom + (has_caption ? gap : 0pt),
+        width: width,
+        font: cap_font,
+        color: caption_color,
+        text: full_caption
+    );
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = (has_caption ? cap_node.bottom : body.bottom) - y;
+    \alias bottom: Distance = y + height;
+}
+
+// Atomic footnote entry collected at the bottom of the page where its anchor landed.
+\Component FootnoteEntry(
+    marker: String = "*",
+    env font: Font,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    marker_indent: Distance = 14pt,
+    color: Color = #334155,
+    marker_color: Color = #0f172a
+) {
+    \let has_marker = marker != "";
+    \let note_font = \Font(
+        font: font,
+        size: font.size * 0.85,
+        weight: 400,
+        italic: false,
+        line_height: font.line_height * 0.85
+    );
+    \let mark_node = \Text(
+        x: x,
+        y: y,
+        font: note_font,
+        color: marker_color,
+        text: marker
+    );
+    \let indent = has_marker ? marker_indent : 0pt;
+    \let body_node = \Text(
+        x: x + indent,
+        y: y,
+        width: width - indent,
+        font: note_font,
+        color: color
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = max(mark_node.height, body_node.height);
+    \alias bottom: Distance = y + height;
+}
+
+// Inline footnote callout (`\InlineBox`):
+// Renders the raised superscript marker inline on the text line and deposits `\FootnoteEntry`
+// into `env footnotes` (\PageList) for the page containing that line.
+\InlineBox Footnote(
+    marker: String = "*",
+    unnumbered: Boolean = false,
+    env font: Font,
+    env footnotes: PageList,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    marker_color: Color = #1e293b
+) {
+    \let sup_font = \Font(font: font, size: font.size * 0.72, weight: 400, italic: false);
+    \let shift = font.size * 0.38;
+    \let mark = \Text(
+        x: x,
+        y: y,
+        font: sup_font,
+        color: marker_color,
+        text: marker
+    );
+
+    \alias width: Distance = mark.width;
+    \alias height: Distance = mark.height;
+    \alias baseline: Distance = marker != "" ? (mark.baseline + shift) : y;
+
+    \Deposit(into: footnotes) {
+        \FootnoteEntry(marker: marker) {
+            \Children
+        }
+    }
+}
+
+// Margin sidenote entry deposited into `sidenotes` (\PageList).
+// Exposes `target_y` so `\SidenoteColumn` aligns the first baseline to the prose callout
+// while pushing overlapping notes downward in single-pass order.
+\Component SidenoteEntry(
+    anchor_y: Distance,
+    marker: String = "",
+    env font: Font,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    color: Color = #475569,
+    marker_color: Color = #0f172a
+) {
+    \let has_marker = marker != "";
+    \let note_font = \Font(
+        font: font,
+        size: font.size * 0.85,
+        weight: 400,
+        italic: false,
+        line_height: font.line_height * 0.85
+    );
+    \let mark_node = \Text(
+        x: x,
+        y: y,
+        font: note_font,
+        color: marker_color,
+        text: marker
+    );
+    \let marker_gap = has_marker ? 4pt : 0pt;
+    \let body_node = \Text(
+        x: x + mark_node.width + marker_gap,
+        y: y,
+        width: width - mark_node.width - marker_gap,
+        font: note_font,
+        color: color
+    ) {
+        \Children
+    };
+
+    \alias target_y: Distance = anchor_y - note_font.cap_height;
+    \alias right: Distance = x + width;
+    \alias height: Distance = max(mark_node.height, body_node.height);
+    \alias bottom: Distance = y + height;
+}
+
+// Inline sidenote callout (`\InlineBox`):
+// Passes its positioned page-local `baseline` to `\SidenoteEntry(anchor_y: baseline)`.
+\InlineBox Sidenote(
+    marker: String = "",
+    unnumbered: Boolean = false,
+    env font: Font,
+    env sidenotes: PageList,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    marker_color: Color = #1e293b
+) {
+    \let sup_font = \Font(font: font, size: font.size * 0.72, weight: 400, italic: false);
+    \let shift = font.size * 0.38;
+    \let mark = \Text(
+        x: x,
+        y: y,
+        font: sup_font,
+        color: marker_color,
+        text: marker
+    );
+
+    \alias width: Distance = mark.width;
+    \alias height: Distance = mark.height;
+    \alias baseline: Distance = marker != "" ? (mark.baseline + shift) : y;
+
+    \Deposit(into: sidenotes) {
+        \SidenoteEntry(anchor_y: baseline, marker: marker) {
+            \Children
+        }
+    }
+}
+
+// Collision-avoiding margin column for `\Collect(from: sidenotes[page])`.
+// Each child starts at its desired `child.target_y`, clamped below `y` and `prev.bottom + gap`.
+\Component SidenoteColumn(
+    x: Distance,
+    y: Distance,
+    width: Distance,
+    max_bottom: Distance,
+    gap: Distance = 10pt
+) {
+    \alias right: Distance = x + width;
+    \alias height: Distance = max_bottom - y;
+    \alias bottom: Distance = max_bottom;
+
+    \Children(
+        x: x,
+        width: width,
+        y: prev ? max(child.target_y, prev.bottom + gap) : max(y, child.target_y)
+    )
+}
+
+// Book page template with two-sided mirrored margins, running header roll-forward,
+// chapter-opener header suppression, customizable footnote rule, and margin sidenotes.
+\Component BookPage(
+    width: Distance = 8.5in,
+    height: Distance = 11in,
+    x: Distance = page.left,
+    y: Distance = page.top,
+    two_sided: Boolean = true,
+    margin_inner: Distance = 1in,
+    margin_outer: Distance = 0.75in,
+    margin_top: Distance = 0.9in,
+    margin_bottom: Distance = 0.9in,
+    header_offset: Distance = 0.45in,
+    footer_offset: Distance = 0.45in,
+    header_gap: Distance = 6pt,
+    sidenote_width: Distance = 0pt,
+    sidenote_gutter: Distance = 0.25in,
+    sidenote_gap: Distance = 10pt,
+    footnote_gap: Distance = 6pt,
+    footnote_rule_width: Distance = 1.5in,
+    footnote_rule_thickness: Distance = 0.5pt,
+    footnote_rule_color: Color = #64748b,
+    footnote_rule_top_gap: Distance = 10pt,
+    footnote_rule_bottom_gap: Distance = 6pt,
+    page_bg: Color = #ffffff,
+    chrome_color: Color = #64748b,
+    book_title: String = "",
+    show_total_pages: Boolean = false,
+    env font: Font,
+    env chapter_meta: PageValue,
+    env footnotes: PageList,
+    env sidenotes: PageList
+) {
+    \let body_width = width - margin_inner - margin_outer;
+    \let body_top = y + margin_top;
+    \let body_bottom_limit = y + height - margin_bottom;
+    \let body_max_height = body_bottom_limit - body_top;
+
+    \let is_verso = two_sided && page.is_verso;
+    \let body_x = is_verso ? (x + margin_outer) : (x + margin_inner);
+
+    // Public `\alias` port (NEVER `\let`) so `page.prev.running_chapter` is visible across pages.
+    \let has_chapter_start = chapter_meta[page].has_value;
+    \alias running_chapter: String = has_chapter_start
+        ? chapter_meta[page].value.title
+        : (page.prev ? page.prev.running_chapter : "");
+
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+
+    // Optional page background sheet
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: page_bg
+    )
+
+    // Running header (suppressed on chapter openers and before the first chapter)
+    \let chrome_font = \Font(font: font, size: font.size * 0.82, weight: 400, italic: true);
+    \let num_font = \Font(font: font, size: font.size * 0.85, weight: 400, italic: false);
+    \let show_header = !has_chapter_start && running_chapter != "";
+    \let verso_title = book_title != "" ? book_title : running_chapter;
+    \let header_text = show_header ? (is_verso ? verso_title : running_chapter) : "";
+    \let header_align = is_verso ? Align.Left : (two_sided ? Align.Right : Align.Left);
+
+    \let header_node = \Text(
+        x: body_x,
+        y: y + header_offset,
+        width: body_width,
+        font: chrome_font,
+        color: chrome_color,
+        align: header_align,
+        text: header_text
+    );
+
+    \Rect(
+        x: body_x,
+        y: header_node.bottom + header_gap,
+        width: body_width,
+        height: 0.4pt,
+        color: #cbd5e1,
+        opacity: show_header ? 1.0 : 0.0
+    )
+
+    // Bottom-anchored footnote block & customizable separator rule
+    \let has_footnotes = footnotes[page].len > 0;
+    \let footnote_stack = \VStackStretch(
+        x: body_x,
+        y: body_bottom_limit - footnote_stack.height,
+        width: body_width,
+        gap: footnote_gap
+    ) {
+        \Collect(from: footnotes[page])
+    };
+
+    \Rect(
+        x: body_x,
+        y: footnote_stack.top - footnote_rule_bottom_gap - footnote_rule_thickness,
+        width: footnote_rule_width,
+        height: footnote_rule_thickness,
+        color: footnote_rule_color,
+        opacity: has_footnotes ? 1.0 : 0.0
+    )
+
+    \let fn_reserved = has_footnotes
+        ? (footnote_stack.height + footnote_rule_top_gap + footnote_rule_thickness + footnote_rule_bottom_gap)
+        : 0pt;
+
+    // Rectangular flow region (width invariant; height shrinks as footnotes land on this page)
+    \FlowBody(
+        x: body_x,
+        y: body_top,
+        width: body_width,
+        height: body_max_height - fn_reserved
+    )
+
+    // Outer-margin collision-avoiding sidenotes
+    \let sidenote_x = is_verso
+        ? (body_x - sidenote_gutter - sidenote_width)
+        : (body_x + body_width + sidenote_gutter);
+
+    \SidenoteColumn(
+        x: sidenote_x,
+        y: body_top,
+        width: sidenote_width,
+        max_bottom: body_bottom_limit,
+        gap: sidenote_gap
+    ) {
+        \Collect(from: sidenotes[page])
+    }
+
+    // Footer page number (reads post-packing `page.count` safely in Phase C)
+    \let footer_align = (!two_sided || has_chapter_start)
+        ? Align.Center
+        : (is_verso ? Align.Left : Align.Right);
+    \let footer_text = show_total_pages
+        ? ("Page " + page.number + " of " + page.count)
+        : ("" + page.number);
+
+    \Text(
+        x: body_x,
+        y: y + height - footer_offset,
+        width: body_width,
+        font: num_font,
+        color: chrome_color,
+        align: footer_align,
+        text: footer_text
+    )
+}
+
+// Top-level Book component packaging `BookPage` and buckets into `\PagedFlow`.
+\Component Book(
+    title: String = "",
+    two_sided: Boolean = true,
+    reset_footnotes_per_chapter: Boolean = false,
+    reset_figures_per_chapter: Boolean = true,
+    page_width: Distance = 8.5in,
+    page_height: Distance = 11in,
+    margin_inner: Distance = 1in,
+    margin_outer: Distance = 0.75in,
+    margin_top: Distance = 0.9in,
+    margin_bottom: Distance = 0.9in,
+    header_offset: Distance = 0.45in,
+    footer_offset: Distance = 0.45in,
+    sidenote_width: Distance = 0pt,
+    sidenote_gutter: Distance = 0.25in,
+    sidenote_gap: Distance = 10pt,
+    paragraph_gap: Distance = 10pt,
+    footnote_gap: Distance = 6pt,
+    footnote_rule_width: Distance = 1.5in,
+    footnote_rule_thickness: Distance = 0.5pt,
+    footnote_rule_color: Color = #64748b,
+    footnote_rule_top_gap: Distance = 10pt,
+    footnote_rule_bottom_gap: Distance = 6pt,
+    page_bg: Color = #ffffff,
+    show_total_pages: Boolean = false,
+    orphans: Integer = 2,
+    widows: Integer = 2,
+    start_page: Integer = 1,
+    page_gap: Distance = 0pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    env font: Font = \Font(family: "Georgia", size: 11pt, line_height: 15.5pt)
+) {
+    \env font = self.font;
+    \env chapter_meta = \PageValue();
+    \env footnotes = \PageList();
+    \env sidenotes = \PageList();
+
+    \let body_width = page_width - margin_inner - margin_outer;
+
+    \let flow = \PagedFlow(
+        x: x,
+        y: y,
+        gap: page_gap,
+        orphans: orphans,
+        widows: widows,
+        start_page: start_page,
+        page: \BookPage(
+            width: page_width,
+            height: page_height,
+            two_sided: two_sided,
+            margin_inner: margin_inner,
+            margin_outer: margin_outer,
+            margin_top: margin_top,
+            margin_bottom: margin_bottom,
+            header_offset: header_offset,
+            footer_offset: footer_offset,
+            sidenote_width: sidenote_width,
+            sidenote_gutter: sidenote_gutter,
+            sidenote_gap: sidenote_gap,
+            footnote_gap: footnote_gap,
+            footnote_rule_width: footnote_rule_width,
+            footnote_rule_thickness: footnote_rule_thickness,
+            footnote_rule_color: footnote_rule_color,
+            footnote_rule_top_gap: footnote_rule_top_gap,
+            footnote_rule_bottom_gap: footnote_rule_bottom_gap,
+            page_bg: page_bg,
+            book_title: title,
+            show_total_pages: show_total_pages
+        )
+    ) {
+        \VStackStretch(
+            width: body_width,
+            gap: paragraph_gap,
+            pagination: \Pagination(breakable: true)
+        ) {
+            \Children
+        }
+    };
+
+    \alias page_count: Integer = flow.page_count;
+    \alias end_page: Integer = flow.end_page;
+    \alias width: Distance = flow.width;
+    \alias height: Distance = flow.height;
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+}

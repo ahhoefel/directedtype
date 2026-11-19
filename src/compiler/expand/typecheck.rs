@@ -25,6 +25,10 @@ pub enum StaticType {
     Expr,
     Enum(String),
     Node(String),
+    PageValueSlice(Option<NodeId>),
+    PageListSlice(Option<NodeId>),
+    BucketPayload(Option<NodeId>),
+    PagePrevRecursive,
 }
 
 impl StaticType {
@@ -45,6 +49,10 @@ impl StaticType {
             StaticType::Expr => "Expr".to_string(),
             StaticType::Enum(name) => name.clone(),
             StaticType::Node(name) => name.clone(),
+            StaticType::PageValueSlice(_) => "PageValueSlice".to_string(),
+            StaticType::PageListSlice(_) => "PageListSlice".to_string(),
+            StaticType::BucketPayload(_) => "BucketPayload".to_string(),
+            StaticType::PagePrevRecursive => "PagePrevRecursive".to_string(),
         }
     }
 
@@ -85,7 +93,23 @@ impl StaticType {
             "ViewPort" => Ok(StaticType::ViewPort),
             "Expr" | "Expression" => Ok(StaticType::Expr),
             "Node" => Ok(StaticType::Node("Node".to_string())),
-            "Window" | "Rect" | "Line" | "Text" | "Font" | "Clip" | "Box" | "Anchor" | "AnchorScope" => {
+            "Window"
+            | "Rect"
+            | "Line"
+            | "Text"
+            | "Font"
+            | "Clip"
+            | "Box"
+            | "Anchor"
+            | "AnchorScope"
+            | "Bookmark"
+            | "Page"
+            | "Pagination"
+            | "PageBreak"
+            | "PageValue"
+            | "PageList"
+            | "PagedFlow"
+            | "FlowBody" => {
                 Ok(StaticType::Node(name.to_string()))
             }
             "Number" => Err(CompileError::Custom {
@@ -152,6 +176,11 @@ impl StaticType {
                 true
             }
             (StaticType::Node(n), StaticType::Node(_)) if n == "Node" => true,
+            (
+                StaticType::PageListSlice(_) | StaticType::PageValueSlice(_),
+                StaticType::PageListSlice(None) | StaticType::PageValueSlice(None),
+            ) => true,
+            (StaticType::PagePrevRecursive, _) | (_, StaticType::PagePrevRecursive) => true,
             _ => false,
         }
     }
@@ -185,6 +214,10 @@ pub(super) fn validate_expr_type_annotations(
             validate_expr_type_annotations(&t.else_expr, enums, registry)?;
         }
         Expr::MemberAccess(m) => validate_expr_type_annotations(&m.target, enums, registry)?,
+        Expr::Index(idx) => {
+            validate_expr_type_annotations(&idx.target, enums, registry)?;
+            validate_expr_type_annotations(&idx.index, enums, registry)?;
+        }
         Expr::Call(c) => {
             for arg in &c.args {
                 validate_expr_type_annotations(arg, enums, registry)?;
@@ -216,7 +249,7 @@ pub(super) fn validate_expr_type_annotations(
                 validate_expr_type_annotations(&arm.body, enums, registry)?;
             }
         }
-        Expr::Literal(_) | Expr::Ident(_) => {}
+        Expr::Literal(_) | Expr::Ident(_) | Expr::DomNodeRef(_, _) => {}
     }
     Ok(())
 }
@@ -492,6 +525,11 @@ pub(super) fn validate_children_sibling_guards(
             }
             Ok(())
         }
+        Expr::Index(idx) => {
+            validate_children_sibling_guards(&idx.target, prev_guarded, next_guarded)?;
+            validate_children_sibling_guards(&idx.index, prev_guarded, next_guarded)
+        }
+        Expr::DomNodeRef(_, _) => Ok(()),
     }
 }
 
@@ -819,18 +857,18 @@ pub(super) fn infer_expr_literal_for_typecheck<'a>(
                     _ => Some(Literal::Float(0.0, call.span)),
                 };
             }
-            if matches!(
-                call.callee.as_str(),
-                "distance_to_float"
-                    | "to_px"
-                    | "to_pt"
-                    | "to_float"
-                    | "to_number"
-                    | "sin"
-                    | "cos"
-                    | "tan"
-                    | "atan2"
-            ) {
+            if DistanceUnit::from_conversion_fn(call.callee.as_str()).is_some()
+                || matches!(
+                    call.callee.as_str(),
+                    "distance_to_float"
+                        | "to_float"
+                        | "to_number"
+                        | "sin"
+                        | "cos"
+                        | "tan"
+                        | "atan2"
+                )
+            {
                 return Some(Literal::Float(0.0, call.span));
             }
             if call.callee.as_str() == "to_integer" {
@@ -875,10 +913,12 @@ pub(super) fn infer_expr_literal_for_typecheck<'a>(
             None
         }
         Expr::MethodCall(mc) => {
-            if matches!(
-                mc.method.as_str(),
-                "to_px" | "to_pt" | "to_seconds" | "to_ms" | "to_float" | "to_number"
-            ) {
+            if DistanceUnit::from_conversion_fn(mc.method.as_str()).is_some()
+                || matches!(
+                    mc.method.as_str(),
+                    "to_seconds" | "to_ms" | "to_float" | "to_number"
+                )
+            {
                 return Some(Literal::Float(0.0, mc.span));
             }
             if mc.method.as_str() == "to_integer" {
@@ -1426,8 +1466,29 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
 }
 
 pub(super) fn known_builtin_port_type(node_name: &str, port_name: &str) -> Option<StaticType> {
+    if node_name == "Node" {
+        return match port_name {
+            "page" | "end_page" => Some(StaticType::Integer),
+            "x" | "y" | "width" | "height" | "left" | "top" | "right" | "bottom" => {
+                Some(StaticType::Distance)
+            }
+            _ => None,
+        };
+    }
     if node_name == "Window" {
         return super::builtins::window::window_port_type(port_name);
+    }
+    if node_name == "Page" {
+        return match port_name {
+            "number" | "count" => Some(StaticType::Integer),
+            "is_first" | "is_last" | "is_odd" | "is_recto" | "is_even" | "is_verso" => {
+                Some(StaticType::Boolean)
+            }
+            "width" | "height" | "left" | "top" | "right" | "bottom" => Some(StaticType::Distance),
+            "dpi" => Some(StaticType::Float),
+            "prev" => Some(StaticType::Node("PageTemplate".to_string())),
+            _ => None,
+        };
     }
     if let Some(prim) = super::builtins::lookup_builtin(node_name, true) {
         return prim.port_type(port_name);
@@ -1438,21 +1499,28 @@ pub(super) fn known_builtin_port_type(node_name: &str, port_name: &str) -> Optio
 struct TypecheckCache<'a> {
     node_caches: Vec<HashMap<Symbol, StaticType>>,
     window_cache: HashMap<Symbol, StaticType>,
+    page_cache: HashMap<Symbol, StaticType>,
     visiting: HashSet<(NodeId, Symbol)>,
     guarded_timers: HashSet<(NodeId, Symbol)>,
     template_types: Option<&'a HashMap<Symbol, StaticType>>,
     current_self_node: Option<NodeId>,
+    bucket_schemas: HashMap<NodeId, HashMap<String, StaticType>>,
 }
 
 impl<'a> TypecheckCache<'a> {
-    fn new(num_nodes: usize) -> Self {
+    fn new(
+        num_nodes: usize,
+        bucket_schemas: HashMap<NodeId, HashMap<String, StaticType>>,
+    ) -> Self {
         Self {
             node_caches: vec![HashMap::new(); num_nodes],
             window_cache: HashMap::new(),
+            page_cache: HashMap::new(),
             visiting: HashSet::new(),
             guarded_timers: HashSet::new(),
             template_types: None,
             current_self_node: None,
+            bucket_schemas,
         }
     }
 
@@ -1460,10 +1528,12 @@ impl<'a> TypecheckCache<'a> {
         Self {
             node_caches: Vec::new(),
             window_cache: HashMap::new(),
+            page_cache: HashMap::new(),
             visiting: HashSet::new(),
             guarded_timers: HashSet::new(),
             template_types: Some(template_types),
             current_self_node: None,
+            bucket_schemas: HashMap::new(),
         }
     }
 
@@ -1471,6 +1541,8 @@ impl<'a> TypecheckCache<'a> {
     fn get(&self, node_id: NodeId, port_sym: Symbol) -> Option<&StaticType> {
         if node_id.is_window() {
             self.window_cache.get(&port_sym)
+        } else if node_id.is_page() {
+            self.page_cache.get(&port_sym)
         } else {
             self.node_caches.get(node_id.0)?.get(&port_sym)
         }
@@ -1480,6 +1552,8 @@ impl<'a> TypecheckCache<'a> {
     fn insert(&mut self, node_id: NodeId, port_sym: Symbol, ty: StaticType) {
         if node_id.is_window() {
             self.window_cache.insert(port_sym, ty);
+        } else if node_id.is_page() {
+            self.page_cache.insert(port_sym, ty);
         } else if let Some(map) = self.node_caches.get_mut(node_id.0) {
             map.insert(port_sym, ty);
         }
@@ -1503,7 +1577,44 @@ pub fn typecheck_expanded_document(
     enums: &HashMap<String, EnumDef>,
     registry: &HashMap<String, Vec<ComponentDef>>,
 ) -> Result<(), CompileError> {
-    let mut cache = TypecheckCache::new(doc.nodes.len());
+    typecheck_expanded_document_inner(doc, enums, registry)?;
+    for flow in &doc.paged_flows {
+        let mut probe_doc = flow.probe_doc.clone();
+        probe_doc.page_template_private_ports = doc.page_template_private_ports.clone();
+        probe_doc.deposits = doc.deposits.clone();
+        typecheck_expanded_document_inner(&mut probe_doc, enums, registry)?;
+    }
+    Ok(())
+}
+
+fn typecheck_expanded_document_inner(
+    doc: &mut ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> Result<(), CompileError> {
+    let bucket_schemas = infer_bucket_schemas(doc, enums, registry)?;
+    let mut cache = TypecheckCache::new(doc.nodes.len(), bucket_schemas);
+
+    // 0. Validate page.prev & page bucket guard discipline and privacy rules before expression inference
+    let empty_guards: HashSet<(NodeId, BucketIndexKey, bool)> = HashSet::new();
+    for expr in doc.window_ports.values() {
+        validate_page_prev_guards(expr, false)?;
+        validate_bucket_guards(expr, doc, &empty_guards)?;
+    }
+    for expr in doc.page_ports.values() {
+        validate_page_prev_guards(expr, false)?;
+        validate_bucket_guards(expr, doc, &empty_guards)?;
+    }
+    for node in &doc.nodes {
+        for expr in node.ports.values() {
+            validate_page_prev_guards(expr, false)?;
+            validate_bucket_guards(expr, doc, &empty_guards)?;
+        }
+    }
+    for (expr, _, _) in &doc.local_bindings {
+        validate_page_prev_guards(expr, false)?;
+        validate_bucket_guards(expr, doc, &empty_guards)?;
+    }
 
     // 1. Validate and infer all window ports
     let window_port_names: Vec<String> = doc.window_ports.keys().cloned().collect();
@@ -1589,7 +1700,7 @@ fn infer_port_type(
     registry: &HashMap<String, Vec<ComponentDef>>,
     cache: &mut TypecheckCache<'_>,
 ) -> Result<StaticType, CompileError> {
-    if !node_id.is_window() {
+    if !node_id.is_window() && !node_id.is_page() {
         if let Some(node) = doc.get_node(node_id) {
             if let Some(ty) = node.get_preverified_port_type(port_sym, port_name) {
                 return Ok(ty.clone());
@@ -1611,6 +1722,13 @@ fn infer_port_type(
         } else {
             None
         }
+    } else if node_id.is_page() {
+        known_builtin_port_type("Page", port_name).map(|st| match (&st, &doc.page_template_component) {
+            (StaticType::Node(n), Some(tmpl_name)) if n == "PageTemplate" && port_name == "prev" => {
+                StaticType::Node(tmpl_name.clone())
+            }
+            _ => st,
+        })
     } else if let Some(node) = doc.get_node(node_id) {
         if let Some(name) = node.port_types.get(port_name) {
             if let Some(ty) = node
@@ -1634,6 +1752,26 @@ fn infer_port_type(
         None
     };
 
+    if !cache.visiting.is_empty() && !node_id.is_window() && !node_id.is_page() {
+        if let Some(node) = doc.get_node(node_id) {
+            if node.ports.contains_key(port_name)
+                && doc
+                    .page_template_component
+                    .as_ref()
+                    .is_none_or(|tmpl| &node.name != tmpl)
+            {
+                if let Some(expected) = explicit_ty {
+                    return Ok(expected);
+                }
+                if !node.is_component {
+                    if let Some(builtin) = known_builtin_port_type(&node.name, port_name) {
+                        return Ok(builtin);
+                    }
+                }
+            }
+        }
+    }
+
     let key = (node_id, port_sym);
     if !cache.visiting.insert(key) {
         // Cycle detected: if there is an explicit or builtin type, return it; otherwise let graph cycle checker report it
@@ -1642,6 +1780,8 @@ fn infer_port_type(
         }
         let node_name = if node_id.is_window() {
             "Window"
+        } else if node_id.is_page() {
+            "Page"
         } else {
             doc.get_node(node_id).map(|n| n.name.as_str()).unwrap_or("")
         };
@@ -1657,6 +1797,12 @@ fn infer_port_type(
             .is_none()
             .then(|| super::rewrite::get_materialized_expr_port(node_id, port_name))
             .flatten()
+    } else if node_id.is_page() {
+        doc.page_ports
+            .get(port_name)
+            .is_none()
+            .then(|| super::rewrite::get_materialized_expr_port(node_id, port_name))
+            .flatten()
     } else {
         doc.get_node(node_id)
             .and_then(|n| n.ports.get(port_name))
@@ -1666,6 +1812,8 @@ fn infer_port_type(
     };
     let expr_opt = if node_id.is_window() {
         doc.window_ports.get(port_name)
+    } else if node_id.is_page() {
+        doc.page_ports.get(port_name)
     } else {
         doc.get_node(node_id).and_then(|n| n.ports.get(port_name))
     }
@@ -1686,7 +1834,10 @@ fn infer_port_type(
             }
         };
         if let Some(expected) = explicit_ty {
-            if !actual.matches(&expected) {
+            let is_page_prev_unset = node_id.is_page()
+                && port_name == "prev"
+                && matches!(actual, StaticType::Unset);
+            if !actual.matches(&expected) && !is_page_prev_unset {
                 cache.visiting.remove(&key);
                 return Err(CompileError::TypeMismatch {
                     expected: expected.type_name(),
@@ -1698,11 +1849,16 @@ fn infer_port_type(
         } else {
             let node_name = if node_id.is_window() {
                 "Window"
+            } else if node_id.is_page() {
+                "Page"
             } else {
                 doc.get_node(node_id).map(|n| n.name.as_str()).unwrap_or("")
             };
             if let Some(builtin) = known_builtin_port_type(node_name, port_name) {
-                if !node_id.is_window() && doc.get_node(node_id).is_some_and(|n| !n.is_component) {
+                if !node_id.is_window()
+                    && !node_id.is_page()
+                    && doc.get_node(node_id).is_some_and(|n| !n.is_component)
+                {
                     if !actual.matches(&builtin) {
                         cache.visiting.remove(&key);
                         return Err(CompileError::TypeMismatch {
@@ -1725,6 +1881,8 @@ fn infer_port_type(
     } else {
         let node_name = if node_id.is_window() {
             "Window"
+        } else if node_id.is_page() {
+            "Page"
         } else {
             doc.get_node(node_id).map(|n| n.name.as_str()).unwrap_or("")
         };
@@ -1808,7 +1966,7 @@ fn is_non_nullable_indefinite_timer_expr(
                     );
                 }
             }
-        } else if !node_id.is_template_self() {
+        } else if !node_id.is_template_self() && !node_id.is_page() {
             if let Some(node) = doc.get_node(node_id) {
                 if !node.state_vars.contains_key(port_name) {
                     if let Some(port_expr) = node.ports.get(port_name) {
@@ -1934,7 +2092,7 @@ fn extract_timer_guards(
                             return res;
                         }
                     }
-                } else if !node_id.is_template_self() {
+                } else if !node_id.is_template_self() && !node_id.is_page() {
                     if let Some(node) = doc.get_node(node_id) {
                         if !node.state_vars.contains_key(port_name) {
                             if let Some(port_expr) = node.ports.get(port_name) {
@@ -1989,6 +2147,9 @@ fn infer_expr_type(
             if id.name == Symbol::WINDOW {
                 return Ok(StaticType::Node("Window".to_string()));
             }
+            if id.name == Symbol::PAGE {
+                return Err(CompileError::PageOutsidePagedFlow { span: id.span });
+            }
             if id.name == Symbol::PREV {
                 return Err(CompileError::Custom {
                     message: "Cannot access 'prev' without a guard; no previous sibling exists (guard with 'prev ? ... : ...')".to_string(),
@@ -2005,6 +2166,9 @@ fn infer_expr_type(
                 if node_id.is_window() {
                     return Ok(StaticType::Node("Window".to_string()));
                 }
+                if node_id.is_page() {
+                    return Ok(StaticType::Node("Page".to_string()));
+                }
                 if let Some(node) = doc.get_node(node_id) {
                     return Ok(StaticType::Node(node.name.clone()));
                 }
@@ -2014,207 +2178,8 @@ fn infer_expr_type(
                 span: id.span,
             })
         }
-        Expr::MemberAccess(m) => {
-            if let Expr::Ident(target_id) = m.target.as_ref() {
-                if let Some(enum_def) = enums.get(target_id.as_str()) {
-                    if enum_def.has_variant(m.member.as_str()) {
-                        return Ok(StaticType::Enum(target_id.as_str().to_string()));
-                    }
-                }
-                if let Some(raw_node_id) = target_id.node_id() {
-                    let node_id = if raw_node_id.is_template_self() {
-                        if let Some(template_types) = cache.template_types {
-                            if let Some(ty) = template_types.get(&m.member.name) {
-                                return Ok(ty.clone());
-                            }
-                            return Err(CompileError::Custom {
-                                message: format!(
-                                    "Template port '{}' has no known static type",
-                                    m.member.as_str()
-                                ),
-                                span: m.span,
-                            });
-                        }
-                        if let Some(self_node) = cache.current_self_node {
-                            self_node
-                        } else {
-                            return Err(CompileError::Custom {
-                                message: format!(
-                                    "Template port '{}' has no known static type",
-                                    m.member.as_str()
-                                ),
-                                span: m.span,
-                            });
-                        }
-                    } else {
-                        raw_node_id
-                    };
-                    let has_port = if node_id.is_window() {
-                        doc.window_ports.contains_key(m.member.as_str())
-                            || super::rewrite::has_materialized_expr_port(
-                                node_id,
-                                m.member.as_str(),
-                            )
-                            || known_builtin_port_type("Window", m.member.as_str()).is_some()
-                    } else if let Some(node) = doc.get_node(node_id) {
-                        node.ports.contains_key(m.member.as_str())
-                            || node.port_types.contains_key(m.member.as_str())
-                            || super::rewrite::has_materialized_expr_port(
-                                node_id,
-                                m.member.as_str(),
-                            )
-                            || (!node.is_component
-                                && known_builtin_port_type(&node.name, m.member.as_str()).is_some())
-                    } else {
-                        super::rewrite::has_materialized_expr_port(node_id, m.member.as_str())
-                    };
-                    if has_port {
-                        return infer_port_type(
-                            node_id,
-                            m.member.name,
-                            m.member.as_str(),
-                            doc,
-                            enums,
-                            registry,
-                            cache,
-                        );
-                    }
-                    // Check if it's an event handler method on a component node
-                    if let Some(node) = doc.get_node(node_id) {
-                        if node.is_component {
-                            return Ok(StaticType::Handler);
-                        }
-                    }
-                }
-            }
-            let target_ty = infer_expr_type(&m.target, doc, enums, registry, cache)?;
-            match target_ty {
-                StaticType::Node(ref node_name) => {
-                    if let Some(builtin) = known_builtin_port_type(node_name, m.member.as_str()) {
-                        return Ok(builtin);
-                    }
-                    if let Some(overloads) = registry.get(node_name).or_else(|| {
-                        registry.iter().find_map(|(k, v)| {
-                            (crate::compiler::graph::unmangle_component_name(k) == node_name)
-                                .then_some(v)
-                        })
-                    }) {
-                        for comp in overloads {
-                            if let Some(param) =
-                                comp.params.iter().find(|p| p.name.as_str() == m.member.as_str())
-                            {
-                                if let Some(ref t) = param.type_annotation {
-                                    if let Ok(st) = StaticType::from_type_name(
-                                        t.name.as_str(),
-                                        t.span,
-                                        enums,
-                                        registry,
-                                    ) {
-                                        return Ok(st);
-                                    }
-                                }
-                            }
-                        }
-                        return Ok(StaticType::Handler);
-                    }
-                    Err(CompileError::Custom {
-                        message: format!(
-                            "Node '{}' has no known property or method '{}'",
-                            node_name, m.member
-                        ),
-                        span: m.span,
-                    })
-                }
-                StaticType::ViewPort => match m.member.as_str() {
-                    "x" | "y" | "width" | "height" | "left" | "top" | "right" | "bottom" => {
-                        Ok(StaticType::Distance)
-                    }
-                    _ => Err(CompileError::Custom {
-                        message: format!("ViewPort has no property '{}'", m.member),
-                        span: m.span,
-                    }),
-                },
-                StaticType::Timer => {
-                    let prop_ty = match m.member.as_str() {
-                        "time" | "duration" | "dt" => StaticType::Duration,
-                        "elapsed" => StaticType::Float,
-                        "frames" => StaticType::Integer,
-                        _ => {
-                            return Err(CompileError::Custom {
-                                message: format!(
-                                    "Node 'Timer' has no public property '{}'",
-                                    m.member
-                                ),
-                                span: m.span,
-                            });
-                        }
-                    };
-                    if is_nullable_timer_target(
-                        &m.target,
-                        &target_ty,
-                        doc,
-                        cache.current_self_node,
-                    ) {
-                        let is_guarded =
-                            canonical_timer_key(&m.target, cache.current_self_node)
-                                .is_some_and(|k| cache.guarded_timers.contains(&k));
-                        if !is_guarded {
-                            return Err(CompileError::Custom {
-                                message: format!(
-                                    "Cannot access property '{}' on unguarded 'Timer'; guard with 'timer ? ... : ...'",
-                                    m.member
-                                ),
-                                span: m.span,
-                            });
-                        }
-                    }
-                    Ok(prop_ty)
-                }
-                StaticType::IndefiniteTimer => {
-                    let prop_ty = match m.member.as_str() {
-                        "time" | "dt" => StaticType::Duration,
-                        "frames" => StaticType::Integer,
-                        _ => {
-                            return Err(CompileError::Custom {
-                                message: format!(
-                                    "Node 'IndefiniteTimer' has no public property '{}'",
-                                    m.member
-                                ),
-                                span: m.span,
-                            });
-                        }
-                    };
-                    if is_nullable_timer_target(
-                        &m.target,
-                        &target_ty,
-                        doc,
-                        cache.current_self_node,
-                    ) {
-                        let is_guarded =
-                            canonical_timer_key(&m.target, cache.current_self_node)
-                                .is_some_and(|k| cache.guarded_timers.contains(&k));
-                        if !is_guarded {
-                            return Err(CompileError::Custom {
-                                message: format!(
-                                    "Cannot access property '{}' on unguarded 'IndefiniteTimer'; guard with 'timer ? ... : ...'",
-                                    m.member
-                                ),
-                                span: m.span,
-                            });
-                        }
-                    }
-                    Ok(prop_ty)
-                }
-                other => Err(CompileError::Custom {
-                    message: format!(
-                        "Cannot access member '{}' on value of type '{}'",
-                        m.member,
-                        other.type_name()
-                    ),
-                    span: m.span,
-                }),
-            }
-        }
+        Expr::DomNodeRef(_, _) => Ok(StaticType::Node("Node".to_string())),
+        Expr::MemberAccess(m) => infer_member_access_type(m, doc, enums, registry, cache),
         Expr::Unary(u) => {
             let op_ty = infer_expr_type(&u.operand, doc, enums, registry, cache)?;
             match u.op {
@@ -2230,483 +2195,27 @@ fn infer_expr_type(
                         span: u.span,
                     }),
                 },
-                UnaryOp::Not => match op_ty.decay() {
-                    StaticType::Boolean
-                    | StaticType::Timer
-                    | StaticType::IndefiniteTimer
-                    | StaticType::Handler => Ok(StaticType::Boolean),
-                    other => Err(CompileError::TypeMismatch {
-                        expected: "Boolean or Timer".to_string(),
-                        actual: other.type_name(),
-                        span: u.span,
-                    }),
-                },
-            }
-        }
-        Expr::Binary(bin) => {
-            let left_ty = infer_expr_type(&bin.left, doc, enums, registry, cache)?;
-            let right_ty = if matches!(bin.op, BinaryOp::And | BinaryOp::Or) {
-                let (l_pos, l_neg) =
-                    extract_timer_guards(&bin.left, doc, enums, registry, cache, 0);
-                let saved = cache.guarded_timers.clone();
-                if bin.op == BinaryOp::And {
-                    cache.guarded_timers.extend(l_pos);
-                } else {
-                    cache.guarded_timers.extend(l_neg);
-                }
-                let res = infer_expr_type(&bin.right, doc, enums, registry, cache);
-                cache.guarded_timers = saved;
-                res?
-            } else {
-                infer_expr_type(&bin.right, doc, enums, registry, cache)?
-            };
-            match bin.op {
-                BinaryOp::Add => match (&left_ty, &right_ty) {
-                    (StaticType::String, _) | (_, StaticType::String) => Ok(StaticType::String),
-                    (StaticType::Distance, StaticType::Distance)
-                    | (StaticType::Distance, StaticType::ZeroInteger)
-                    | (StaticType::ZeroInteger, StaticType::Distance) => Ok(StaticType::Distance),
-                    (StaticType::Area, StaticType::Area)
-                    | (StaticType::Area, StaticType::ZeroInteger)
-                    | (StaticType::ZeroInteger, StaticType::Area) => Ok(StaticType::Area),
-                    (StaticType::Duration, StaticType::Duration)
-                    | (StaticType::Duration, StaticType::ZeroInteger)
-                    | (StaticType::ZeroInteger, StaticType::Duration) => Ok(StaticType::Duration),
-                    (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
-                        Ok(StaticType::Integer)
+                UnaryOp::Not => {
+                    if is_page_prev_expr(&u.operand) {
+                        return Ok(StaticType::Boolean);
                     }
-                    (
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                    ) => Ok(StaticType::Float),
-                    (StaticType::Distance, other) => Err(CompileError::TypeMismatch {
-                        expected: "Distance".to_string(),
-                        actual: other.type_name(),
-                        span: bin.right.span(),
-                    }),
-                    (StaticType::Area, other) => Err(CompileError::TypeMismatch {
-                        expected: "Area".to_string(),
-                        actual: other.type_name(),
-                        span: bin.right.span(),
-                    }),
-                    (StaticType::Duration, other) => Err(CompileError::TypeMismatch {
-                        expected: "Duration".to_string(),
-                        actual: other.type_name(),
-                        span: bin.right.span(),
-                    }),
-                    (other, StaticType::Distance) => Err(CompileError::TypeMismatch {
-                        expected: "Distance".to_string(),
-                        actual: other.type_name(),
-                        span: bin.left.span(),
-                    }),
-                    (other, StaticType::Area) => Err(CompileError::TypeMismatch {
-                        expected: "Area".to_string(),
-                        actual: other.type_name(),
-                        span: bin.left.span(),
-                    }),
-                    (other, StaticType::Duration) => Err(CompileError::TypeMismatch {
-                        expected: "Duration".to_string(),
-                        actual: other.type_name(),
-                        span: bin.left.span(),
-                    }),
-                    _ => Err(CompileError::TypeMismatch {
-                        expected: left_ty.type_name(),
-                        actual: right_ty.type_name(),
-                        span: bin.span,
-                    }),
-                },
-                BinaryOp::Sub => match (&left_ty, &right_ty) {
-                    (StaticType::Distance, StaticType::Distance)
-                    | (StaticType::Distance, StaticType::ZeroInteger)
-                    | (StaticType::ZeroInteger, StaticType::Distance) => Ok(StaticType::Distance),
-                    (StaticType::Area, StaticType::Area)
-                    | (StaticType::Area, StaticType::ZeroInteger)
-                    | (StaticType::ZeroInteger, StaticType::Area) => Ok(StaticType::Area),
-                    (StaticType::Duration, StaticType::Duration)
-                    | (StaticType::Duration, StaticType::ZeroInteger)
-                    | (StaticType::ZeroInteger, StaticType::Duration) => Ok(StaticType::Duration),
-                    (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
-                        Ok(StaticType::Integer)
-                    }
-                    (
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                    ) => Ok(StaticType::Float),
-                    (StaticType::Distance, other) => Err(CompileError::TypeMismatch {
-                        expected: "Distance".to_string(),
-                        actual: other.type_name(),
-                        span: bin.right.span(),
-                    }),
-                    (StaticType::Area, other) => Err(CompileError::TypeMismatch {
-                        expected: "Area".to_string(),
-                        actual: other.type_name(),
-                        span: bin.right.span(),
-                    }),
-                    (StaticType::Duration, other) => Err(CompileError::TypeMismatch {
-                        expected: "Duration".to_string(),
-                        actual: other.type_name(),
-                        span: bin.right.span(),
-                    }),
-                    (other, StaticType::Distance) => Err(CompileError::TypeMismatch {
-                        expected: "Distance".to_string(),
-                        actual: other.type_name(),
-                        span: bin.left.span(),
-                    }),
-                    (other, StaticType::Area) => Err(CompileError::TypeMismatch {
-                        expected: "Area".to_string(),
-                        actual: other.type_name(),
-                        span: bin.left.span(),
-                    }),
-                    (other, StaticType::Duration) => Err(CompileError::TypeMismatch {
-                        expected: "Duration".to_string(),
-                        actual: other.type_name(),
-                        span: bin.left.span(),
-                    }),
-                    _ => Err(CompileError::TypeMismatch {
-                        expected: left_ty.type_name(),
-                        actual: right_ty.type_name(),
-                        span: bin.span,
-                    }),
-                },
-                BinaryOp::Mul => match (&left_ty, &right_ty) {
-                    (StaticType::Distance, StaticType::Distance) => Ok(StaticType::Area),
-                    (
-                        StaticType::Distance,
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                    )
-                    | (
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                        StaticType::Distance,
-                    ) => Ok(StaticType::Distance),
-                    (
-                        StaticType::Area,
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                    )
-                    | (
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                        StaticType::Area,
-                    ) => Ok(StaticType::Area),
-                    (
-                        StaticType::Duration,
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                    )
-                    | (
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                        StaticType::Duration,
-                    ) => Ok(StaticType::Duration),
-                    (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
-                        Ok(StaticType::Integer)
-                    }
-                    (
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                    ) => Ok(StaticType::Float),
-                    _ => Err(CompileError::TypeMismatch {
-                        expected: "Float, Integer, Distance, or Duration".to_string(),
-                        actual: format!("{} * {}", left_ty.type_name(), right_ty.type_name()),
-                        span: bin.span,
-                    }),
-                },
-                BinaryOp::Div => match (&left_ty, &right_ty) {
-                    (StaticType::Distance, StaticType::Distance)
-                    | (StaticType::Area, StaticType::Area)
-                    | (StaticType::Duration, StaticType::Duration) => Ok(StaticType::Float),
-                    (StaticType::Area, StaticType::Distance) => Ok(StaticType::Distance),
-                    (
-                        StaticType::Distance,
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                    ) => Ok(StaticType::Distance),
-                    (
-                        StaticType::Area,
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                    ) => Ok(StaticType::Area),
-                    (
-                        StaticType::Duration,
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                    ) => Ok(StaticType::Duration),
-                    (
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                    ) => Ok(StaticType::Float),
-                    _ => Err(CompileError::TypeMismatch {
-                        expected: "Float, Integer, Distance, Area, or Duration".to_string(),
-                        actual: format!("{} / {}", left_ty.type_name(), right_ty.type_name()),
-                        span: bin.span,
-                    }),
-                },
-                BinaryOp::Rem => match (&left_ty, &right_ty) {
-                    (StaticType::Distance, StaticType::Distance) => Ok(StaticType::Distance),
-                    (StaticType::Area, StaticType::Area) => Ok(StaticType::Area),
-                    (StaticType::Duration, StaticType::Duration) => Ok(StaticType::Duration),
-                    (
-                        StaticType::Integer | StaticType::ZeroInteger,
-                        StaticType::Integer | StaticType::ZeroInteger,
-                    ) => Ok(StaticType::Integer),
-                    (
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                        StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                    ) => Ok(StaticType::Float),
-                    _ => Err(CompileError::TypeMismatch {
-                        expected: "Float or Integer".to_string(),
-                        actual: format!("{} % {}", left_ty.type_name(), right_ty.type_name()),
-                        span: bin.span,
-                    }),
-                },
-                BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
-                    match (&left_ty, &right_ty) {
-                        (StaticType::Distance, StaticType::Distance)
-                        | (StaticType::Distance, StaticType::ZeroInteger)
-                        | (StaticType::ZeroInteger, StaticType::Distance)
-                        | (StaticType::Area, StaticType::Area)
-                        | (StaticType::Area, StaticType::ZeroInteger)
-                        | (StaticType::ZeroInteger, StaticType::Area)
-                        | (StaticType::Duration, StaticType::Duration)
-                        | (StaticType::Duration, StaticType::ZeroInteger)
-                        | (StaticType::ZeroInteger, StaticType::Duration)
-                        | (
-                            StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                            StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
-                        ) => Ok(StaticType::Boolean),
-                        (StaticType::Distance, other) => Err(CompileError::TypeMismatch {
-                            expected: "Distance".to_string(),
-                            actual: other.type_name(),
-                            span: bin.right.span(),
-                        }),
-                        (StaticType::Area, other) => Err(CompileError::TypeMismatch {
-                            expected: "Area".to_string(),
-                            actual: other.type_name(),
-                            span: bin.right.span(),
-                        }),
-                        (StaticType::Duration, other) => Err(CompileError::TypeMismatch {
-                            expected: "Duration".to_string(),
-                            actual: other.type_name(),
-                            span: bin.right.span(),
-                        }),
-                        (other, StaticType::Distance) => Err(CompileError::TypeMismatch {
-                            expected: "Distance".to_string(),
-                            actual: other.type_name(),
-                            span: bin.left.span(),
-                        }),
-                        (other, StaticType::Area) => Err(CompileError::TypeMismatch {
-                            expected: "Area".to_string(),
-                            actual: other.type_name(),
-                            span: bin.left.span(),
-                        }),
-                        (other, StaticType::Duration) => Err(CompileError::TypeMismatch {
-                            expected: "Duration".to_string(),
-                            actual: other.type_name(),
-                            span: bin.left.span(),
-                        }),
-                        _ => Err(CompileError::TypeMismatch {
-                            expected: left_ty.type_name(),
-                            actual: right_ty.type_name(),
-                            span: bin.span,
-                        }),
-                    }
-                }
-                BinaryOp::Eq | BinaryOp::Ne => {
-                    if left_ty.matches(&right_ty) || right_ty.matches(&left_ty) {
-                        Ok(StaticType::Boolean)
-                    } else if matches!(
-                        (&left_ty, &right_ty),
-                        (StaticType::Color, StaticType::String)
-                            | (StaticType::String, StaticType::Color)
-                    ) {
-                        Ok(StaticType::Boolean)
-                    } else {
-                        Err(CompileError::TypeMismatch {
-                            expected: left_ty.type_name(),
-                            actual: right_ty.type_name(),
-                            span: bin.span,
-                        })
-                    }
-                }
-                BinaryOp::And | BinaryOp::Or => {
-                    if !matches!(
-                        left_ty,
+                    match op_ty.decay() {
                         StaticType::Boolean
-                            | StaticType::Timer
-                            | StaticType::IndefiniteTimer
-                            | StaticType::Handler
-                            | StaticType::Unset
-                    ) {
-                        return Err(CompileError::TypeMismatch {
-                            expected: "Boolean".to_string(),
-                            actual: left_ty.type_name(),
-                            span: bin.left.span(),
-                        });
+                        | StaticType::Timer
+                        | StaticType::IndefiniteTimer
+                        | StaticType::Handler => Ok(StaticType::Boolean),
+                        other => Err(CompileError::TypeMismatch {
+                            expected: "Boolean or Timer".to_string(),
+                            actual: other.type_name(),
+                            span: u.span,
+                        }),
                     }
-                    if !matches!(
-                        right_ty,
-                        StaticType::Boolean
-                            | StaticType::Timer
-                            | StaticType::IndefiniteTimer
-                            | StaticType::Handler
-                            | StaticType::Unset
-                    ) {
-                        return Err(CompileError::TypeMismatch {
-                            expected: "Boolean".to_string(),
-                            actual: right_ty.type_name(),
-                            span: bin.right.span(),
-                        });
-                    }
-                    Ok(StaticType::Boolean)
                 }
             }
         }
-        Expr::Ternary(tern) => {
-            let cond_ty = infer_expr_type(&tern.condition, doc, enums, registry, cache)?;
-            if !matches!(
-                cond_ty,
-                StaticType::Boolean
-                    | StaticType::Timer
-                    | StaticType::IndefiniteTimer
-                    | StaticType::Handler
-                    | StaticType::Unset
-            ) {
-                return Err(CompileError::TypeMismatch {
-                    expected: "Boolean".to_string(),
-                    actual: cond_ty.type_name(),
-                    span: tern.condition.span(),
-                });
-            }
-            let (pos_guards, neg_guards) =
-                extract_timer_guards(&tern.condition, doc, enums, registry, cache, 0);
-            let saved_guards = cache.guarded_timers.clone();
-            cache.guarded_timers.extend(pos_guards);
-            let then_res = infer_expr_type(&tern.then_expr, doc, enums, registry, cache);
-            cache.guarded_timers.clone_from(&saved_guards);
-            let then_ty = then_res?;
-
-            cache.guarded_timers.extend(neg_guards);
-            let else_res = infer_expr_type(&tern.else_expr, doc, enums, registry, cache);
-            cache.guarded_timers = saved_guards;
-            let else_ty = else_res?;
-            if then_ty == else_ty {
-                Ok(then_ty.decay())
-            } else if then_ty.matches(&else_ty) {
-                Ok(else_ty.decay())
-            } else if else_ty.matches(&then_ty) {
-                Ok(then_ty.decay())
-            } else if matches!(
-                (&then_ty, &else_ty),
-                (StaticType::Node(a), StaticType::Node(b))
-                    if matches!(a.as_str(), "Window" | "ScrollView")
-                        && matches!(b.as_str(), "Window" | "ScrollView")
-            ) {
-                Ok(StaticType::ViewPort)
-            } else {
-                Err(CompileError::TypeMismatch {
-                    expected: then_ty.type_name(),
-                    actual: else_ty.type_name(),
-                    span: tern.else_expr.span(),
-                })
-            }
-        }
-        Expr::Call(call) => {
-            match call.callee.as_str() {
-                "distance_to_float" | "to_px" | "to_pt" | "to_float" | "to_number" => {
-                    for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
-                    }
-                    Ok(StaticType::Float)
-                }
-                "to_integer" => {
-                    for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
-                    }
-                    Ok(StaticType::Integer)
-                }
-                "sqrt" => {
-                    let mut first_ty = None;
-                    for (i, arg) in call.args.iter().enumerate() {
-                        let t = infer_expr_type(arg, doc, enums, registry, cache)?;
-                        if i == 0 {
-                            first_ty = Some(t);
-                        }
-                    }
-                    if matches!(first_ty, Some(StaticType::Area)) {
-                        Ok(StaticType::Distance)
-                    } else {
-                        Ok(StaticType::Float)
-                    }
-                }
-                "round" | "floor" | "ceil" => {
-                    let mut first_ty = None;
-                    for (i, arg) in call.args.iter().enumerate() {
-                        let t = infer_expr_type(arg, doc, enums, registry, cache)?;
-                        if i == 0 {
-                            first_ty = Some(t);
-                        }
-                    }
-                    match first_ty {
-                        Some(StaticType::Distance) => Ok(StaticType::Distance),
-                        Some(StaticType::Area) => Ok(StaticType::Area),
-                        Some(StaticType::Duration) => Ok(StaticType::Duration),
-                        _ => Ok(StaticType::Integer),
-                    }
-                }
-                "to_fixed" | "to_precision" => {
-                    for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
-                    }
-                    Ok(StaticType::String)
-                }
-                "hsl" | "hsla" | "rgb" | "rgba" => {
-                    for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
-                    }
-                    Ok(StaticType::Color)
-                }
-                "text_width"
-                | "text_height"
-                | "text_baseline_offset"
-                | "span_metric"
-                | "font_cap_height"
-                | "font_x_height"
-                | "font_ascent"
-                | "font_descent"
-                | "font_line_gap"
-                | "font_line_height" => {
-                    for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
-                    }
-                    Ok(StaticType::Distance)
-                }
-                "max" | "min" | "sum" | "abs" | "clamp" | "only" | "hypot" => {
-                    if call.args.is_empty() {
-                        return Ok(StaticType::Distance);
-                    }
-                    let mut acc_ty =
-                        infer_expr_type(&call.args[0], doc, enums, registry, cache)?;
-                    for arg in &call.args[1..] {
-                        let arg_ty = infer_expr_type(arg, doc, enums, registry, cache)?;
-                        if arg_ty.matches(&acc_ty) {
-                            // keep acc_ty
-                        } else if acc_ty.matches(&arg_ty) {
-                            acc_ty = arg_ty;
-                        } else {
-                            return Err(CompileError::TypeMismatch {
-                                expected: acc_ty.type_name(),
-                                actual: arg_ty.type_name(),
-                                span: arg.span(),
-                            });
-                        }
-                    }
-                    if call.callee.as_str() == "hypot" && acc_ty.decay() == StaticType::Integer {
-                        Ok(StaticType::Float)
-                    } else {
-                        Ok(acc_ty.decay())
-                    }
-                }
-                _ => {
-                    for arg in &call.args {
-                        let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
-                    }
-                    Ok(StaticType::Float)
-                }
-            }
-        }
+        Expr::Binary(bin) => infer_binary_type(bin, doc, enums, registry, cache),
+        Expr::Ternary(tern) => infer_ternary_type(tern, doc, enums, registry, cache),
+        Expr::Call(call) => infer_call_type(call, doc, enums, registry, cache),
         Expr::MethodCall(mc) => {
             let target_ty = infer_expr_type(&mc.target, doc, enums, registry, cache)?;
             for arg in &mc.args {
@@ -2714,7 +2223,11 @@ fn infer_expr_type(
             }
             match mc.method.as_str() {
                 "append" | "to_fixed" | "to_precision" => Ok(StaticType::String),
-                "to_px" | "to_pt" | "to_float" | "to_number" => Ok(StaticType::Float),
+                name if DistanceUnit::from_conversion_fn(name).is_some()
+                    || matches!(name, "to_float" | "to_number") =>
+                {
+                    Ok(StaticType::Float)
+                }
                 "to_seconds" | "to_ms" => {
                     if !target_ty.matches(&StaticType::Duration) {
                         return Err(CompileError::TypeMismatch {
@@ -2729,132 +2242,1803 @@ fn infer_expr_type(
                 _ => Ok(StaticType::Float),
             }
         }
-        Expr::Node(elem) => match elem.name.as_str() {
-            "Timer" => {
-                if elem.content.is_some() {
-                    return Err(CompileError::Custom {
-                        message: "Node 'Timer' does not accept a content block".to_string(),
-                        span: elem.span,
-                    });
-                }
-                if elem.key.is_some() {
-                    return Err(CompileError::Custom {
-                        message: "Node 'Timer' does not accept a key".to_string(),
-                        span: elem.span,
-                    });
-                }
-                if elem.ports.is_empty() {
-                    return Err(CompileError::MissingPort {
-                        node: "Timer".to_string(),
-                        port: "duration".to_string(),
-                        span: elem.span,
-                    });
-                }
-                for port in &elem.ports {
-                    if port.name.as_str() != "duration" {
-                        return Err(CompileError::Custom {
-                            message: format!(
-                                "Node 'Timer' does not accept property '{}'",
-                                port.name.as_str()
-                            ),
-                            span: port.name.span,
-                        });
-                    }
-                    let port_ty =
-                        infer_expr_type(&port.expr, doc, enums, registry, cache)?;
-                    if !port_ty.matches(&StaticType::Duration) {
-                        return Err(CompileError::TypeMismatch {
-                            expected: "Duration".to_string(),
-                            actual: port_ty.type_name(),
-                            span: port.expr.span(),
-                        });
-                    }
-                }
-                Ok(StaticType::Timer)
+        Expr::Node(elem) => infer_node_expr_type(elem, doc, enums, registry, cache),
+        Expr::ExprDef(_) => Ok(StaticType::Expr),
+        Expr::Match(m) => infer_match_type(m, doc, enums, registry, cache),
+        Expr::Index(idx) => {
+            let target_ty = infer_expr_type(&idx.target, doc, enums, registry, cache)?;
+            let index_ty = infer_expr_type(&idx.index, doc, enums, registry, cache)?;
+            let valid_index = matches!(
+                index_ty,
+                StaticType::Integer | StaticType::ZeroInteger
+            ) || matches!(&index_ty, StaticType::Node(n) if n == "Page")
+                || doc
+                    .page_template_component
+                    .as_ref()
+                    .is_some_and(|tmpl| matches!(&index_ty, StaticType::Node(n) if n == tmpl));
+            if !valid_index {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Integer or Page".to_string(),
+                    actual: index_ty.type_name(),
+                    span: idx.index.span(),
+                });
             }
-            "IndefiniteTimer" => {
-                if elem.content.is_some() {
-                    return Err(CompileError::Custom {
-                        message: "Node 'IndefiniteTimer' does not accept a content block"
-                            .to_string(),
-                        span: elem.span,
-                    });
+            let bucket_nid = crate::compiler::expand::builtins::pagination::resolve_bucket_node_id(
+                &idx.target,
+                doc,
+            );
+            match &target_ty {
+                StaticType::Node(n) if n == "PageValue" => {
+                    Ok(StaticType::PageValueSlice(bucket_nid))
                 }
-                if elem.key.is_some() {
-                    return Err(CompileError::Custom {
-                        message: "Node 'IndefiniteTimer' does not accept a key".to_string(),
-                        span: elem.span,
-                    });
-                }
-                if let Some(port) = elem.ports.first() {
+                StaticType::Node(n) if n == "PageList" => Ok(StaticType::PageListSlice(bucket_nid)),
+                other => Err(CompileError::TypeMismatch {
+                    expected: "PageValue or PageList".to_string(),
+                    actual: other.type_name(),
+                    span: idx.target.span(),
+                }),
+            }
+        }
+    }
+}
+
+#[inline(never)]
+fn infer_member_access_type(
+    m: &MemberAccessExpr,
+    doc: &ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    cache: &mut TypecheckCache<'_>,
+) -> Result<StaticType, CompileError> {
+    if let Expr::Ident(target_id) = m.target.as_ref() {
+        if let Some(enum_def) = enums.get(target_id.as_str()) {
+            if enum_def.has_variant(m.member.as_str()) {
+                return Ok(StaticType::Enum(target_id.as_str().to_string()));
+            }
+        }
+        if let Some(raw_node_id) = target_id.node_id() {
+            let node_id = if raw_node_id.is_template_self() {
+                if let Some(template_types) = cache.template_types {
+                    if let Some(ty) = template_types.get(&m.member.name) {
+                        return Ok(ty.clone());
+                    }
                     return Err(CompileError::Custom {
                         message: format!(
-                            "Node 'IndefiniteTimer' does not accept property '{}'",
+                            "Template port '{}' has no known static type",
+                            m.member.as_str()
+                        ),
+                        span: m.span,
+                    });
+                }
+                if let Some(self_node) = cache.current_self_node {
+                    self_node
+                } else {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Template port '{}' has no known static type",
+                            m.member.as_str()
+                        ),
+                        span: m.span,
+                    });
+                }
+            } else {
+                raw_node_id
+            };
+            let has_port = if node_id.is_window() {
+                doc.window_ports.contains_key(m.member.as_str())
+                    || super::rewrite::has_materialized_expr_port(
+                        node_id,
+                        m.member.as_str(),
+                    )
+                    || known_builtin_port_type("Window", m.member.as_str()).is_some()
+            } else if node_id.is_page() {
+                doc.page_ports.contains_key(m.member.as_str())
+                    || super::rewrite::has_materialized_expr_port(
+                        node_id,
+                        m.member.as_str(),
+                    )
+                    || known_builtin_port_type("Page", m.member.as_str()).is_some()
+            } else if let Some(node) = doc.get_node(node_id) {
+                node.ports.contains_key(m.member.as_str())
+                    || node.port_types.contains_key(m.member.as_str())
+                    || super::rewrite::has_materialized_expr_port(
+                        node_id,
+                        m.member.as_str(),
+                    )
+                    || (!node.is_component
+                        && known_builtin_port_type(&node.name, m.member.as_str()).is_some())
+            } else {
+                super::rewrite::has_materialized_expr_port(node_id, m.member.as_str())
+            };
+            if has_port {
+                return infer_port_type(
+                    node_id,
+                    m.member.name,
+                    m.member.as_str(),
+                    doc,
+                    enums,
+                    registry,
+                    cache,
+                );
+            }
+            // Check if it's an event handler method on a component node
+            if let Some(node) = doc.get_node(node_id) {
+                if node.is_component {
+                    return Ok(StaticType::Handler);
+                }
+            }
+        }
+    }
+    let target_ty = infer_expr_type(&m.target, doc, enums, registry, cache)?;
+    if is_page_prev_expr(&m.target) {
+        let member_name = m.member.as_str();
+        if doc.page_template_private_ports.contains(member_name) {
+            return Err(CompileError::Custom {
+                message: format!(
+                    "Cannot access private property '{}' on 'page.prev'; expose it via \\alias",
+                    member_name
+                ),
+                span: m.span,
+            });
+        }
+        if let Some(tmpl_node) = doc.page_template_component.as_ref().and_then(|tname| {
+            doc.nodes
+                .iter()
+                .find(|n| n.is_component && &n.name == tname)
+        }) {
+            let sym = m.member.name;
+            if cache.visiting.contains(&(tmpl_node.id, sym)) {
+                if let Some(ty_name) = tmpl_node.port_types.get(member_name) {
+                    return StaticType::from_type_name(
+                        ty_name,
+                        m.span,
+                        enums,
+                        registry,
+                    );
+                }
+                return Ok(StaticType::PagePrevRecursive);
+            }
+            if tmpl_node.ports.contains_key(member_name)
+                || tmpl_node.port_types.contains_key(member_name)
+            {
+                return infer_port_type(
+                    tmpl_node.id,
+                    sym,
+                    member_name,
+                    doc,
+                    enums,
+                    registry,
+                    cache,
+                );
+            }
+            return Err(CompileError::Custom {
+                message: format!(
+                    "Page template '{}' has no public property '{}'",
+                    tmpl_node.name, member_name
+                ),
+                span: m.span,
+            });
+        }
+    }
+    match target_ty {
+        StaticType::Node(ref node_name) => {
+            if let Some(builtin) = known_builtin_port_type(node_name, m.member.as_str()) {
+                return Ok(builtin);
+            }
+            if let Some(overloads) = registry.get(node_name).or_else(|| {
+                registry.iter().find_map(|(k, v)| {
+                    (crate::compiler::graph::unmangle_component_name(k) == node_name)
+                        .then_some(v)
+                })
+            }) {
+                for comp in overloads {
+                    if let Some(param) =
+                        comp.params.iter().find(|p| p.name.as_str() == m.member.as_str())
+                    {
+                        if let Some(ref t) = param.type_annotation {
+                            if let Ok(st) = StaticType::from_type_name(
+                                t.name.as_str(),
+                                t.span,
+                                enums,
+                                registry,
+                            ) {
+                                return Ok(st);
+                            }
+                        }
+                    }
+                }
+                return Ok(StaticType::Handler);
+            }
+            Err(CompileError::Custom {
+                message: format!(
+                    "Node '{}' has no known property or method '{}'",
+                    node_name, m.member
+                ),
+                span: m.span,
+            })
+        }
+        StaticType::ViewPort => match m.member.as_str() {
+            "x" | "y" | "width" | "height" | "left" | "top" | "right" | "bottom" => {
+                Ok(StaticType::Distance)
+            }
+            _ => Err(CompileError::Custom {
+                message: format!("ViewPort has no property '{}'", m.member),
+                span: m.span,
+            }),
+        },
+        StaticType::Timer => {
+            let prop_ty = match m.member.as_str() {
+                "time" | "duration" | "dt" => StaticType::Duration,
+                "elapsed" => StaticType::Float,
+                "frames" => StaticType::Integer,
+                _ => {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Node 'Timer' has no public property '{}'",
+                            m.member
+                        ),
+                        span: m.span,
+                    });
+                }
+            };
+            if is_nullable_timer_target(
+                &m.target,
+                &target_ty,
+                doc,
+                cache.current_self_node,
+            ) {
+                let is_guarded =
+                    canonical_timer_key(&m.target, cache.current_self_node)
+                        .is_some_and(|k| cache.guarded_timers.contains(&k));
+                if !is_guarded {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Cannot access property '{}' on unguarded 'Timer'; guard with 'timer ? ... : ...'",
+                            m.member
+                        ),
+                        span: m.span,
+                    });
+                }
+            }
+            Ok(prop_ty)
+        }
+        StaticType::IndefiniteTimer => {
+            let prop_ty = match m.member.as_str() {
+                "time" | "dt" => StaticType::Duration,
+                "frames" => StaticType::Integer,
+                _ => {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Node 'IndefiniteTimer' has no public property '{}'",
+                            m.member
+                        ),
+                        span: m.span,
+                    });
+                }
+            };
+            if is_nullable_timer_target(
+                &m.target,
+                &target_ty,
+                doc,
+                cache.current_self_node,
+            ) {
+                let is_guarded =
+                    canonical_timer_key(&m.target, cache.current_self_node)
+                        .is_some_and(|k| cache.guarded_timers.contains(&k));
+                if !is_guarded {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Cannot access property '{}' on unguarded 'IndefiniteTimer'; guard with 'timer ? ... : ...'",
+                            m.member
+                        ),
+                        span: m.span,
+                    });
+                }
+            }
+            Ok(prop_ty)
+        }
+        StaticType::PageValueSlice(bucket_nid) => match m.member.as_str() {
+            "has_value" => Ok(StaticType::Boolean),
+            "value" | "first" => Ok(StaticType::BucketPayload(bucket_nid)),
+            other => Err(CompileError::Custom {
+                message: format!("PageValue slice has no property '{other}'"),
+                span: m.span,
+            }),
+        },
+        StaticType::PageListSlice(bucket_nid) => match m.member.as_str() {
+            "len" => Ok(StaticType::Integer),
+            "first" | "last" => Ok(StaticType::BucketPayload(bucket_nid)),
+            other => Err(CompileError::Custom {
+                message: format!("PageList slice has no property '{other}'"),
+                span: m.span,
+            }),
+        },
+        StaticType::BucketPayload(bucket_nid) => {
+            let member_name = m.member.as_str();
+            if let Some(bid) = bucket_nid {
+                if let Some(schema_map) = cache.bucket_schemas.get(&bid) {
+                    if let Some(prop_ty) = schema_map.get(member_name) {
+                        return Ok(prop_ty.clone());
+                    }
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Bucket payload has no public property '{member_name}'"
+                        ),
+                        span: m.span,
+                    });
+                }
+            }
+            if cache.template_types.is_some() {
+                return Err(CompileError::Custom {
+                    message: "Deferred bucket payload typecheck".to_string(),
+                    span: m.span,
+                });
+            }
+            // Empty bucket (0 deposits in document): short-circuited under guard
+            Ok(StaticType::PagePrevRecursive)
+        }
+        StaticType::PagePrevRecursive => Ok(StaticType::PagePrevRecursive),
+        other => Err(CompileError::Custom {
+            message: format!(
+                "Cannot access member '{}' on value of type '{}'",
+                m.member,
+                other.type_name()
+            ),
+            span: m.span,
+        }),
+    }
+}
+
+#[inline(never)]
+fn infer_binary_type(
+    bin: &BinaryExpr,
+    doc: &ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    cache: &mut TypecheckCache<'_>,
+) -> Result<StaticType, CompileError> {
+    let left_ty = infer_expr_type(&bin.left, doc, enums, registry, cache)?;
+    let right_ty = if matches!(bin.op, BinaryOp::And | BinaryOp::Or) {
+        let (l_pos, l_neg) =
+            extract_timer_guards(&bin.left, doc, enums, registry, cache, 0);
+        let saved = cache.guarded_timers.clone();
+        if bin.op == BinaryOp::And {
+            cache.guarded_timers.extend(l_pos);
+        } else {
+            cache.guarded_timers.extend(l_neg);
+        }
+        let res = infer_expr_type(&bin.right, doc, enums, registry, cache);
+        cache.guarded_timers = saved;
+        res?
+    } else {
+        infer_expr_type(&bin.right, doc, enums, registry, cache)?
+    };
+    match bin.op {
+        BinaryOp::Add => match (&left_ty, &right_ty) {
+            (StaticType::PagePrevRecursive, other)
+            | (other, StaticType::PagePrevRecursive) => Ok(other.clone()),
+            (StaticType::String, _) | (_, StaticType::String) => Ok(StaticType::String),
+            (StaticType::Distance, StaticType::Distance)
+            | (StaticType::Distance, StaticType::ZeroInteger)
+            | (StaticType::ZeroInteger, StaticType::Distance) => Ok(StaticType::Distance),
+            (StaticType::Area, StaticType::Area)
+            | (StaticType::Area, StaticType::ZeroInteger)
+            | (StaticType::ZeroInteger, StaticType::Area) => Ok(StaticType::Area),
+            (StaticType::Duration, StaticType::Duration)
+            | (StaticType::Duration, StaticType::ZeroInteger)
+            | (StaticType::ZeroInteger, StaticType::Duration) => Ok(StaticType::Duration),
+            (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
+                Ok(StaticType::Integer)
+            }
+            (
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+            ) => Ok(StaticType::Float),
+            (StaticType::Distance, other) => Err(CompileError::TypeMismatch {
+                expected: "Distance".to_string(),
+                actual: other.type_name(),
+                span: bin.right.span(),
+            }),
+            (StaticType::Area, other) => Err(CompileError::TypeMismatch {
+                expected: "Area".to_string(),
+                actual: other.type_name(),
+                span: bin.right.span(),
+            }),
+            (StaticType::Duration, other) => Err(CompileError::TypeMismatch {
+                expected: "Duration".to_string(),
+                actual: other.type_name(),
+                span: bin.right.span(),
+            }),
+            (other, StaticType::Distance) => Err(CompileError::TypeMismatch {
+                expected: "Distance".to_string(),
+                actual: other.type_name(),
+                span: bin.left.span(),
+            }),
+            (other, StaticType::Area) => Err(CompileError::TypeMismatch {
+                expected: "Area".to_string(),
+                actual: other.type_name(),
+                span: bin.left.span(),
+            }),
+            (other, StaticType::Duration) => Err(CompileError::TypeMismatch {
+                expected: "Duration".to_string(),
+                actual: other.type_name(),
+                span: bin.left.span(),
+            }),
+            _ => Err(CompileError::TypeMismatch {
+                expected: left_ty.type_name(),
+                actual: right_ty.type_name(),
+                span: bin.span,
+            }),
+        },
+        BinaryOp::Sub => match (&left_ty, &right_ty) {
+            (StaticType::PagePrevRecursive, other)
+            | (other, StaticType::PagePrevRecursive) => Ok(other.clone()),
+            (StaticType::Distance, StaticType::Distance)
+            | (StaticType::Distance, StaticType::ZeroInteger)
+            | (StaticType::ZeroInteger, StaticType::Distance) => Ok(StaticType::Distance),
+            (StaticType::Area, StaticType::Area)
+            | (StaticType::Area, StaticType::ZeroInteger)
+            | (StaticType::ZeroInteger, StaticType::Area) => Ok(StaticType::Area),
+            (StaticType::Duration, StaticType::Duration)
+            | (StaticType::Duration, StaticType::ZeroInteger)
+            | (StaticType::ZeroInteger, StaticType::Duration) => Ok(StaticType::Duration),
+            (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
+                Ok(StaticType::Integer)
+            }
+            (
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+            ) => Ok(StaticType::Float),
+            (StaticType::Distance, other) => Err(CompileError::TypeMismatch {
+                expected: "Distance".to_string(),
+                actual: other.type_name(),
+                span: bin.right.span(),
+            }),
+            (StaticType::Area, other) => Err(CompileError::TypeMismatch {
+                expected: "Area".to_string(),
+                actual: other.type_name(),
+                span: bin.right.span(),
+            }),
+            (StaticType::Duration, other) => Err(CompileError::TypeMismatch {
+                expected: "Duration".to_string(),
+                actual: other.type_name(),
+                span: bin.right.span(),
+            }),
+            (other, StaticType::Distance) => Err(CompileError::TypeMismatch {
+                expected: "Distance".to_string(),
+                actual: other.type_name(),
+                span: bin.left.span(),
+            }),
+            (other, StaticType::Area) => Err(CompileError::TypeMismatch {
+                expected: "Area".to_string(),
+                actual: other.type_name(),
+                span: bin.left.span(),
+            }),
+            (other, StaticType::Duration) => Err(CompileError::TypeMismatch {
+                expected: "Duration".to_string(),
+                actual: other.type_name(),
+                span: bin.left.span(),
+            }),
+            _ => Err(CompileError::TypeMismatch {
+                expected: left_ty.type_name(),
+                actual: right_ty.type_name(),
+                span: bin.span,
+            }),
+        },
+        BinaryOp::Mul => match (&left_ty, &right_ty) {
+            (StaticType::PagePrevRecursive, _) | (_, StaticType::PagePrevRecursive) => {
+                Ok(StaticType::PagePrevRecursive)
+            }
+            (StaticType::Distance, StaticType::Distance) => Ok(StaticType::Area),
+            (
+                StaticType::Distance,
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+            )
+            | (
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                StaticType::Distance,
+            ) => Ok(StaticType::Distance),
+            (
+                StaticType::Area,
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+            )
+            | (
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                StaticType::Area,
+            ) => Ok(StaticType::Area),
+            (
+                StaticType::Duration,
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+            )
+            | (
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                StaticType::Duration,
+            ) => Ok(StaticType::Duration),
+            (StaticType::Integer | StaticType::ZeroInteger, StaticType::Integer | StaticType::ZeroInteger) => {
+                Ok(StaticType::Integer)
+            }
+            (
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+            ) => Ok(StaticType::Float),
+            _ => Err(CompileError::TypeMismatch {
+                expected: "Float, Integer, Distance, or Duration".to_string(),
+                actual: format!("{} * {}", left_ty.type_name(), right_ty.type_name()),
+                span: bin.span,
+            }),
+        },
+        BinaryOp::Div => match (&left_ty, &right_ty) {
+            (StaticType::PagePrevRecursive, _) | (_, StaticType::PagePrevRecursive) => {
+                Ok(StaticType::PagePrevRecursive)
+            }
+            (StaticType::Distance, StaticType::Distance)
+            | (StaticType::Area, StaticType::Area)
+            | (StaticType::Duration, StaticType::Duration) => Ok(StaticType::Float),
+            (StaticType::Area, StaticType::Distance) => Ok(StaticType::Distance),
+            (
+                StaticType::Distance,
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+            ) => Ok(StaticType::Distance),
+            (
+                StaticType::Area,
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+            ) => Ok(StaticType::Area),
+            (
+                StaticType::Duration,
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+            ) => Ok(StaticType::Duration),
+            (
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+            ) => Ok(StaticType::Float),
+            _ => Err(CompileError::TypeMismatch {
+                expected: "Float, Integer, Distance, Area, or Duration".to_string(),
+                actual: format!("{} / {}", left_ty.type_name(), right_ty.type_name()),
+                span: bin.span,
+            }),
+        },
+        BinaryOp::Rem => match (&left_ty, &right_ty) {
+            (StaticType::PagePrevRecursive, other)
+            | (other, StaticType::PagePrevRecursive) => Ok(other.clone()),
+            (StaticType::Distance, StaticType::Distance) => Ok(StaticType::Distance),
+            (StaticType::Area, StaticType::Area) => Ok(StaticType::Area),
+            (StaticType::Duration, StaticType::Duration) => Ok(StaticType::Duration),
+            (
+                StaticType::Integer | StaticType::ZeroInteger,
+                StaticType::Integer | StaticType::ZeroInteger,
+            ) => Ok(StaticType::Integer),
+            (
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+            ) => Ok(StaticType::Float),
+            _ => Err(CompileError::TypeMismatch {
+                expected: "Float or Integer".to_string(),
+                actual: format!("{} % {}", left_ty.type_name(), right_ty.type_name()),
+                span: bin.span,
+            }),
+        },
+        BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
+            match (&left_ty, &right_ty) {
+                (StaticType::PagePrevRecursive, _) | (_, StaticType::PagePrevRecursive) => {
+                    Ok(StaticType::Boolean)
+                }
+                (StaticType::Distance, StaticType::Distance)
+                | (StaticType::Distance, StaticType::ZeroInteger)
+                | (StaticType::ZeroInteger, StaticType::Distance)
+                | (StaticType::Area, StaticType::Area)
+                | (StaticType::Area, StaticType::ZeroInteger)
+                | (StaticType::ZeroInteger, StaticType::Area)
+                | (StaticType::Duration, StaticType::Duration)
+                | (StaticType::Duration, StaticType::ZeroInteger)
+                | (StaticType::ZeroInteger, StaticType::Duration)
+                | (
+                    StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                    StaticType::Float | StaticType::Integer | StaticType::ZeroInteger,
+                ) => Ok(StaticType::Boolean),
+                (StaticType::Distance, other) => Err(CompileError::TypeMismatch {
+                    expected: "Distance".to_string(),
+                    actual: other.type_name(),
+                    span: bin.right.span(),
+                }),
+                (StaticType::Area, other) => Err(CompileError::TypeMismatch {
+                    expected: "Area".to_string(),
+                    actual: other.type_name(),
+                    span: bin.right.span(),
+                }),
+                (StaticType::Duration, other) => Err(CompileError::TypeMismatch {
+                    expected: "Duration".to_string(),
+                    actual: other.type_name(),
+                    span: bin.right.span(),
+                }),
+                (other, StaticType::Distance) => Err(CompileError::TypeMismatch {
+                    expected: "Distance".to_string(),
+                    actual: other.type_name(),
+                    span: bin.left.span(),
+                }),
+                (other, StaticType::Area) => Err(CompileError::TypeMismatch {
+                    expected: "Area".to_string(),
+                    actual: other.type_name(),
+                    span: bin.left.span(),
+                }),
+                (other, StaticType::Duration) => Err(CompileError::TypeMismatch {
+                    expected: "Duration".to_string(),
+                    actual: other.type_name(),
+                    span: bin.left.span(),
+                }),
+                _ => Err(CompileError::TypeMismatch {
+                    expected: left_ty.type_name(),
+                    actual: right_ty.type_name(),
+                    span: bin.span,
+                }),
+            }
+        }
+        BinaryOp::Eq | BinaryOp::Ne => {
+            if (is_page_prev_expr(&bin.left) && matches!(right_ty, StaticType::Unset))
+                || (is_page_prev_expr(&bin.right) && matches!(left_ty, StaticType::Unset))
+            {
+                Ok(StaticType::Boolean)
+            } else if left_ty.matches(&right_ty) || right_ty.matches(&left_ty) {
+                Ok(StaticType::Boolean)
+            } else if matches!(
+                (&left_ty, &right_ty),
+                (StaticType::Color, StaticType::String)
+                    | (StaticType::String, StaticType::Color)
+            ) {
+                Ok(StaticType::Boolean)
+            } else {
+                Err(CompileError::TypeMismatch {
+                    expected: left_ty.type_name(),
+                    actual: right_ty.type_name(),
+                    span: bin.span,
+                })
+            }
+        }
+        BinaryOp::And | BinaryOp::Or => {
+            if !is_page_prev_expr(&bin.left)
+                && !matches!(
+                    left_ty,
+                    StaticType::Boolean
+                        | StaticType::Timer
+                        | StaticType::IndefiniteTimer
+                        | StaticType::Handler
+                        | StaticType::Unset
+                )
+            {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Boolean".to_string(),
+                    actual: left_ty.type_name(),
+                    span: bin.left.span(),
+                });
+            }
+            if !is_page_prev_expr(&bin.right)
+                && !matches!(
+                    right_ty,
+                    StaticType::Boolean
+                        | StaticType::Timer
+                        | StaticType::IndefiniteTimer
+                        | StaticType::Handler
+                        | StaticType::Unset
+                )
+            {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Boolean".to_string(),
+                    actual: right_ty.type_name(),
+                    span: bin.right.span(),
+                });
+            }
+            Ok(StaticType::Boolean)
+        }
+    }
+}
+
+#[inline(never)]
+fn infer_ternary_type(
+    tern: &TernaryExpr,
+    doc: &ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    cache: &mut TypecheckCache<'_>,
+) -> Result<StaticType, CompileError> {
+    let cond_ty = infer_expr_type(&tern.condition, doc, enums, registry, cache)?;
+    if !is_page_prev_expr(&tern.condition)
+        && !matches!(
+            cond_ty,
+            StaticType::Boolean
+                | StaticType::Timer
+                | StaticType::IndefiniteTimer
+                | StaticType::Handler
+                | StaticType::Unset
+        )
+    {
+        return Err(CompileError::TypeMismatch {
+            expected: "Boolean".to_string(),
+            actual: cond_ty.type_name(),
+            span: tern.condition.span(),
+        });
+    }
+    let (pos_guards, neg_guards) =
+        extract_timer_guards(&tern.condition, doc, enums, registry, cache, 0);
+    let saved_guards = cache.guarded_timers.clone();
+    cache.guarded_timers.extend(pos_guards);
+    let then_res = infer_expr_type(&tern.then_expr, doc, enums, registry, cache);
+    cache.guarded_timers.clone_from(&saved_guards);
+    let then_ty = then_res?;
+
+    cache.guarded_timers.extend(neg_guards);
+    let else_res = infer_expr_type(&tern.else_expr, doc, enums, registry, cache);
+    cache.guarded_timers = saved_guards;
+    let else_ty = else_res?;
+    if matches!(then_ty, StaticType::PagePrevRecursive) {
+        Ok(else_ty.decay())
+    } else if matches!(else_ty, StaticType::PagePrevRecursive) {
+        Ok(then_ty.decay())
+    } else if then_ty == else_ty {
+        Ok(then_ty.decay())
+    } else if then_ty.matches(&else_ty) {
+        Ok(else_ty.decay())
+    } else if else_ty.matches(&then_ty) {
+        Ok(then_ty.decay())
+    } else if matches!(
+        (&then_ty, &else_ty),
+        (StaticType::Node(a), StaticType::Node(b))
+            if matches!(a.as_str(), "Window" | "ScrollView")
+                && matches!(b.as_str(), "Window" | "ScrollView")
+    ) {
+        Ok(StaticType::ViewPort)
+    } else {
+        Err(CompileError::TypeMismatch {
+            expected: then_ty.type_name(),
+            actual: else_ty.type_name(),
+            span: tern.else_expr.span(),
+        })
+    }
+}
+
+#[inline(never)]
+fn infer_call_type(
+    call: &CallExpr,
+    doc: &ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    cache: &mut TypecheckCache<'_>,
+) -> Result<StaticType, CompileError> {
+    match call.callee.as_str() {
+        name if DistanceUnit::from_conversion_fn(name).is_some()
+            || matches!(name, "distance_to_float" | "to_float" | "to_number") =>
+        {
+            for arg in &call.args {
+                let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
+            }
+            Ok(StaticType::Float)
+        }
+        "to_integer" => {
+            for arg in &call.args {
+                let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
+            }
+            Ok(StaticType::Integer)
+        }
+        "sqrt" => {
+            let mut first_ty = None;
+            for (i, arg) in call.args.iter().enumerate() {
+                let t = infer_expr_type(arg, doc, enums, registry, cache)?;
+                if i == 0 {
+                    first_ty = Some(t);
+                }
+            }
+            if matches!(first_ty, Some(StaticType::Area)) {
+                Ok(StaticType::Distance)
+            } else {
+                Ok(StaticType::Float)
+            }
+        }
+        "round" | "floor" | "ceil" => {
+            let mut first_ty = None;
+            for (i, arg) in call.args.iter().enumerate() {
+                let t = infer_expr_type(arg, doc, enums, registry, cache)?;
+                if i == 0 {
+                    first_ty = Some(t);
+                }
+            }
+            match first_ty {
+                Some(StaticType::Distance) => Ok(StaticType::Distance),
+                Some(StaticType::Area) => Ok(StaticType::Area),
+                Some(StaticType::Duration) => Ok(StaticType::Duration),
+                _ => Ok(StaticType::Integer),
+            }
+        }
+        "to_fixed" | "to_precision" => {
+            for arg in &call.args {
+                let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
+            }
+            Ok(StaticType::String)
+        }
+        "hsl" | "hsla" | "rgb" | "rgba" => {
+            for arg in &call.args {
+                let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
+            }
+            Ok(StaticType::Color)
+        }
+        "text_width"
+        | "text_height"
+        | "text_baseline_offset"
+        | "span_metric"
+        | "font_cap_height"
+        | "font_x_height"
+        | "font_ascent"
+        | "font_descent"
+        | "font_line_gap"
+        | "font_line_height" => {
+            for arg in &call.args {
+                let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
+            }
+            Ok(StaticType::Distance)
+        }
+        "max" | "min" | "sum" | "abs" | "clamp" | "only" | "hypot" => {
+            if call.args.is_empty() {
+                return Ok(StaticType::Distance);
+            }
+            let mut acc_ty =
+                infer_expr_type(&call.args[0], doc, enums, registry, cache)?;
+            for arg in &call.args[1..] {
+                let arg_ty = infer_expr_type(arg, doc, enums, registry, cache)?;
+                if arg_ty.matches(&acc_ty) {
+                    // keep acc_ty
+                } else if acc_ty.matches(&arg_ty) {
+                    acc_ty = arg_ty;
+                } else {
+                    return Err(CompileError::TypeMismatch {
+                        expected: acc_ty.type_name(),
+                        actual: arg_ty.type_name(),
+                        span: arg.span(),
+                    });
+                }
+            }
+            if call.callee.as_str() == "hypot" && acc_ty.decay() == StaticType::Integer {
+                Ok(StaticType::Float)
+            } else {
+                Ok(acc_ty.decay())
+            }
+        }
+        _ => {
+            for arg in &call.args {
+                let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
+            }
+            Ok(StaticType::Float)
+        }
+    }
+}
+
+#[inline(never)]
+fn infer_node_expr_type(
+    elem: &ElementNode,
+    doc: &ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    cache: &mut TypecheckCache<'_>,
+) -> Result<StaticType, CompileError> {
+    match elem.name.as_str() {
+        "Timer" => {
+            if elem.content.is_some() {
+                return Err(CompileError::Custom {
+                    message: "Node 'Timer' does not accept a content block".to_string(),
+                    span: elem.span,
+                });
+            }
+            if elem.key.is_some() {
+                return Err(CompileError::Custom {
+                    message: "Node 'Timer' does not accept a key".to_string(),
+                    span: elem.span,
+                });
+            }
+            if elem.ports.is_empty() {
+                return Err(CompileError::MissingPort {
+                    node: "Timer".to_string(),
+                    port: "duration".to_string(),
+                    span: elem.span,
+                });
+            }
+            for port in &elem.ports {
+                if port.name.as_str() != "duration" {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Node 'Timer' does not accept property '{}'",
                             port.name.as_str()
                         ),
                         span: port.name.span,
                     });
                 }
-                Ok(StaticType::IndefiniteTimer)
+                let port_ty =
+                    infer_expr_type(&port.expr, doc, enums, registry, cache)?;
+                if !port_ty.matches(&StaticType::Duration) {
+                    return Err(CompileError::TypeMismatch {
+                        expected: "Duration".to_string(),
+                        actual: port_ty.type_name(),
+                        span: port.expr.span(),
+                    });
+                }
             }
-            _ => Ok(StaticType::Node(elem.name.as_str().to_string())),
+            Ok(StaticType::Timer)
+        }
+        "IndefiniteTimer" => {
+            if elem.content.is_some() {
+                return Err(CompileError::Custom {
+                    message: "Node 'IndefiniteTimer' does not accept a content block"
+                        .to_string(),
+                    span: elem.span,
+                });
+            }
+            if elem.key.is_some() {
+                return Err(CompileError::Custom {
+                    message: "Node 'IndefiniteTimer' does not accept a key".to_string(),
+                    span: elem.span,
+                });
+            }
+            if let Some(port) = elem.ports.first() {
+                return Err(CompileError::Custom {
+                    message: format!(
+                        "Node 'IndefiniteTimer' does not accept property '{}'",
+                        port.name.as_str()
+                    ),
+                    span: port.name.span,
+                });
+            }
+            Ok(StaticType::IndefiniteTimer)
+        }
+        _ => Ok(StaticType::Node(elem.name.as_str().to_string())),
+    }
+}
+
+#[inline(never)]
+fn infer_match_type(
+    m: &MatchExpr,
+    doc: &ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+    cache: &mut TypecheckCache<'_>,
+) -> Result<StaticType, CompileError> {
+    let mut acc_ty: Option<StaticType> = None;
+    let saved_guards = cache.guarded_timers.clone();
+    let mut acc_neg_guards: HashSet<(NodeId, Symbol)> = HashSet::new();
+    for arm in &m.arms {
+        let mut arm_pos_guards = HashSet::new();
+        let mut arm_neg_guards = HashSet::new();
+        if let MatchPattern::Condition(c) = &arm.pattern {
+            cache.guarded_timers.clone_from(&saved_guards);
+            cache.guarded_timers.extend(acc_neg_guards.iter().copied());
+            let c_res = infer_expr_type(c, doc, enums, registry, cache);
+            cache.guarded_timers.clone_from(&saved_guards);
+            let c_ty = c_res?;
+            if !matches!(
+                c_ty,
+                StaticType::Boolean
+                    | StaticType::Timer
+                    | StaticType::IndefiniteTimer
+                    | StaticType::Handler
+                    | StaticType::Unset
+            ) {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Boolean".to_string(),
+                    actual: c_ty.type_name(),
+                    span: c.span(),
+                });
+            }
+            let (pos, neg) = extract_timer_guards(c, doc, enums, registry, cache, 0);
+            arm_pos_guards = pos;
+            arm_neg_guards = neg;
+        }
+        cache.guarded_timers.clone_from(&saved_guards);
+        cache.guarded_timers.extend(acc_neg_guards.iter().copied());
+        cache.guarded_timers.extend(arm_pos_guards);
+        let arm_res = infer_expr_type(&arm.body, doc, enums, registry, cache);
+        cache.guarded_timers.clone_from(&saved_guards);
+        let arm_ty = arm_res?;
+        acc_neg_guards.extend(arm_neg_guards);
+        if let Some(prev_ty) = &acc_ty {
+            if arm_ty == *prev_ty || arm_ty.matches(prev_ty) {
+                // keep prev_ty
+            } else if prev_ty.matches(&arm_ty) {
+                acc_ty = Some(arm_ty.decay());
+            } else {
+                return Err(CompileError::TypeMismatch {
+                    expected: prev_ty.type_name(),
+                    actual: arm_ty.type_name(),
+                    span: arm.body.span(),
+                });
+            }
+        } else {
+            acc_ty = Some(arm_ty);
+        }
+    }
+    Ok(acc_ty.unwrap_or(StaticType::Integer).decay())
+}
+
+pub(super) fn is_page_prev_expr(expr: &Expr) -> bool {
+    let mut cur = expr;
+    while let Expr::Paren(inner, _) = cur {
+        cur = inner;
+    }
+    let Expr::MemberAccess(m) = cur else {
+        return false;
+    };
+    if m.member.as_str() != "prev" {
+        return false;
+    }
+    let mut tgt = m.target.as_ref();
+    while let Expr::Paren(inner, _) = tgt {
+        tgt = inner;
+    }
+    matches!(tgt, Expr::Ident(id) if id.node_id().is_some_and(|nid| nid.is_page()) || id.as_str() == "page")
+}
+
+fn is_page_port(expr: &Expr, port: &str) -> bool {
+    let mut cur = expr;
+    while let Expr::Paren(inner, _) = cur {
+        cur = inner;
+    }
+    let Expr::MemberAccess(m) = cur else {
+        return false;
+    };
+    if m.member.as_str() != port {
+        return false;
+    }
+    let mut tgt = m.target.as_ref();
+    while let Expr::Paren(inner, _) = tgt {
+        tgt = inner;
+    }
+    matches!(tgt, Expr::Ident(id) if id.node_id().is_some_and(|nid| nid.is_page()) || id.as_str() == "page")
+}
+
+fn is_unset_expr(expr: &Expr) -> bool {
+    let mut cur = expr;
+    while let Expr::Paren(inner, _) = cur {
+        cur = inner;
+    }
+    matches!(cur, Expr::Ident(id) if id.name == Symbol::UNSET)
+}
+
+fn literal_int_val(expr: &Expr) -> Option<i64> {
+    let mut cur = expr;
+    while let Expr::Paren(inner, _) = cur {
+        cur = inner;
+    }
+    match cur {
+        Expr::Literal(Literal::Integer(n, _)) => Some(*n),
+        _ => None,
+    }
+}
+
+fn literal_bool_val(expr: &Expr) -> Option<bool> {
+    let mut cur = expr;
+    while let Expr::Paren(inner, _) = cur {
+        cur = inner;
+    }
+    match cur {
+        Expr::Literal(Literal::Bool(b, _)) => Some(*b),
+        _ => None,
+    }
+}
+
+/// Returns `(then_guarded, else_guarded)` for `page.prev` access safety within a boolean condition.
+fn extract_page_prev_guards(cond: &Expr, prev_guarded: bool) -> Result<(bool, bool), CompileError> {
+    let cond = unwrap_parens(cond);
+    if is_page_prev_expr(cond) {
+        return Ok((true, false));
+    }
+    if is_page_port(cond, "is_first") {
+        return Ok((false, true));
+    }
+    match cond {
+        Expr::Unary(u) if u.op == UnaryOp::Not => {
+            let (t, e) = extract_page_prev_guards(&u.operand, prev_guarded)?;
+            Ok((e, t))
+        }
+        Expr::Binary(bin) => match bin.op {
+            BinaryOp::Eq => {
+                if (is_page_prev_expr(&bin.left) && is_unset_expr(&bin.right))
+                    || (is_page_prev_expr(&bin.right) && is_unset_expr(&bin.left))
+                {
+                    return Ok((false, true));
+                }
+                if (is_page_port(&bin.left, "is_first") && literal_bool_val(&bin.right) == Some(false))
+                    || (is_page_port(&bin.right, "is_first") && literal_bool_val(&bin.left) == Some(false))
+                {
+                    return Ok((true, false));
+                }
+                if (is_page_port(&bin.left, "is_first") && literal_bool_val(&bin.right) == Some(true))
+                    || (is_page_port(&bin.right, "is_first") && literal_bool_val(&bin.left) == Some(true))
+                {
+                    return Ok((false, true));
+                }
+                if (is_page_port(&bin.left, "number") && literal_int_val(&bin.right) == Some(1))
+                    || (is_page_port(&bin.right, "number") && literal_int_val(&bin.left) == Some(1))
+                {
+                    return Ok((false, true));
+                }
+                validate_page_prev_guards(&bin.left, prev_guarded)?;
+                validate_page_prev_guards(&bin.right, prev_guarded)?;
+                Ok((false, false))
+            }
+            BinaryOp::Ne => {
+                if (is_page_prev_expr(&bin.left) && is_unset_expr(&bin.right))
+                    || (is_page_prev_expr(&bin.right) && is_unset_expr(&bin.left))
+                {
+                    return Ok((true, false));
+                }
+                if (is_page_port(&bin.left, "is_first") && literal_bool_val(&bin.right) == Some(true))
+                    || (is_page_port(&bin.right, "is_first") && literal_bool_val(&bin.left) == Some(true))
+                {
+                    return Ok((true, false));
+                }
+                if (is_page_port(&bin.left, "is_first") && literal_bool_val(&bin.right) == Some(false))
+                    || (is_page_port(&bin.right, "is_first") && literal_bool_val(&bin.left) == Some(false))
+                {
+                    return Ok((false, true));
+                }
+                if (is_page_port(&bin.left, "number") && literal_int_val(&bin.right) == Some(1))
+                    || (is_page_port(&bin.right, "number") && literal_int_val(&bin.left) == Some(1))
+                {
+                    return Ok((true, false));
+                }
+                validate_page_prev_guards(&bin.left, prev_guarded)?;
+                validate_page_prev_guards(&bin.right, prev_guarded)?;
+                Ok((false, false))
+            }
+            BinaryOp::Gt => {
+                if (is_page_port(&bin.left, "number") && literal_int_val(&bin.right).is_some_and(|n| n >= 1))
+                    || (is_page_port(&bin.right, "number") && literal_int_val(&bin.left).is_some_and(|n| n <= 1))
+                {
+                    return Ok((true, false));
+                }
+                validate_page_prev_guards(&bin.left, prev_guarded)?;
+                validate_page_prev_guards(&bin.right, prev_guarded)?;
+                Ok((false, false))
+            }
+            BinaryOp::Ge => {
+                if (is_page_port(&bin.left, "number") && literal_int_val(&bin.right).is_some_and(|n| n >= 2))
+                    || (is_page_port(&bin.right, "number") && literal_int_val(&bin.left).is_some_and(|n| n <= 1))
+                {
+                    return Ok((true, false));
+                }
+                validate_page_prev_guards(&bin.left, prev_guarded)?;
+                validate_page_prev_guards(&bin.right, prev_guarded)?;
+                Ok((false, false))
+            }
+            BinaryOp::Lt => {
+                if (is_page_port(&bin.right, "number") && literal_int_val(&bin.left).is_some_and(|n| n >= 1))
+                    || (is_page_port(&bin.left, "number") && literal_int_val(&bin.right).is_some_and(|n| n <= 2))
+                {
+                    let then_g = is_page_port(&bin.right, "number");
+                    return Ok((then_g, !then_g));
+                }
+                validate_page_prev_guards(&bin.left, prev_guarded)?;
+                validate_page_prev_guards(&bin.right, prev_guarded)?;
+                Ok((false, false))
+            }
+            BinaryOp::Le => {
+                if (is_page_port(&bin.right, "number") && literal_int_val(&bin.left).is_some_and(|n| n >= 2))
+                    || (is_page_port(&bin.left, "number") && literal_int_val(&bin.right).is_some_and(|n| n <= 1))
+                {
+                    let then_g = is_page_port(&bin.right, "number");
+                    return Ok((then_g, !then_g));
+                }
+                validate_page_prev_guards(&bin.left, prev_guarded)?;
+                validate_page_prev_guards(&bin.right, prev_guarded)?;
+                Ok((false, false))
+            }
+            BinaryOp::And => {
+                let (l_pos, l_neg) = extract_page_prev_guards(&bin.left, prev_guarded)?;
+                let (r_pos, r_neg) =
+                    extract_page_prev_guards(&bin.right, prev_guarded || l_pos)?;
+                Ok((l_pos || r_pos, l_neg && r_neg))
+            }
+            BinaryOp::Or => {
+                let (l_pos, l_neg) = extract_page_prev_guards(&bin.left, prev_guarded)?;
+                let (r_pos, r_neg) =
+                    extract_page_prev_guards(&bin.right, prev_guarded || l_neg)?;
+                Ok((l_pos && r_pos, l_neg || r_neg))
+            }
+            _ => {
+                validate_page_prev_guards(&bin.left, prev_guarded)?;
+                validate_page_prev_guards(&bin.right, prev_guarded)?;
+                Ok((false, false))
+            }
         },
-        Expr::ExprDef(_) => Ok(StaticType::Expr),
-        Expr::Match(m) => {
-            let mut acc_ty: Option<StaticType> = None;
-            let saved_guards = cache.guarded_timers.clone();
-            let mut acc_neg_guards: HashSet<(NodeId, Symbol)> = HashSet::new();
-            for arm in &m.arms {
-                let mut arm_pos_guards = HashSet::new();
-                let mut arm_neg_guards = HashSet::new();
-                if let MatchPattern::Condition(c) = &arm.pattern {
-                    cache.guarded_timers.clone_from(&saved_guards);
-                    cache.guarded_timers.extend(acc_neg_guards.iter().copied());
-                    let c_res = infer_expr_type(c, doc, enums, registry, cache);
-                    cache.guarded_timers.clone_from(&saved_guards);
-                    let c_ty = c_res?;
-                    if !matches!(
-                        c_ty,
-                        StaticType::Boolean
-                            | StaticType::Timer
-                            | StaticType::IndefiniteTimer
-                            | StaticType::Handler
-                            | StaticType::Unset
-                    ) {
-                        return Err(CompileError::TypeMismatch {
-                            expected: "Boolean".to_string(),
-                            actual: c_ty.type_name(),
-                            span: c.span(),
-                        });
-                    }
-                    let (pos, neg) = extract_timer_guards(c, doc, enums, registry, cache, 0);
-                    arm_pos_guards = pos;
-                    arm_neg_guards = neg;
-                }
-                cache.guarded_timers.clone_from(&saved_guards);
-                cache.guarded_timers.extend(acc_neg_guards.iter().copied());
-                cache.guarded_timers.extend(arm_pos_guards);
-                let arm_res = infer_expr_type(&arm.body, doc, enums, registry, cache);
-                cache.guarded_timers.clone_from(&saved_guards);
-                let arm_ty = arm_res?;
-                acc_neg_guards.extend(arm_neg_guards);
-                if let Some(prev_ty) = &acc_ty {
-                    if arm_ty == *prev_ty || arm_ty.matches(prev_ty) {
-                        // keep prev_ty
-                    } else if prev_ty.matches(&arm_ty) {
-                        acc_ty = Some(arm_ty.decay());
-                    } else {
-                        return Err(CompileError::TypeMismatch {
-                            expected: prev_ty.type_name(),
-                            actual: arm_ty.type_name(),
-                            span: arm.body.span(),
-                        });
-                    }
-                } else {
-                    acc_ty = Some(arm_ty);
+        _ => {
+            validate_page_prev_guards(cond, prev_guarded)?;
+            Ok((false, false))
+        }
+    }
+}
+
+pub(super) fn validate_page_prev_guards(
+    expr: &Expr,
+    prev_guarded: bool,
+) -> Result<(), CompileError> {
+    match expr {
+        Expr::Literal(_) | Expr::Ident(_) | Expr::DomNodeRef(_, _) => Ok(()),
+        Expr::Paren(inner, _) => validate_page_prev_guards(inner, prev_guarded),
+        Expr::MemberAccess(m) => {
+            if is_page_prev_expr(&m.target) && !prev_guarded {
+                return Err(CompileError::UnguardedPagePrevAccess {
+                    port: m.member.as_str().to_string(),
+                    span: m.span,
+                });
+            }
+            if let Expr::Index(idx) = unwrap_parens(&m.target) {
+                if is_page_prev_expr(&idx.index)
+                    && matches!(m.member.as_str(), "value" | "first" | "last")
+                    && !prev_guarded
+                {
+                    return Err(CompileError::UnguardedPagePrevAccess {
+                        port: m.member.as_str().to_string(),
+                        span: m.span,
+                    });
                 }
             }
-            Ok(acc_ty.unwrap_or(StaticType::Integer).decay())
+            validate_page_prev_guards(&m.target, prev_guarded)
+        }
+        Expr::Index(idx) => {
+            validate_page_prev_guards(&idx.target, prev_guarded)?;
+            validate_page_prev_guards(&idx.index, prev_guarded)
+        }
+        Expr::Unary(u) => {
+            if u.op == UnaryOp::Not {
+                let _ = extract_page_prev_guards(expr, prev_guarded)?;
+                Ok(())
+            } else {
+                validate_page_prev_guards(&u.operand, prev_guarded)
+            }
+        }
+        Expr::Binary(b) => {
+            if matches!(
+                b.op,
+                BinaryOp::And
+                    | BinaryOp::Or
+                    | BinaryOp::Eq
+                    | BinaryOp::Ne
+                    | BinaryOp::Gt
+                    | BinaryOp::Ge
+                    | BinaryOp::Lt
+                    | BinaryOp::Le
+            ) {
+                let _ = extract_page_prev_guards(expr, prev_guarded)?;
+                Ok(())
+            } else {
+                validate_page_prev_guards(&b.left, prev_guarded)?;
+                validate_page_prev_guards(&b.right, prev_guarded)
+            }
+        }
+        Expr::Ternary(t) => {
+            let (pos_g, neg_g) = extract_page_prev_guards(&t.condition, prev_guarded)?;
+            validate_page_prev_guards(&t.then_expr, prev_guarded || pos_g)?;
+            validate_page_prev_guards(&t.else_expr, prev_guarded || neg_g)
+        }
+        Expr::Call(c) => {
+            for arg in &c.args {
+                validate_page_prev_guards(arg, prev_guarded)?;
+            }
+            Ok(())
+        }
+        Expr::MethodCall(mc) => {
+            validate_page_prev_guards(&mc.target, prev_guarded)?;
+            for arg in &mc.args {
+                validate_page_prev_guards(arg, prev_guarded)?;
+            }
+            Ok(())
+        }
+        Expr::ExprDef(def) => {
+            for p in &def.params {
+                if let Some(d) = &p.default_edge {
+                    validate_page_prev_guards(d, prev_guarded)?;
+                }
+            }
+            validate_page_prev_guards(&def.body, prev_guarded)
+        }
+        Expr::Match(m) => {
+            if let Some(scrutinee) = &m.scrutinee {
+                validate_page_prev_guards(scrutinee, prev_guarded)?;
+                let scrutinee_is_page_prev = is_page_prev_expr(scrutinee);
+                for arm in &m.arms {
+                    let mut arm_guarded = prev_guarded;
+                    if let MatchPattern::Condition(cond) = &arm.pattern {
+                        validate_page_prev_guards(cond, prev_guarded)?;
+                        let (pos_g, _) = extract_page_prev_guards(cond, prev_guarded)?;
+                        arm_guarded |= pos_g;
+                    } else if scrutinee_is_page_prev
+                        && !matches!(arm.pattern, MatchPattern::Wildcard(_))
+                    {
+                        arm_guarded = true;
+                    }
+                    validate_page_prev_guards(&arm.body, arm_guarded)?;
+                }
+            } else {
+                for arm in &m.arms {
+                    let mut arm_guarded = prev_guarded;
+                    if let MatchPattern::Condition(cond) = &arm.pattern {
+                        validate_page_prev_guards(cond, prev_guarded)?;
+                        let (pos_g, _) = extract_page_prev_guards(cond, prev_guarded)?;
+                        arm_guarded |= pos_g;
+                    }
+                    validate_page_prev_guards(&arm.body, arm_guarded)?;
+                }
+            }
+            Ok(())
+        }
+        Expr::Node(elem) => {
+            for p in &elem.ports {
+                validate_page_prev_guards(&p.expr, prev_guarded)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn infer_deposit_elem_public_ports(
+    elem: &ElementNode,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> Result<HashMap<String, StaticType>, CompileError> {
+    let mut map: HashMap<String, StaticType> = HashMap::new();
+    let tag = elem.name.as_str();
+    if let Some(overloads) = registry.get(tag) {
+        let mut matching: Vec<&ComponentDef> = overloads
+            .iter()
+            .filter(|def| {
+                let Ok(schema) = super::schema::ComponentSchema::for_def(def) else {
+                    return false;
+                };
+                elem.ports.iter().all(|p| {
+                    let pname = p.name.as_str();
+                    pname == "clip"
+                        || pname == "pagination"
+                        || pname.starts_with("on_")
+                        || schema.param_names.contains(pname)
+                })
+            })
+            .collect();
+        if matching.is_empty() {
+            matching.extend(overloads.iter());
+        }
+        let mut combined: Option<HashMap<String, StaticType>> = None;
+        for def in matching {
+            let schema = super::schema::ComponentSchema::for_def(def)?;
+            let mut overload_map: HashMap<String, StaticType> = HashMap::new();
+            for p in &def.params {
+                let pname = p.name.as_str();
+                if let Some(ty_str) = schema.static_port_types.get(pname) {
+                    if let Ok(st) = StaticType::from_type_name(ty_str, p.span, enums, registry) {
+                        overload_map.insert(pname.to_string(), st);
+                    }
+                }
+            }
+            for (aname, alias_b) in &schema.declared_aliases {
+                if schema.private_ports.contains(aname) {
+                    continue;
+                }
+                let ty = if let Some(ty_str) = schema.static_port_types.get(aname) {
+                    StaticType::from_type_name(ty_str, alias_b.span, enums, registry)?
+                } else if let Some(ann) = &alias_b.type_annotation {
+                    StaticType::from_type_name(ann.name.as_str(), ann.span, enums, registry)?
+                } else if matches!(
+                    aname.as_str(),
+                    "x" | "y" | "width" | "height" | "left" | "top" | "right" | "bottom"
+                ) {
+                    StaticType::Distance
+                } else {
+                    StaticType::PagePrevRecursive
+                };
+                overload_map.insert(aname.clone(), ty);
+            }
+            for (pname, ty_str) in schema.static_port_types.iter() {
+                if !schema.private_ports.contains(pname) && !overload_map.contains_key(pname) {
+                    if let Ok(st) =
+                        StaticType::from_type_name(ty_str, elem.span, enums, registry)
+                    {
+                        overload_map.insert(pname.clone(), st);
+                    }
+                }
+            }
+            for sp in ["left", "top", "right", "bottom"] {
+                if !schema.private_ports.contains(sp)
+                    && (schema.comp_scope_ports.iter().any(|p| p == sp)
+                        || overload_map.contains_key("x")
+                        || overload_map.contains_key("width"))
+                {
+                    overload_map.entry(sp.to_string()).or_insert(StaticType::Distance);
+                }
+            }
+            for pg_port in ["page", "end_page"] {
+                if !schema.private_ports.contains(pg_port) {
+                    overload_map.insert(pg_port.to_string(), StaticType::Integer);
+                }
+            }
+
+            combined = Some(match combined {
+                None => overload_map,
+                Some(mut prev) => {
+                    prev.retain(|k, ty| {
+                        overload_map.get(k).is_some_and(|other| {
+                            ty == other || ty.matches(other) || other.matches(ty)
+                        })
+                    });
+                    prev
+                }
+            });
+        }
+        if let Some(m) = combined {
+            map = m;
+        }
+    } else if let Some(prim) = super::builtins::lookup_builtin(tag, true) {
+        let candidate_ports = [
+            "x", "y", "width", "height", "left", "top", "right", "bottom", "z", "opacity",
+            "color", "text", "align", "size", "weight", "family", "italic", "baseline",
+            "page", "end_page",
+        ];
+        for pname in candidate_ports {
+            if matches!(pname, "left" | "top" | "right" | "bottom") && !prim.is_non_spatial() {
+                map.insert(pname.to_string(), StaticType::Distance);
+            } else if matches!(pname, "page" | "end_page") {
+                map.insert(pname.to_string(), StaticType::Integer);
+            } else if prim.accepts_port(pname) {
+                if let Some(ty) = prim.port_type(pname) {
+                    map.insert(pname.to_string(), ty);
+                }
+            }
+        }
+    }
+    Ok(map)
+}
+
+fn infer_bucket_schemas(
+    doc: &ExpandedDocument,
+    enums: &HashMap<String, EnumDef>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> Result<HashMap<NodeId, HashMap<String, StaticType>>, CompileError> {
+    let mut schemas: HashMap<NodeId, HashMap<String, StaticType>> = HashMap::new();
+    for dep in &doc.deposits {
+        let elem_map = infer_deposit_elem_public_ports(&dep.payload.elem, enums, registry)?;
+        match schemas.entry(dep.bucket_id) {
+            std::collections::hash_map::Entry::Vacant(v) => {
+                v.insert(elem_map);
+            }
+            std::collections::hash_map::Entry::Occupied(mut o) => {
+                let acc = o.get_mut();
+                acc.retain(|k, ty| {
+                    elem_map.get(k).is_some_and(|other| {
+                        let t1 = ty.clone().decay();
+                        let t2 = other.clone().decay();
+                        t1 == t2 || t1.matches(&t2) || t2.matches(&t1)
+                    })
+                });
+            }
+        }
+    }
+    Ok(schemas)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum BucketIndexKey {
+    Page,
+    Node(NodeId),
+    Int(i64),
+    ExprText(String),
+}
+
+fn canonical_bucket_index_key(expr: &Expr) -> BucketIndexKey {
+    let mut cur = expr;
+    while let Expr::Paren(inner, _) = cur {
+        cur = inner;
+    }
+    match cur {
+        Expr::Ident(id) => {
+            if let Some(nid) = id.node_id() {
+                if nid.is_page() {
+                    BucketIndexKey::Page
+                } else {
+                    BucketIndexKey::Node(nid)
+                }
+            } else {
+                BucketIndexKey::ExprText(id.as_str().to_string())
+            }
+        }
+        Expr::Literal(Literal::Integer(i, _)) => BucketIndexKey::Int(*i),
+        _ => BucketIndexKey::ExprText(format!("{cur}")),
+    }
+}
+
+fn resolve_bucket_slice_member<'a>(
+    expr: &'a Expr,
+    doc: &ExpandedDocument,
+) -> Option<(NodeId, BucketIndexKey, bool, &'a str)> {
+    let mut cur = expr;
+    while let Expr::Paren(inner, _) = cur {
+        cur = inner;
+    }
+    let Expr::MemberAccess(m) = cur else {
+        return None;
+    };
+    let mut inner_tgt = m.target.as_ref();
+    while let Expr::Paren(inner, _) = inner_tgt {
+        inner_tgt = inner;
+    }
+    let Expr::Index(idx) = inner_tgt else {
+        return None;
+    };
+    let bucket_id =
+        crate::compiler::expand::builtins::pagination::resolve_bucket_node_id(&idx.target, doc)?;
+    let is_list = doc.get_node(bucket_id)?.name == "PageList";
+    let key = canonical_bucket_index_key(&idx.index);
+    Some((bucket_id, key, is_list, m.member.as_str()))
+}
+
+fn extract_bucket_guards(
+    cond: &Expr,
+    doc: &ExpandedDocument,
+    guarded: &HashSet<(NodeId, BucketIndexKey, bool)>,
+    depth: usize,
+) -> Result<(Vec<(NodeId, BucketIndexKey, bool)>, Vec<(NodeId, BucketIndexKey, bool)>), CompileError>
+{
+    let cond = unwrap_parens(cond);
+    if depth < 8 {
+        if let Expr::MemberAccess(m) = cond {
+            if !matches!(unwrap_parens(&m.target), Expr::Index(_)) {
+                if let Expr::Ident(id) = unwrap_parens(&m.target) {
+                    if let Some(nid) = id.node_id() {
+                        if !nid.is_window() && !nid.is_page() {
+                            if let Some(port_expr) =
+                                doc.get_node(nid).and_then(|n| n.ports.get(m.member.as_str()))
+                            {
+                                return extract_bucket_guards(port_expr, doc, guarded, depth + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some((bid, key, is_list, mem)) = resolve_bucket_slice_member(cond, doc) {
+        if !is_list && mem == "has_value" {
+            return Ok((vec![(bid, key, false)], Vec::new()));
+        }
+        validate_bucket_guards(cond, doc, guarded)?;
+        return Ok((Vec::new(), Vec::new()));
+    }
+
+    match cond {
+        Expr::Unary(u) if matches!(u.op, UnaryOp::Not) => {
+            let (p, n) = extract_bucket_guards(&u.operand, doc, guarded, depth + 1)?;
+            Ok((n, p))
+        }
+        Expr::Binary(b) => match b.op {
+            BinaryOp::And => {
+                let (lp, ln) = extract_bucket_guards(&b.left, doc, guarded, depth + 1)?;
+                let mut next_guarded = guarded.clone();
+                next_guarded.extend(lp.iter().cloned());
+                let (rp, rn) = extract_bucket_guards(&b.right, doc, &next_guarded, depth + 1)?;
+                let mut pos = lp;
+                pos.extend(rp);
+                let _ = (ln, rn);
+                Ok((pos, Vec::new()))
+            }
+            BinaryOp::Or => {
+                let (_lp, ln) = extract_bucket_guards(&b.left, doc, guarded, depth + 1)?;
+                let mut next_neg = guarded.clone();
+                next_neg.extend(ln.iter().cloned());
+                let (_rp, rn) = extract_bucket_guards(&b.right, doc, &next_neg, depth + 1)?;
+                let mut neg = ln;
+                neg.extend(rn);
+                Ok((Vec::new(), neg))
+            }
+            BinaryOp::Eq | BinaryOp::Ne => {
+                let check_bool_has_value = |lhs: &Expr, rhs: &Expr| {
+                    let (bid, key, is_list, mem) = resolve_bucket_slice_member(lhs, doc)?;
+                    if !is_list && mem == "has_value" {
+                        if let Expr::Literal(Literal::Bool(v, _)) = unwrap_parens(rhs) {
+                            return Some((bid, key, *v));
+                        }
+                    }
+                    None
+                };
+                if let Some((bid, key, expected_bool)) =
+                    check_bool_has_value(&b.left, &b.right)
+                        .or_else(|| check_bool_has_value(&b.right, &b.left))
+                {
+                    let is_true_when_eq = expected_bool;
+                    let true_in_pos = if b.op == BinaryOp::Eq {
+                        is_true_when_eq
+                    } else {
+                        !is_true_when_eq
+                    };
+                    return if true_in_pos {
+                        Ok((vec![(bid, key, false)], Vec::new()))
+                    } else {
+                        Ok((Vec::new(), vec![(bid, key, false)]))
+                    };
+                }
+                let check_len_zero = |lhs: &Expr, rhs: &Expr| {
+                    let (bid, key, is_list, mem) = resolve_bucket_slice_member(lhs, doc)?;
+                    if is_list && mem == "len" && literal_int_val(rhs) == Some(0) {
+                        return Some((bid, key));
+                    }
+                    None
+                };
+                if let Some((bid, key)) =
+                    check_len_zero(&b.left, &b.right).or_else(|| check_len_zero(&b.right, &b.left))
+                {
+                    return if b.op == BinaryOp::Ne {
+                        Ok((vec![(bid, key, true)], Vec::new()))
+                    } else {
+                        Ok((Vec::new(), vec![(bid, key, true)]))
+                    };
+                }
+                validate_bucket_guards(&b.left, doc, guarded)?;
+                validate_bucket_guards(&b.right, doc, guarded)?;
+                Ok((Vec::new(), Vec::new()))
+            }
+            BinaryOp::Gt | BinaryOp::Ge | BinaryOp::Lt | BinaryOp::Le => {
+                let lhs_len = resolve_bucket_slice_member(&b.left, doc)
+                    .filter(|(_, _, is_list, mem)| *is_list && *mem == "len");
+                let rhs_len = resolve_bucket_slice_member(&b.right, doc)
+                    .filter(|(_, _, is_list, mem)| *is_list && *mem == "len");
+                if let (Some((bid, key, _, _)), Some(v)) = (lhs_len, literal_int_val(&b.right)) {
+                    let guarantees_nonempty = match b.op {
+                        BinaryOp::Gt => v >= 0,
+                        BinaryOp::Ge => v >= 1,
+                        _ => false,
+                    };
+                    let else_guarantees_nonempty = match b.op {
+                        BinaryOp::Le => v <= 0,
+                        BinaryOp::Lt => v <= 1,
+                        _ => false,
+                    };
+                    if guarantees_nonempty {
+                        return Ok((vec![(bid, key, true)], Vec::new()));
+                    }
+                    if else_guarantees_nonempty {
+                        return Ok((Vec::new(), vec![(bid, key, true)]));
+                    }
+                }
+                if let (Some(v), Some((bid, key, _, _))) = (literal_int_val(&b.left), rhs_len) {
+                    let guarantees_nonempty = match b.op {
+                        BinaryOp::Lt => v >= 0,
+                        BinaryOp::Le => v >= 1,
+                        _ => false,
+                    };
+                    let else_guarantees_nonempty = match b.op {
+                        BinaryOp::Ge => v <= 0,
+                        BinaryOp::Gt => v <= 1,
+                        _ => false,
+                    };
+                    if guarantees_nonempty {
+                        return Ok((vec![(bid, key, true)], Vec::new()));
+                    }
+                    if else_guarantees_nonempty {
+                        return Ok((Vec::new(), vec![(bid, key, true)]));
+                    }
+                }
+                validate_bucket_guards(&b.left, doc, guarded)?;
+                validate_bucket_guards(&b.right, doc, guarded)?;
+                Ok((Vec::new(), Vec::new()))
+            }
+            _ => {
+                validate_bucket_guards(&b.left, doc, guarded)?;
+                validate_bucket_guards(&b.right, doc, guarded)?;
+                Ok((Vec::new(), Vec::new()))
+            }
+        },
+        _ => {
+            validate_bucket_guards(cond, doc, guarded)?;
+            Ok((Vec::new(), Vec::new()))
+        }
+    }
+}
+
+fn validate_bucket_guards(
+    expr: &Expr,
+    doc: &ExpandedDocument,
+    guarded: &HashSet<(NodeId, BucketIndexKey, bool)>,
+) -> Result<(), CompileError> {
+    match expr {
+        Expr::Literal(_) | Expr::Ident(_) | Expr::DomNodeRef(_, _) => Ok(()),
+        Expr::Paren(inner, _) => validate_bucket_guards(inner, doc, guarded),
+        Expr::Unary(u) => validate_bucket_guards(&u.operand, doc, guarded),
+        Expr::MemberAccess(m) => {
+            if let Some((bid, key, is_list, mem)) = resolve_bucket_slice_member(expr, doc) {
+                let needs_guard = if is_list {
+                    matches!(mem, "first" | "last")
+                } else {
+                    matches!(mem, "value" | "first")
+                };
+                if needs_guard && !guarded.contains(&(bid, key, is_list)) {
+                    let expected_guard = if is_list {
+                        format!("bucket[...].len > 0 ? ... : ...")
+                    } else {
+                        format!("bucket[...].has_value ? ... : ...")
+                    };
+                    return Err(CompileError::UnguardedBucketAccess {
+                        access: format!(".{mem}"),
+                        expected_guard,
+                        span: m.span,
+                    });
+                }
+            }
+            validate_bucket_guards(&m.target, doc, guarded)
+        }
+        Expr::Index(idx) => {
+            validate_bucket_guards(&idx.target, doc, guarded)?;
+            validate_bucket_guards(&idx.index, doc, guarded)
+        }
+        Expr::Binary(b) => {
+            if matches!(
+                b.op,
+                BinaryOp::And
+                    | BinaryOp::Or
+                    | BinaryOp::Eq
+                    | BinaryOp::Ne
+                    | BinaryOp::Gt
+                    | BinaryOp::Ge
+                    | BinaryOp::Lt
+                    | BinaryOp::Le
+            ) {
+                let _ = extract_bucket_guards(expr, doc, guarded, 0)?;
+                Ok(())
+            } else {
+                validate_bucket_guards(&b.left, doc, guarded)?;
+                validate_bucket_guards(&b.right, doc, guarded)
+            }
+        }
+        Expr::Ternary(t) => {
+            let (pos_g, neg_g) = extract_bucket_guards(&t.condition, doc, guarded, 0)?;
+            let mut then_guarded = guarded.clone();
+            then_guarded.extend(pos_g);
+            validate_bucket_guards(&t.then_expr, doc, &then_guarded)?;
+
+            let mut else_guarded = guarded.clone();
+            else_guarded.extend(neg_g);
+            validate_bucket_guards(&t.else_expr, doc, &else_guarded)
+        }
+        Expr::Call(c) => {
+            for arg in &c.args {
+                validate_bucket_guards(arg, doc, guarded)?;
+            }
+            Ok(())
+        }
+        Expr::MethodCall(mc) => {
+            validate_bucket_guards(&mc.target, doc, guarded)?;
+            for arg in &mc.args {
+                validate_bucket_guards(arg, doc, guarded)?;
+            }
+            Ok(())
+        }
+        Expr::ExprDef(def) => {
+            for p in &def.params {
+                if let Some(d) = &p.default_edge {
+                    validate_bucket_guards(d, doc, guarded)?;
+                }
+            }
+            validate_bucket_guards(&def.body, doc, guarded)
+        }
+        Expr::Match(m) => {
+            if let Some(s) = &m.scrutinee {
+                validate_bucket_guards(s, doc, guarded)?;
+            }
+            for arm in &m.arms {
+                let mut arm_guarded = guarded.clone();
+                if let MatchPattern::Condition(c) = &arm.pattern {
+                    validate_bucket_guards(c, doc, guarded)?;
+                    let (pos_g, _) = extract_bucket_guards(c, doc, guarded, 0)?;
+                    arm_guarded.extend(pos_g);
+                }
+                validate_bucket_guards(&arm.body, doc, &arm_guarded)?;
+            }
+            Ok(())
+        }
+        Expr::Node(elem) => {
+            for p in &elem.ports {
+                validate_bucket_guards(&p.expr, doc, guarded)?;
+            }
+            Ok(())
         }
     }
 }

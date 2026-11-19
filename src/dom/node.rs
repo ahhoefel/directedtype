@@ -1,7 +1,16 @@
-use crate::ast::{ComponentKey, Expr};
+use crate::ast::{ComponentKey, ContentItem, Expr, Ident, TypeRef};
 use crate::dom::handle::NodeHandle;
 use crate::span::Span;
 use std::collections::HashMap;
+
+/// An ordered, lossless content entry inside a `DomNode`'s `{ ... }` slot.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DomContentItem {
+    Text(String),
+    ParagraphBreak,
+    Child(NodeHandle),
+    Directive(ContentItem),
+}
 
 /// An authoring-level node in the Component DOM.
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +30,12 @@ pub struct DomNode {
     /// Ordered sequence of child node handles.
     pub children: Vec<NodeHandle>,
 
+    /// Ordered lossless content sequence (interleaved text, paragraph breaks, children, directives).
+    pub content_items: Vec<DomContentItem>,
+
+    /// Preserved `\let name [: Type] = \Elem(...)` wrapper when this node was declared via a `\let` item.
+    pub root_let_binding: Option<(Ident, Option<TypeRef>, Span)>,
+
     /// Declared port equations (e.g. `width: 320`, `color: #6366f1`).
     pub ports: HashMap<String, Expr>,
 
@@ -39,6 +54,8 @@ impl DomNode {
             key: None,
             parent: None,
             children: Vec::new(),
+            content_items: Vec::new(),
+            root_let_binding: None,
             ports: HashMap::new(),
             text_content: None,
             span,

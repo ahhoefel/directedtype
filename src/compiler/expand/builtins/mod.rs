@@ -3,6 +3,7 @@ pub mod box_prim;
 pub mod clip;
 pub mod font;
 pub mod line;
+pub mod pagination;
 pub mod rect;
 pub mod text;
 pub mod window;
@@ -18,6 +19,10 @@ use crate::compiler::expand::children::apply_forwarded_directives;
 use crate::compiler::expand::context::{ElementContext, EnvEntry, LexicalBinding, ScopeContext};
 use crate::compiler::expand::expand_element;
 use crate::compiler::expand::rewrite::{extract_event_binding, rewrite_expr};
+use crate::compiler::expand::text_flow::{
+    coalesce_block_content_items, is_non_flow_decl_name, is_non_layout_pagination_directive,
+    CoalescedBlockItem,
+};
 use crate::compiler::expand::typecheck::{
     validate_and_coerce_primitive_port_literal, validate_node_type_annotation, StaticType,
 };
@@ -37,6 +42,7 @@ pub(in crate::compiler::expand) struct PrimitiveExpandState<'a, 'ctx> {
     pub node_id: NodeId,
     pub elem: &'a ElementNode,
     pub ctx: &'a ElementContext<'ctx>,
+    pub registry: &'a HashMap<String, Vec<ComponentDef>>,
     pub doc: &'a mut ExpandedDocument,
     pub node_fonts: &'a mut HashMap<NodeId, NodeId>,
     pub active_scope_for_children: ScopeId,
@@ -76,6 +82,21 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
 
     /// Returns true if an explicit or ambient `font` on this primitive is forwarded into `env font` for its content slot (`\Text`).
     fn forwards_font_to_content_env(&self) -> bool {
+        false
+    }
+
+    /// Returns true if this primitive coalesces block prose runs into synthetic `\Text` paragraphs (`\PagedFlow`).
+    fn coalesces_block_content(&self) -> bool {
+        false
+    }
+
+    /// Returns true if this primitive opens a `\PagedFlow` context for its children.
+    fn sets_paged_flow(&self) -> bool {
+        false
+    }
+
+    /// Returns true if this primitive captures `{ ... }` content lazily without eager expansion (`\Deposit`).
+    fn defers_content_slot(&self) -> bool {
         false
     }
 
@@ -119,6 +140,8 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
         _elem: &ElementNode,
         ctx: &ElementContext<'_>,
         _doc: &mut ExpandedDocument,
+        _registry: &HashMap<String, Vec<ComponentDef>>,
+        _node_fonts: &HashMap<NodeId, NodeId>,
     ) -> Result<ScopeId, CompileError> {
         Ok(ctx.active_scope_id)
     }
@@ -145,6 +168,7 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
     fn on_content_child(
         &self,
         _doc: &mut ExpandedDocument,
+        _node_id: NodeId,
         _child_id: NodeId,
         _child_elem: &ElementNode,
         _full_text: &mut String,
@@ -226,8 +250,10 @@ pub(in crate::compiler::expand) fn default_builtin_port_type(port_name: &str) ->
         | "shadow_blur"
         | "shadow_spread"
         | "scroll_x"
-        | "scroll_y" => Some(StaticType::Distance),
-        "z" | "weight" => Some(StaticType::Integer),
+        | "scroll_y"
+        | "__flow_body_width" => Some(StaticType::Distance),
+        "z" | "weight" | "page" | "end_page" | "page_count" | "orphans" | "widows"
+        | "start_page" => Some(StaticType::Integer),
         "opacity" => Some(StaticType::Float),
         "color" | "border_color" | "shadow_color" => {
             Some(StaticType::Color)
@@ -237,6 +263,7 @@ pub(in crate::compiler::expand) fn default_builtin_port_type(port_name: &str) ->
         }
         "underline" | "italic" => Some(StaticType::Boolean),
         "clip" | "up" => Some(StaticType::Node("Clip".to_string())),
+        "pagination" => Some(StaticType::Node("Pagination".to_string())),
         "font" => Some(StaticType::Node("Font".to_string())),
         "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
         "shadow" => Some(StaticType::Node("Shadow".to_string())),
@@ -294,7 +321,16 @@ const ALL_BUILTINS: &[&dyn BuiltinPrimitive] = &[
     &box_prim::BoxPrimitive,
     &anchor::AnchorPrimitive,
     &anchor::AnchorScopePrimitive,
+    &anchor::BookmarkPrimitive,
     &box_prim::LinkPrimitive,
+    &pagination::PagedFlowPrimitive,
+    &pagination::FlowBodyPrimitive,
+    &pagination::PaginationPrimitive,
+    &pagination::PageBreakPrimitive,
+    &pagination::PageValuePrimitive,
+    &pagination::PageListPrimitive,
+    &pagination::DepositPrimitive,
+    &pagination::CollectPrimitive,
 ];
 
 /// Looks up a built-in primitive handler by element name.
@@ -311,7 +347,16 @@ pub(in crate::compiler::expand) fn lookup_builtin(
         "Box" => Some(&box_prim::BoxPrimitive),
         "Anchor" => Some(&anchor::AnchorPrimitive),
         "AnchorScope" => Some(&anchor::AnchorScopePrimitive),
+        "Bookmark" => Some(&anchor::BookmarkPrimitive),
         "Link" if is_inline_span => Some(&box_prim::LinkPrimitive),
+        "PagedFlow" => Some(&pagination::PagedFlowPrimitive),
+        "FlowBody" => Some(&pagination::FlowBodyPrimitive),
+        "Pagination" => Some(&pagination::PaginationPrimitive),
+        "PageBreak" => Some(&pagination::PageBreakPrimitive),
+        "PageValue" => Some(&pagination::PageValuePrimitive),
+        "PageList" => Some(&pagination::PageListPrimitive),
+        "Deposit" => Some(&pagination::DepositPrimitive),
+        "Collect" => Some(&pagination::CollectPrimitive),
         _ => None,
     }
 }
@@ -500,6 +545,7 @@ struct PrimitiveExpander<'a, 'ctx> {
     full_text: String,
     text_spans: Vec<TextSpan>,
     inline_boxes: Vec<InlineBoxSpan>,
+    just_expanded_zero_width_deposit: bool,
 }
 
 impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
@@ -511,7 +557,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
         registry: &'a HashMap<String, Vec<ComponentDef>>,
         doc: &'a mut ExpandedDocument,
         node_fonts: &'a mut HashMap<NodeId, NodeId>,
-    ) -> Result<Self, CompileError> {
+    ) -> Result<Box<Self>, CompileError> {
         // Validate that caller or container does not attempt to override immutable spatial alias ports
         // or pass unsupported properties to this primitive.
         for port in &elem.ports {
@@ -534,7 +580,8 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             }
         }
 
-        let active_scope_for_children = primitive.pre_expand_children(node_id, elem, ctx, doc)?;
+        let active_scope_for_children =
+            primitive.pre_expand_children(node_id, elem, ctx, doc, registry, node_fonts)?;
 
         let mut primitive_scope_ports = primitive.scope_ports();
         for p in &elem.ports {
@@ -562,7 +609,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             &mut last_child_id,
         )?;
 
-        Ok(Self {
+        Ok(Box::new(Self {
             primitive,
             node_id,
             elem,
@@ -581,10 +628,14 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             full_text: String::new(),
             text_spans: Vec::new(),
             inline_boxes: Vec::new(),
-        })
+            just_expanded_zero_width_deposit: false,
+        }))
     }
 
     fn expand_content_slot(&mut self) -> Result<(), CompileError> {
+        if self.primitive.defers_content_slot() {
+            return Ok(());
+        }
         let text_content_env_scope_storage;
         let content_env_scope: &HashMap<String, EnvEntry> =
             if self.primitive.forwards_font_to_content_env() {
@@ -611,12 +662,31 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 self.ctx.env_scope
             };
 
+        if self.primitive.coalesces_block_content() {
+            self.expand_coalesced_flow_content(content_env_scope)?;
+            let full_text = std::mem::take(&mut self.full_text);
+            let text_spans = std::mem::take(&mut self.text_spans);
+            let inline_boxes = std::mem::take(&mut self.inline_boxes);
+            self.primitive
+                .finish_content(self.node_id, self.doc, full_text, text_spans, inline_boxes);
+            return Ok(());
+        }
+
         if let Some(slot) = &self.elem.content {
             for item in &slot.items {
                 match item {
                     ContentItem::Text(chunk) => {
+                        let text = if self.just_expanded_zero_width_deposit
+                            && self.full_text.ends_with(' ')
+                            && chunk.text.starts_with(' ')
+                        {
+                            &chunk.text[1..]
+                        } else {
+                            chunk.text.as_str()
+                        };
+                        self.just_expanded_zero_width_deposit = false;
                         self.primitive.on_content_text(
-                            &chunk.text,
+                            text,
                             &mut self.full_text,
                             &mut self.text_spans,
                         );
@@ -628,6 +698,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                         self.expand_content_let(l, content_env_scope)?;
                     }
                     ContentItem::ParagraphBreak(span) => {
+                        self.just_expanded_zero_width_deposit = false;
                         self.primitive.on_paragraph_break(*span)?;
                     }
                     ContentItem::Alias(_)
@@ -635,6 +706,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     | ContentItem::Env(_)
                     | ContentItem::Assert(_) => {}
                     ContentItem::Children(dir) => {
+                        self.just_expanded_zero_width_deposit = false;
                         self.expand_content_children(dir, content_env_scope)?;
                     }
                 }
@@ -646,6 +718,120 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
         let inline_boxes = std::mem::take(&mut self.inline_boxes);
         self.primitive
             .finish_content(self.node_id, self.doc, full_text, text_spans, inline_boxes);
+        Ok(())
+    }
+
+    fn expand_coalesced_flow_content(
+        &mut self,
+        content_env_scope: &HashMap<String, EnvEntry>,
+    ) -> Result<(), CompileError> {
+        let Some(slot) = &self.elem.content else {
+            return Ok(());
+        };
+        let coalesced = coalesce_block_content_items(&slot.items, self.registry);
+        let is_layout_flags: Vec<bool> = coalesced
+            .iter()
+            .map(|c| match c {
+                CoalescedBlockItem::Element { elem, .. } => {
+                    !is_non_layout_pagination_directive(elem.name.as_str())
+                }
+                _ => false,
+            })
+            .collect();
+        let child_in_paged_flow = self.ctx.in_paged_flow || self.primitive.sets_paged_flow();
+
+        for (idx, item) in coalesced.into_iter().enumerate() {
+            match item {
+                CoalescedBlockItem::NonFlowLet(l) => {
+                    self.expand_content_let(l, content_env_scope)?;
+                }
+                CoalescedBlockItem::Children(dir) => {
+                    self.expand_content_children(dir, content_env_scope)?;
+                }
+                CoalescedBlockItem::Element {
+                    elem: child_elem,
+                    var_name,
+                    type_annotation,
+                    ..
+                } => {
+                    if let Some(ref ty) = type_annotation {
+                        validate_node_type_annotation(
+                            child_elem.name.as_str(),
+                            child_elem.span,
+                            Some(ty),
+                            self.ctx.enums,
+                            self.registry,
+                        )?;
+                    }
+                    let is_layout = is_layout_flags[idx];
+                    let has_next_layout = is_layout
+                        && is_layout_flags[idx + 1..].iter().any(|&flag| flag);
+
+                    let wired_child;
+                    let target_elem = if is_layout {
+                        wired_child = pagination::wire_paged_flow_child_elem(
+                            self.node_id,
+                            &child_elem,
+                            self.last_child_id,
+                            self.registry,
+                        );
+                        &wired_child
+                    } else {
+                        &child_elem
+                    };
+
+                    let child_ctx = ElementContext {
+                        parent_id: Some(self.node_id),
+                        parent_name: Some(self.elem.name.as_str()),
+                        prev_sibling_id: self.last_child_id,
+                        has_next_sibling: has_next_layout,
+                        parent_ports: &self.primitive_scope_ports,
+                        lexical_scope: self.ctx.lexical_scope,
+                        env_scope: content_env_scope,
+                        enclosing_component_id: self.ctx.enclosing_component_id,
+                        enclosing_num_children: self.ctx.enclosing_num_children,
+                        enclosing_instantiated_children: self.ctx.enclosing_instantiated_children,
+                        shadowed_ports: self.ctx.shadowed_ports,
+                        is_let: var_name.is_some(),
+                        ambient_authored_ports: None,
+                        enums: self.ctx.enums,
+                        active_scope_id: self.active_scope_for_children,
+                        consumer_children: self.ctx.consumer_children,
+                        in_paged_flow: child_in_paged_flow,
+                        in_page_template: self.ctx.in_page_template,
+                        in_unbreakable_flow_container: self.ctx.in_unbreakable_flow_container,
+                        enclosing_comp_ports: self.ctx.enclosing_comp_ports,
+                    };
+
+                    let child_id = expand_element(
+                        target_elem,
+                        &child_ctx,
+                        self.registry,
+                        self.doc,
+                        self.node_fonts,
+                    )?;
+                    if let Some(v_name) = var_name {
+                        self.doc.get_node_mut(child_id).unwrap().var_name = Some(v_name.clone());
+                        self.ctx
+                            .lexical_scope
+                            .borrow_mut()
+                            .insert(Symbol::new(&v_name), LexicalBinding::Node(child_id));
+                    }
+                    if is_layout {
+                        if let Some(prev_id) = self.last_child_id {
+                            if crate::compiler::expand::rewrite::has_any_pending_fwd_refs() {
+                                self.ctx.lexical_scope.borrow_mut().insert(
+                                    Symbol::next_of(prev_id),
+                                    LexicalBinding::Node(child_id),
+                                );
+                            }
+                        }
+                        self.last_child_id = Some(child_id);
+                    }
+                    self.child_ids.push(child_id);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -673,6 +859,10 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             enums: self.ctx.enums,
             active_scope_id: self.active_scope_for_children,
             consumer_children: self.ctx.consumer_children,
+            in_paged_flow: self.ctx.in_paged_flow,
+            in_page_template: self.ctx.in_page_template,
+            in_unbreakable_flow_container: self.ctx.in_unbreakable_flow_container,
+            enclosing_comp_ports: self.ctx.enclosing_comp_ports,
         };
 
         let wired_child_elem;
@@ -691,10 +881,18 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             self.node_fonts,
         )?;
         self.child_ids.push(child_id);
-        self.last_child_id = Some(child_id);
+        if child_elem.name.as_str() == "Deposit" {
+            self.just_expanded_zero_width_deposit = true;
+        } else {
+            self.just_expanded_zero_width_deposit = false;
+            if !is_non_layout_pagination_directive(child_elem.name.as_str()) {
+                self.last_child_id = Some(child_id);
+            }
+        }
 
         self.primitive.on_content_child(
             self.doc,
+            self.node_id,
             child_id,
             child_elem,
             &mut self.full_text,
@@ -737,6 +935,10 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 enums: self.ctx.enums,
                 active_scope_id: self.active_scope_for_children,
                 consumer_children: self.ctx.consumer_children,
+                in_paged_flow: self.ctx.in_paged_flow,
+                in_page_template: self.ctx.in_page_template,
+                in_unbreakable_flow_container: self.ctx.in_unbreakable_flow_container,
+                enclosing_comp_ports: self.ctx.enclosing_comp_ports,
             };
 
             let wired_child_elem;
@@ -760,22 +962,27 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 let_binding.name.name,
                 LexicalBinding::Node(child_id),
             );
-            self.child_ids.push(child_id);
-            self.last_child_id = Some(child_id);
+            if !is_non_flow_decl_name(child_elem.name.as_str()) {
+                self.child_ids.push(child_id);
+                if !is_non_layout_pagination_directive(child_elem.name.as_str()) {
+                    self.last_child_id = Some(child_id);
+                }
 
-            if child_elem.name.as_str() == "Font" {
-                self.node_fonts.insert(child_id, child_id);
+                if child_elem.name.as_str() == "Font" {
+                    self.node_fonts.insert(child_id, child_id);
+                }
+
+                self.primitive.on_content_child(
+                    self.doc,
+                    self.node_id,
+                    child_id,
+                    child_elem,
+                    &mut self.full_text,
+                    &mut self.text_spans,
+                    &mut self.inline_boxes,
+                    true,
+                );
             }
-
-            self.primitive.on_content_child(
-                self.doc,
-                child_id,
-                child_elem,
-                &mut self.full_text,
-                &mut self.text_spans,
-                &mut self.inline_boxes,
-                true,
-            );
         } else if let Some(LetValue::Expr(raw_expr)) = &let_binding.value {
             let empty_children: [NodeId; 0] = [];
             let rewritten = {
@@ -1003,17 +1210,21 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 prev_sibling_id: self.last_child_id,
                 has_next_sibling,
                 parent_ports: &self.primitive_scope_ports,
-                lexical_scope: entry.caller_lexical_scope,
+                lexical_scope: entry.effective_lexical_scope(),
                 env_scope: child_env_scope,
                 enclosing_component_id: entry.caller_enclosing_component_id,
                 enclosing_num_children: entry.caller_enclosing_num_children,
                 enclosing_instantiated_children: entry.caller_enclosing_instantiated_children,
-                shadowed_ports: entry.caller_shadowed_ports,
+                shadowed_ports: entry.effective_shadowed_ports(),
                 is_let: entry.var_name.is_some(),
                 ambient_authored_ports: Some(&authored_ambient_ports),
                 enums: self.ctx.enums,
                 active_scope_id: self.active_scope_for_children,
                 consumer_children: None,
+                in_paged_flow: self.ctx.in_paged_flow,
+                in_page_template: self.ctx.in_page_template,
+                in_unbreakable_flow_container: self.ctx.in_unbreakable_flow_container,
+                enclosing_comp_ports: self.ctx.enclosing_comp_ports,
             };
             let child_id = expand_element(
                 &wired_elem,
@@ -1033,7 +1244,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             if let Some(v_name) = &entry.var_name {
                 self.doc.get_node_mut(child_id).unwrap().var_name = Some(v_name.clone());
                 entry
-                    .caller_lexical_scope
+                    .effective_lexical_scope()
                     .borrow_mut()
                     .insert(Symbol::new(v_name), LexicalBinding::Node(child_id));
             }
@@ -1044,9 +1255,17 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 inst_list.borrow_mut().push(child_id);
             }
             self.child_ids.push(child_id);
-            self.last_child_id = Some(child_id);
+            if child_elem.name.as_str() == "Deposit" {
+                self.just_expanded_zero_width_deposit = true;
+            } else {
+                self.just_expanded_zero_width_deposit = false;
+                if !is_non_layout_pagination_directive(child_elem.name.as_str()) {
+                    self.last_child_id = Some(child_id);
+                }
+            }
             self.primitive.on_content_child(
                 self.doc,
+                self.node_id,
                 child_id,
                 child_elem,
                 &mut self.full_text,
@@ -1062,6 +1281,9 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
     fn expand_inline_port_nodes(&mut self) -> Result<Vec<(String, Expr)>, CompileError> {
         let mut resolved_port_exprs = Vec::with_capacity(self.elem.ports.len() + 1);
         for port in &self.elem.ports {
+            if self.elem.name.as_str() == "PagedFlow" && port.name.as_str() == "page" {
+                continue;
+            }
             if port.name.as_str() == "font" {
                 if let Some(ref pre_expr) = self.pre_expanded_font_expr {
                     resolved_port_exprs.push(("font".to_string(), pre_expr.clone()));
@@ -1099,6 +1321,10 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                         enums: self.ctx.enums,
                         active_scope_id: self.ctx.active_scope_id,
                         consumer_children: None,
+                        in_paged_flow: false,
+                        in_page_template: self.ctx.in_page_template,
+                        in_unbreakable_flow_container: self.ctx.in_unbreakable_flow_container,
+                        enclosing_comp_ports: self.ctx.enclosing_comp_ports,
                     };
                     let child_id = expand_element(
                         inline_elem,
@@ -1107,7 +1333,10 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                         self.doc,
                         self.node_fonts,
                     )?;
-                    if !matches!(inline_elem.name.as_str(), "Font" | "TextBounds" | "Shadow") {
+                    if !matches!(
+                        inline_elem.name.as_str(),
+                        "Font" | "TextBounds" | "Shadow" | "Pagination" | "PageValue" | "PageList"
+                    ) {
                         self.child_ids.push(child_id);
                         self.last_child_id = Some(child_id);
                     }
@@ -1254,7 +1483,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
     }
 
     fn finish(
-        self,
+        mut self: Box<Self>,
         ports: HashMap<String, Expr>,
         authored_ports: HashMap<String, Expr>,
         event_handlers: HashMap<String, EventHandlerBinding>,
@@ -1263,17 +1492,19 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             .ctx
             .parent_id
             .is_some_and(|p| self.doc.get_node(p).is_some_and(|n| n.name == "Text"));
+        let child_ids = std::mem::take(&mut self.child_ids);
 
         let mut state = PrimitiveExpandState {
             node_id: self.node_id,
             elem: self.elem,
             ctx: self.ctx,
+            registry: self.registry,
             doc: self.doc,
             node_fonts: self.node_fonts,
             active_scope_for_children: self.active_scope_for_children,
             font_node_id: self.font_node_id,
             is_inline_span,
-            child_ids: self.child_ids,
+            child_ids,
             ports,
             authored_ports,
             event_handlers,
@@ -1316,6 +1547,24 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             &mut state.authored_ports,
         );
 
+        let pagination_spec = self::pagination::merge_pagination_specs(
+            None,
+            state.ports.get("pagination"),
+            state.doc,
+            self.primitive.name() == "Text",
+        );
+
+        if self.primitive.name() != "PagedFlow" {
+            state
+                .ports
+                .entry("page".to_string())
+                .or_insert_with(|| Expr::Literal(Literal::Integer(1, self.elem.span)));
+        }
+        state
+            .ports
+            .entry("end_page".to_string())
+            .or_insert_with(|| Expr::Literal(Literal::Integer(1, self.elem.span)));
+
         let overload_params = std::sync::Arc::new(self.primitive.overload_params(&state));
         let node = state.doc.get_node_mut(self.node_id).unwrap();
         node.overload_params = overload_params;
@@ -1324,6 +1573,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
         node.authored_ports =
             crate::compiler::expanded::AuthoredPorts::from_map(state.authored_ports);
         node.event_handlers = state.event_handlers;
+        node.pagination = pagination_spec;
 
         Ok(())
     }

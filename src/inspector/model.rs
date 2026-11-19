@@ -335,6 +335,12 @@ fn format_dag_expr_into_spans(
             format_dag_expr_into_spans(&m.target, owner_id, layout, skipped_set, spans);
             push_equation_span(spans, format!(".{}", m.member), false, false);
         }
+        Expr::Index(idx) => {
+            format_dag_expr_into_spans(&idx.target, owner_id, layout, skipped_set, spans);
+            push_equation_span(spans, "[", false, false);
+            format_dag_expr_into_spans(&idx.index, owner_id, layout, skipped_set, spans);
+            push_equation_span(spans, "]", false, false);
+        }
         Expr::Binary(b) => {
             format_dag_expr_into_spans(&b.left, owner_id, layout, skipped_set, spans);
             push_equation_span(spans, format!(" {} ", b.op), false, false);
@@ -380,7 +386,7 @@ fn format_dag_expr_into_spans(
         Expr::Node(node) => {
             push_equation_span(spans, format!("\\{}(...)", node.name), false, false);
         }
-        Expr::ExprDef(_) | Expr::Match(_) => {
+        Expr::ExprDef(_) | Expr::Match(_) | Expr::DomNodeRef(_, _) => {
             push_equation_span(spans, format!("{expr}"), false, false);
         }
     }
@@ -402,6 +408,8 @@ fn format_dag_expr_for_node(
         Expr::Ident(id) => {
             if id.as_str() == "__window" || id.as_str() == "window" {
                 "window".to_string()
+            } else if id.as_str() == "__page" {
+                "page".to_string()
             } else if let Some(raw_nid) = id.node_id() {
                 let nid = if raw_nid.is_template_self() {
                     owner_id.unwrap_or(raw_nid)
@@ -416,6 +424,11 @@ fn format_dag_expr_for_node(
         Expr::MemberAccess(m) => {
             let target_str = format_dag_expr_for_node(&m.target, owner_id, layout);
             format!("{}.{}", target_str, m.member)
+        }
+        Expr::Index(idx) => {
+            let target_str = format_dag_expr_for_node(&idx.target, owner_id, layout);
+            let index_str = format_dag_expr_for_node(&idx.index, owner_id, layout);
+            format!("{target_str}[{index_str}]")
         }
         Expr::Binary(b) => {
             format!(
@@ -469,7 +482,7 @@ fn format_dag_expr_for_node(
         Expr::Node(node) => {
             format!("\\{}(...)", node.name)
         }
-        Expr::ExprDef(_) | Expr::Match(_) => format!("{expr}"),
+        Expr::ExprDef(_) | Expr::Match(_) | Expr::DomNodeRef(_, _) => format!("{expr}"),
     }
 }
 

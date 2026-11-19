@@ -25,26 +25,30 @@ fn expand_component(item: TokenStream, is_guest: bool) -> TokenStream {
     let input = parse_macro_input!(item as ItemImpl);
     let self_ty = &input.self_ty;
 
-    let (trait_path, ctx_path, error_path, from_payload_path, event_path) = if is_guest {
-        (
-            quote! { directedtype_guest::Component },
-            quote! { directedtype_guest::Context<'_> },
-            quote! { directedtype_guest::DispatchError },
-            quote! { directedtype_guest::FromPayload },
-            quote! { directedtype_guest::Event },
-        )
-    } else {
-        (
-            quote! { directedtype::component::Component },
-            quote! { directedtype::component::Context<'_> },
-            quote! { directedtype::component::DispatchError },
-            quote! { directedtype::component::FromPayload },
-            quote! { directedtype::interaction::Event },
-        )
-    };
+    let (trait_path, ctx_path, prepare_ctx_path, error_path, from_payload_path, event_path) =
+        if is_guest {
+            (
+                quote! { directedtype_guest::Component },
+                quote! { directedtype_guest::Context<'_> },
+                quote! { directedtype_guest::dom::PrepareContext<'_> },
+                quote! { directedtype_guest::DispatchError },
+                quote! { directedtype_guest::FromPayload },
+                quote! { directedtype_guest::Event },
+            )
+        } else {
+            (
+                quote! { directedtype::component::Component },
+                quote! { directedtype::component::Context<'_> },
+                quote! { directedtype::component::PrepareContext<'_> },
+                quote! { directedtype::component::DispatchError },
+                quote! { directedtype::component::FromPayload },
+                quote! { directedtype::interaction::Event },
+            )
+        };
 
     let mut match_arms = Vec::new();
     let mut on_mount_impl = None;
+    let mut on_prepare_impl = None;
 
     for item in &input.items {
         if let ImplItem::Fn(method) = item {
@@ -63,6 +67,29 @@ fn expand_component(item: TokenStream, is_guest: bool) -> TokenStream {
             });
 
             if !takes_mut_self {
+                continue;
+            }
+
+            // Check if it's on_prepare
+            if method_str == "on_prepare" {
+                let prepare_body = match &method.sig.output {
+                    ReturnType::Default => quote! {
+                        self.on_prepare(ctx);
+                        Ok(())
+                    },
+                    ReturnType::Type(_, _) => quote! {
+                        self.on_prepare(ctx)
+                    },
+                };
+                on_prepare_impl = Some(quote! {
+                    fn has_prepare(&self) -> bool {
+                        true
+                    }
+
+                    fn on_prepare(&mut self, ctx: &mut #prepare_ctx_path) -> Result<(), #error_path> {
+                        #prepare_body
+                    }
+                });
                 continue;
             }
 
@@ -142,11 +169,13 @@ fn expand_component(item: TokenStream, is_guest: bool) -> TokenStream {
     }
 
     let on_mount_tokens = on_mount_impl.unwrap_or_else(|| quote! {});
+    let on_prepare_tokens = on_prepare_impl.unwrap_or_else(|| quote! {});
 
     let expanded = quote! {
         #input
 
         impl #trait_path for #self_ty {
+            #on_prepare_tokens
             #on_mount_tokens
 
             fn dispatch(

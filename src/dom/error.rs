@@ -37,4 +37,26 @@ pub enum DomError {
 
     #[error("Transaction error: {0}")]
     TransactionError(String),
+
+    #[error("Pre-layout prepare error in component '{component}' ({node:?}): {message}")]
+    PrepareError {
+        component: String,
+        node: NodeHandle,
+        message: String,
+    },
+
+    #[error("Pre-layout prepare exceeded {pass_limit} passes (last component '{last_tag}')")]
+    PrepareCycle {
+        pass_limit: usize,
+        last_tag: String,
+    },
+
+    #[error("Pre-layout prepare budget exceeded: {0}")]
+    PrepareBudgetExceeded(String),
+
+    #[error("Pre-layout prepare WASM trap: {0}")]
+    PrepareTrap(String),
+
+    #[error("Pre-layout asset access denied: {0}")]
+    AssetAccessDenied(String),
 }

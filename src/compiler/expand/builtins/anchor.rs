@@ -1,14 +1,16 @@
 use crate::ast::{
-    DistanceUnit, ElementNode, Expr, Ident, Literal, MemberAccessExpr, PortBinding,
+    ComponentDef, DistanceUnit, ElementNode, Expr, Ident, Literal, MemberAccessExpr, PortBinding,
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{BuiltinPrimitive, PrimitiveExpandState};
 use crate::compiler::expand::context::ElementContext;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::scope::ScopeId;
+use std::collections::HashMap;
 
 pub struct AnchorPrimitive;
 pub struct AnchorScopePrimitive;
+pub struct BookmarkPrimitive;
 
 /// Wires default `x = parent.left` and `y = parent.top` onto a child element of an `\Anchor` or `\AnchorScope`.
 pub(super) fn wire_wrapper_child_origin(node_id: NodeId, child_elem: &ElementNode) -> ElementNode {
@@ -200,6 +202,14 @@ impl BuiltinPrimitive for AnchorPrimitive {
         "Anchor"
     }
 
+    fn port_type(&self, port_name: &str) -> Option<crate::compiler::expand::typecheck::StaticType> {
+        match port_name {
+            "outline_title" => Some(crate::compiler::expand::typecheck::StaticType::String),
+            "outline_level" => Some(crate::compiler::expand::typecheck::StaticType::Integer),
+            _ => crate::compiler::expand::builtins::default_builtin_port_type(port_name),
+        }
+    }
+
     fn wires_child_origin_to_self(&self) -> bool {
         true
     }
@@ -210,6 +220,8 @@ impl BuiltinPrimitive for AnchorPrimitive {
         elem: &ElementNode,
         ctx: &ElementContext<'_>,
         doc: &mut ExpandedDocument,
+        _registry: &HashMap<String, Vec<ComponentDef>>,
+        _node_fonts: &HashMap<NodeId, NodeId>,
     ) -> Result<ScopeId, CompileError> {
         let anchor_name = elem
             .ports
@@ -269,6 +281,8 @@ impl BuiltinPrimitive for AnchorScopePrimitive {
         elem: &ElementNode,
         ctx: &ElementContext<'_>,
         doc: &mut ExpandedDocument,
+        _registry: &HashMap<String, Vec<ComponentDef>>,
+        _node_fonts: &HashMap<NodeId, NodeId>,
     ) -> Result<ScopeId, CompileError> {
         let scope_name = elem
             .ports
@@ -324,6 +338,44 @@ impl BuiltinPrimitive for AnchorScopePrimitive {
 
     fn overload_params(&self, _state: &PrimitiveExpandState<'_, '_>) -> Vec<String> {
         vec!["name".to_string()]
+    }
+}
+
+impl BuiltinPrimitive for BookmarkPrimitive {
+    fn name(&self) -> &'static str {
+        "Bookmark"
+    }
+
+    fn port_type(&self, port_name: &str) -> Option<crate::compiler::expand::typecheck::StaticType> {
+        match port_name {
+            "title" | "target" => Some(crate::compiler::expand::typecheck::StaticType::String),
+            "level" => Some(crate::compiler::expand::typecheck::StaticType::Integer),
+            _ => crate::compiler::expand::builtins::default_builtin_port_type(port_name),
+        }
+    }
+
+    fn wires_child_origin_to_self(&self) -> bool {
+        true
+    }
+
+    fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
+        if !state.ports.contains_key("title") {
+            return Err(CompileError::MissingPort {
+                node: "Bookmark".to_string(),
+                port: "title".to_string(),
+                span: state.elem.span,
+            });
+        }
+        state
+            .ports
+            .entry("level".to_string())
+            .or_insert_with(|| Expr::Literal(Literal::Integer(1, state.elem.span)));
+        finalize_anchor_like_geometry(state);
+        Ok(())
+    }
+
+    fn overload_params(&self, _state: &PrimitiveExpandState<'_, '_>) -> Vec<String> {
+        vec!["title".to_string()]
     }
 }
 

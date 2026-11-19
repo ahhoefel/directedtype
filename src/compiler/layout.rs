@@ -473,6 +473,8 @@ impl ResolvedLayout {
     pub fn node_display_label(&self, id: NodeId) -> String {
         if id.is_window() {
             "window".to_string()
+        } else if id.is_page() {
+            "page".to_string()
         } else if let Some(node) = self.get_node(id) {
             if let Some(var) = &node.var_name {
                 var.clone()
@@ -1188,13 +1190,15 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             continue;
         }
 
-        let (text, font_size, font_weight, font_family, max_width, line_height, align, ox, oy, raw_spans, raw_boxes) = {
+        let (text, font_size, font_weight, font_family, max_width, line_height, align, ox, oy, raw_spans, raw_boxes, has_dynamic_splice) = {
             let n = &layout.nodes[text_node_idx];
             let fnode = n
                 .font
                 .or_else(|| n.properties.get("font").and_then(|v| v.as_node()))
                 .and_then(|fid| layout.nodes.get(fid.0));
-            let text = n.text_content.clone().unwrap_or_default();
+            let (resolved_text_opt, resolved_spans, resolved_boxes, splice_shifts) =
+                crate::compiler::text::resolve_active_rich_text(n, layout);
+            let text = resolved_text_opt.unwrap_or_default();
             let font_size = fnode
                 .and_then(|f| f.properties.get("size"))
                 .and_then(|v| v.as_f64())
@@ -1243,8 +1247,9 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 align,
                 n.rect.x,
                 n.rect.y + y_offset,
-                n.text_spans.clone(),
-                n.inline_boxes.clone(),
+                resolved_spans,
+                resolved_boxes,
+                !splice_shifts.is_empty(),
             )
         };
 
@@ -1382,6 +1387,9 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             }
         }
 
+        if has_dynamic_splice {
+            layout.nodes[text_node_idx].text_content = Some(text.clone());
+        }
         layout.nodes[text_node_idx].text_spans = spans.clone();
 
         let child_metrics = crate::compiler::text::compute_span_fragments_with_metrics_and_boxes(

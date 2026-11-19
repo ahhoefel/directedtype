@@ -1,7 +1,7 @@
 use crate::ast::{
-    BinaryExpr, BinaryOp, CallExpr, EnumVariantPattern, Expr, ExprDef, Ident, Literal, MatchArm,
-    MatchExpr, MatchPattern, MemberAccessExpr, MethodCallExpr, ParamDef, TernaryExpr, TypeRef,
-    UnaryExpr, UnaryOp,
+    BinaryExpr, BinaryOp, CallExpr, EnumVariantPattern, Expr, ExprDef, Ident, IndexExpr, Literal,
+    MatchArm, MatchExpr, MatchPattern, MemberAccessExpr, MethodCallExpr, ParamDef, TernaryExpr,
+    TypeRef, UnaryExpr, UnaryOp,
 };
 use crate::error::ParseError;
 use crate::parser::cursor::ParserCursor;
@@ -25,6 +25,20 @@ fn parse_expr_bp(cursor: &mut ParserCursor<'_>, min_bp: u8) -> Result<Expr, Pars
             lhs = Expr::MemberAccess(MemberAccessExpr {
                 target: std::sync::Arc::new(lhs),
                 member,
+                span,
+            });
+            continue;
+        }
+
+        // Postfix: Index access `[expr]`
+        if peeked.0 == Token::LBracket {
+            cursor.consume_token(&Token::LBracket)?;
+            let index = parse_expr_bp(cursor, 0)?;
+            let close_span = cursor.consume_token(&Token::RBracket)?;
+            let span = lhs.span().merge(close_span);
+            lhs = Expr::Index(IndexExpr {
+                target: std::sync::Arc::new(lhs),
+                index: std::sync::Arc::new(index),
                 span,
             });
             continue;
@@ -161,7 +175,7 @@ fn parse_prefix(cursor: &mut ParserCursor<'_>) -> Result<Expr, ParseError> {
             } else {
                 Err(ParseError::Custom {
                     message: format!(
-                        "Unknown distance unit '{}'. Supported units are 'px', 'pt', 'em', 's', and 'ms'",
+                        "Unknown distance unit '{}'. Supported units are 'px', 'pt', 'em', 'in', 'pc', 'mm', 'cm', 's', and 'ms'",
                         unit_str
                     ),
                     span,
@@ -263,6 +277,9 @@ fn expr_contains_non_value_node(expr: &Expr) -> bool {
     match expr {
         Expr::Node(node) => !matches!(node.name.as_str(), "Timer" | "IndefiniteTimer"),
         Expr::MemberAccess(m) => expr_contains_non_value_node(&m.target),
+        Expr::Index(ix) => {
+            expr_contains_non_value_node(&ix.target) || expr_contains_non_value_node(&ix.index)
+        }
         Expr::Ternary(t) => {
             expr_contains_non_value_node(&t.condition)
                 || expr_contains_non_value_node(&t.then_expr)
@@ -290,7 +307,7 @@ fn expr_contains_non_value_node(expr: &Expr) -> bool {
                     }) || expr_contains_non_value_node(&arm.body)
                 })
         }
-        Expr::Literal(_) | Expr::Ident(_) => false,
+        Expr::Literal(_) | Expr::Ident(_) | Expr::DomNodeRef(_, _) => false,
     }
 }
 

@@ -79,7 +79,16 @@ fn collect_agg_members_and_parent_refs(
         Expr::Paren(inner, _) => {
             collect_agg_members_and_parent_refs(inner, parent_id, agg_members, parent_refs);
         }
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) | Expr::Match(_) => {}
+        Expr::Index(idx) => {
+            collect_agg_members_and_parent_refs(&idx.target, parent_id, agg_members, parent_refs);
+            collect_agg_members_and_parent_refs(&idx.index, parent_id, agg_members, parent_refs);
+        }
+        Expr::Literal(_)
+        | Expr::Ident(_)
+        | Expr::Node(_)
+        | Expr::ExprDef(_)
+        | Expr::Match(_)
+        | Expr::DomNodeRef(_, _) => {}
     }
 }
 
@@ -220,7 +229,31 @@ fn scan_expr_for_parent_or_local_deps<'a>(
             child_id,
             stack,
         ),
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) | Expr::Match(_) => {
+        Expr::Index(idx) => {
+            scan_expr_for_parent_or_local_deps(
+                &idx.target,
+                curr_id,
+                parent_id,
+                target_member,
+                parent_ports_for_member,
+                child_id,
+                stack,
+            ) || scan_expr_for_parent_or_local_deps(
+                &idx.index,
+                curr_id,
+                parent_id,
+                target_member,
+                parent_ports_for_member,
+                child_id,
+                stack,
+            )
+        }
+        Expr::Literal(_)
+        | Expr::Ident(_)
+        | Expr::Node(_)
+        | Expr::ExprDef(_)
+        | Expr::Match(_)
+        | Expr::DomNodeRef(_, _) => {
             false
         }
     }
@@ -572,7 +605,44 @@ fn resolve_and_filter_agg_expr(
                 Expr::Paren(std::sync::Arc::new(unfilt), *span),
             ))
         }
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) | Expr::Match(_) => {
+        Expr::Index(idx) => {
+            let (t_filt, t_unfilt) = resolve_and_filter_agg_expr(
+                &idx.target,
+                comp_id,
+                comp_name,
+                instantiated_children_ids,
+                parent_ports_by_member,
+                nodes,
+                skipped_out,
+            )?;
+            let (i_filt, i_unfilt) = resolve_and_filter_agg_expr(
+                &idx.index,
+                comp_id,
+                comp_name,
+                instantiated_children_ids,
+                parent_ports_by_member,
+                nodes,
+                skipped_out,
+            )?;
+            Ok((
+                Expr::Index(IndexExpr {
+                    target: std::sync::Arc::new(t_filt),
+                    index: std::sync::Arc::new(i_filt),
+                    span: idx.span,
+                }),
+                Expr::Index(IndexExpr {
+                    target: std::sync::Arc::new(t_unfilt),
+                    index: std::sync::Arc::new(i_unfilt),
+                    span: idx.span,
+                }),
+            ))
+        }
+        Expr::Literal(_)
+        | Expr::Ident(_)
+        | Expr::Node(_)
+        | Expr::ExprDef(_)
+        | Expr::Match(_)
+        | Expr::DomNodeRef(_, _) => {
             Ok((expr.clone(), expr.clone()))
         }
     }
@@ -604,7 +674,15 @@ fn expr_contains_agg_child_of(expr: &Expr, comp_id: NodeId) -> bool {
                 || expr_contains_agg_child_of(&t.else_expr, comp_id)
         }
         Expr::Paren(inner, _) => expr_contains_agg_child_of(inner, comp_id),
-        Expr::Literal(_) | Expr::Node(_) | Expr::ExprDef(_) | Expr::Match(_) => false,
+        Expr::Index(idx) => {
+            expr_contains_agg_child_of(&idx.target, comp_id)
+                || expr_contains_agg_child_of(&idx.index, comp_id)
+        }
+        Expr::Literal(_)
+        | Expr::Node(_)
+        | Expr::ExprDef(_)
+        | Expr::Match(_)
+        | Expr::DomNodeRef(_, _) => false,
     }
 }
 

@@ -1,0 +1,91 @@
+// DirectedType Standard Component Library: Bibliography
+// Inline citations (`\Cite`) and deterministic BibTeX reference list (`\Bibliography`)
+// rewritten in place before layout by `Bibliography::on_prepare`.
+
+\use "components/VStackStretch.dt"
+\use "components/HStack.dt"
+\use "components/HDivider.dt"
+\use "components/Link.dt"
+
+\Span Cite(
+    key: String,
+    text: String = "[" + key + "]",
+    env font: Font,
+    x: Distance = parent.left,
+    y: Distance = parent.top
+) {
+    \alias current_color = #1d4ed8;
+    \alias color = #1d4ed8;
+}
+
+\Component BibEntry(
+    label: String,
+    author: String,
+    title: String,
+    venue: String = "",
+    year: String = "",
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font
+) {
+    \let bib_font = \Font(font: font, size: font.size * 0.9, line_height: font.line_height * 0.9);
+    \let venue_part = venue != "" ? (", " + venue) : "";
+    \let year_part = year != "" ? (" (" + year + ").") : ".";
+    \let citation_line = author + ", \"" + title + "\"" + venue_part + year_part;
+
+    \let row = \HStack(x: x, y: y, gap: 8px, width: width) {
+        \let num_col = \Text(font: bib_font, color: #1d4ed8, text: label);
+        \Text(
+            width: max(40pt, width - num_col.width - 8px),
+            font: bib_font,
+            color: #1e293b,
+            text: citation_line
+        )
+    };
+
+    \alias height: Distance = row.height;
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+}
+
+\Component Bibliography(
+    title: String = "References",
+    sort: String = "citation",
+    src: String = "",
+    data: String = "",
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: true),
+    env font: Font
+) {
+    \let heading_font = \Font(
+        font: font,
+        size: font.size * 1.45,
+        weight: 700,
+        line_height: font.line_height * 1.35
+    );
+
+    \let stack = \VStackStretch(
+        x: x,
+        y: y,
+        width: width,
+        gap: 10px,
+        pagination: \Pagination(breakable: true)
+    ) {
+        \Text(
+            font: heading_font,
+            color: #0f172a,
+            text: title,
+            pagination: \Pagination(breakable: false, keep_with_next: true)
+        )
+        \HDivider(color: #cbd5e1)
+        \Children
+    };
+
+    \alias height: Distance = stack.height;
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+}

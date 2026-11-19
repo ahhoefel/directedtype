@@ -1,9 +1,11 @@
 pub mod context;
+pub mod dom;
 pub mod event;
 pub mod protocol;
 pub mod value;
 
 pub use context::{Callback, Context, EmitCallback};
+pub use dom::{DomError, DomLinkInfo, NodeHandle, PrepareContext};
 pub use event::{Event, EventKind, Modifiers, MouseButton, Point};
 pub use protocol::{Action, ComponentResponse, DispatchRequest, MountRequest, StateMutation};
 pub use value::{IndefiniteTimer, Timer, Value};
@@ -15,6 +17,16 @@ use std::sync::Mutex;
 
 /// Trait implemented by guest companion component structs.
 pub trait Component: Default + 'static {
+    /// Returns `true` if this component overrides `on_prepare`.
+    fn has_prepare(&self) -> bool {
+        false
+    }
+
+    /// Pre-layout Component DOM inspection and structural transform pass.
+    fn on_prepare(&mut self, _ctx: &mut dom::PrepareContext<'_>) -> Result<(), DispatchError> {
+        Ok(())
+    }
+
     /// Lifecycle hook invoked when the component is mounted into the document layout.
     fn on_mount(&mut self, _ctx: &mut Context<'_>) {}
 
@@ -276,6 +288,27 @@ pub fn dispatch_handler<T: Component>(
     })
 }
 
+/// Returns `1` if `T` implements `on_prepare`, `0` otherwise.
+pub fn has_prepare_handler<T: Component>() -> u32 {
+    u32::from(T::default().has_prepare())
+}
+
+/// Executes `T::on_prepare` for `self_handle`, returning `0` on success or packed `(ptr, len)` UTF-8 error message.
+pub fn prepare_handler<T: Component>(self_handle: u64) -> u64 {
+    let mut component = T::default();
+    let mut ctx = dom::PrepareContext::new(dom::NodeHandle(self_handle));
+    match component.on_prepare(&mut ctx) {
+        Ok(()) => 0,
+        Err(e) => {
+            let bytes = e.to_string().into_bytes();
+            let len = bytes.len();
+            let ptr = bytes.as_ptr();
+            std::mem::forget(bytes);
+            pack_ptr_len(ptr, len)
+        }
+    }
+}
+
 /// Macro to export a component as a WebAssembly guest module.
 #[macro_export]
 macro_rules! export_component {
@@ -294,6 +327,16 @@ macro_rules! export_component {
         }
 
         #[no_mangle]
+        pub extern "C" fn __dt_has_prepare() -> u32 {
+            $crate::has_prepare_handler::<$comp_ty>()
+        }
+
+        #[no_mangle]
+        pub extern "C" fn __dt_prepare(self_handle: u64) -> u64 {
+            $crate::prepare_handler::<$comp_ty>(self_handle)
+        }
+
+        #[no_mangle]
         pub extern "C" fn __dt_mount(ptr: *const u8, len: usize) -> u64 {
             $crate::mount_handler::<$comp_ty>(&INSTANCES, ptr, len)
         }
@@ -307,6 +350,7 @@ macro_rules! export_component {
 
 pub mod prelude {
     pub use crate::context::{Callback, Context, EmitCallback};
+    pub use crate::dom::{DomError, DomLinkInfo, NodeHandle, PrepareContext};
     pub use crate::event::{Event, EventKind, Modifiers, MouseButton, Point};
     pub use crate::value::{IndefiniteTimer, Timer, Value};
     pub use crate::{export_component, Component, DispatchError, FromPayload};

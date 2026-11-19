@@ -8,6 +8,9 @@ use crate::compiler::expand::aggregation::{
     get_agg_emitted_count, reset_agg_emitted_count, resolve_and_filter_component_aggregations,
 };
 use crate::compiler::expand::builtins::clip::default_inherited_clip_expr;
+use crate::compiler::expand::builtins::pagination::{
+    merge_pagination_specs, resolve_pagination_node_id, resolve_pagination_spec_from_node,
+};
 use crate::compiler::expand::builtins::{eval_assert_directive, insert_default_spatial_aliases};
 use crate::compiler::expand::children::{
     collect_consumer_children, count_consumer_children, expand_block_consumer_children,
@@ -24,7 +27,7 @@ use crate::compiler::expand::rewrite::{
 };
 use crate::compiler::expand::schema::{ComponentSchema, PortMask};
 use crate::compiler::expand::text_flow::{
-    finalize_inline_box_component_ports, finalize_span_component_ports,
+    finalize_inline_box_component_ports, finalize_span_component_ports, is_non_flow_decl_name,
 };
 use crate::compiler::expand::typecheck::{
     coerce_typed_binding_expr, resolve_ident_or_member_to_literal,
@@ -74,6 +77,8 @@ struct ComponentExpander<'a> {
     span_full_text: Option<String>,
     span_text_spans: Vec<TextSpan>,
     span_inline_boxes: Vec<InlineBoxSpan>,
+    body_pagination_node_id: Option<NodeId>,
+    body_in_unbreakable_flow_container: Option<&'a str>,
 }
 
 impl<'a> ComponentExpander<'a> {
@@ -88,7 +93,7 @@ impl<'a> ComponentExpander<'a> {
         caller_env_scope: &'a HashMap<String, EnvEntry>,
         node_fonts: &'a mut HashMap<NodeId, NodeId>,
         instantiated_children_ids: &'a RefCell<Vec<NodeId>>,
-    ) -> Result<Self, CompileError> {
+    ) -> Result<Box<Self>, CompileError> {
         let schema = ComponentSchema::for_def(comp_def)?;
         schema.validate_caller_ports(comp_def, instance)?;
         let templates =
@@ -127,13 +132,18 @@ impl<'a> ComponentExpander<'a> {
         let already_rewritten_ports = PortMask::default();
 
         let num_consumer_children = count_consumer_children(
+            ctx,
             instance.content.as_ref(),
             schema.is_span_def || is_single_text_context,
             ctx.consumer_children.map_or(0, |c| c.len()),
+            lexical_scope,
+            caller_env_scope,
+            doc,
+            node_fonts,
             registry,
         );
 
-        Ok(Self {
+        Ok(Box::new(Self {
             ctx,
             instance,
             comp_def,
@@ -169,7 +179,9 @@ impl<'a> ComponentExpander<'a> {
             span_full_text: None,
             span_text_spans: Vec::new(),
             span_inline_boxes: Vec::new(),
-        })
+            body_pagination_node_id: None,
+            body_in_unbreakable_flow_container: ctx.in_unbreakable_flow_container,
+        }))
     }
 
     fn pre_resolve_explicit_font_port(&mut self) {
@@ -239,6 +251,10 @@ impl<'a> ComponentExpander<'a> {
                         enums: ctx.enums,
                         active_scope_id: ctx.active_scope_id,
                         consumer_children: None,
+                        in_paged_flow: false,
+                        in_page_template: ctx.in_page_template,
+                        in_unbreakable_flow_container: ctx.in_unbreakable_flow_container,
+                        enclosing_comp_ports: None,
                     };
                     let child_id = expand_element(
                         inline_elem,
@@ -289,13 +305,31 @@ impl<'a> ComponentExpander<'a> {
             Expr::Node(inline_elem)
                 if !super::is_value_node_name(inline_elem.name.as_str()) =>
             {
+                let param_scope_storage;
+                let effective_lex = if self.comp_ports.is_empty() {
+                    self.lexical_scope
+                } else {
+                    let mut cloned = self.lexical_scope.borrow().clone();
+                    for k in self.comp_ports.keys() {
+                        cloned.insert(
+                            Symbol::new(k),
+                            LexicalBinding::Member {
+                                node_id: ctx.comp_node_id,
+                                member: Ident::new(k, inline_elem.span),
+                                is_state: false,
+                            },
+                        );
+                    }
+                    param_scope_storage = RefCell::new(cloned);
+                    &param_scope_storage
+                };
                 let child_ctx = ElementContext {
                     parent_id: Some(ctx.comp_node_id),
                     parent_name: ctx.parent_name,
                     prev_sibling_id: ctx.prev_sibling_id,
                     has_next_sibling: false,
                     parent_ports: ctx.parent_ports,
-                    lexical_scope: self.lexical_scope,
+                    lexical_scope: effective_lex,
                     env_scope: self.caller_env_scope,
                     enclosing_component_id: Some(ctx.comp_node_id),
                     enclosing_num_children: self.num_consumer_children,
@@ -306,6 +340,10 @@ impl<'a> ComponentExpander<'a> {
                     enums: ctx.enums,
                     active_scope_id: ctx.active_scope_id,
                     consumer_children: None,
+                    in_paged_flow: false,
+                    in_page_template: ctx.in_page_template,
+                    in_unbreakable_flow_container: ctx.in_unbreakable_flow_container,
+                    enclosing_comp_ports: Some(&self.comp_ports),
                 };
                 let child_id = expand_element(
                     inline_elem,
@@ -482,7 +520,7 @@ impl<'a> ComponentExpander<'a> {
             .and_then(|pid| self.doc.get_node(pid))
             .is_some_and(|p| p.name == "Text" || p.is_span);
         for (name, expr) in explicit_ports {
-            if name != "clip" && !name.starts_with("on_") {
+            if name != "clip" && name != "pagination" && !name.starts_with("on_") {
                 let port_span = self
                     .instance
                     .ports
@@ -576,6 +614,14 @@ impl<'a> ComponentExpander<'a> {
             }
             self.internal_scope_ports = std::borrow::Cow::Owned(internal);
         }
+
+        self.body_in_unbreakable_flow_container = if self.ctx.in_paged_flow
+            && !compute_initial_component_breakable(&self.comp_ports, comp_def, self.doc)
+        {
+            Some(comp_def.name.as_str())
+        } else {
+            self.ctx.in_unbreakable_flow_container
+        };
 
         self.instantiate_pre_body_templates();
 
@@ -745,6 +791,8 @@ impl<'a> ComponentExpander<'a> {
             self.caller_env_scope,
             self.instantiated_children_ids,
             self.registry,
+            self.doc,
+            self.node_fonts,
         )?;
         debug_assert_eq!(
             self.num_consumer_children,
@@ -1181,6 +1229,10 @@ impl<'a> ComponentExpander<'a> {
                 enums: ctx.enums,
                 active_scope_id: ctx.active_scope_id,
                 consumer_children: Some(&self.consumer_child_entries),
+                in_paged_flow: ctx.in_paged_flow,
+                in_page_template: ctx.in_page_template,
+                in_unbreakable_flow_container: self.body_in_unbreakable_flow_container,
+                enclosing_comp_ports: Some(&self.comp_ports),
             };
             let expanded_node_id = expand_element(
                 elem,
@@ -1192,7 +1244,12 @@ impl<'a> ComponentExpander<'a> {
             debug_assert_eq!(node_id, expanded_node_id);
             self.doc.get_node_mut(node_id).unwrap().var_name =
                 Some(let_binding.name.as_str().to_string());
-            self.all_children_ids.push(node_id);
+            if let_binding.name.as_str() == "pagination" {
+                self.body_pagination_node_id = Some(expanded_node_id);
+            }
+            if !is_non_flow_decl_name(elem.name.as_str()) {
+                self.all_children_ids.push(node_id);
+            }
             if elem.name.as_str() == "Font" {
                 self.node_fonts.insert(node_id, node_id);
             }
@@ -1327,6 +1384,10 @@ impl<'a> ComponentExpander<'a> {
                         enums: ctx.enums,
                         active_scope_id: ctx.active_scope_id,
                         consumer_children: Some(&self.consumer_child_entries),
+                        in_paged_flow: ctx.in_paged_flow,
+                        in_page_template: ctx.in_page_template,
+                        in_unbreakable_flow_container: ctx.in_unbreakable_flow_container,
+                        enclosing_comp_ports: Some(&self.comp_ports),
                     };
                     let node_id = expand_element(
                         elem,
@@ -1459,6 +1520,10 @@ impl<'a> ComponentExpander<'a> {
             enums: self.ctx.enums,
             active_scope_id: self.ctx.active_scope_id,
             consumer_children: Some(&self.consumer_child_entries),
+            in_paged_flow: self.ctx.in_paged_flow,
+            in_page_template: self.ctx.in_page_template,
+            in_unbreakable_flow_container: self.body_in_unbreakable_flow_container,
+            enclosing_comp_ports: Some(&self.comp_ports),
         };
         let body_id = expand_element(
             body_node,
@@ -1482,8 +1547,27 @@ impl<'a> ComponentExpander<'a> {
                 });
             }
         }
+        let body_ctx = InstanceContext {
+            comp_node_id: self.ctx.comp_node_id,
+            parent_id: self.ctx.parent_id,
+            parent_name: self.ctx.parent_name,
+            prev_sibling_id: self.ctx.prev_sibling_id,
+            has_next_sibling: self.ctx.has_next_sibling,
+            parent_ports: self.ctx.parent_ports,
+            ambient_authored_ports: self.ctx.ambient_authored_ports,
+            enclosing_component_id: self.ctx.enclosing_component_id,
+            enclosing_num_children: self.ctx.enclosing_num_children,
+            enclosing_instantiated_children: self.ctx.enclosing_instantiated_children,
+            shadowed_ports: self.ctx.shadowed_ports,
+            enums: self.ctx.enums,
+            active_scope_id: self.ctx.active_scope_id,
+            consumer_children: self.ctx.consumer_children,
+            in_page_template: self.ctx.in_page_template,
+            in_paged_flow: self.ctx.in_paged_flow,
+            in_unbreakable_flow_container: self.body_in_unbreakable_flow_container,
+        };
         expand_caller_slot_envs(
-            self.ctx,
+            &body_ctx,
             self.instance,
             self.comp_def,
             &self.comp_scope_ports,
@@ -1497,7 +1581,7 @@ impl<'a> ComponentExpander<'a> {
         self.children_env_scope_dirty = true;
         if !self.schema.is_span_def {
             expand_block_consumer_children(
-                self.ctx,
+                &body_ctx,
                 self.comp_def,
                 dir,
                 &self.comp_scope_ports,
@@ -1591,8 +1675,27 @@ impl<'a> ComponentExpander<'a> {
         }
 
         if self.schema.is_span_def {
+            let span_ctx = InstanceContext {
+                comp_node_id: self.ctx.comp_node_id,
+                parent_id: self.ctx.parent_id,
+                parent_name: self.ctx.parent_name,
+                prev_sibling_id: self.ctx.prev_sibling_id,
+                has_next_sibling: self.ctx.has_next_sibling,
+                parent_ports: self.ctx.parent_ports,
+                ambient_authored_ports: self.ctx.ambient_authored_ports,
+                enclosing_component_id: self.ctx.enclosing_component_id,
+                enclosing_num_children: self.ctx.enclosing_num_children,
+                enclosing_instantiated_children: self.ctx.enclosing_instantiated_children,
+                shadowed_ports: self.ctx.shadowed_ports,
+                enums: self.ctx.enums,
+                active_scope_id: self.ctx.active_scope_id,
+                consumer_children: self.ctx.consumer_children,
+                in_page_template: self.ctx.in_page_template,
+                in_paged_flow: self.ctx.in_paged_flow,
+                in_unbreakable_flow_container: self.body_in_unbreakable_flow_container,
+            };
             let (full_text, spans, ibs) = expand_span_consumer_children(
-                self.ctx,
+                &span_ctx,
                 self.comp_def,
                 &self.comp_scope_ports,
                 &self.consumer_child_entries,
@@ -1954,7 +2057,7 @@ impl<'a> ComponentExpander<'a> {
                                 .window_ports
                                 .get("dpi")
                                 .and_then(|e| eval_expr(e, &HashMap::new()).ok())
-                                .unwrap_or(crate::compiler::value::Value::Float(96.0)),
+                                .unwrap_or(crate::compiler::value::Value::Float(self.doc.default_dpi)),
                         );
                         for n in &self.doc.nodes {
                             if n.name == "Font" {
@@ -2047,10 +2150,10 @@ impl<'a> ComponentExpander<'a> {
     /// Populates the final `ExpandedNode` for this component instance with its ports,
     /// port type metadata, children, state/env bindings, event handlers, and text spans.
     fn finish(
-        self,
+        mut self: Box<Self>,
         mut rewritten_ports: HashMap<String, Expr>,
         authored_port_overrides: HashMap<String, Expr>,
-    ) {
+    ) -> Result<(), CompileError> {
         let comp_def = self.comp_def;
         let mut node_port_types = std::sync::Arc::clone(&self.schema.static_port_types);
         if self.schema.is_span_def || self.schema.is_inline_box_def {
@@ -2073,64 +2176,117 @@ impl<'a> ComponentExpander<'a> {
             }
         }
 
-        let node = self.doc.get_node_mut(self.ctx.comp_node_id).unwrap();
-        node.is_component = true;
-        node.component_path = comp_def.span.file_path();
-        node.overload_params = std::sync::Arc::clone(&self.schema.overload_params);
-        node.children = self.all_children_ids;
-        node.authored_ports =
-            crate::compiler::expanded::AuthoredPorts::from_base_and_overrides(
-                std::sync::Arc::clone(&self.schema.base_authored_ports),
-                authored_port_overrides,
-            );
-        node.private_ports = std::sync::Arc::clone(&self.schema.private_ports);
-        node.state_vars = std::sync::Arc::clone(&self.schema.state_var_types);
-        node.env_vars = std::sync::Arc::clone(&self.schema.env_var_types);
-        node.preverified_port_types = Some(std::sync::Arc::clone(
-            &self.templates.preverified_port_types,
-        ));
-        node.preverified_ports = self.preverified_ports;
-        node.port_table = Some(std::sync::Arc::clone(&self.schema.port_table));
+        rewritten_ports
+            .entry("page".to_string())
+            .or_insert_with(|| Expr::Literal(Literal::Integer(1, self.instance.span)));
+        rewritten_ports
+            .entry("end_page".to_string())
+            .or_insert_with(|| Expr::Literal(Literal::Integer(1, self.instance.span)));
 
-        let local_scope_borrow = self.local_scope.borrow();
-        for (port_name, port_expr) in rewritten_ports.iter_mut() {
-            if port_name.starts_with("on_")
-                || node_port_types
-                    .get(port_name.as_str())
-                    .is_some_and(|t| t == "Handler")
-            {
-                if self.schema.comp_shadowed_ports.contains(port_name.as_str()) {
-                    if let Some(LexicalBinding::Expr(shadowed_expr)) =
-                        local_scope_borrow.get(&Symbol::new(port_name))
-                    {
-                        if super::rewrite::has_any_pending_fwd_refs()
-                            && super::rewrite::expr_has_unresolved_ident(shadowed_expr)
+        {
+            let local_scope_borrow = self.local_scope.borrow();
+            for (port_name, port_expr) in rewritten_ports.iter_mut() {
+                if port_name.starts_with("on_")
+                    || node_port_types
+                        .get(port_name.as_str())
+                        .is_some_and(|t| t == "Handler")
+                {
+                    if self.schema.comp_shadowed_ports.contains(port_name.as_str()) {
+                        if let Some(LexicalBinding::Expr(shadowed_expr)) =
+                            local_scope_borrow.get(&Symbol::new(port_name))
                         {
-                            super::rewrite::record_pending_fwd_node(self.ctx.comp_node_id);
+                            if super::rewrite::has_any_pending_fwd_refs()
+                                && super::rewrite::expr_has_unresolved_ident(shadowed_expr)
+                            {
+                                super::rewrite::record_pending_fwd_node(self.ctx.comp_node_id);
+                            }
+                            *port_expr = shadowed_expr.clone();
                         }
-                        *port_expr = shadowed_expr.clone();
+                    }
+                    if let Some(binding) = extract_event_binding(port_name, port_expr) {
+                        let node = self.doc.get_node_mut(self.ctx.comp_node_id).unwrap();
+                        node.event_handlers.insert(port_name.clone(), binding);
+                    }
+                    if let Some(default_binding) = self.default_self_handlers.get(port_name.as_str())
+                    {
+                        let node = self.doc.get_node_mut(self.ctx.comp_node_id).unwrap();
+                        node.default_event_handlers
+                            .insert(port_name.clone(), default_binding.clone());
                     }
                 }
-                if let Some(binding) = extract_event_binding(port_name, port_expr) {
-                    node.event_handlers.insert(port_name.clone(), binding);
-                }
-                if let Some(default_binding) = self.default_self_handlers.get(port_name.as_str()) {
-                    node.default_event_handlers
-                        .insert(port_name.clone(), default_binding.clone());
-                }
             }
-        }
-        if let Some(t) = self.span_full_text {
-            node.text_content = Some(t);
-            node.text_spans = self.span_text_spans;
-            node.inline_boxes = self.span_inline_boxes;
         }
         super::rewrite::sync_materialized_expr_ports_for_node(
             self.ctx.comp_node_id,
             &mut rewritten_ports,
         );
-        node.port_types = node_port_types;
-        node.ports = rewritten_ports;
+        let all_children_ids = std::mem::take(&mut self.all_children_ids);
+        let preverified_ports = std::mem::take(&mut self.preverified_ports);
+        let span_full_text = self.span_full_text.take();
+        let span_text_spans = std::mem::take(&mut self.span_text_spans);
+        let span_inline_boxes = std::mem::take(&mut self.span_inline_boxes);
+        {
+            let node = self.doc.get_node_mut(self.ctx.comp_node_id).unwrap();
+            node.is_component = true;
+            node.component_path = comp_def.span.file_path();
+            node.overload_params = std::sync::Arc::clone(&self.schema.overload_params);
+            node.children = all_children_ids;
+            node.authored_ports =
+                crate::compiler::expanded::AuthoredPorts::from_base_and_overrides(
+                    std::sync::Arc::clone(&self.schema.base_authored_ports),
+                    authored_port_overrides,
+                );
+            node.private_ports = std::sync::Arc::clone(&self.schema.private_ports);
+            node.state_vars = std::sync::Arc::clone(&self.schema.state_var_types);
+            node.env_vars = std::sync::Arc::clone(&self.schema.env_var_types);
+            node.preverified_port_types = Some(std::sync::Arc::clone(
+                &self.templates.preverified_port_types,
+            ));
+            node.preverified_ports = preverified_ports;
+            node.port_table = Some(std::sync::Arc::clone(&self.schema.port_table));
+            if let Some(t) = span_full_text {
+                let has_own_text_port_only = t.is_empty()
+                    && span_text_spans.is_empty()
+                    && span_inline_boxes.is_empty()
+                    && rewritten_ports.contains_key("text");
+                if !has_own_text_port_only {
+                    node.text_content = Some(t);
+                    node.text_spans = span_text_spans;
+                    node.inline_boxes = span_inline_boxes;
+                }
+            }
+            node.port_types = node_port_types;
+            node.ports = rewritten_ports;
+        }
+
+        let pag_port_expr = self
+            .doc
+            .get_node(self.ctx.comp_node_id)
+            .and_then(|n| n.ports.get("pagination"))
+            .cloned();
+        let pagination_spec = merge_pagination_specs(
+            self.body_pagination_node_id,
+            pag_port_expr.as_ref(),
+            self.doc,
+            false,
+        );
+        if pagination_spec.breakable {
+            let inst_children = self.instantiated_children_ids.borrow();
+            let all_ch = &self.doc.nodes[self.ctx.comp_node_id.0].children;
+            check_unsupported_breakable_chrome(
+                self.ctx.comp_node_id,
+                comp_def.name.as_str(),
+                self.instance.span,
+                all_ch,
+                &inst_children,
+                self.doc,
+            )?;
+        }
+        self.doc
+            .get_node_mut(self.ctx.comp_node_id)
+            .unwrap()
+            .pagination = pagination_spec;
+        Ok(())
     }
 }
 
@@ -2171,7 +2327,107 @@ pub(super) fn expand_component_instance(
         &mut authored_port_overrides,
     );
     expander.resolve_aggregations_and_assertions(&mut rewritten_ports)?;
-    expander.finish(rewritten_ports, authored_port_overrides);
+    expander.finish(rewritten_ports, authored_port_overrides)?;
 
+    Ok(())
+}
+
+fn compute_initial_component_breakable(
+    comp_ports: &HashMap<String, Expr>,
+    comp_def: &ComponentDef,
+    doc: &ExpandedDocument,
+) -> bool {
+    if let Some(pag_expr) = comp_ports.get("pagination") {
+        if let Some(pag_id) = resolve_pagination_node_id(pag_expr, doc) {
+            if let Some(pag_node) = doc.get_node(pag_id) {
+                if pag_node.authored_ports.contains_key("breakable") {
+                    return resolve_pagination_spec_from_node(doc, pag_id, false).breakable;
+                }
+            }
+        }
+    }
+    for item in &comp_def.body {
+        if let ComponentBodyItem::Let(l) = item {
+            if l.name.as_str() == "pagination" {
+                if let Some(LetValue::Node(elem)) = &l.value {
+                    for p in &elem.ports {
+                        if p.name.as_str() == "breakable" {
+                            if let Expr::Literal(Literal::Bool(b, _)) = &p.expr {
+                                return *b;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn check_unsupported_breakable_chrome(
+    comp_node_id: NodeId,
+    comp_name: &str,
+    span: crate::span::Span,
+    all_children_ids: &[NodeId],
+    instantiated_child_ids: &[NodeId],
+    doc: &ExpandedDocument,
+) -> Result<(), CompileError> {
+    let mut chrome_roots: Vec<(NodeId, Expr)> = Vec::new();
+    for &cid in all_children_ids {
+        let Some(child) = doc.get_node(cid) else {
+            continue;
+        };
+        if !child.is_component && child.parent == Some(comp_node_id) {
+            if child.name == "Rect" {
+                if let Some(h) = child.ports.get("height") {
+                    chrome_roots.push((cid, h.clone()));
+                }
+            } else if child.name == "Line" {
+                if let Some(y2) = child.ports.get("y2") {
+                    chrome_roots.push((cid, y2.clone()));
+                }
+            }
+        }
+    }
+    if chrome_roots.is_empty() {
+        return Ok(());
+    }
+    let inst_set: std::collections::HashSet<NodeId> = instantiated_child_ids.iter().copied().collect();
+    for (owner_cid, expr) in chrome_roots {
+        let mut queue = std::collections::VecDeque::new();
+        for dep in crate::compiler::graph::extract_var_dependencies_for_node(&expr, owner_cid) {
+            queue.push_back(dep);
+        }
+        let mut visited = std::collections::HashSet::new();
+        while let Some(dep) = queue.pop_front() {
+            if !visited.insert(dep) {
+                continue;
+            }
+            if dep.node == comp_node_id && matches!(dep.port.as_str(), "height" | "bottom") {
+                return Err(CompileError::UnsupportedBreakableChrome {
+                    component: comp_name.to_string(),
+                    span,
+                });
+            }
+            if dep.port.agg_child_of_node().is_some()
+                || (inst_set.contains(&dep.node) && dep.node != owner_cid)
+            {
+                return Err(CompileError::UnsupportedBreakableChrome {
+                    component: comp_name.to_string(),
+                    span,
+                });
+            }
+            if let Some(dep_node) = doc.get_node(dep.node) {
+                if let Some(next_expr) = dep_node.ports.get(dep.port.as_str()) {
+                    for next_dep in crate::compiler::graph::extract_var_dependencies_for_node(
+                        next_expr,
+                        dep.node,
+                    ) {
+                        queue.push_back(next_dep);
+                    }
+                }
+            }
+        }
+    }
     Ok(())
 }

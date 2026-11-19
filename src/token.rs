@@ -66,6 +66,12 @@ pub enum Token {
     #[token("}")]
     RBrace,
 
+    #[token("[")]
+    LBracket,
+
+    #[token("]")]
+    RBracket,
+
     // Punctuation
     #[token(":")]
     Colon,
@@ -230,6 +236,8 @@ impl fmt::Display for Token {
             Token::RParen => write!(f, ")"),
             Token::LBrace => write!(f, "{{"),
             Token::RBrace => write!(f, "}}"),
+            Token::LBracket => write!(f, "["),
+            Token::RBracket => write!(f, "]"),
             Token::Colon => write!(f, ":"),
             Token::Comma => write!(f, ","),
             Token::Dot => write!(f, "."),

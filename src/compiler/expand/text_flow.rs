@@ -46,7 +46,40 @@ pub(super) fn is_allowed_in_single_text(
     if registry.contains_key(elem.name.as_str()) {
         return false;
     }
-    matches!(elem.name.as_str(), "Font" | "Anchor" | "Text" | "Link")
+    matches!(
+        elem.name.as_str(),
+        "Font" | "Anchor" | "Text" | "Link" | "Deposit"
+    )
+}
+
+#[inline]
+pub(super) fn is_non_flow_decl_name(name: &str) -> bool {
+    matches!(name, "PageValue" | "PageList" | "Pagination")
+}
+
+#[inline]
+pub(super) fn is_non_layout_pagination_directive(name: &str) -> bool {
+    matches!(name, "PageBreak" | "Deposit" | "Collect")
+}
+
+pub(super) fn collect_subtree_deposit_ids(doc: &ExpandedDocument, root: NodeId) -> Vec<NodeId> {
+    let mut out = Vec::new();
+    let mut stack = vec![root];
+    let mut visited = HashSet::new();
+    while let Some(nid) = stack.pop() {
+        if !visited.insert(nid) {
+            continue;
+        }
+        if let Some(node) = doc.get_node(nid) {
+            if node.name == "Deposit" {
+                out.push(nid);
+            }
+            for &cid in node.children.iter().rev() {
+                stack.push(cid);
+            }
+        }
+    }
+    out
 }
 
 pub(super) fn element_places_children_in_single_text(
@@ -144,8 +177,10 @@ pub(super) fn component_children_is_single_text(
 }
 
 /// Accumulates an expanded child node's text, spans, and inline boxes into an enclosing `\Text` primitive.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn accumulate_text_child(
-    doc: &ExpandedDocument,
+    doc: &mut ExpandedDocument,
+    parent_id: NodeId,
     child_id: NodeId,
     child_elem: &ElementNode,
     full_text: &mut String,
@@ -153,14 +188,41 @@ pub(super) fn accumulate_text_child(
     inline_boxes: &mut Vec<InlineBoxSpan>,
     fallback_slot_text: bool,
 ) {
+    if child_elem.name.as_str() == "Deposit" {
+        let byte_idx = full_text.len();
+        doc.nodes[parent_id.0]
+            .inline_deposits
+            .push((child_id, byte_idx));
+        for dep in &mut doc.deposits {
+            if dep.deposit_id == child_id {
+                dep.host_node_id = Some(parent_id);
+                dep.inline_byte_index = Some(byte_idx);
+            }
+        }
+        return;
+    }
+
     if doc.nodes[child_id.0].is_inline_box {
+        let byte_idx = full_text.len();
         inline_boxes.push(InlineBoxSpan {
             node_id: child_id,
-            index: full_text.len(),
+            index: byte_idx,
             width: 0.0,
             height: 0.0,
             baseline_offset: 0.0,
         });
+        let box_deposits = collect_subtree_deposit_ids(doc, child_id);
+        for dep_id in box_deposits {
+            doc.nodes[parent_id.0]
+                .inline_deposits
+                .push((dep_id, byte_idx));
+            for dep in &mut doc.deposits {
+                if dep.deposit_id == dep_id {
+                    dep.host_node_id = Some(parent_id);
+                    dep.inline_byte_index = Some(byte_idx);
+                }
+            }
+        }
         return;
     }
 
@@ -189,6 +251,25 @@ pub(super) fn accumulate_text_child(
     full_text.push_str(&child_text);
     let end = full_text.len();
 
+    let shifted_deposits: Vec<(NodeId, usize)> = doc.nodes[child_id.0]
+        .inline_deposits
+        .iter()
+        .map(|&(dep_id, off)| (dep_id, start + off))
+        .collect();
+    if !shifted_deposits.is_empty() {
+        doc.nodes[parent_id.0]
+            .inline_deposits
+            .extend(shifted_deposits.iter().copied());
+        for (dep_id, abs_off) in shifted_deposits {
+            for dep in &mut doc.deposits {
+                if dep.deposit_id == dep_id {
+                    dep.host_node_id = Some(parent_id);
+                    dep.inline_byte_index = Some(abs_off);
+                }
+            }
+        }
+    }
+
     for mut sub_ib in doc.nodes[child_id.0].inline_boxes.clone() {
         sub_ib.index += start;
         inline_boxes.push(sub_ib);
@@ -202,7 +283,10 @@ pub(super) fn accumulate_text_child(
         }
     } else {
         let is_link = child_elem.name.as_str() == "Link"
-            || child_elem.ports.iter().any(|p| p.name.as_str() == "url");
+            || child_elem
+                .ports
+                .iter()
+                .any(|p| p.name.as_str() == "url" || p.name.as_str() == "to");
 
         let mut style = SpanStyle::default();
         if is_link {
@@ -275,6 +359,9 @@ pub(super) fn finalize_span_component_ports(
             own_style.url = Some(s.clone());
             own_style.cursor = Some(CursorKind::Pointer);
         }
+    }
+    if rewritten_ports.contains_key("to") {
+        own_style.cursor = Some(CursorKind::Pointer);
     }
     if let Some(color_expr) = rewritten_ports
         .get("color")
@@ -714,5 +801,226 @@ pub(super) fn extract_inline_box_baseline_offset(
         }),
         other => other.clone(),
     }
+}
+
+/// Output item produced by normalizing a block container's content slot.
+pub(super) enum CoalescedBlockItem<'a> {
+    /// A coalesced `\Text` paragraph or standalone child element (with optional `\let` binding name and type annotation).
+    Element {
+        elem: ElementNode,
+        var_name: Option<String>,
+        raw_text: Option<TextChunk>,
+        type_annotation: Option<TypeRef>,
+    },
+    /// A non-flow `\let` declaration (`PageValue`, `PageList`, `Pagination`, or scalar expression).
+    NonFlowLet(&'a LetBinding),
+    /// A forwarded `\Children` directive.
+    Children(&'a ChildrenDirective),
+}
+
+fn drain_flushed_inline_items(
+    pending_inline_items: &mut Vec<ContentItem>,
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> Vec<(ElementNode, Option<String>, Option<TextChunk>, Option<TypeRef>)> {
+    if pending_inline_items.is_empty() {
+        return Vec::new();
+    }
+    let has_text_or_span = pending_inline_items.iter().any(|it| match it {
+        ContentItem::Text(t) => !t.text.trim().is_empty(),
+        ContentItem::Node(e) => is_span_element(e, registry),
+        ContentItem::Let(l) => l
+            .value
+            .as_ref()
+            .is_some_and(|v| matches!(v, LetValue::Node(e) if is_span_element(e, registry))),
+        _ => false,
+    });
+
+    if has_text_or_span {
+        while let Some(ContentItem::Text(first_chunk)) = pending_inline_items.first_mut() {
+            let trimmed = first_chunk.text.trim_start();
+            if trimmed.is_empty() {
+                pending_inline_items.remove(0);
+            } else {
+                if trimmed.len() != first_chunk.text.len() {
+                    first_chunk.text = trimmed.to_string();
+                }
+                break;
+            }
+        }
+        while let Some(ContentItem::Text(last_chunk)) = pending_inline_items.last_mut() {
+            let trimmed = last_chunk.text.trim_end();
+            if trimmed.is_empty() {
+                pending_inline_items.pop();
+            } else {
+                if trimmed.len() != last_chunk.text.len() {
+                    last_chunk.text = trimmed.to_string();
+                }
+                break;
+            }
+        }
+        if pending_inline_items.is_empty() {
+            return Vec::new();
+        }
+        let first_span = pending_inline_items.first().unwrap().span();
+        let last_span = pending_inline_items.last().unwrap().span();
+        let para_span = Span::new(first_span.start, last_span.end);
+        let raw_text = if pending_inline_items.len() == 1 {
+            if let ContentItem::Text(chunk) = &pending_inline_items[0] {
+                Some(chunk.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let items = std::mem::take(pending_inline_items);
+        let synthetic_text = ElementNode {
+            name: Ident::new("Text", para_span),
+            key: None,
+            ports: Vec::new(),
+            content: Some(ContentSlot {
+                items,
+                span: para_span,
+            }),
+            span: para_span,
+            handle: None,
+        };
+        vec![(synthetic_text, None, raw_text, None)]
+    } else {
+        let mut out = Vec::new();
+        for item in pending_inline_items.drain(..) {
+            match item {
+                ContentItem::Node(child_elem) => {
+                    out.push((child_elem, None, None, None));
+                }
+                ContentItem::Let(l) => {
+                    if let Some(LetValue::Node(child_elem)) = l.value {
+                        out.push((
+                            child_elem,
+                            Some(l.name.as_str().to_string()),
+                            None,
+                            l.type_annotation,
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+}
+
+/// Normalizes a block container's content items into coalesced paragraphs, standalone elements,
+/// non-flow `\let` declarations, and `\Children` directives.
+pub(super) fn coalesce_block_content_items<'a>(
+    items: &'a [ContentItem],
+    registry: &HashMap<String, Vec<ComponentDef>>,
+) -> Vec<CoalescedBlockItem<'a>> {
+    let mut out = Vec::new();
+    let mut pending_inline_items: Vec<ContentItem> = Vec::new();
+
+    for item in items {
+        match item {
+            ContentItem::Text(chunk) => {
+                pending_inline_items.push(ContentItem::Text(chunk.clone()));
+            }
+            ContentItem::Node(child_elem) => {
+                if is_inline_element(child_elem, registry)
+                    || child_elem.name.as_str() == "Deposit"
+                {
+                    pending_inline_items.push(ContentItem::Node(child_elem.clone()));
+                } else {
+                    for (elem, var_name, raw_text, type_annotation) in
+                        drain_flushed_inline_items(&mut pending_inline_items, registry)
+                    {
+                        out.push(CoalescedBlockItem::Element {
+                            elem,
+                            var_name,
+                            raw_text,
+                            type_annotation,
+                        });
+                    }
+                    out.push(CoalescedBlockItem::Element {
+                        elem: child_elem.clone(),
+                        var_name: None,
+                        raw_text: None,
+                        type_annotation: None,
+                    });
+                }
+            }
+            ContentItem::Let(l) => {
+                if let Some(LetValue::Node(child_elem)) = &l.value {
+                    if is_non_flow_decl_name(child_elem.name.as_str()) {
+                        out.push(CoalescedBlockItem::NonFlowLet(l));
+                    } else if is_inline_element(child_elem, registry)
+                        || child_elem.name.as_str() == "Deposit"
+                    {
+                        pending_inline_items.push(ContentItem::Let(l.clone()));
+                    } else {
+                        for (elem, var_name, raw_text, type_annotation) in
+                            drain_flushed_inline_items(&mut pending_inline_items, registry)
+                        {
+                            out.push(CoalescedBlockItem::Element {
+                                elem,
+                                var_name,
+                                raw_text,
+                                type_annotation,
+                            });
+                        }
+                        out.push(CoalescedBlockItem::Element {
+                            elem: child_elem.clone(),
+                            var_name: Some(l.name.as_str().to_string()),
+                            raw_text: None,
+                            type_annotation: l.type_annotation.clone(),
+                        });
+                    }
+                } else {
+                    out.push(CoalescedBlockItem::NonFlowLet(l));
+                }
+            }
+            ContentItem::ParagraphBreak(_) => {
+                for (elem, var_name, raw_text, type_annotation) in
+                    drain_flushed_inline_items(&mut pending_inline_items, registry)
+                {
+                    out.push(CoalescedBlockItem::Element {
+                        elem,
+                        var_name,
+                        raw_text,
+                        type_annotation,
+                    });
+                }
+            }
+            ContentItem::Children(dir) => {
+                for (elem, var_name, raw_text, type_annotation) in
+                    drain_flushed_inline_items(&mut pending_inline_items, registry)
+                {
+                    out.push(CoalescedBlockItem::Element {
+                        elem,
+                        var_name,
+                        raw_text,
+                        type_annotation,
+                    });
+                }
+                out.push(CoalescedBlockItem::Children(dir));
+            }
+            ContentItem::Alias(_)
+            | ContentItem::State(_)
+            | ContentItem::Env(_)
+            | ContentItem::Assert(_) => {}
+        }
+    }
+
+    for (elem, var_name, raw_text, type_annotation) in
+        drain_flushed_inline_items(&mut pending_inline_items, registry)
+    {
+        out.push(CoalescedBlockItem::Element {
+            elem,
+            var_name,
+            raw_text,
+            type_annotation,
+        });
+    }
+
+    out
 }
 

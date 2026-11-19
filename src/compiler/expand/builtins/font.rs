@@ -71,6 +71,10 @@ pub(super) fn pre_resolve_primitive_font(
                     enums: ctx.enums,
                     active_scope_id: ctx.active_scope_id,
                     consumer_children: None,
+                    in_paged_flow: ctx.in_paged_flow,
+                    in_page_template: ctx.in_page_template,
+                    in_unbreakable_flow_container: ctx.in_unbreakable_flow_container,
+                    enclosing_comp_ports: ctx.enclosing_comp_ports,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
                 if !matches!(inline_elem.name.as_str(), "Font" | "TextBounds" | "Shadow") {

@@ -1,13 +1,17 @@
 pub mod ast;
 pub mod compiler;
 pub mod component;
+#[cfg(feature = "vello-renderer")]
 pub mod docgen;
 pub mod dom;
 pub mod error;
+#[cfg(feature = "vello-renderer")]
 pub mod inspector;
 pub mod interaction;
 pub mod lexer;
 pub mod parser;
+#[cfg(feature = "pdf")]
+pub mod pdf;
 pub mod render;
 pub mod span;
 pub mod symbol;
@@ -18,7 +22,7 @@ extern crate self as directedtype;
 pub use ast::Document;
 pub use component::{
     Callback, Component, ComponentFactory, ComponentRegistry, Context, DispatchError, EmitCallback,
-    EventHandlerBinding, EventHandlerTarget, FromPayload, InstanceManager,
+    EventHandlerBinding, EventHandlerTarget, FromPayload, InstanceManager, PrepareContext,
 };
 pub use directedtype_macros::component;
 pub use compiler::{
@@ -27,6 +31,7 @@ pub use compiler::{
 };
 pub use dom::{Dom, DomError, DomHitTestResult, NodeHandle, Transaction};
 pub use error::ParseError;
+#[cfg(feature = "vello-renderer")]
 pub use inspector::{
     InspectOverlayComponent, InspectOverlayStyle, InspectPanelComponent, InspectorScrollbarKind,
     InspectTargetInfo, InspectorState,
@@ -37,7 +42,8 @@ pub use parser::parse_document as parse;
 pub mod prelude {
     pub use crate::compiler::{IndefiniteTimer, Timer, Value};
     pub use crate::component::{
-        Callback, Component, Context, DispatchError, EmitCallback, FromPayload,
+        Callback, Component, Context, DispatchError, DomLinkInfo, EmitCallback, FromPayload,
+        GuestDomError, GuestNodeHandle, GuestValue, PrepareContext,
     };
     pub use crate::interaction::{Event, EventKind, Modifiers, MouseButton, Point};
     pub use directedtype_macros::component;

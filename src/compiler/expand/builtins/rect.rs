@@ -40,6 +40,7 @@ impl BuiltinPrimitive for RectPrimitive {
                 | "scroll_x"
                 | "scroll_y"
                 | "clip"
+                | "pagination"
                 | "cursor"
                 | "opacity"
                 | "name"

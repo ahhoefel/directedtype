@@ -1,9 +1,11 @@
 use crate::ast::{ComponentKey, Document};
 use crate::compiler::error::CompileError;
 use crate::compiler::eval::{evaluate_graph_with_state, invalidate_and_reevaluate};
-use crate::compiler::expand::expand_document_with_resolver;
+use crate::compiler::expand::expand_document_with_resolver_and_dpi;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
-use crate::compiler::graph::{build_variable_graph_with_window, VarId, VariableGraph};
+use crate::compiler::graph::{
+    build_variable_graph_with_window_and_dpi, VarId, VariableGraph,
+};
 use crate::compiler::layout::{
     resolve_layout_with_graph, update_resolved_layout, ResolvedLayout, ResolvedNode,
 };
@@ -97,11 +99,25 @@ impl CompiledDocument {
         base_dir: &Path,
         resolver: &R,
     ) -> Result<Self, CompileError> {
-        let expanded = expand_document_with_resolver(doc, base_dir, resolver)?;
-        let graph = std::sync::Arc::new(build_variable_graph_with_window(
+        Self::compile_with_resolver_and_dpi(doc, window_width, window_height, 96.0, base_dir, resolver)
+    }
+
+    /// Compiles an AST document with explicit window dimensions, default DPI, base directory, and custom FileResolver.
+    pub fn compile_with_resolver_and_dpi<R: FileResolver>(
+        doc: &Document,
+        window_width: f64,
+        window_height: f64,
+        default_dpi: f64,
+        base_dir: &Path,
+        resolver: &R,
+    ) -> Result<Self, CompileError> {
+        let expanded =
+            expand_document_with_resolver_and_dpi(doc, base_dir, resolver, default_dpi)?;
+        let graph = std::sync::Arc::new(build_variable_graph_with_window_and_dpi(
             &expanded,
             window_width,
             window_height,
+            default_dpi,
         )?);
         let schedule = sort_graph(&graph)?;
         let state_overrides = HashMap::new();
@@ -133,7 +149,36 @@ impl CompiledDocument {
         resolver: &R,
         registry: &crate::component::ComponentRegistry,
     ) -> Result<Self, CompileError> {
-        let mut compiled = Self::compile_with_resolver(doc, window_width, window_height, base_dir, resolver)?;
+        Self::compile_with_registry_and_dpi(
+            doc,
+            window_width,
+            window_height,
+            96.0,
+            base_dir,
+            resolver,
+            registry,
+        )
+    }
+
+    /// Compiles an AST document with explicit DPI and `ComponentRegistry`, instantiating companion components
+    /// and executing their `on_mount` lifecycle hooks.
+    pub fn compile_with_registry_and_dpi<R: FileResolver>(
+        doc: &Document,
+        window_width: f64,
+        window_height: f64,
+        default_dpi: f64,
+        base_dir: &Path,
+        resolver: &R,
+        registry: &crate::component::ComponentRegistry,
+    ) -> Result<Self, CompileError> {
+        let mut compiled = Self::compile_with_resolver_and_dpi(
+            doc,
+            window_width,
+            window_height,
+            default_dpi,
+            base_dir,
+            resolver,
+        )?;
         compiled.attach_registry(registry)?;
         Ok(compiled)
     }

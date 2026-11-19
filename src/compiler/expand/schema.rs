@@ -182,6 +182,10 @@ fn expr_references_any_name(expr: &Expr, names: &HashSet<String>) -> bool {
     match expr {
         Expr::Ident(id) => names.contains(id.as_str()),
         Expr::MemberAccess(m) => expr_references_any_name(&m.target, names),
+        Expr::Index(idx) => {
+            expr_references_any_name(&idx.target, names)
+                || expr_references_any_name(&idx.index, names)
+        }
         Expr::Binary(b) => {
             expr_references_any_name(&b.left, names) || expr_references_any_name(&b.right, names)
         }
@@ -216,7 +220,7 @@ fn expr_references_any_name(expr: &Expr, names: &HashSet<String>) -> bool {
                     }) || expr_references_any_name(&arm.body, names)
                 })
         }
-        Expr::Literal(_) => false,
+        Expr::Literal(_) | Expr::DomNodeRef(_, _) => false,
     }
 }
 
@@ -357,7 +361,7 @@ impl ComponentSchema {
             }
         }
 
-        let mut comp_scope_ports = vec!["clip".to_string()];
+        let mut comp_scope_ports = vec!["clip".to_string(), "pagination".to_string()];
         if is_span_def || is_inline_box_def {
             for p in [
                 "x", "y", "width", "height", "left", "top", "right", "bottom", "baseline",
@@ -540,7 +544,7 @@ impl ComponentSchema {
             .params
             .iter()
             .map(|p| p.name.as_str())
-            .chain(["clip", "left", "top", "right", "bottom"])
+            .chain(["clip", "pagination", "left", "top", "right", "bottom"])
         {
             if all_let_names.contains(p) || declared_envs.contains_key(p) {
                 comp_shadowed_ports.insert(p.to_string());
@@ -569,6 +573,9 @@ impl ComponentSchema {
 
         let mut static_port_types: HashMap<String, String> = HashMap::new();
         static_port_types.insert("clip".to_string(), "Clip".to_string());
+        static_port_types.insert("pagination".to_string(), "Pagination".to_string());
+        static_port_types.insert("page".to_string(), "Integer".to_string());
+        static_port_types.insert("end_page".to_string(), "Integer".to_string());
         if is_span_def || is_inline_box_def {
             for p in [
                 "x", "y", "width", "height", "left", "top", "right", "bottom", "baseline",
@@ -965,7 +972,10 @@ impl ComponentSchema {
                     span: port.name.span,
                 });
             }
-            if self.all_let_names.contains(name) && !self.param_names.contains(name) {
+            if self.all_let_names.contains(name)
+                && !self.param_names.contains(name)
+                && name != "pagination"
+            {
                 return Err(CompileError::Custom {
                     message: format!(
                         "Node '{}' has no public property '{}'",
@@ -1124,6 +1134,10 @@ pub(super) fn collect_expr_lets<'a>(expr: &'a Expr, out: &mut Vec<&'a LetBinding
             }
         }
         Expr::MemberAccess(m) => collect_expr_lets(&m.target, out),
+        Expr::Index(idx) => {
+            collect_expr_lets(&idx.target, out);
+            collect_expr_lets(&idx.index, out);
+        }
         Expr::ExprDef(def) => {
             for p in &def.params {
                 if let Some(d) = &p.default_edge {
@@ -1143,7 +1157,7 @@ pub(super) fn collect_expr_lets<'a>(expr: &'a Expr, out: &mut Vec<&'a LetBinding
                 collect_expr_lets(&arm.body, out);
             }
         }
-        Expr::Literal(_) | Expr::Ident(_) => {}
+        Expr::Literal(_) | Expr::Ident(_) | Expr::DomNodeRef(_, _) => {}
     }
 }
 
@@ -1236,7 +1250,7 @@ pub(super) fn select_component_overload<'a>(
     let explicit_ports: HashSet<String> =
         elem.ports.iter().map(|p| p.name.as_str().to_string()).collect();
 
-    let matching: Vec<&ComponentDef> = overloads
+    let accepting: Vec<&ComponentDef> = overloads
         .iter()
         .filter(|o| {
             let has_param = |name: &str| {
@@ -1248,11 +1262,22 @@ pub(super) fn select_component_overload<'a>(
             // must be accepted by this overload.
             for port in &elem.ports {
                 let name = port.name.as_str();
-                if name != "clip" && !has_param(name) && !name.starts_with("on_") {
+                if name != "clip"
+                    && name != "pagination"
+                    && !has_param(name)
+                    && !name.starts_with("on_")
+                {
                     return false;
                 }
             }
+            true
+        })
+        .collect();
 
+    let matching: Vec<&ComponentDef> = accepting
+        .iter()
+        .copied()
+        .filter(|o| {
             // 2. All required parameters (those without defaults) must be satisfied
             // by caller explicit arguments, container-injected ambient arguments,
             // or by an ambient bound env variable.
@@ -1272,27 +1297,28 @@ pub(super) fn select_component_overload<'a>(
         })
         .collect();
 
-    match matching.len() {
-        1 => Ok(matching[0]),
-        _ => {
-            let mut provided: Vec<String> = explicit_ports
-                .into_iter()
-                .filter(|p| p != "clip" && !p.starts_with("on_"))
-                .collect();
-            provided.sort();
-            let available_signatures: Vec<Vec<String>> = overloads
-                .iter()
-                .map(|o| o.params.iter().map(|p| p.name.as_str().to_string()).collect())
-                .collect();
-            Err(CompileError::NoMatchingOverload(Box::new(
-                NoMatchingOverloadDetails {
-                    name: comp_name.to_string(),
-                    provided_ports: provided,
-                    available_signatures,
-                    span,
-                },
-            )))
-        }
+    if matching.len() == 1 {
+        Ok(matching[0])
+    } else if matching.is_empty() && accepting.len() == 1 {
+        Ok(accepting[0])
+    } else {
+        let mut provided: Vec<String> = explicit_ports
+            .into_iter()
+            .filter(|p| p != "clip" && p != "pagination" && !p.starts_with("on_"))
+            .collect();
+        provided.sort();
+        let available_signatures: Vec<Vec<String>> = overloads
+            .iter()
+            .map(|o| o.params.iter().map(|p| p.name.as_str().to_string()).collect())
+            .collect();
+        Err(CompileError::NoMatchingOverload(Box::new(
+            NoMatchingOverloadDetails {
+                name: comp_name.to_string(),
+                provided_ports: provided,
+                available_signatures,
+                span,
+            },
+        )))
     }
 }
 
@@ -1331,7 +1357,13 @@ fn validate_key_expr(
                     span: id.span,
                 });
             }
-            if name == "self" || name == "parent" || name == "prev" || name == "next" || name == "window" {
+            if name == "self"
+                || name == "parent"
+                || name == "prev"
+                || name == "next"
+                || name == "window"
+                || name == "page"
+            {
                 return Err(CompileError::InvalidComponentKeyDependency {
                     node: node_name.to_string(),
                     name: name.to_string(),
@@ -1390,6 +1422,11 @@ fn validate_key_expr(
                 other => validate_key_expr(node_name, other, lexical_scope),
             }
         }
+        Expr::Index(idx) => Err(CompileError::InvalidComponentKeyDependency {
+            node: node_name.to_string(),
+            name: format!("{}[...]", idx.target),
+            span: idx.span,
+        }),
         Expr::Binary(b) => {
             validate_key_expr(node_name, &b.left, lexical_scope)?;
             validate_key_expr(node_name, &b.right, lexical_scope)
@@ -1436,6 +1473,7 @@ fn validate_key_expr(
             }
             Ok(())
         }
+        Expr::DomNodeRef(_, _) => Ok(()),
     }
 }
 
@@ -1444,6 +1482,9 @@ fn expr_has_template_self(expr: &Expr) -> bool {
         Expr::Literal(_) => false,
         Expr::Ident(id) => id.node_id().is_some_and(|n| n.is_template_self()),
         Expr::MemberAccess(m) => expr_has_template_self(&m.target),
+        Expr::Index(idx) => {
+            expr_has_template_self(&idx.target) || expr_has_template_self(&idx.index)
+        }
         Expr::Binary(b) => expr_has_template_self(&b.left) || expr_has_template_self(&b.right),
         Expr::Unary(u) => expr_has_template_self(&u.operand),
         Expr::Paren(inner, _) => expr_has_template_self(inner),
@@ -1456,7 +1497,7 @@ fn expr_has_template_self(expr: &Expr) -> bool {
         Expr::MethodCall(mc) => {
             expr_has_template_self(&mc.target) || mc.args.iter().any(expr_has_template_self)
         }
-        Expr::Node(_) | Expr::ExprDef(_) => false,
+        Expr::Node(_) | Expr::ExprDef(_) | Expr::DomNodeRef(_, _) => false,
         Expr::Match(m) => {
             m.scrutinee.as_ref().is_some_and(|s| expr_has_template_self(s))
                 || m.arms.iter().any(|arm| {
@@ -1479,6 +1520,10 @@ fn collect_template_self_deps(expr: &Expr, deps: &mut Vec<Symbol>) {
                 }
             }
             collect_template_self_deps(&m.target, deps);
+        }
+        Expr::Index(idx) => {
+            collect_template_self_deps(&idx.target, deps);
+            collect_template_self_deps(&idx.index, deps);
         }
         Expr::Binary(b) => {
             collect_template_self_deps(&b.left, deps);
@@ -1513,7 +1558,7 @@ fn collect_template_self_deps(expr: &Expr, deps: &mut Vec<Symbol>) {
                 collect_template_self_deps(&arm.body, deps);
             }
         }
-        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) => {}
+        Expr::Literal(_) | Expr::Ident(_) | Expr::Node(_) | Expr::ExprDef(_) | Expr::DomNodeRef(_, _) => {}
     }
 }
 
@@ -1579,33 +1624,21 @@ fn try_compile_self_template(
     inlined_caller_exprs: &mut Vec<(Symbol, Span)>,
 ) -> Option<Expr> {
     match expr {
-        Expr::Literal(Literal::Distance(val, unit, span)) => match unit {
-            DistanceUnit::Px => Some(expr.clone()),
-            DistanceUnit::Pt => Some(Expr::Binary(BinaryExpr {
-                op: BinaryOp::Mul,
-                left: std::sync::Arc::new(Expr::Literal(Literal::Distance(
-                    *val,
-                    DistanceUnit::Px,
+        Expr::Literal(Literal::Distance(val, unit, span)) => {
+            if let Some(pts_per_unit) = unit.points_per_unit() {
+                Some(super::rewrite::lower_points_to_px_expr(
+                    *val * pts_per_unit,
                     *span,
-                ))),
-                right: std::sync::Arc::new(Expr::Binary(BinaryExpr {
-                    op: BinaryOp::Div,
-                    left: std::sync::Arc::new(Expr::MemberAccess(MemberAccessExpr {
-                        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(
-                            crate::compiler::expanded::NodeId::WINDOW,
-                            *span,
-                        ))),
-                        member: Ident::from_symbol(Symbol::DPI, *span),
-                        span: *span,
-                    })),
-                    right: std::sync::Arc::new(Expr::Literal(Literal::Float(72.0, *span))),
-                    span: *span,
-                })),
-                span: *span,
-            })),
-            DistanceUnit::Em => None,
-        },
-        Expr::Literal(Literal::Area(_, DistanceUnit::Pt | DistanceUnit::Em, _)) => None,
+                ))
+            } else {
+                match unit {
+                    DistanceUnit::Px => Some(expr.clone()),
+                    DistanceUnit::Em => None,
+                    _ => unreachable!("all physical units handled by points_per_unit()"),
+                }
+            }
+        }
+        Expr::Literal(Literal::Area(_, unit, _)) if *unit != DistanceUnit::Px => None,
         Expr::Literal(_) => Some(expr.clone()),
         Expr::Ident(id) => {
             if let Some((_, bound_expr, _)) =
@@ -1622,6 +1655,7 @@ fn try_compile_self_template(
             if id.name == Symbol::SELF
                 || id.name == Symbol::PARENT
                 || id.name == Symbol::WINDOW
+                || id.name == Symbol::PAGE
                 || id.name == Symbol::PREV
                 || id.name == Symbol::NEXT
                 || id.name == Symbol::CHILD
@@ -2080,7 +2114,11 @@ fn try_compile_self_template(
                 Some(acc_expr)
             }
         }
-        Expr::MethodCall(_) | Expr::Node(_) | Expr::ExprDef(_) => None,
+        Expr::MethodCall(_)
+        | Expr::Index(_)
+        | Expr::Node(_)
+        | Expr::ExprDef(_)
+        | Expr::DomNodeRef(_, _) => None,
     }
 }
 
