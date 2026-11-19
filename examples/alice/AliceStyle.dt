@@ -62,6 +62,50 @@
     \alias baseline: Distance = y;
 }
 
+// Continuous multi-em dash (default 2em) matching Old Standard TT's U+2014 stroke geometry
+// (stroke thickness 0.036em, top at 0.28em above baseline, 0.06em outer sidebearings, zero internal gap)
+\InlineBox DoubleEmDash(
+    ems: Float = 2.0,
+    sidebearing: Distance = 0.06em,
+    thickness: Distance = 0.036em,
+    top_above_baseline: Distance = 0.28em,
+    color: Color = #111111,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    env font: Font
+) {
+    \let total_w = ems * 1em;
+
+    \Rect(
+        x: x + sidebearing,
+        y: y,
+        width: total_w - 2 * sidebearing,
+        height: thickness,
+        color: color
+    )
+
+    \alias width: Distance = total_w;
+    \alias height: Distance = top_above_baseline;
+    \alias baseline: Distance = y + top_above_baseline;
+}
+
+// Atomic non-breaking inline run (keeps a word, \DoubleEmDash{}, and closing quote together on one line)
+\InlineBox NoBreak(
+    color: Color = #111111,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    env font: Font
+) {
+    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
+    \let t = \Text(x: x, y: y, font: font, color: color, text_bounds: grid_bounds) {
+        \Children
+    };
+
+    \alias width: Distance = t.width;
+    \alias height: Distance = t.height;
+    \alias baseline: Distance = t.baseline;
+}
+
 // Inline Small Caps span (scales uppercase glyphs to match Victorian small-cap optical height)
 \Span SmallCaps(env font: Font, scale: Float = 0.74) {
     \env font = \Font(font: self.font, size: self.font.size * scale);

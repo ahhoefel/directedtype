@@ -285,8 +285,8 @@
 
         \Para(align: Align.JustifyAll) {
             The Hatter shook his head mournfully. “Not I!” he replied. “We
-            quarrelled last March——just before \Italic{he} went mad, you
-            know——” (point\-ing with his tea\=spoon at the March Hare,) “——it was
+            quarrelled last March\DoubleEmDash{}just before \Italic{he} went mad, you
+            know\DoubleEmDash{}” (point\-ing with his tea\=spoon at the March Hare,) “\DoubleEmDash{}it was
             at the great concert given by the Queen of Hearts, and I had to sing
         }
 
@@ -317,7 +317,7 @@
             \Spacer(height: 8pt)
             \VerseLine(left_margin: 36pt, indent: 0pt) { ‘Up above the world you fly, }
             \VerseLine(left_margin: 36pt, indent: 0pt) { Like a tea\=tray in the sky. }
-            \VerseLine(left_margin: 94pt, indent: 0pt) { Twinkle, twinkle————’” }
+            \VerseLine(left_margin: 94pt, indent: 0pt) { Twinkle, twinkle\DoubleEmDash(ems: 4.0){}’” }
         }
 
         // ============================================================
@@ -325,7 +325,7 @@
         // ============================================================
         \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
             Here the Dormouse shook itself, and began singing in its sleep
-            “\Italic{Twinkle, twinkle, twinkle, twinkle——}” and went on so long
+            “\Italic{Twinkle, twinkle, twinkle, twinkle\DoubleEmDash{}}” and went on so long
             that they had to pinch it to make it stop.
         }
 
@@ -403,7 +403,7 @@
         \Para {
             “Once upon a time there were three little sisters,” the Dormouse
             began in a great hurry; “and their names were Elsie, Lacie, and
-            Tillie; and they lived at the bottom of a well——”
+            Tillie; and they lived at the bottom of a well\DoubleEmDash{}”
         }
 
         \Para {
@@ -480,7 +480,7 @@
         \Para {
             “One, indeed!” said the Dormouse indig\-nantly. However, he consented
             to go on. “And so these three little sisters—they were learning to
-            draw, you know——”
+            draw, you know\DoubleEmDash{}”
         }
 
         \Para {
@@ -534,7 +534,7 @@
         \Para {
             “They were learning to draw,” the Dormouse went on, yawning and
             rubbing its eyes, for it was getting very sleepy; “and they drew all
-            manner of things—everything that begins with an M——”
+            manner of things—everything that begins with an M\DoubleEmDash{}”
         }
 
         \Para {
@@ -552,7 +552,7 @@
         \Para {
             The Dormouse had closed its eyes by this time, and was going off
             into a doze; but, on being pinched by the Hatter, it woke up again
-            with a little shriek, and went on:—“——that begins with an M, such as
+            with a little shriek, and went on:—“\DoubleEmDash{}that begins with an M, such as
             mouse\=traps, and the moon, and memory, and muchness—you know you say
             things are ‘much of a muchness’—did you ever see such a thing as a
             drawing of a muchness?”
@@ -565,7 +565,7 @@
             pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
         ) {
             “Really, now you ask me,” said Alice, very much confused, “I don’t
-            think——”
+            think\DoubleEmDash{}”
         }
 
         \Para(pagination: \Pagination(breakable: false, keep_with_next: true)) {

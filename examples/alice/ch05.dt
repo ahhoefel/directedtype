@@ -419,8 +419,8 @@
         }
 
         \Para {
-            “But I’m \Italic{not} a serpent, I tell you!” said Alice. “I’m a——
-            I’m a——”
+            “But I’m \Italic{not} a serpent, I tell you!” said Alice. “I’m a\DoubleEmDash{}
+            I’m a\DoubleEmDash{}”
         }
 
         \Para {
@@ -490,7 +490,7 @@
             never do to come upon them \Italic{this} size: why, I should
             frighten them out of their wits!” So she began nibbling at the
             right\=hand bit again, and did not venture to go near the house till
-            she had brought herself down to nine inches high.
+            she had brought herself down to nine~inches~high.
         }
     };
 

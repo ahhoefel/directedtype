@@ -150,7 +150,7 @@
         \Para {
             “\Italic{Un}important, of course, I meant,” the King hastily said,
             and went on to himself in an under\-tone,
-            “important—unimportant—unimportant—important——” as if he were trying
+            “important—unimportant—unimportant—important\DoubleEmDash{}” as if he were trying
             which word sounded best.
         }
 
@@ -343,7 +343,7 @@
 
         \Para {
             “That’s the most important piece of evidence we’ve heard yet,” said
-            the King, rubbing his hands; “so now let the jury——”
+            the King, rubbing his hands; “so now let the jury\DoubleEmDash{}”
         }
 
         \Para {
@@ -377,7 +377,7 @@
             “All right, so far,” said the King, and he went on mut\-ter\-ing over
             the verses to him\-self: “‘\Italic{We know it to be true—}’ that’s the
             jury, of course—‘\Italic{I gave her one, they gave him two—}’ why,
-            that must be what he did with the tarts, you know——”
+            that must be what he did with the tarts, you know\DoubleEmDash{}”
         }
 
         \Para {

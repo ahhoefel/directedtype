@@ -285,7 +285,7 @@
         \FlushPara {
             “and I hadn’t but just begun my tea—not above a week or so—and what
             with the bread-and\=butter get\-ting so thin—and the twin\-kling of the
-            tea——”
+            \NoBreak{tea\DoubleEmDash{}”}
         }
 
         \Para {
@@ -306,7 +306,7 @@
 
         \Para {
             “I’m a poor man,” the Hatter went on, “and most things twinkled
-            after that—only the March Hare said——”
+            after that—only the March Hare said\DoubleEmDash{}”
         }
 
         \Para {
@@ -326,14 +326,14 @@
         }
 
         \Para {
-            “Well, at any rate, the Dormouse said——” the Hatter went on, looking
+            “Well, at any rate, the Dormouse said\DoubleEmDash{}” the Hatter went on, looking
             anxiously round to see if he would deny it too: but the Dormouse
             denied nothing, being fast asleep.
         }
 
         \Para {
             “After that,” continued the Hatter, “I cut some more
-            bread\=and\=butter——”
+            bread\=and\=butter\DoubleEmDash{}”
         }
 
         \Para {
@@ -418,7 +418,7 @@
         // Pages 174–175: The Duchess's Cook & calling "Alice!"
         // ============================================================
         \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
-            “——and just take his head off outside,” the Queen added to one of
+            “\DoubleEmDash{}and just take his head off outside,” the Queen added to one of
             the officers; but the Hatter was out of sight before the officer
             could get to the door.
         }

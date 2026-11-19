@@ -134,7 +134,7 @@
         }
 
         \Para {
-            “I shall sit here,” the Footman remarked, “till to\=morrow——”
+            “I shall sit here,” the Footman remarked, “till to\=morrow\DoubleEmDash{}”
         }
 
         \Para {
@@ -144,7 +144,7 @@
         }
 
         \Para {
-            “——or next day, maybe,” the Footman con\-tinued in the same tone,
+            “\DoubleEmDash{}or next day, maybe,” the Footman con\-tinued in the same tone,
             exactly as if nothing had happened.
         }
 
@@ -273,7 +273,7 @@
             very glad to get an opportunity of showing off a little of her
             knowledge. “Just think of what work it would make with the day and
             night! You see the earth takes twenty\=four hours to turn round on
-            its axis——”
+            its axis\DoubleEmDash{}”
         }
 
         \Para {
@@ -284,7 +284,7 @@
             Alice glanced rather anxiously at the cook, to see if she meant to
             take the hint; but the cook was busily stirring the soup, and seemed
             not to be listening, so she went on again: “Twenty-four hours, I
-            \Italic{think;} or is it twelve? I——”
+            \Italic{think;} or is it twelve? I\DoubleEmDash{}”
         }
 
         \Para(align: Align.JustifyAll) {
@@ -416,7 +416,7 @@
             “it would have made a dreadfully ugly child: but it makes rather a
             handsome pig, I think.” And she be\-gan thinking over other children
             she knew, who might do very well as pigs, and was just say\-ing to
-            herself, “if one only knew the right way to change them——” when she
+            herself, “if one only knew the right way to change \NoBreak{them\DoubleEmDash{}”} when she
             was a little startled by seeing the Cheshire Cat sitting on a bough
             of a tree a few yards off.
         }
@@ -440,7 +440,7 @@
         }
 
         \Para {
-            “I don’t much care where——” said Alice.
+            “I don’t much care where\DoubleEmDash{}” said Alice.
         }
 
         \Para {
@@ -448,7 +448,7 @@
         }
 
         \Para {
-            “——so long as I get \Italic{somewhere,}” Alice added as an
+            “\DoubleEmDash{}so long as I get \Italic{somewhere,}” Alice added as an
             explanation.
         }
 

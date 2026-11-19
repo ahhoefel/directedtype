@@ -48,7 +48,7 @@
             new kind of rule, “and vinegar that makes them sour—and camomile
             that makes them bitter—and—and barley\=sugar and such things that
             make children sweet\=tempered. I only wish people knew \Italic{that:}
-            then they wouldn’t be so stingy about it, you know——”
+            then they wouldn’t be so stingy about it, you know\DoubleEmDash{}”
         }
 
         \Para {
@@ -83,9 +83,9 @@
 
         \WrapLeftStack(
             src: "images/tenniel_32.png",
-            img_offset_x: -1.6pt,
+            img_offset_x: -4pt,
             img_offset_y: 4pt,
-            narrow_x: 169.5pt
+            narrow_x: 166pt
         ) {
             \FlushPara {
                 right height to rest her chin upon Alice’s shoul\-der, and it was
@@ -216,7 +216,7 @@
 
         \Para {
             “Just about as much right,” said the Duchess, “as pigs have to fly;
-            and the m——”
+            and the m\DoubleEmDash{}”
         }
 
         \Para {
@@ -383,7 +383,7 @@
             “When we were little,” the Mock Turtle went on at last, more calmly,
             though still sob\-bing a little now and then, “we went to school in
             the sea. The master was an old Turtle—we used to call him
-            Tortoise——”
+            Tortoise\DoubleEmDash{}”
         }
 
         \Para {
@@ -404,7 +404,7 @@
         }
 
         \Para {
-            “Yes, we went to school in the sea, though you mayn’t believe it——”
+            “Yes, we went to school in the sea, though you mayn’t believe it\DoubleEmDash{}”
         }
 
         \Para {
@@ -422,7 +422,7 @@
 
         \Para {
             “We had the best of educations—in fact, we went to school every
-            day——”
+            day\DoubleEmDash{}”
         }
 
         \Para {

@@ -190,15 +190,15 @@
 
         \WrapLeft(
             src: "images/tenniel_12.png",
-            img_offset_x: -1pt,
+            img_offset_x: -9.5pt,
             img_offset_y: 4pt,
-            narrow_x: 154.5pt,
+            narrow_x: 144.5pt,
             align: Align.Justify
         ) {
             out her hand, and made a snatch in the air. She did not get hold of
             any\-thing, but she heard a lit\-tle shriek and a fall, and a crash of
             bro\-ken glass, from which she con\-cluded that it was just pos\-sible
-            it had fall\-en into a cucumber\=frame, or some\-thing of the sort.
+            it had fall\-en into a cu\-cum\-ber-frame, or some\-thing of the sort.
         }
 
         // ============================================================
@@ -275,9 +275,9 @@
         // ============================================================
         \WrapLeftStack(
             src: "images/tenniel_13.png",
-            img_offset_x: -6pt,
+            img_offset_x: -7.5pt,
             img_offset_y: 12pt,
-            narrow_x: 128.5pt,
+            narrow_x: 123pt,
             break_before: Break.Page
         ) {
             \FlushPara {

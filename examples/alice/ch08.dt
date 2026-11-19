@@ -60,9 +60,9 @@
 
         \WrapLeftStack(
             src: "images/tenniel_28.png",
-            img_offset_x: -1.6pt,
+            img_offset_x: -4pt,
             img_offset_y: 13pt,
-            narrow_x: 166.5pt
+            narrow_x: 163pt
         ) {
             \Para {
                 “What for?” said the one who had spo\-ken first.
@@ -81,7 +81,7 @@
 
         \FlushPara {
             down his brush, and had just begun “Well, of all the unjust
-            things——” when his eye chanced to fall upon Alice, as she stood
+            things\DoubleEmDash{}” when his eye chanced to fall upon Alice, as she stood
             watching them, and he checked himself suddenly: the others looked
             round also, and all of them bowed low.
         }
@@ -100,7 +100,7 @@
             a \Italic{red} rose\=tree, and we put a white one in by mistake; and
             if the Queen was to find it out, we should all have our heads cut
             off, you know. So you see, Miss, we’re doing our best, afore she
-            comes, to——” At this moment Five, who had been anxiously looking
+            comes, \NoBreak{to\DoubleEmDash{}”} At this moment Five, who had been anxiously looking
             across the garden, called out “The Queen! The Queen!” and the three
             gardeners instantly threw them\-selves flat upon their faces. There
             was a sound of many footsteps, and Alice looked round, eager to see
@@ -168,9 +168,9 @@
         \TopPlate(src: "images/tenniel_29.png", grid_lines: 18.0, img_top: 3.5pt)
 
         \Para {
-            The Queen turned crimson with fury, and, after glaring at her for a
-            moment like a wild beast, began screaming, “Off with her head!
-            Off——”
+            The Queen turned crim\-son with fury, and, after glar\-ing at her for a
+            mo\-ment like a wild beast, began scream\-ing, “Off with her head!
+            Off\DoubleEmDash{}”
         }
 
         // ============================================================
@@ -209,7 +209,7 @@
 
         \Para {
             “May it please your Majesty,” said Two, in a very humble tone, going
-            down on one knee as he spoke, “we were trying——”
+            down on one knee as he spoke, “we were trying\DoubleEmDash{}”
         }
 
         \Para {
@@ -284,10 +284,10 @@
         }
 
         \Para {
-            “She boxed the Queen’s ears——” the Rabbit began. Alice gave a little
+            “She boxed the Queen’s ears\DoubleEmDash{}” the Rabbit began. Alice gave a little
             scream of laughter. “Oh, hush!” the Rabbit whispered in a frightened
             tone. “The Queen will hear you! You see, she came rather late, and
-            the Queen said——”
+            the Queen said\DoubleEmDash{}”
         }
 
         \Para {
@@ -311,9 +311,9 @@
 
         \WrapLeftStack(
             src: "images/tenniel_30.png",
-            img_offset_x: 3pt,
+            img_offset_x: 0.5pt,
             img_offset_y: 12pt,
-            narrow_x: 156pt
+            narrow_x: 152.5pt
         ) {
             \FlushPara {
                 the sol\-diers had to dou\-ble them\-selves up and to stand on their
@@ -400,9 +400,9 @@
         }
 
         \Para {
-            “Not at all,” said Alice: “she’s so ex\-tremely——” Just then she
+            “Not at all,” said Alice: “she’s so ex\-\NoBreak{tremely\DoubleEmDash{}”} Just then she
             noticed that the Queen was close behind her, listening: so she went
-            on, “——likely to win, that it’s hardly worth while finishing the
+            on, “\DoubleEmDash{}likely to win, that it’s hardly worth while finishing the
             game.”
         }
 

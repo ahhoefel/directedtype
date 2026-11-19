@@ -42,9 +42,9 @@
         }
 
         \Para {
-            “You may not have lived much under the sea——” (“I haven’t,” said
-            Alice)—“and perhaps you were never even introduced to a lobster——”
-            (Alice began to say “I once tasted——” but checked herself hastily,
+            “You may not have lived much under the \NoBreak{sea\DoubleEmDash{}”} (“I haven’t,” said
+            Alice)—“and perhaps you were never even introduced to a lobster\DoubleEmDash{}”
+            (Alice began to say “I once tasted\DoubleEmDash{}” but checked herself hastily,
             and said “No, never”)—“so you can have no idea what a delightful
             thing a Lobster\=Quadrille is!”
         }
@@ -55,12 +55,12 @@
 
         \Para {
             “Why,” said the Gryphon, “you first form into a line along the
-            sea\=shore——”
+            sea\=shore\DoubleEmDash{}”
         }
 
         \Para {
             “Two lines!” cried the Mock Turtle. “Seals, turtles, salmon, and so
-            on; then, when you’ve cleared all the jelly\=fish out of the way——”
+            on; then, when you’ve cleared all the jelly\=fish out of the way\DoubleEmDash{}”
         }
 
         \Para {
@@ -68,7 +68,7 @@
         }
 
         \Para {
-            “——you advance twice——”
+            “\DoubleEmDash{}you advance twice\DoubleEmDash{}”
         }
 
         \Para {
@@ -77,16 +77,16 @@
 
         \Para {
             “Of course,” the Mock Turtle said: “advance twice, set to
-            partners——”
+            partners\DoubleEmDash{}”
         }
 
         \Para {
-            “——change lobsters, and retire in same order,” continued the
+            “\DoubleEmDash{}change lobsters, and retire in same order,” continued the
             Gryphon.
         }
 
         \Para {
-            “Then, you know,” the Mock Turtle went on, “you throw the——”
+            “Then, you know,” the Mock Turtle went on, “you throw the\DoubleEmDash{}”
         }
 
         \Para {
@@ -94,7 +94,7 @@
         }
 
         \Para {
-            “——as far out to sea as you can——”
+            “\DoubleEmDash{}as far out to sea as you can\DoubleEmDash{}”
         }
 
         \Para {
@@ -209,7 +209,7 @@
         }
 
         \Para {
-            “Yes,” said Alice, “I’ve often seen them at dinn——” she checked
+            “Yes,” said Alice, “I’ve often seen them at dinn\DoubleEmDash{}” she checked
             herself hastily.
         }
 
@@ -226,7 +226,7 @@
         \Para {
             “You’re wrong about the crumbs,” said the Mock Turtle: “crumbs would
             all wash off in the sea. But they \Italic{have} their tails in their
-            mouths; and the reason is——” here the Mock Turtle yawned and shut
+            mouths; and the reason is\DoubleEmDash{}” here the Mock Turtle yawned and shut
             his eyes.—“Tell her about the reason and all that,” he said to the
             Gryphon.
         }
@@ -366,9 +366,9 @@
         // ============================================================
         \WrapLeftStack(
             src: "images/tenniel_36.png",
-            img_offset_x: -10.5pt,
+            img_offset_x: -16pt,
             img_offset_y: 3.4pt,
-            narrow_x: 147.5pt,
+            narrow_x: 144pt,
             min_grid_lines: 15.2,
             break_before: Break.Page
         ) {
@@ -443,7 +443,7 @@
         \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, break_before: Break.Page) {
             \Spacer(height: 4pt)
             \VerseLine(left_margin: 10pt, indent: 0pt) { “I passed by his garden, and marked, with one eye, }
-            \VerseLine(left_margin: 10pt, indent: 0pt) { How the owl and the oyster were sharing a pie——” }
+            \VerseLine(left_margin: 10pt, indent: 0pt) { How the owl and the oyster were sharing a pie\DoubleEmDash{}” }
             \Spacer(height: 24pt)
         }
 

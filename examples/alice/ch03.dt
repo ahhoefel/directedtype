@@ -155,7 +155,7 @@
             ‘William the Conqueror, whose cause was favoured by the pope, was
             soon submitted to by the English, who wanted leaders, and had been
             of late much accustomed to usurpation and conquest. Edwin and
-            Morcar, the earls of Mercia and Northumbria—’”
+            Morcar, the earls of Mercia and North\-um\-bria—’”
         }
 
         \Para {
@@ -344,7 +344,7 @@
         \FlushPara(
             pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
         ) {
-            so that her idea of the tale was something like this:——“Fury said to
+            so that her idea of the tale was something like this:\DoubleEmDash{}“Fury said to
         }
 
         \MouseTailCalligram()
