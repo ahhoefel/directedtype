@@ -43,7 +43,7 @@
             The table was a large one, but the three were all crowded together
             at one corner of it: “No room! No room!” they cried out when they
             saw Alice coming. “There’s \Italic{plenty} of room!” said Alice
-            indignantly, and she sat down in a large arm-chair at one end of the
+            indignantly, and she sat down in a large arm\=chair at one end of the
             table.
         }
 
@@ -92,12 +92,12 @@
 
         \Para {
             The Hatter opened his eyes very wide on hearing this; but all he
-            \Italic{said} was, “Why is a raven like a writing-desk?”
+            \Italic{said} was, “Why is a raven like a writing\=desk?”
         }
 
         \Para {
             “Come, we shall have some fun now!” thought Alice. “I’m glad they’ve
-            begun asking riddles.—I believe I can guess that,” she added aloud.
+            begun ask\-ing riddles.—I believe I can guess that,” she added aloud.
         }
 
         \Para {
@@ -142,13 +142,13 @@
             “It \Italic{is} the same thing with you,” said the Hatter, and here
             the conversation dropped, and the party sat silent for a minute,
             while Alice thought over all she could remember about ravens and
-            writing-desks, which wasn’t much.
+            writing\=desks, which wasn’t much.
         }
 
         \Para {
             The Hatter was the first to break the silence. “What day of the
-            month is it?” he said, turning to Alice: he had taken his watch out
-            of his pocket, and was looking at it uneasily, shaking it every now
+            month is it?” he said, turn\-ing to Alice: he had taken his watch out
+            of his pocket, and was looking at it uneasily, shak\-ing it every now
             and then, and holding it to his ear.
         }
 
@@ -167,7 +167,7 @@
 
         \Para {
             “Yes, but some crumbs must have got in as well,” the Hatter
-            grumbled: “you shouldn’t have put it in with the bread-knife.”
+            grumbled: “you shouldn’t have put it in with the bread\=knife.”
         }
 
         \Para {
@@ -259,10 +259,10 @@
         \Para {
             “Ah! that accounts for it,” said the Hatter. “He won’t stand
             beating. Now, if you only kept on good terms with him, he’d do
-            almost anything you liked with the clock. For instance, suppose it
-            were nine o’clock in the morning, just time to begin lessons: you’d
+            almost anything you liked with the clock. For in\-stance, suppose it
+            were nine o’clock in the morn\-ing, just time to begin lessons: you’d
             only have to whisper a hint to Time, and round goes the clock in a
-            twinkling! Half-past one, time for dinner!”
+            twinkling! Half\=past one, time for dinner!”
         }
 
         \Para {
@@ -276,7 +276,7 @@
 
         \Para {
             “Not at first, perhaps,” said the Hatter: “but you could keep it to
-            half-past one as long as you liked.”
+            half\=past one as long as you liked.”
         }
 
         \Para {
@@ -286,7 +286,7 @@
         \Para(align: Align.JustifyAll) {
             The Hatter shook his head mournfully. “Not I!” he replied. “We
             quarrelled last March——just before \Italic{he} went mad, you
-            know——” (pointing with his tea-spoon at the March Hare,) “——it was
+            know——” (point\-ing with his tea\=spoon at the March Hare,) “——it was
             at the great concert given by the Queen of Hearts, and I had to sing
         }
 
@@ -316,7 +316,7 @@
         \PoemBlock(size: 10pt, leading: 15.5pt, italic: true) {
             \Spacer(height: 8pt)
             \VerseLine(left_margin: 36pt, indent: 0pt) { ‘Up above the world you fly, }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Like a tea-tray in the sky. }
+            \VerseLine(left_margin: 36pt, indent: 0pt) { Like a tea\=tray in the sky. }
             \VerseLine(left_margin: 94pt, indent: 0pt) { Twinkle, twinkle————’” }
         }
 
@@ -345,12 +345,12 @@
 
         \Para {
             A bright idea came into Alice’s head. “Is that the reason so many
-            tea-things are put out here?” she asked.
+            tea\=things are put out here?” she asked.
         }
 
         \Para {
             “Yes, that’s it,” said the Hatter with a sigh: “it’s always
-            tea-time, and we’ve no time to wash the things between whiles.”
+            tea\=time, and we’ve no time to wash the things between whiles.”
         }
 
         \Para {
@@ -442,7 +442,7 @@
 
         \Para {
             “You mean you can’t take \Italic{less,}” said the Hatter: “it’s very
-            easy to take \Italic{more} than nothing.”
+            easy to take \Italic{more} than no\-thing.”
         }
 
         \Para {
@@ -455,30 +455,30 @@
 
         \Para {
             Alice did not quite know what to say to this: so she helped herself
-            to some tea and bread-and-butter, and then turned to the Dormouse,
+            to some tea and bread\=and\=butter, and then turned to the Dor\-mouse,
             and repeated her question. “Why did they live at the bottom of a
             well?”
         }
 
         \Para {
             The Dormouse again took a minute or two to think about it, and then
-            said, “It was a treacle-well.”
+            said, “It was a treacle\=well.”
         }
 
         \Para {
-            “There’s no such thing!” Alice was beginning very angrily, but the
+            “There’s no such thing!” Alice was begin\-ning very angrily, but the
             Hatter and the March Hare went “Sh! sh!” and the Dormouse sulkily
             remarked, “If you can’t be civil, you’d better finish the story for
             yourself.”
         }
 
         \Para {
-            “No, please go on!” Alice said very humbly; “I won’t interrupt
+            “No, please go on!” Alice said very hum\-bly; “I won’t interrupt
             again. I dare say there may be \Italic{one.}”
         }
 
         \Para {
-            “One, indeed!” said the Dormouse indignantly. However, he consented
+            “One, indeed!” said the Dormouse indig\-nantly. However, he consented
             to go on. “And so these three little sisters—they were learning to
             draw, you know——”
         }
@@ -488,7 +488,7 @@
         }
 
         \Para {
-            “Treacle,” said the Dormouse, without considering at all this time.
+            “Treacle,” said the Dormouse, without consider\-ing at all this time.
         }
 
         \Para {
@@ -501,7 +501,7 @@
             Hare moved into the Dormouse’s place, and Alice rather unwillingly
             took the place of the March Hare. The Hatter was the only one who
             got any advantage from the change: and Alice was a good deal worse
-            off than before, as the March Hare had just upset the milk-jug into
+            off than before, as the March Hare had just up\-set the milk\=jug into
             his plate.
         }
 
@@ -512,8 +512,8 @@
         }
 
         \Para {
-            “You can draw water out of a water-well,” said the Hatter; “so I
-            should think you could draw treacle out of a treacle-well—eh,
+            “You can draw water out of a water\=well,” said the Hatter; “so I
+            should think you could draw treacle out of a treacle\=well—eh,
             stupid?”
         }
 
@@ -553,7 +553,7 @@
             The Dormouse had closed its eyes by this time, and was going off
             into a doze; but, on being pinched by the Hatter, it woke up again
             with a little shriek, and went on:—“——that begins with an M, such as
-            mouse-traps, and the moon, and memory, and muchness—you know you say
+            mouse\=traps, and the moon, and memory, and muchness—you know you say
             things are ‘much of a muchness’—did you ever see such a thing as a
             drawing of a muchness?”
         }
@@ -588,14 +588,14 @@
         // ============================================================
         \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
             “At any rate I’ll never go \Italic{there} again!” said Alice as she
-            picked her way through the wood. “It’s the stupidest tea-party I
+            picked her way through the wood. “It’s the stupidest tea\=party I
             ever was at in all my life!”
         }
 
         \Para {
             Just as she said this, she noticed that one of the trees had a door
             leading right into it. “That’s very curious!” she thought. “But
-            everything’s curious to-day. I think I may as well go in at once.”
+            everything’s curious to\=day. I think I may as well go in at once.”
             And in she went.
         }
 
@@ -607,7 +607,7 @@
             the mushroom (she had kept a piece of it in her pocket) till she was
             about a foot high: then she walked down the little passage: and
             \Italic{then}—she found herself at last in the beautiful garden,
-            among the bright flower-beds and the cool fountains.
+            among the bright flower\=beds and the cool fountains.
         }
     };
 

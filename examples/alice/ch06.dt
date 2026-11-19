@@ -62,8 +62,8 @@
             \DropInitial{F}//
             \SmallCaps{OR} a minute or two she stood looking at the house, and
             wondering what to do next, when suddenly a footman in livery came
-            running out of the wood—(she considered him to be a footman because
-            he was in livery: otherwise, judging by his face only, she would
+            run\-ning out of the wood—(she considered him to be a footman because
+            he was in livery: other\-wise, judging by his face only, she would
             have called him a fish)—and rapped loudly at the door with his
             knuckles. It was opened by another footman in livery, with a round
             face, and large eyes like a frog; and both footmen, Alice noticed,
@@ -82,12 +82,12 @@
         }
 
         \Para {
-            The Fish-Footman began by producing from under his arm a great
+            The Fish\=Footman began by producing from under his arm a great
             letter, nearly as large as himself, and this he handed over to the
             other, saying, in a solemn tone, “For the Duchess. An invitation
-            from the Queen to play croquet.” The Frog-Footman repeated, in the
+            from the Queen to play croquet.” The Frog\=Footman repeated, in the
             same solemn tone, only changing the order of the words a little,
-            “From the Queen. An invitation for the Duchess to play croquet.”
+            “From the Queen. An invi\-tation for the Duchess to play croquet.”
         }
 
         // ============================================================
@@ -100,7 +100,7 @@
         \Para {
             Alice laughed so much at this, that she had to run back into the
             wood for fear of their hearing her; and when she next peeped out the
-            Fish-Footman was gone, and the other was sitting on the ground near
+            Fish\=Footman was gone, and the other was sitting on the ground near
             the door, staring stupidly up into the sky.
         }
 
@@ -123,7 +123,7 @@
         }
 
         \Para {
-            “There might be some sense in your knocking,” the Footman went on
+            “There might be some sense in your knock\-ing,” the Footman went on
             without attending to her, “if we had the door between us. For
             instance, if you were \Italic{inside,} you might knock, and I could
             let you out, you know.” He was looking up into the sky all the time
@@ -134,7 +134,7 @@
         }
 
         \Para {
-            “I shall sit here,” the Footman remarked, “till to-morrow——”
+            “I shall sit here,” the Footman remarked, “till to\=morrow——”
         }
 
         \Para {
@@ -144,7 +144,7 @@
         }
 
         \Para {
-            “——or next day, maybe,” the Footman continued in the same tone,
+            “——or next day, maybe,” the Footman con\-tinued in the same tone,
             exactly as if nothing had happened.
         }
 
@@ -153,7 +153,7 @@
         }
 
         \Para {
-            “\Italic{Are} you to get in at all?” said the Footman. “That’s the
+            “\Italic{Are} you to get in at all?” said the Foot\-man. “That’s the
             first question, you know.”
         }
 
@@ -205,7 +205,7 @@
         \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
             There was certainly too much of it in the air. Even the Duchess
             sneezed occasionally; and as for the baby, it was sneezing and
-            howling alternately without a moment’s pause. The only two creatures
+            howl\-ing alternately without a moment’s pause. The only two creatures
             in the kitchen that did not sneeze, were the cook, and a large cat
             which was sitting on the hearth and grinning from ear to ear.
         }
@@ -249,7 +249,7 @@
             would be as well to introduce some other subject of conversation.
             While she was trying to fix on one, the cook took the cauldron of
             soup off the fire, and at once set to work throwing everything
-            within her reach at the Duchess and the baby—the fire-irons came
+            within her reach at the Duchess and the baby—the fire\=irons came
             first; then followed a shower of saucepans, plates, and dishes. The
             Duchess took no notice of them even when they hit her; and the baby
             was howling so much already, that it was quite impossible to say
@@ -272,7 +272,7 @@
             “Which would \Italic{not} be an advantage,” said Alice, who felt
             very glad to get an opportunity of showing off a little of her
             knowledge. “Just think of what work it would make with the day and
-            night! You see the earth takes twenty-four hours to turn round on
+            night! You see the earth takes twenty\=four hours to turn round on
             its axis——”
         }
 
@@ -297,7 +297,7 @@
         // Page 85 (Recto): Duchess's Lullaby & CHORUS
         // ============================================================
         \FlushPara(pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)) {
-            lullaby to it as she did so, and giving it a violent shake at the
+            lullaby to it as she did so, and giving it a vio\-lent shake at the
             end of every line:—
         }
 
@@ -335,15 +335,15 @@
             “Here! you may nurse it a bit, if you like!” the Duchess said to
             Alice, flinging the baby at her as she spoke. “I must go and get
             ready to play croquet with the Queen,” and she hurried out of the
-            room. The cook threw a frying-pan after her as she went out, but it
+            room. The cook threw a frying\=pan after her as she went out, but it
             just missed her.
         }
 
         \Para {
-            Alice caught the baby with some difficulty, as it was a queer-shaped
+            Alice caught the baby with some difficulty, as it was a queer\=shaped
             little creature, and held out its arms and legs in all directions,
-            “just like a star-fish,” thought Alice. The poor little thing was
-            snorting like a steam-engine when she caught it, and kept doubling
+            “just like a star\=fish,” thought Alice. The poor little thing was
+            snorting like a steam\=engine when she caught it, and kept doubling
             itself up and straightening itself out again, so that altogether,
             for the first minute or two, it was as much as she could do to hold
             it.
@@ -364,7 +364,7 @@
         \Para {
             The baby grunted again, and Alice looked very anxiously into its
             face to see what was the matter with it. There could be no doubt
-            that it had a \Italic{very} turn-up nose, much more like a snout
+            that it had a \Italic{very} turn\=up nose, much more like a snout
             than a real nose; also its eyes were getting extremely small for a
             baby: altogether Alice did not like the look of the thing at all.
             “But perhaps it was only sobbing,” she thought, and looked into its
@@ -397,10 +397,10 @@
             narrow_x: 147pt
         ) {
             \FlushPara(font_size: 11.4pt) {
-                so violently, that she looked down into its face in some alarm.
-                This time there could be \Italic{no} mistake about it: it was
-                neither more nor less than a pig, and she felt that it would be
-                quite absurd for her to carry it any further.
+                so vio\-lently, that she looked down into its face in some alarm.
+                This time there could be \Italic{no} mis\-take about it: it was
+                nei\-ther more nor less than a pig, and she felt that it would be
+                quite ab\-surd for her to car\-ry it any fur\-ther.
             }
             \Para(font_size: 11.4pt, align: Align.JustifyAll) {
                 So she set the
@@ -414,15 +414,15 @@
             little creature down, and felt quite relieved to see it trot away
             quietly into the wood. “If it had grown up,” she said to herself,
             “it would have made a dreadfully ugly child: but it makes rather a
-            handsome pig, I think.” And she began thinking over other children
-            she knew, who might do very well as pigs, and was just saying to
+            handsome pig, I think.” And she be\-gan thinking over other children
+            she knew, who might do very well as pigs, and was just say\-ing to
             herself, “if one only knew the right way to change them——” when she
             was a little startled by seeing the Cheshire Cat sitting on a bough
             of a tree a few yards off.
         }
 
         \Para {
-            The Cat only grinned when it saw Alice. It looked good-natured, she
+            The Cat only grinned when it saw Alice. It looked good\=natured, she
             thought: still it had \Italic{very} long claws and a great many
             teeth, so she felt that it ought to be treated with respect.
         }
@@ -514,11 +514,11 @@
             \Para(font_size: 11.1pt) {
                 “Well, then,” the Cat went on, “you see, a dog growls when it’s
                 angry, and wags its tail when it’s pleased. Now \Italic{I} growl
-                when I’m pleased, and wag my tail when I’m angry. Therefore I’m
+                when I’m pleased, and wag my tail when I’m angry. There\-fore I’m
                 mad.”
             }
             \Para(font_size: 11.1pt) {
-                “\Italic{I} call it purring, not growling,” said Alice.
+                “\Italic{I} call it pur\-ring, not growl\-ing,” said Alice.
             }
             \Para(font_size: 11.1pt, align: Align.JustifyAll) {
                 “Call it what you like,” said the Cat. “Do you
@@ -529,7 +529,7 @@
         // Page 92 (Verso): 22 lines leading into the vanishing grin
         // ============================================================
         \FlushPara(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
-            play croquet with the Queen to-day?”
+            play croquet with the Queen to\=day?”
         }
 
         \Para {
@@ -543,12 +543,12 @@
 
         \Para {
             Alice was not much surprised at this, she was getting so used to
-            queer things happening. While she was looking at the place where it
+            queer things hap\-pening. While she was looking at the place where it
             had been, it suddenly appeared again.
         }
 
         \Para {
-            “By-the-bye, what became of the baby?” said the Cat. “I’d nearly
+            “By\=the\=bye, what became of the baby?” said the Cat. “I’d nearly
             forgotten to ask.”
         }
 
@@ -586,13 +586,13 @@
 
         \Para {
             “I said pig,” replied Alice; “and I wish you wouldn’t keep appearing
-            and vanishing so suddenly: you make one quite giddy.”
+            and vanishing so sud\-denly: you make one quite giddy.”
         }
 
         \Para {
             “All right,” said the Cat; and this time it vanished quite slowly,
             beginning with the end of the tail, and ending with the grin, which
-            remained some time after the rest of it had gone.
+            re\-mained some time after the rest of it had gone.
         }
 
         // ============================================================
@@ -609,7 +609,7 @@
             of the March Hare: she thought it must be the right house, because
             the chimneys were shaped like ears and the roof was thatched with
             fur. It was so large a house, that she did not like to go nearer
-            till she had nibbled some more of the left-hand bit of mushroom, and
+            till she had nibbled some more of the left\=hand bit of mush\-room, and
             raised herself to about two feet high: even then she walked up
             towards it rather timidly, saying to herself, “Suppose it should be
             raving mad after all! I almost wish I’d gone to see the Hatter

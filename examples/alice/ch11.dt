@@ -62,7 +62,7 @@
         }
 
         \Para {
-            “And that’s the jury-box,” thought Alice, “and those twelve
+            “And that’s the jury\=box,” thought Alice, “and those twelve
             creatures,” (she was obliged to say “creatures,” you see, because
             some of them were animals, and some were birds,) “I suppose they are
             the jurors.” She said this last word two or three times over to
@@ -90,7 +90,7 @@
         }
 
         \Para {
-            Alice could see, as well as if she were looking over their
+            Alice could see, as well as if she were look\-ing over their
             shoulders, that all the jurors were writing down “stupid things!” on
             their slates, and she could even make out that one of them didn’t
             know how to spell “stupid,” and that he had to ask his neighbour to
@@ -115,7 +115,7 @@
 
         \Para {
             On this the White Rabbit blew three blasts on the trumpet, and then
-            unrolled the parchment scroll, and read as follows:—
+            unrolled the parch\-ment scroll, and read as follows:—
         }
 
         // ============================================================
@@ -139,7 +139,7 @@
         // Pages 167–169: Calling the First Witness (The Hatter)
         // ============================================================
         \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
-            “Not yet, not yet!” the Rabbit hastily interrupted. “There’s a great
+            “Not yet, not yet!” the Rabbit hastily in\-terrupted. “There’s a great
             deal to come before that!”
         }
 
@@ -150,7 +150,7 @@
 
         \Para {
             The first witness was the Hatter. He came in with a teacup in one
-            hand, and a piece of bread-and-butter in the other. “I beg pardon,
+            hand, and a piece of bread\=and\=butter in the other. “I beg pardon,
             your Majesty,” he began, “for bringing these in: but I hadn’t quite
             finished my tea when I was sent for.”
         }
@@ -161,7 +161,7 @@
 
         \Para {
             The Hatter looked at the March Hare, who had followed him into the
-            court, arm-in-arm with the Dormouse. “Fourteenth of March, I
+            court, arm\=in\=arm with the Dormouse. “Fourteenth of March, I
             \Italic{think} it was,” he said.
         }
 
@@ -211,7 +211,7 @@
             This did not seem to encourage the witness at all: he kept shifting
             from one foot to the other, looking uneasily at the Queen, and in
             his confusion he bit a large piece out of his teacup instead of the
-            bread-and-butter.
+            bread\=and\=butter.
         }
 
         \Para {
@@ -267,24 +267,24 @@
             src: "images/tenniel_38.png",
             img_offset_x: -0.4pt,
             img_offset_y: 12pt,
-            narrow_x: 144.5pt
+            narrow_x: 147pt
         ) {
-            \FlushPara(font_size: 10.1pt) {
+            \FlushPara(font_size: 10.9pt) {
                 trembled so, that he shook both his shoes off.
             }
-            \Para(font_size: 10.1pt) {
-                “Give your evidence,” the King repeated angrily, “or I’ll have
-                you executed, whether you’re nervous or not.”
+            \Para(font_size: 10.9pt) {
+                “Give your evi\-dence,” the King re\-peated an\-grily, “or I’ll have
+                you execu\-ted, wheth\-er you’re ner\-vous or not.”
             }
-            \Para(font_size: 10.1pt, align: Align.JustifyAll) {
-                “I’m a poor man, your Majesty,” the Hatter began, in a trembling
+            \Para(font_size: 10.9pt, align: Align.JustifyAll) {
+                “I’m a poor man, your Maj\-esty,” the Hatter began, in a trem\-bling
                 voice,
             }
         }
 
-        \FlushPara(font_size: 11.45pt) {
+        \FlushPara {
             “and I hadn’t but just begun my tea—not above a week or so—and what
-            with the bread-and-butter getting so thin—and the twinkling of the
+            with the bread-and\=butter getting so thin—and the twinkling of the
             tea——”
         }
 
@@ -333,7 +333,7 @@
 
         \Para {
             “After that,” continued the Hatter, “I cut some more
-            bread-and-butter——”
+            bread\=and\=butter——”
         }
 
         \Para {
@@ -350,7 +350,7 @@
         }
 
         \Para {
-            The miserable Hatter dropped his teacup and bread-and-butter, and
+            The miserable Hatter dropped his teacup and bread\=and\=butter, and
             went down on one knee. “I’m a poor man, your Majesty,” he began.
         }
 
@@ -359,7 +359,7 @@
         }
 
         \Para {
-            Here one of the guinea-pigs cheered, and was immediately suppressed
+            Here one of the guinea\=pigs cheered, and was immediately suppressed
             by the officers of the court. (As that is rather a hard word, I will
             just explain to you how it was done. They had a large canvas bag,
             which tied up at the mouth with strings: into this they slipped the
@@ -370,7 +370,7 @@
             “I’m glad I’ve seen that done,” thought Alice. “I’ve so often read
             in the newspapers, at the end of trials, ‘There was some attempt at
             applause, which was immediately suppressed by the officers of the
-            court,’ and I never understood what it meant till now.”
+            court,’ and I never under\-stood what it meant till now.”
         }
 
         \Para {
@@ -394,13 +394,13 @@
         }
 
         \Para(pagination: \Pagination(breakable: false, keep_with_next: true)) {
-            Here the other guinea-pig cheered, and was suppressed.
+            Here the other guinea\=pig cheered, and was suppressed.
         }
 
         \MidPlate(src: "images/tenniel_39.png", grid_lines: 10.0, img_top: 12pt)
 
         \Para {
-            “Come, that finished the guinea-pigs!” thought Alice. “Now we shall
+            “Come, that finished the guinea\=pigs!” thought Alice. “Now we shall
             get on better.”
         }
 
@@ -428,7 +428,7 @@
         }
 
         \Para {
-            The next witness was the Duchess’s cook. She carried the pepper-box
+            The next witness was the Duchess’s cook. She carried the pepper\=box
             in her hand, and Alice guessed who it was, even before she got into
             the court, by the way the people near the door began sneezing all at
             once.
@@ -444,7 +444,7 @@
 
         \Para {
             The King looked anxiously at the White Rabbit, who said in a low
-            voice, “Your Majesty must cross-examine \Italic{this} witness.”
+            voice, “Your Majesty must cross\=examine \Italic{this} witness.”
         }
 
         \Para {
@@ -464,7 +464,7 @@
 
         \Para {
             “Collar that Dormouse!” the Queen shrieked out. “Behead that
-            Dormouse! Turn that Dormouse out of court! Suppress him! Pinch him!
+            Dormouse! Turn that Dor\-mouse out of court! Suppress him! Pinch him!
             Off with his whiskers!”
         }
 
@@ -477,7 +477,7 @@
         \Para {
             “Never mind!” said the King, with an air of great relief. “Call the
             next witness.” And he added in an undertone to the Queen, “Really,
-            my dear, \Italic{you} must cross-examine the next witness. It quite
+            my dear, \Italic{you} must cross\=examine the next witness. It quite
             makes my forehead ache!”
         }
 

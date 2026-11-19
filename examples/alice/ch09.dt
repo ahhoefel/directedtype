@@ -44,10 +44,10 @@
             Duchess,” she said to herself, (not in a very hopeful tone though,)
             “I won’t have any pepper in my kitchen \Italic{at all.} Soup does
             very well without—Maybe it’s always pepper that makes people
-            hot-tempered,” she went on, very much pleased at having found out a
+            hot\=tempered,” she went on, very much pleased at having found out a
             new kind of rule, “and vinegar that makes them sour—and camomile
-            that makes them bitter—and—and barley-sugar and such things that
-            make children sweet-tempered. I only wish people knew \Italic{that:}
+            that makes them bitter—and—and barley\=sugar and such things that
+            make children sweet\=tempered. I only wish people knew \Italic{that:}
             then they wouldn’t be so stingy about it, you know——”
         }
 
@@ -64,7 +64,7 @@
         }
 
         \Para {
-            “Tut, tut, child!” said the Duchess. “Everything’s got a moral, if
+            “Tut, tut, child!” said the Duchess. “Every\-thing’s got a moral, if
             only you can find it.” And she squeezed herself up closer to Alice’s
             side as she spoke.
         }
@@ -88,8 +88,8 @@
             narrow_x: 161pt
         ) {
             \FlushPara(font_size: 11.3pt) {
-                right height to rest her chin upon Alice’s shoulder, and it was
-                an uncomfortably sharp chin. However, she did not like to be
+                right height to rest her chin upon Alice’s shoul\-der, and it was
+                an un\-comfortably sharp chin. How\-ever, she did not like to be
                 rude, so she bore it as well as she could.
             }
             \Para(font_size: 11.3pt, align: Align.JustifyAll) {
@@ -129,13 +129,13 @@
         \Para {
             “I dare say you’re wondering why I don’t put my arm round your
             waist,” the Duchess said after a pause: “the reason is, that I’m
-            doubtful about the temper of your flamingo. Shall I try the
+            doubt\-ful about the temper of your flamingo. Shall I try the
             experiment?”
         }
 
         \Para {
             “He might bite,” Alice cautiously replied, not feeling at all
-            anxious to have the experiment tried.
+            anxious to have the experi\-ment tried.
         }
 
         \Para {
@@ -158,14 +158,14 @@
 
         \Para {
             “Of course it is,” said the Duchess, who seemed ready to agree to
-            everything that Alice said; “there’s a large mustard-mine near here.
+            everything that Alice said; “there’s a large mustard\=mine near here.
             And the moral of that is—‘The more there is of mine, the less there
             is of yours.’”
         }
 
         \Para {
             “Oh, I know!” exclaimed Alice, who had not attended to this last
-            remark, “it’s a vegetable. It doesn’t look like one, but it is.”
+            remark, “it’s a veget\-able. It doesn’t look like one, but it is.”
         }
 
         \Para(font_size: 11.2pt) {
@@ -195,7 +195,7 @@
 
         \Para {
             “Oh, don’t talk about trouble!” said the Duchess. “I make you a
-            present of everything I’ve said as yet.”
+            present of every\-thing I’ve said as yet.”
         }
 
         \Para {
@@ -244,7 +244,7 @@
         \Para {
             “Let’s go on with the game,” the Queen said to Alice; and Alice was
             too much frightened to say a word, but slowly followed her back to
-            the croquet-ground.
+            the croquet\=ground.
         }
 
         \Para {
@@ -288,7 +288,7 @@
 
         \Para(font_size: 11.2pt) {
             As they walked off together, Alice heard the King say in a low
-            voice, to the company generally, “You are all pardoned.” “Come,
+            voice, to the company gener\-ally, “You are all pardoned.” “Come,
             \Italic{that’s} a good thing!” she said to herself, for she had felt
             quite unhappy at the number of executions the Queen had ordered.
         }
@@ -367,7 +367,7 @@
 
         \Para {
             These words were followed by a very long silence, broken only by an
-            occasional exclamation of “Hjckrrh!” from the Gryphon, and the
+            occasional exclama\-tion of “Hjckrrh!” from the Gryphon, and the
             constant heavy sobbing of the Mock Turtle. Alice was very nearly
             getting up and saying, “Thank you, sir, for your interesting story,”
             but she could not help thinking there \Italic{must} be more to come,
@@ -381,7 +381,7 @@
 
         \Para {
             “When we were little,” the Mock Turtle went on at last, more calmly,
-            though still sobbing a little now and then, “we went to school in
+            though still sob\-bing a little now and then, “we went to school in
             the sea. The master was an old Turtle—we used to call him
             Tortoise——”
         }
@@ -397,7 +397,7 @@
 
         \Para {
             “You ought to be ashamed of yourself for asking such a simple
-            question,” added the Gryphon; and then they both sat silent and
+            question,” added the Gry\-phon; and then they both sat silent and
             looked at poor Alice, who felt ready to sink into the earth. At last
             the Gryphon said to the Mock Turtle, “Drive on, old fellow! Don’t be
             all day about it!” and he went on in these words.
@@ -426,7 +426,7 @@
         }
 
         \Para {
-            “\Italic{I’ve} been to a day-school, too,” said Alice; “you needn’t
+            “\Italic{I’ve} been to a day\=school, too,” said Alice; “you needn’t
             be so proud as all that.”
         }
 
@@ -469,16 +469,16 @@
         \Para {
             “Reeling and Writhing, of course, to begin with,” the Mock Turtle
             replied; “and then the different branches of Arithmetic—Ambition,
-            Distraction, Uglification, and Derision.”
+            Dis\-traction, Uglification, and Derision.”
         }
 
         \Para {
-            “I never heard of ‘Uglification,’” Alice ventured to say. “What is
+            “I never heard of ‘Uglification,’” Alice ven\-tured to say. “What is
             it?”
         }
 
         \Para {
-            The Gryphon lifted up both its paws in surprise. “What! Never heard
+            The Gryphon lifted up both its paws in sur\-prise. “What! Never heard
             of uglifying!” it exclaimed. “You know what to beautify is, I
             suppose?”
         }
@@ -501,7 +501,7 @@
         \Para {
             “Well, there was Mystery,” the Mock Turtle replied, counting off the
             subjects on his flappers,—“Mystery, ancient and modern, with
-            Seaography: then Drawling—the Drawling-master was an old conger-eel,
+            Seaography: then Drawling—the Drawling\=master was an old conger\=eel,
             that used to come once a week: \Italic{he} taught us Drawling,
             Stretching, and Fainting in Coils.”
         }
