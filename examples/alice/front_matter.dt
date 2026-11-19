@@ -29,7 +29,7 @@
         src: src,
         x: x + (width - img.width) * 0.5,
         y: y - 6pt,
-        dpi: 190.0
+        dpi: img.file_dpi
     );
 
     \alias right: Distance = x + width;

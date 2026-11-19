@@ -118,10 +118,9 @@
     \Children
 }
 
-// Centered DPI-sized illustration block compatible with VStackStretch (preserves intrinsic 190 DPI size)
+// Centered DPI-sized illustration block compatible with VStackStretch (uses embedded PNG pHYs DPI)
 \Component CenteredPlate(
     src: Path,
-    dpi: Float = 190.0,
     top_pad: Distance = 0pt,
     bottom_pad: Distance = 0pt,
     shift_x: Distance = 0pt,
@@ -134,7 +133,7 @@
         src: src,
         x: x + (width - img.width) * 0.5 + shift_x,
         y: y + top_pad,
-        dpi: dpi
+        dpi: img.file_dpi
     );
 
     \alias right: Distance = x + width;
@@ -158,7 +157,7 @@
         src: src,
         x: x + (width - img.width) * 0.5 + shift_x,
         y: y + img_top,
-        dpi: 190.0
+        dpi: img.file_dpi
     );
 
     \alias right: Distance = x + width;
@@ -181,7 +180,7 @@
         src: src,
         x: x + (width - img.width) * 0.5 + shift_x,
         y: y + img_top,
-        dpi: 190.0
+        dpi: img.file_dpi
     );
 
     \alias right: Distance = x + width;
@@ -203,12 +202,12 @@
     env font: Font
 ) {
     \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
-    \Image(
+    \let img = \Image(
         src: src,
         x: x + img_offset_x,
         y: y + img_offset_y,
-        dpi: 190.0
-    )
+        dpi: img.file_dpi
+    );
 
     \let t = \Text(
         x: x + narrow_x,
@@ -245,12 +244,12 @@
     pagination: Pagination = \Pagination(breakable: false, break_before: break_before),
     env font: Font
 ) {
-    \Image(
+    \let img = \Image(
         src: src,
         x: x + img_offset_x,
         y: y + img_offset_y,
-        dpi: 190.0
-    )
+        dpi: img.file_dpi
+    );
 
     \let top_pad = top_blank_lines * 18.0pt;
     \let col = \VStackStretch(
@@ -289,7 +288,7 @@
         src: src,
         x: x + width + img_right_bleed - img.width,
         y: y + img_offset_y,
-        dpi: 190.0
+        dpi: img.file_dpi
     );
 
     \let t = \Text(
@@ -533,7 +532,7 @@
         src: img_src,
         x: x + (width - art.width) * 0.5,
         y: y + img_top,
-        dpi: 190.0
+        dpi: art.file_dpi
     );
 
     \let ch_label = \Text(
@@ -616,12 +615,12 @@
     \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let col_w = width - narrow_x;
 
-    \Image(
+    \let img = \Image(
         src: img_src,
         x: x + img_offset_x,
         y: y + 21pt,
-        dpi: 190.0
-    )
+        dpi: img.file_dpi
+    );
 
     \Text(
         x: x + narrow_x,
