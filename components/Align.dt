@@ -5,6 +5,7 @@
     Center,
     Right,
     Justify,
+    JustifyAll,
     Top,
     Bottom,
     Stretch,

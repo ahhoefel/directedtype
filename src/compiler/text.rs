@@ -1,18 +1,84 @@
 use parley::style::{FontFamily, FontStyle, FontWeight, StyleProperty};
 use parley::{FontContext, LayoutContext};
-use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
-static SHARED_FONT_CONTEXT: OnceLock<Mutex<FontContext>> = OnceLock::new();
+struct SharedFontStore {
+    font_cx: FontContext,
+    registered_dirs: HashSet<PathBuf>,
+}
+
+static SHARED_FONT_CONTEXT: OnceLock<Mutex<SharedFontStore>> = OnceLock::new();
 static PREWARM_STARTED: AtomicBool = AtomicBool::new(false);
+static FONT_GENERATION: AtomicU64 = AtomicU64::new(1);
+
+fn init_shared_font_store() -> Mutex<SharedFontStore> {
+    let mut store = SharedFontStore {
+        font_cx: FontContext::new(),
+        registered_dirs: HashSet::new(),
+    };
+    let _ = register_font_dir_into(&mut store, Path::new("fonts"));
+    Mutex::new(store)
+}
+
+fn register_font_dir_into(store: &mut SharedFontStore, dir: &Path) -> bool {
+    let Ok(canon) = std::fs::canonicalize(dir) else {
+        return false;
+    };
+    if !canon.is_dir() || !store.registered_dirs.insert(canon.clone()) {
+        return false;
+    }
+    let Ok(entries) = std::fs::read_dir(&canon) else {
+        return false;
+    };
+    let mut paths: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| matches!(ext.to_ascii_lowercase().as_str(), "ttf" | "otf" | "ttc"))
+                .unwrap_or(false)
+        })
+        .collect();
+    paths.sort();
+    let mut loaded_any = false;
+    for path in paths {
+        if let Ok(bytes) = std::fs::read(&path) {
+            let blob = parley::fontique::Blob::new(Arc::new(bytes));
+            store.font_cx.collection.register_fonts(blob, None);
+            loaded_any = true;
+        }
+    }
+    loaded_any
+}
+
+/// Registers any `.ttf`, `.otf`, or `.ttc` font files found in `<base_dir>/fonts`,
+/// `<base_dir>/../fonts`, or `./fonts` into the shared `FontContext`.
+pub fn register_local_fonts_for_base_dir(base_dir: &Path) {
+    let mutex = SHARED_FONT_CONTEXT.get_or_init(init_shared_font_store);
+    let mut store = mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut changed = false;
+    changed |= register_font_dir_into(&mut store, &base_dir.join("fonts"));
+    if let Some(parent) = base_dir.parent() {
+        changed |= register_font_dir_into(&mut store, &parent.join("fonts"));
+    }
+    changed |= register_font_dir_into(&mut store, Path::new("fonts"));
+    if changed {
+        FONT_GENERATION.fetch_add(1, Ordering::Release);
+    }
+}
 
 /// Spawns a background thread to scan system fonts and initialize the shared `FontContext`
 /// while parsing and AST expansion proceed on the main thread.
 pub fn prewarm_font_context() {
     if !PREWARM_STARTED.swap(true, Ordering::Relaxed) {
         std::thread::spawn(|| {
-            let _ = SHARED_FONT_CONTEXT.get_or_init(|| Mutex::new(FontContext::new()));
+            let _ = SHARED_FONT_CONTEXT.get_or_init(init_shared_font_store);
         });
     }
 }
@@ -20,18 +86,32 @@ pub fn prewarm_font_context() {
 /// Returns a `FontContext` cloned from the process-wide pre-warmed system font collection,
 /// avoiding redundant system font directory scans across threads and renderer instances.
 pub fn create_font_context() -> FontContext {
-    let mutex = SHARED_FONT_CONTEXT.get_or_init(|| Mutex::new(FontContext::new()));
+    let mutex = SHARED_FONT_CONTEXT.get_or_init(init_shared_font_store);
     mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .font_cx
         .clone()
 }
 
 thread_local! {
     static FONT_CONTEXT: RefCell<FontContext> = RefCell::new(create_font_context());
+    static LOCAL_FONT_GEN: Cell<u64> = Cell::new(FONT_GENERATION.load(Ordering::Acquire));
     static LAYOUT_CONTEXT: RefCell<LayoutContext<()>> = RefCell::new(LayoutContext::new());
     static FONT_METRICS_CACHE: RefCell<std::collections::HashMap<(u64, u64, String), FontMetrics>> =
         RefCell::new(std::collections::HashMap::new());
+}
+
+#[inline]
+fn sync_thread_local_font_context() {
+    let global_gen = FONT_GENERATION.load(Ordering::Acquire);
+    LOCAL_FONT_GEN.with(|cell| {
+        if cell.get() != global_gen {
+            FONT_CONTEXT.with(|fc| *fc.borrow_mut() = create_font_context());
+            FONT_METRICS_CACHE.with(|c| c.borrow_mut().clear());
+            cell.set(global_gen);
+        }
+    });
 }
 
 /// Measures the rendered height of the given text when wrapped to `max_width`.
@@ -550,7 +630,9 @@ pub fn shape_paragraph_lines(
             let alignment = match align {
                 Some("center") | Some("Center") => parley::Alignment::Center,
                 Some("right") | Some("Right") | Some("end") | Some("End") => parley::Alignment::End,
-                Some("justify") | Some("Justify") => parley::Alignment::Justify,
+                Some("justify") | Some("Justify") | Some("justify_all") | Some("JustifyAll") => {
+                    parley::Alignment::Justify
+                }
                 _ => parley::Alignment::Start,
             };
             layout.align(alignment, parley::layout::AlignmentOptions::default());
@@ -744,6 +826,7 @@ pub fn measure_font_metrics(
 
     let size = if font_size > 0.0 { font_size as f32 } else { 16.0 };
     let weight = if font_weight > 0.0 { font_weight as f32 } else { 400.0 };
+    sync_thread_local_font_context();
     let family_key = font_family.unwrap_or("").to_string();
     let cache_key = ((size as f64).to_bits(), (weight as f64).to_bits(), family_key);
     if let Some(cached) = FONT_METRICS_CACHE.with(|c| c.borrow().get(&cache_key).copied()) {
@@ -916,6 +999,7 @@ pub fn font_family_exists(family: &str) -> bool {
     {
         return true;
     }
+    sync_thread_local_font_context();
     FONT_CONTEXT.with(|font_cx_cell| {
         let mut font_cx = font_cx_cell.borrow_mut();
         font_cx.collection.family_id(trimmed).is_some()
@@ -1108,7 +1192,9 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
         let alignment = match align {
             Some("center") | Some("Center") => parley::Alignment::Center,
             Some("right") | Some("Right") | Some("end") | Some("End") => parley::Alignment::End,
-            Some("justify") | Some("Justify") => parley::Alignment::Justify,
+            Some("justify") | Some("Justify") | Some("justify_all") | Some("JustifyAll") => {
+                parley::Alignment::Justify
+            }
             _ => parley::Alignment::Start,
         };
         layout.align(alignment, parley::layout::AlignmentOptions::default());
@@ -1375,7 +1461,9 @@ pub fn compute_span_range_metrics_with_boxes(
         let alignment = match align {
             Some("center") | Some("Center") => parley::Alignment::Center,
             Some("right") | Some("Right") | Some("end") | Some("End") => parley::Alignment::End,
-            Some("justify") | Some("Justify") => parley::Alignment::Justify,
+            Some("justify") | Some("Justify") | Some("justify_all") | Some("JustifyAll") => {
+                parley::Alignment::Justify
+            }
             _ => parley::Alignment::Start,
         };
         layout.align(alignment, parley::layout::AlignmentOptions::default());

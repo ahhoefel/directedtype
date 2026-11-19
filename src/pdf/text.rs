@@ -152,6 +152,11 @@ pub(super) fn draw_text_node(
         .and_then(|f| f.properties.get("family"))
         .and_then(|v| v.as_str());
 
+    let font_italic = fnode
+        .and_then(|f| f.properties.get("italic"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     let text_rgba = node
         .properties
         .get("color")
@@ -182,6 +187,9 @@ pub(super) fn draw_text_node(
         if !family.is_empty() {
             builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
         }
+    }
+    if font_italic {
+        builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
     }
     if let Some(lh) = line_height_prop {
         builder.push_default(StyleProperty::LineHeight(
@@ -268,10 +276,13 @@ pub(super) fn draw_text_node(
         layout_text.break_all_lines(Some(node.rect.width as f32));
     }
 
+    let is_justify_all = matches!(align_str, Some("justify_all") | Some("JustifyAll"));
     let alignment = match align_str {
         Some("center") | Some("Center") => Alignment::Center,
         Some("right") | Some("Right") | Some("end") | Some("End") => Alignment::End,
-        Some("justify") | Some("Justify") => Alignment::Justify,
+        Some("justify") | Some("Justify") | Some("justify_all") | Some("JustifyAll") => {
+            Alignment::Justify
+        }
         _ => Alignment::Start,
     };
     layout_text.align(alignment, AlignmentOptions::default());
@@ -391,6 +402,7 @@ pub(super) fn draw_text_node(
     // 2. Render lines & glyph runs with `/ToUnicode` cluster ranges and post-glyph underlines
     let lines_info: Vec<(usize, parley::layout::Line<'_, [u8; 4]>)> =
         layout_text.lines().enumerate().collect();
+    let total_lines = lines_info.len();
 
     for (line_idx, line) in lines_info {
         if let Some(spec) = slice_spec {
@@ -398,6 +410,66 @@ pub(super) fn draw_text_node(
                 continue;
             }
         }
+
+        // When `Align.JustifyAll` is active, Parley justifies lines `0..total_lines-1` but leaves
+        // the final line (or any explicit `\n` line) ragged. Compute per-space extra advance here.
+        let is_unjustified_line = is_justify_all
+            && node.rect.width > 0.0
+            && (line_idx + 1 == total_lines
+                || active_text
+                    .get(line.text_range())
+                    .is_some_and(|s| s.ends_with('\n')));
+
+        let (line_space_extra, line_space_limit) = if is_unjustified_line {
+            let lm = line.metrics();
+            let free = (node.rect.width as f32) - lm.offset - (lm.advance - lm.trailing_whitespace);
+            if free > 0.05 {
+                let mut temp_cursor: Option<(usize, usize)> = None;
+                let mut space_flags: Vec<bool> = Vec::new();
+                for item in line.items() {
+                    if let PositionedLayoutItem::GlyphRun(gr) = item {
+                        let r = gr.run();
+                        let gc = gr.glyphs().count();
+                        let s_idx = match temp_cursor {
+                            Some((ri, idx)) if ri == r.index() => idx,
+                            _ => 0,
+                        };
+                        let gs: Vec<Range<usize>> = r
+                            .visual_clusters()
+                            .flat_map(|c| {
+                                let tr = c.text_range();
+                                c.glyphs().map(move |_| tr.clone())
+                            })
+                            .skip(s_idx)
+                            .take(gc)
+                            .collect();
+                        temp_cursor = Some((r.index(), s_idx + gs.len()));
+                        for cr in gs {
+                            let is_sp = active_text
+                                .get(cr)
+                                .is_some_and(|s| !s.is_empty() && s.chars().all(|ch| ch == ' ' || ch == '\u{00A0}'));
+                            space_flags.push(is_sp);
+                        }
+                    }
+                }
+                while space_flags.last() == Some(&true) {
+                    space_flags.pop();
+                }
+                let n_spaces = space_flags.iter().filter(|&&b| b).count();
+                if n_spaces > 0 {
+                    (free / (n_spaces as f32), n_spaces)
+                } else {
+                    (0.0, 0)
+                }
+            } else {
+                (0.0, 0)
+            }
+        } else {
+            (0.0, 0)
+        };
+
+        let mut spaces_applied = 0usize;
+        let mut line_extra_x = 0.0f32;
 
         // Track cluster slice offset within each underlying Parley `LineItem::Run` because
         // `line.items()` can split a single `Run` into multiple styled `GlyphRun`s.
@@ -439,6 +511,7 @@ pub(super) fn draw_text_node(
             let run_rgba = Rgba8::from_rgba8(brush_u8[0], brush_u8[1], brush_u8[2], brush_u8[3]);
             let (run_rgb, run_alpha) = rgba_to_krilla(run_rgba);
 
+            let run_start_extra_x = line_extra_x;
             let mut krilla_glyphs = Vec::with_capacity(glyphs_with_ranges.len());
             let mut cursor_x = 0.0f32;
             let mut min_gx = f32::MAX;
@@ -458,8 +531,23 @@ pub(super) fn draw_text_node(
                     .map(|s| s.style.baseline_shift as f32)
                     .unwrap_or(0.0);
 
-                let gx_abs = origin_x as f32 + glyph_run.offset() + cursor_x + g.x;
-                let gx_end = origin_x as f32 + glyph_run.offset() + cursor_x + g.advance;
+                let is_internal_space = spaces_applied < line_space_limit
+                    && active_text
+                        .get(cluster_range.clone())
+                        .is_some_and(|s| !s.is_empty() && s.chars().all(|ch| ch == ' ' || ch == '\u{00A0}'));
+                let extra_adv = if is_internal_space {
+                    spaces_applied += 1;
+                    line_extra_x += line_space_extra;
+                    line_space_extra
+                } else {
+                    0.0
+                };
+                let eff_advance = g.advance + extra_adv;
+
+                let gx_abs =
+                    origin_x as f32 + glyph_run.offset() + run_start_extra_x + cursor_x + g.x;
+                let gx_end =
+                    origin_x as f32 + glyph_run.offset() + run_start_extra_x + cursor_x + eff_advance;
                 if gx_abs < min_gx {
                     min_gx = gx_abs;
                 }
@@ -467,11 +555,11 @@ pub(super) fn draw_text_node(
                     max_gx = gx_end;
                 }
                 underline_gy = origin_y as f32 + glyph_run.baseline() + g.y + cluster_y_shift;
-                cursor_x += g.advance;
+                cursor_x += eff_advance;
 
                 krilla_glyphs.push(KrillaGlyph::new(
                     GlyphId::new(g.id),
-                    g.advance / run_font_size,
+                    eff_advance / run_font_size,
                     g.x / run_font_size,
                     -(g.y + cluster_y_shift) / run_font_size,
                     0.0,
@@ -481,7 +569,7 @@ pub(super) fn draw_text_node(
             }
 
             let start = Point::from_xy(
-                origin_x as f32 + glyph_run.offset(),
+                origin_x as f32 + glyph_run.offset() + run_start_extra_x,
                 origin_y as f32 + glyph_run.baseline(),
             );
 

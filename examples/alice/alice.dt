@@ -1,0 +1,16 @@
+// Alice's Adventures in Wonderland (1865 Macmillan Edition)
+// Front Matter ([i]–[x]) + Chapter I (Pages 1–14)
+
+\use "AliceStyle.dt"
+\use "front_matter.dt"
+\use "ch01.dt"
+
+\AliceBook(
+    folio_offset: 10,
+    start_page: 1,
+    font_size: 11.95pt,
+    line_height: 17.1pt
+) {
+    \FrontMatter()
+    \ChapterOne()
+}

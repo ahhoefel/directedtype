@@ -36,6 +36,7 @@ pub struct TextRenderKey {
     pub font_size: f32,
     pub font_weight: f32,
     pub font_family: Option<String>,
+    pub font_italic: bool,
     pub color: [u8; 4],
     pub align: Option<String>,
     pub spans: Vec<SpanRenderKey>,
@@ -754,6 +755,11 @@ pub fn build_scene(
                     .and_then(|f| f.properties.get("family"))
                     .and_then(|v| v.as_str());
 
+                let font_italic = fnode
+                    .and_then(|f| f.properties.get("italic"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
                 let text_color = node
                     .properties
                     .get("color")
@@ -847,6 +853,7 @@ pub fn build_scene(
                     font_size,
                     font_weight,
                     font_family: font_family.map(|s| s.to_string()),
+                    font_italic,
                     color: color_to_rgba8(&text_color),
                     align: align_str.map(|s| s.to_string()),
                     spans: span_keys,
@@ -877,6 +884,9 @@ pub fn build_scene(
                     if !family.is_empty() {
                         builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
                     }
+                }
+                if font_italic {
+                    builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
                 }
                 if let Some(lh) = line_height_prop {
                     builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
@@ -950,10 +960,13 @@ pub fn build_scene(
                     layout_text.break_all_lines(Some(node.rect.width as f32));
                 }
 
+                let is_justify_all = matches!(align_str, Some("justify_all") | Some("JustifyAll"));
                 let alignment = match align_str {
                     Some("center") | Some("Center") => Alignment::Center,
                     Some("right") | Some("Right") | Some("end") | Some("End") => Alignment::End,
-                    Some("justify") | Some("Justify") => Alignment::Justify,
+                    Some("justify") | Some("Justify") | Some("justify_all") | Some("JustifyAll") => {
+                        Alignment::Justify
+                    }
                     _ => Alignment::Start,
                 };
                 layout_text.align(alignment, AlignmentOptions::default());
@@ -1010,10 +1023,90 @@ pub fn build_scene(
                 }
 
                 // Render lines and glyphs into local_scene
-                for line in layout_text.lines() {
+                let all_lines: Vec<_> = layout_text.lines().collect();
+                let total_lines = all_lines.len();
+                for (line_idx, line) in all_lines.into_iter().enumerate() {
+                    let is_unjustified_line = is_justify_all
+                        && node.rect.width > 0.0
+                        && (line_idx + 1 == total_lines
+                            || text
+                                .get(line.text_range())
+                                .is_some_and(|s| s.ends_with('\n')));
+
+                    let (line_space_extra, line_space_limit) = if is_unjustified_line {
+                        let lm = line.metrics();
+                        let free = (node.rect.width as f32)
+                            - lm.offset
+                            - (lm.advance - lm.trailing_whitespace);
+                        if free > 0.05 {
+                            let mut temp_cursor: Option<(usize, usize)> = None;
+                            let mut space_flags: Vec<bool> = Vec::new();
+                            for item in line.items() {
+                                if let PositionedLayoutItem::GlyphRun(gr) = item {
+                                    let r = gr.run();
+                                    let gc = gr.glyphs().count();
+                                    let s_idx = match temp_cursor {
+                                        Some((ri, idx)) if ri == r.index() => idx,
+                                        _ => 0,
+                                    };
+                                    let gs: Vec<std::ops::Range<usize>> = r
+                                        .visual_clusters()
+                                        .flat_map(|c| {
+                                            let tr = c.text_range();
+                                            c.glyphs().map(move |_| tr.clone())
+                                        })
+                                        .skip(s_idx)
+                                        .take(gc)
+                                        .collect();
+                                    temp_cursor = Some((r.index(), s_idx + gs.len()));
+                                    for cr in gs {
+                                        let is_sp = text.get(cr).is_some_and(|s| {
+                                            !s.is_empty()
+                                                && s.chars().all(|ch| ch == ' ' || ch == '\u{00A0}')
+                                        });
+                                        space_flags.push(is_sp);
+                                    }
+                                }
+                            }
+                            while space_flags.last() == Some(&true) {
+                                space_flags.pop();
+                            }
+                            let n_spaces = space_flags.iter().filter(|&&b| b).count();
+                            if n_spaces > 0 {
+                                (free / (n_spaces as f32), n_spaces)
+                            } else {
+                                (0.0, 0)
+                            }
+                        } else {
+                            (0.0, 0)
+                        }
+                    } else {
+                        (0.0, 0)
+                    };
+
+                    let mut spaces_applied = 0usize;
+                    let mut line_extra_x = 0.0f32;
+                    let mut run_cursor: Option<(usize, usize)> = None;
+
                     for item in line.items() {
                         if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
                             let run = glyph_run.run();
+                            let glyph_count = glyph_run.glyphs().count();
+                            let start_idx = match run_cursor {
+                                Some((ri, idx)) if ri == run.index() => idx,
+                                _ => 0,
+                            };
+                            let cluster_ranges: Vec<std::ops::Range<usize>> = run
+                                .visual_clusters()
+                                .flat_map(|c| {
+                                    let r = c.text_range();
+                                    c.glyphs().map(move |_| r.clone())
+                                })
+                                .skip(start_idx)
+                                .take(glyph_count)
+                                .collect();
+                            run_cursor = Some((run.index(), start_idx + cluster_ranges.len()));
+
                             let run_range = run.text_range();
                             let y_shift = node
                                 .text_spans
@@ -1025,32 +1118,56 @@ pub fn build_scene(
                             let brush_u8 = glyph_run.style().brush;
                             let run_color = Color::from_rgba8(brush_u8[0], brush_u8[1], brush_u8[2], brush_u8[3]);
 
-                            let glyphs = glyph_run.positioned_glyphs().map(|g| vello::Glyph {
-                                id: g.id,
-                                x: g.x,
-                                y: g.y + y_shift,
-                            });
+                            let mut positioned_vec: Vec<(vello::Glyph, f32)> =
+                                Vec::with_capacity(glyph_count);
+                            for (idx_g, g) in glyph_run.positioned_glyphs().enumerate() {
+                                let gx = g.x + line_extra_x;
+                                let is_internal_space = spaces_applied < line_space_limit
+                                    && cluster_ranges
+                                        .get(idx_g)
+                                        .and_then(|cr| text.get(cr.clone()))
+                                        .is_some_and(|s| {
+                                            !s.is_empty()
+                                                && s.chars().all(|ch| ch == ' ' || ch == '\u{00A0}')
+                                        });
+                                let eff_adv = if is_internal_space {
+                                    spaces_applied += 1;
+                                    line_extra_x += line_space_extra;
+                                    g.advance + line_space_extra
+                                } else {
+                                    g.advance
+                                };
+                                positioned_vec.push((
+                                    vello::Glyph {
+                                        id: g.id,
+                                        x: gx,
+                                        y: g.y + y_shift,
+                                    },
+                                    eff_adv,
+                                ));
+                            }
+
                             local_scene
                                 .draw_glyphs(font)
                                 .font_size(run.font_size())
                                 .transform(Affine::IDENTITY)
                                 .brush(Brush::Solid(run_color))
-                                .draw(Fill::NonZero, glyphs);
+                                .draw(Fill::NonZero, positioned_vec.iter().map(|(vg, _)| *vg));
 
                             // Draw underline if requested by span/style
                             if glyph_run.style().underline.is_some() {
                                 let mut min_gx = f32::MAX;
                                 let mut max_gx = f32::MIN;
                                 let mut gy = 0.0;
-                                for g in glyph_run.positioned_glyphs() {
-                                    if g.x < min_gx {
-                                        min_gx = g.x;
+                                for &(vg, adv) in &positioned_vec {
+                                    if vg.x < min_gx {
+                                        min_gx = vg.x;
                                     }
-                                    let end_x = g.x + g.advance;
+                                    let end_x = vg.x + adv;
                                     if end_x > max_gx {
                                         max_gx = end_x;
                                     }
-                                    gy = g.y + y_shift;
+                                    gy = vg.y;
                                 }
 
                                 if min_gx < max_gx {

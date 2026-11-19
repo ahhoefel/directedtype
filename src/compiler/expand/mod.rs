@@ -70,6 +70,7 @@ pub fn expand_document_with_resolver_and_dpi<R: crate::compiler::module::FileRes
 ) -> Result<ExpandedDocument, CompileError> {
     rewrite::reset_rewrite_tracking();
     crate::compiler::text::prewarm_font_context();
+    crate::compiler::text::register_local_fonts_for_base_dir(base_dir);
     let (mut registry, imported_items, all_module_enums) =
         crate::compiler::module::resolve_imports_with_enums(doc, base_dir, resolver)?;
     let mut merged_items = imported_items;

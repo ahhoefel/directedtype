@@ -1,0 +1,592 @@
+// Alice's Adventures in Wonderland — 1865 Macmillan Crown Octavo Stylesheet
+// Page trim: 348pt x 514pt (4.833in x 7.139in)
+// Type block: 250pt measure x 22 lines at 17.1pt leading (zero paragraph gap, 16pt first-line indent)
+
+\use "components/Align.dt"
+\use "components/TextBounds.dt"
+\use "components/TextStart.dt"
+\use "components/TextEnd.dt"
+\use "components/VStackStretch.dt"
+\use "components/Spacer.dt"
+\use "components/Bold.dt"
+\use "components/Italic.dt"
+
+// Metadata deposited at each chapter start for running headers
+\Component AliceChapterMeta(
+    number: String,
+    title: String,
+    verso_header: String,
+    recto_header: String,
+    full_header: String = ""
+) {}
+
+// Marker deposited at the end of a chapter so a closing verso page prints the full unnumbered title
+\Component ChapterEndMeta(
+    ended: Boolean = true
+) {}
+
+// Zero-height flow marker placed at the end of each chapter
+\Component ChapterEnd(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    env chapter_end_meta: PageValue
+) {
+    \Deposit(into: chapter_end_meta) {
+        \ChapterEndMeta(ended: true)
+    }
+    \alias right: Distance = x + width;
+    \alias height: Distance = 0pt;
+    \alias bottom: Distance = y;
+}
+
+// Inline first-line paragraph indent (16pt in the 1865 Macmillan setting)
+\InlineBox Indent(
+    width: Distance = 16pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    env font: Font
+) {
+    \alias height: Distance = 0pt;
+    \alias baseline: Distance = y;
+}
+
+// Inline thin space helper for 19th-century punctuation spacing where desired
+\InlineBox ThinSpace(
+    width: Distance = 1.5pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    env font: Font
+) {
+    \alias height: Distance = 0pt;
+    \alias baseline: Distance = y;
+}
+
+// Inline Small Caps span (scales uppercase glyphs to match Victorian small-cap optical height)
+\Span SmallCaps(env font: Font, scale: Float = 0.74) {
+    \env font = \Font(font: self.font, size: self.font.size * scale);
+    \Children
+}
+
+// Inline large initial cap for chapter openings (e.g. "A" in "ALICE")
+\Span DropInitial(env font: Font, size: Distance = 17.5pt) {
+    \env font = \Font(font: self.font, size: size);
+    \Children
+}
+
+// Centered DPI-sized illustration block compatible with VStackStretch (preserves intrinsic 200 DPI size)
+\Component CenteredPlate(
+    src: Path,
+    dpi: Float = 200.0,
+    top_pad: Distance = 0pt,
+    bottom_pad: Distance = 0pt,
+    shift_x: Distance = 0pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false)
+) {
+    \let img = \Image(
+        src: src,
+        x: x + (width - img.width) * 0.5 + shift_x,
+        y: y + top_pad,
+        dpi: dpi
+    );
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = top_pad + img.height + bottom_pad;
+    \alias bottom: Distance = y + height;
+}
+
+// Left-aligned wood-engraving with narrow justified text wrapped along its right side
+\Component WrapLeft(
+    src: Path,
+    img_offset_x: Distance = 1pt,
+    img_offset_y: Distance = 9pt,
+    narrow_x: Distance = 175pt,
+    align: Align = Align.JustifyAll,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font
+) {
+    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
+    \Image(
+        src: src,
+        x: x + img_offset_x,
+        y: y + img_offset_y,
+        dpi: 200.0
+    )
+
+    \let t = \Text(
+        x: x + narrow_x,
+        y: y,
+        width: width - narrow_x,
+        font: font,
+        color: #111111,
+        align: align,
+        text_bounds: grid_bounds
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = t.height;
+    \alias bottom: Distance = y + height;
+}
+
+// Right-aligned wood-engraving with narrow justified text wrapped along its left side
+\Component WrapRight(
+    src: Path,
+    img_right_bleed: Distance = 3.5pt,
+    img_offset_y: Distance = 7pt,
+    narrow_width: Distance = 96pt,
+    align: Align = Align.JustifyAll,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font
+) {
+    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
+    \let img = \Image(
+        src: src,
+        x: x + width + img_right_bleed - img.width,
+        y: y + img_offset_y,
+        dpi: 200.0
+    );
+
+    \let t = \Text(
+        x: x,
+        y: y,
+        width: narrow_width,
+        font: font,
+        color: #111111,
+        align: align,
+        text_bounds: grid_bounds
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = t.height;
+    \alias bottom: Distance = y + height;
+}
+
+// Staggered 4-3-4 asterisk transformation break occupying exact 3 grid lines (3 * 17.1pt = 51.3pt)
+\Component Asterism(
+    step: Distance = 54pt,
+    line_step: Distance = 17.1pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font
+) {
+    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
+    \let cx = x + width * 0.5;
+    \let row1_y = y;
+    \let row2_y = y + line_step;
+    \let row3_y = y + line_step * 2.0;
+
+    // Row 1: 4 stars at -1.5, -0.5, +0.5, +1.5 * step
+    \Text(x: cx - step * 1.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx - step * 0.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx + step * 0.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx + step * 1.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+
+    // Row 2: 3 stars staggered at -1.0, 0.0, +1.0 * step
+    \Text(x: cx - step - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx + step - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+
+    // Row 3: 4 stars at -1.5, -0.5, +0.5, +1.5 * step
+    \Text(x: cx - step * 1.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx - step * 0.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx + step * 0.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx + step * 1.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = line_step * 3.0;
+    \alias bottom: Distance = y + height;
+}
+
+// Standard justified body paragraph locked to the 17.1pt baseline grid with 16pt first-line indent
+\Component Para(
+    indent: Distance = 16pt,
+    align: Align = Align.Justify,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: true),
+    env font: Font
+) {
+    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
+    \let t = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: font,
+        color: #111111,
+        align: align,
+        text_bounds: grid_bounds,
+        pagination: pagination
+    ) {
+        \Indent(width: indent)//
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = t.height;
+    \alias bottom: Distance = y + height;
+}
+
+// Flush-left paragraph (used for chapter openings and continuations after display/wrap blocks)
+\Component FlushPara(
+    align: Align = Align.Justify,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: true),
+    env font: Font
+) {
+    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
+    \let t = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: font,
+        color: #111111,
+        align: align,
+        text_bounds: grid_bounds,
+        pagination: pagination
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = t.height;
+    \alias bottom: Distance = y + height;
+}
+
+// Centered double ornamental rule (used above the prefatory poem and on p. 190)
+\Component DoubleRule(
+    rule_width: Distance = 56.25pt,
+    gap: Distance = 2.5pt,
+    thickness: Distance = 0.5pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false)
+) {
+    \let rx = x + (width - rule_width) * 0.5;
+    \Rect(x: rx, y: y, width: rule_width, height: thickness, color: #111111)
+    \Rect(x: rx, y: y + thickness + gap, width: rule_width, height: thickness, color: #111111)
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = thickness * 2.0 + gap;
+    \alias bottom: Distance = y + height;
+}
+
+// Unbreakable poem page container that scopes the 9.5pt / 16.2pt poem font to its children
+\Component PoemBlock(
+    size: Distance = 9.5pt,
+    leading: Distance = 16.2pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font
+) {
+    \env font = \Font(font: self.font, size: size, line_height: leading);
+    \let stack = \VStackStretch(x: x, y: y, width: width, gap: 0pt, pagination: \Pagination(breakable: false)) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = stack.height;
+    \alias bottom: Distance = y + height;
+}
+
+// Single verse line for poems and songs
+\Component VerseLine(
+    indent: Distance = 0pt,
+    left_margin: Distance = 36pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font
+) {
+    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
+    \let t = \Text(
+        x: x + left_margin + indent,
+        y: y,
+        width: width - left_margin - indent,
+        font: font,
+        color: #111111,
+        text_bounds: grid_bounds
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = t.height;
+    \alias bottom: Distance = y + height;
+}
+
+// Unbreakable chapter header block (illustration + CHAPTER N. + subtitle) sized to leave exact opening lines
+\Component ChapterImageHeader(
+    number: String,
+    title: String,
+    img_src: Path,
+    total_height: Distance = 290.7pt,
+    img_top: Distance = 7.5pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false, keep_with_next: true),
+    env font: Font
+) {
+    \let art = \Image(
+        src: img_src,
+        x: x + (width - art.width) * 0.5,
+        y: y + img_top,
+        dpi: 200.0
+    );
+
+    \let ch_label = \Text(
+        x: x,
+        y: art.bottom + 15.5pt,
+        width: width,
+        font: \Font(font: font, size: 12.5pt),
+        color: #111111,
+        align: Align.Center,
+        text: "CHAPTER " + number + "."
+    );
+
+    \Text(
+        x: x,
+        y: ch_label.bottom + 21pt,
+        width: width,
+        font: \Font(font: font, size: 8.25pt),
+        color: #111111,
+        align: Align.Center,
+        text: title + "."
+    )
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = total_height;
+    \alias bottom: Distance = y + height;
+}
+
+// Chapter container with top Tenniel wood-engraving (Chapters I, III, V)
+\Component AliceChapterWithImage(
+    number: String,
+    title: String,
+    verso_header: String,
+    recto_header: String,
+    img_src: Path,
+    header_height: Distance = 290.7pt,
+    break_before: Break = Break.Page,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: true, break_before: break_before),
+    env font: Font,
+    env chapter_meta: PageValue
+) {
+    \Deposit(into: chapter_meta) {
+        \AliceChapterMeta(
+            number: number,
+            title: title,
+            verso_header: verso_header,
+            recto_header: recto_header,
+            full_header: title + "."
+        )
+    }
+
+    \let hdr = \ChapterImageHeader(
+        x: x,
+        y: y,
+        width: width,
+        number: number,
+        title: title,
+        img_src: img_src,
+        total_height: header_height
+    );
+
+    \let body = \VStackStretch(
+        x: x,
+        y: hdr.bottom,
+        width: width,
+        gap: 0pt,
+        pagination: \Pagination(breakable: true)
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = hdr.height + body.height;
+    \alias bottom: Distance = y + height;
+}
+
+// 1865 Macmillan Crown Octavo Page Template
+\Component AlicePage(
+    width: Distance = 348pt,
+    height: Distance = 514pt,
+    x: Distance = page.left,
+    y: Distance = page.top,
+    margin_inner: Distance = 48.25pt,
+    margin_outer: Distance = 49.75pt,
+    header_y: Distance = 47.5pt,
+    body_top: Distance = 64.0pt,
+    flow_height: Distance = 377.2pt,
+    folio_offset: Integer = 10,
+    page_bg: Color = #fdfcf8,
+    env font: Font,
+    env chapter_meta: PageValue,
+    env chapter_end_meta: PageValue
+) {
+    \let body_width = width - margin_inner - margin_outer;
+    \let is_verso = page.is_verso;
+    \let body_x = is_verso ? (x + margin_outer) : (x + margin_inner);
+    \let folio = page.number - folio_offset;
+
+    \let has_chapter_start = chapter_meta[page].has_value;
+    \alias running_verso: String = has_chapter_start
+        ? chapter_meta[page].value.verso_header
+        : (page.prev ? page.prev.running_verso : "");
+    \alias running_recto: String = has_chapter_start
+        ? chapter_meta[page].value.recto_header
+        : (page.prev ? page.prev.running_recto : "");
+    \alias running_full: String = has_chapter_start
+        ? chapter_meta[page].value.full_header
+        : (page.prev ? page.prev.running_full : "");
+
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+
+    // Cream paper ground
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: page_bg
+    )
+
+    // Running header & outer folio:
+    // When a chapter ends on a verso page (pp. 14, 28, 40, 58), Macmillan prints the full title
+    // centered and suppresses the outer folio number!
+    \let is_body_page = folio >= 1 && folio <= 189;
+    \let show_header = is_body_page && !has_chapter_start && running_verso != "";
+    \let is_verso_chapter_end = is_verso && chapter_end_meta[page].has_value;
+
+    \let header_title = show_header
+        ? (is_verso_chapter_end ? running_full : (is_verso ? running_verso : running_recto))
+        : "";
+    \let folio_text = (show_header && !is_verso_chapter_end) ? ("" + folio) : "";
+
+    \let hdr_font = \Font(font: font, size: 8.25pt, line_height: 10pt);
+    \let folio_font = \Font(font: font, size: 8pt, line_height: 10pt);
+
+    \Text(
+        x: body_x,
+        y: y + header_y,
+        width: body_width,
+        font: hdr_font,
+        color: #111111,
+        align: Align.Center,
+        text: header_title
+    )
+
+    \Text(
+        x: body_x,
+        y: y + header_y + 0.3pt,
+        width: body_width,
+        font: folio_font,
+        color: #111111,
+        align: is_verso ? Align.Left : Align.Right,
+        text: folio_text
+    )
+
+    // 22-line body region (22 * 17.1pt = 376.2pt)
+    \FlowBody(
+        x: body_x,
+        y: y + body_top,
+        width: body_width,
+        height: flow_height
+    )
+
+    // Octavo printer's signature marks in the bottom margin (B, B 2, C, C 2, ... skipping J)
+    \let offset_in_gathering = (folio - 1) % 16;
+    \let gathering = ((folio - 1) - offset_in_gathering) / 16;
+    \let sig_letter = gathering == 0 ? "B"
+        : (gathering == 1 ? "C"
+        : (gathering == 2 ? "D"
+        : (gathering == 3 ? "E"
+        : (gathering == 4 ? "F"
+        : (gathering == 5 ? "G"
+        : (gathering == 6 ? "H"
+        : (gathering == 7 ? "I"
+        : (gathering == 8 ? "K"
+        : (gathering == 9 ? "L"
+        : (gathering == 10 ? "M"
+        : (gathering == 11 ? "N" : "")))))))))));
+    \let sig_text = (folio >= 1 && folio <= 192 && sig_letter != "")
+        ? (offset_in_gathering == 0 ? sig_letter : (offset_in_gathering == 2 ? (sig_letter + " 2") : ""))
+        : "";
+
+    \Text(
+        x: body_x,
+        y: y + body_top + 376.2pt + 8pt,
+        width: body_width,
+        font: folio_font,
+        color: #111111,
+        align: Align.Center,
+        text: sig_text
+    )
+}
+
+// Top-level Alice Book wrapper
+\Component AliceBook(
+    folio_offset: Integer = 10,
+    start_page: Integer = 1,
+    page_gap: Distance = 12pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    font_size: Distance = 11.95pt,
+    line_height: Distance = 17.1pt
+) {
+    \let body_font = \Font(family: "Old Standard TT", size: font_size, line_height: line_height);
+    \env font = body_font;
+    \env chapter_meta = \PageValue();
+    \env chapter_end_meta = \PageValue();
+
+    \let flow = \PagedFlow(
+        x: x,
+        y: y,
+        gap: page_gap,
+        orphans: 1,
+        widows: 1,
+        start_page: start_page,
+        page: \AlicePage(folio_offset: folio_offset)
+    ) {
+        \VStackStretch(
+            width: 250pt,
+            gap: 0pt,
+            pagination: \Pagination(breakable: true)
+        ) {
+            \Children
+        }
+    };
+
+    \alias page_count: Integer = flow.page_count;
+    \alias end_page: Integer = flow.end_page;
+    \alias width: Distance = flow.width;
+    \alias height: Distance = flow.height;
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+}
