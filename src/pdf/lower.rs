@@ -10,6 +10,7 @@ use crate::compiler::layout::{extract_corner_radii, ResolvedLayout, ResolvedNode
 use crate::compiler::value::Value;
 use crate::render::color::{parse_color_rgba8, Rgba8};
 
+use super::image::draw_image_node_pdf;
 use super::links::{emit_page_links, AnchorIndex};
 use super::shadow::{clamp_radii, draw_rect_shadow};
 use super::text::{draw_text_node, is_text_primitive, PdfFontCache};
@@ -396,6 +397,10 @@ pub(super) fn render_page_scene(
                         }
                     }
                 }
+            }
+
+            if node.name == "Image" {
+                draw_image_node_pdf(&mut surface, node, layout, node_offset, pushed_opacity);
             }
 
             if is_text_primitive(node, layout) {

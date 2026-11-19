@@ -1,5 +1,6 @@
 //! Pure-vector PDF backend powered by `krilla`.
 
+pub mod image;
 pub mod links;
 pub mod lower;
 pub mod outline;

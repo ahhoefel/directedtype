@@ -284,7 +284,7 @@ pub fn compute_logical_geometry(layout: &ResolvedLayout, opts: &DocBlockOptions)
         if !node.is_paint_primitive() && node.name != "PadOut" && node.name != "Box" {
             continue;
         }
-        let half_border = if node.name == "Rect" {
+        let half_border = if node.name == "Rect" || node.name == "Image" {
             node.properties
                 .get("border_width")
                 .or_else(|| node.properties.get("stroke_width"))

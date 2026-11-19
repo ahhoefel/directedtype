@@ -2,6 +2,7 @@ pub mod anchor;
 pub mod box_prim;
 pub mod clip;
 pub mod font;
+pub mod image;
 pub mod line;
 pub mod pagination;
 pub mod rect;
@@ -254,11 +255,12 @@ pub(in crate::compiler::expand) fn default_builtin_port_type(port_name: &str) ->
         | "__flow_body_width" => Some(StaticType::Distance),
         "z" | "weight" | "page" | "end_page" | "page_count" | "orphans" | "widows"
         | "start_page" => Some(StaticType::Integer),
-        "opacity" => Some(StaticType::Float),
+        "opacity" | "dpi" | "aspect_ratio" | "file_dpi" => Some(StaticType::Float),
         "color" | "border_color" | "shadow_color" => {
             Some(StaticType::Color)
         }
-        "family" | "text" | "cursor" | "url" | "name" | "path" | "id" => {
+        "src" => Some(StaticType::Path),
+        "family" | "text" | "cursor" | "url" | "name" | "path" | "id" | "alt" => {
             Some(StaticType::String)
         }
         "underline" | "italic" => Some(StaticType::Boolean),
@@ -316,6 +318,7 @@ const ALL_BUILTINS: &[&dyn BuiltinPrimitive] = &[
     &rect::RectPrimitive,
     &line::LinePrimitive,
     &text::TextPrimitive,
+    &image::ImagePrimitive,
     &font::FontPrimitive,
     &clip::ClipPrimitive,
     &box_prim::BoxPrimitive,
@@ -342,6 +345,7 @@ pub(in crate::compiler::expand) fn lookup_builtin(
         "Rect" => Some(&rect::RectPrimitive),
         "Line" => Some(&line::LinePrimitive),
         "Text" => Some(&text::TextPrimitive),
+        "Image" => Some(&image::ImagePrimitive),
         "Font" => Some(&font::FontPrimitive),
         "Clip" => Some(&clip::ClipPrimitive),
         "Box" => Some(&box_prim::BoxPrimitive),
@@ -1009,7 +1013,11 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     &self.primitive_scope_ports,
                 )
                 .with_env_scope(content_env_scope);
-                rewrite_expr(raw_expr, &scope_ctx)?
+                let pre = crate::compiler::expand::typecheck::pre_coerce_ast_for_type(
+                    raw_expr,
+                    let_binding.type_annotation.as_ref(),
+                );
+                rewrite_expr(&pre, &scope_ctx)?
             };
             let rewritten =
                 super::coerce_typed_binding_expr(rewritten, let_binding.type_annotation.as_ref());
@@ -1464,10 +1472,17 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     }
                 }
 
-                let mut rewritten = rewrite_expr(&expr, &scope_ctx)?;
+                let pre_expr = if self.primitive.port_type(&port_name) == Some(StaticType::Path) {
+                    std::borrow::Cow::Owned(
+                        crate::compiler::expand::typecheck::coerce_syntactic_path_expr(&expr),
+                    )
+                } else {
+                    std::borrow::Cow::Borrowed(&expr)
+                };
+                let mut rewritten = rewrite_expr(&pre_expr, &scope_ctx)?;
                 validate_and_coerce_primitive_port_literal(
                     &port_name,
-                    &expr,
+                    &pre_expr,
                     &mut rewritten,
                     &scope_ctx,
                 )?;

@@ -527,6 +527,7 @@ fn guest_value_to_literal_expr(val: &GuestValue) -> Result<Expr, GuestDomError> 
         GuestValue::Distance(d) => Literal::Distance(*d, crate::ast::DistanceUnit::Px, sp),
         GuestValue::Duration(d) => Literal::Duration(*d, crate::ast::DurationUnit::Ms, sp),
         GuestValue::String(s) => Literal::String(s.clone(), sp),
+        GuestValue::Path(p) => Literal::Path(p.clone(), sp),
         GuestValue::Bool(b) => Literal::Bool(*b, sp),
         GuestValue::Color(c) => Literal::Color(c.clone(), sp),
         GuestValue::Enum { enum_name, variant } => {
@@ -554,6 +555,7 @@ fn literal_to_guest_value(lit: &Literal) -> GuestValue {
         }
         Literal::Duration(d, _, _) => GuestValue::Duration(*d),
         Literal::String(s, _) => GuestValue::String(s.clone()),
+        Literal::Path(p, _) => GuestValue::Path(p.clone()),
         Literal::Bool(b, _) => GuestValue::Bool(*b),
         Literal::Color(c, _) => GuestValue::Color(c.clone()),
         Literal::Enum(enum_name, variant, _) => GuestValue::Enum {
@@ -1539,6 +1541,7 @@ fn host_to_guest_value(val: &Value) -> GuestValue {
         Value::Distance(d) | Value::Area(d) => GuestValue::Distance(*d),
         Value::Duration(d) => GuestValue::Duration(*d),
         Value::String(s) => GuestValue::String(s.clone()),
+        Value::Path(p) => GuestValue::Path(p.clone()),
         Value::Bool(b) => GuestValue::Bool(*b),
         Value::Color(c) => GuestValue::Color(c.clone()),
         Value::Node(id) => GuestValue::Node(id.0 as u64),
@@ -1573,6 +1576,7 @@ fn guest_to_host_value(val: GuestValue) -> Value {
         GuestValue::Distance(d) => Value::Distance(d),
         GuestValue::Duration(d) => Value::Duration(d),
         GuestValue::String(s) => Value::String(s),
+        GuestValue::Path(p) => Value::Path(p),
         GuestValue::Bool(b) => Value::Bool(b),
         GuestValue::Color(c) => Value::Color(c),
         GuestValue::Node(id) => Value::Node(NodeId(id as usize)),

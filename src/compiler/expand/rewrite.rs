@@ -636,6 +636,9 @@ pub(super) fn populate_const_env_for_cond(
                                         Literal::String(s, _) => {
                                             crate::compiler::value::Value::String(s)
                                         }
+                                        Literal::Path(p, _) => {
+                                            crate::compiler::value::Value::Path(p)
+                                        }
                                         Literal::Bool(b, _) => {
                                             crate::compiler::value::Value::Bool(b)
                                         }
@@ -1997,6 +2000,10 @@ pub fn rewrite_expr(expr: &Expr, ctx: &ScopeContext<'_>) -> Result<Expr, Compile
                     | "font_descent"
                     | "font_line_gap"
                     | "font_line_height"
+                    | "__image_intrinsic_width"
+                    | "__image_intrinsic_height"
+                    | "__image_aspect_ratio"
+                    | "__image_file_dpi"
             );
             if call.callee.name != Symbol::SELF
                 && call.callee.name != Symbol::PARENT
@@ -2599,7 +2606,10 @@ fn infer_rewritten_expr_type_name(
             | "font_ascent"
             | "font_descent"
             | "font_line_gap"
-            | "font_line_height" => Some("Distance".to_string()),
+            | "font_line_height"
+            | "__image_intrinsic_width"
+            | "__image_intrinsic_height" => Some("Distance".to_string()),
+            "__image_aspect_ratio" | "__image_file_dpi" => Some("Float".to_string()),
             "max" | "min" | "sum" | "abs" | "clamp" | "only" | "round" | "floor" | "ceil" => c
                 .args
                 .first()
@@ -3071,12 +3081,15 @@ pub fn default_expr_for_state_with_enums(
             if ty_name == Some("Float") {
                 return Expr::Literal(Literal::Float(*i as f64, *span));
             }
+        } else if ty_name == Some("Path") {
+            return super::typecheck::coerce_syntactic_path_expr(def);
         }
         def.clone()
     } else if let Some(ty) = ty_name {
         match ty {
             "Boolean" => Expr::Literal(Literal::Bool(false, state.span)),
             "String" => Expr::Literal(Literal::String(String::new(), state.span)),
+            "Path" => Expr::Literal(Literal::Path(String::new(), state.span)),
             "Color" => Expr::Literal(Literal::Color("#000000".to_string(), state.span)),
             "Float" => Expr::Literal(Literal::Float(0.0, state.span)),
             "Distance" => Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, state.span)),

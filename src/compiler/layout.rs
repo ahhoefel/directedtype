@@ -364,6 +364,7 @@ impl ResolvedNode {
         self.name == "Rect"
             || self.name == "Line"
             || self.name == "Text"
+            || self.name == "Image"
             || self.name == "Link"
             || !self.fragments.is_empty()
             || self.text_content.is_some()
@@ -384,6 +385,7 @@ pub struct ResolvedLayout {
     pub values: HashMap<VarId, Value>,
     pub scope_tree: ScopeTree,
     pub graph: Option<std::sync::Arc<VariableGraph>>,
+    pub image_assets: std::sync::Arc<crate::compiler::image::ImageAssetStore>,
 }
 
 impl ResolvedLayout {
@@ -921,6 +923,7 @@ pub fn resolve_layout_with_graph(
                                 part.span(),
                             )),
                             Value::String(s) => Expr::Literal(Literal::String(s, part.span())),
+                            Value::Path(p) => Expr::Literal(Literal::Path(p, part.span())),
                             Value::Bool(b) => Expr::Literal(Literal::Bool(b, part.span())),
                             Value::Color(c) => Expr::Literal(Literal::Color(c, part.span())),
                             Value::Enum { enum_name, variant } => {
@@ -1026,6 +1029,7 @@ pub fn resolve_layout_with_graph(
         values,
         scope_tree: doc.scope_tree.clone(),
         graph,
+        image_assets: std::sync::Arc::clone(&doc.image_assets),
     };
 
     project_inline_fragments(&mut layout);

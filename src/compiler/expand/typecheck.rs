@@ -15,6 +15,7 @@ pub enum StaticType {
     Area,
     Duration,
     String,
+    Path,
     Boolean,
     Color,
     Handler,
@@ -40,6 +41,7 @@ impl StaticType {
             StaticType::Area => "Area".to_string(),
             StaticType::Duration => "Duration".to_string(),
             StaticType::String => "String".to_string(),
+            StaticType::Path => "Path".to_string(),
             StaticType::Boolean => "Boolean".to_string(),
             StaticType::Color => "Color".to_string(),
             StaticType::Handler | StaticType::Unset => "Handler".to_string(),
@@ -85,6 +87,7 @@ impl StaticType {
             "Area" => Ok(StaticType::Area),
             "Duration" => Ok(StaticType::Duration),
             "String" => Ok(StaticType::String),
+            "Path" => Ok(StaticType::Path),
             "Boolean" => Ok(StaticType::Boolean),
             "Color" => Ok(StaticType::Color),
             "Handler" => Ok(StaticType::Handler),
@@ -97,6 +100,7 @@ impl StaticType {
             | "Rect"
             | "Line"
             | "Text"
+            | "Image"
             | "Font"
             | "Clip"
             | "Box"
@@ -533,6 +537,43 @@ pub(super) fn validate_children_sibling_guards(
     }
 }
 
+/// Coerces syntactic string literals (`"..."`) into `Literal::Path` (recursing into parentheses,
+/// ternaries, and `match` arms) while leaving identifier/variable references untouched.
+pub(crate) fn coerce_syntactic_path_expr(expr: &Expr) -> Expr {
+    match expr {
+        Expr::Literal(Literal::String(s, span)) => Expr::Literal(Literal::Path(s.clone(), *span)),
+        Expr::Paren(inner, span) => {
+            Expr::Paren(std::sync::Arc::new(coerce_syntactic_path_expr(inner)), *span)
+        }
+        Expr::Ternary(t) => {
+            let mut next = t.clone();
+            next.then_expr = std::sync::Arc::new(coerce_syntactic_path_expr(&t.then_expr));
+            next.else_expr = std::sync::Arc::new(coerce_syntactic_path_expr(&t.else_expr));
+            Expr::Ternary(next)
+        }
+        Expr::Match(m) => {
+            let mut next = (**m).clone();
+            for arm in &mut next.arms {
+                arm.body = coerce_syntactic_path_expr(&arm.body);
+            }
+            Expr::Match(std::sync::Arc::new(next))
+        }
+        other => other.clone(),
+    }
+}
+
+/// Pre-coerces syntactic AST literals before `rewrite_expr` when the target type annotation is `Path`.
+pub(crate) fn pre_coerce_ast_for_type<'a>(
+    raw_expr: &'a Expr,
+    type_annotation: Option<&TypeRef>,
+) -> std::borrow::Cow<'a, Expr> {
+    if type_annotation.is_some_and(|t| t.name.as_str() == "Path") {
+        std::borrow::Cow::Owned(coerce_syntactic_path_expr(raw_expr))
+    } else {
+        std::borrow::Cow::Borrowed(raw_expr)
+    }
+}
+
 pub(super) fn coerce_typed_binding_expr(mut expr: Expr, type_annotation: Option<&TypeRef>) -> Expr {
     if let Some(ty) = type_annotation {
         match ty.name.as_str() {
@@ -684,6 +725,42 @@ pub(super) fn validate_and_coerce_primitive_port_literal(
                 });
             }
         }
+    } else if port_name == "src" {
+        let unlowered_lit = match orig_expr {
+            Expr::Literal(Literal::String(s, sp)) => Some(Literal::Path(s.clone(), *sp)),
+            Expr::Literal(lit) => Some(lit.clone()),
+            _ => None,
+        };
+        if let Some(lit) =
+            unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(rewritten, scope_ctx))
+        {
+            if !lit.matches_type_name("Path") {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Path".to_string(),
+                    actual: lit.type_name().to_string(),
+                    span: orig_expr.span(),
+                });
+            }
+        }
+    } else if port_name == "dpi" || port_name == "opacity" {
+        let unlowered_lit = match orig_expr {
+            Expr::Literal(lit) => Some(lit.clone()),
+            _ => None,
+        };
+        if let Some(lit) =
+            unlowered_lit.or_else(|| infer_expr_literal_for_typecheck(rewritten, scope_ctx))
+        {
+            if !lit.matches_type_name("Float") {
+                return Err(CompileError::TypeMismatch {
+                    expected: "Float".to_string(),
+                    actual: lit.type_name().to_string(),
+                    span: orig_expr.span(),
+                });
+            }
+        }
+        if let Expr::Literal(Literal::Integer(i, span)) = *rewritten {
+            *rewritten = Expr::Literal(Literal::Float(i as f64, span));
+        }
     }
     Ok(())
 }
@@ -710,6 +787,9 @@ pub(super) fn validate_and_coerce_component_param_types(
                 .map(|p| &p.expr)
                 .or(param.default_edge.as_ref())
                 .and_then(|e| match e {
+                    Expr::Literal(Literal::String(s, sp)) if expected_type == "Path" => {
+                        Some(Literal::Path(s.clone(), *sp))
+                    }
                     Expr::Literal(lit) => Some(lit.clone()),
                     _ => None,
                 });
@@ -891,6 +971,8 @@ pub(super) fn infer_expr_literal_for_typecheck<'a>(
                 "text_width"
                     | "text_height"
                     | "text_baseline_offset"
+                    | "__image_intrinsic_width"
+                    | "__image_intrinsic_height"
                     | "span_metric"
                     | "font_cap_height"
                     | "font_x_height"
@@ -900,6 +982,12 @@ pub(super) fn infer_expr_literal_for_typecheck<'a>(
                     | "font_line_height"
             ) {
                 return Some(Literal::Distance(0.0, DistanceUnit::Px, call.span));
+            }
+            if matches!(
+                call.callee.as_str(),
+                "__image_aspect_ratio" | "__image_file_dpi"
+            ) {
+                return Some(Literal::Float(1.0, call.span));
             }
             if matches!(
                 call.callee.as_str(),
@@ -1407,6 +1495,7 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                         (Literal::Duration(d1, _, _), Literal::Integer(0, _))
                         | (Literal::Integer(0, _), Literal::Duration(d1, _, _)) => *d1 == 0,
                         (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 == b2,
+                        (Literal::Path(p1, _), Literal::Path(p2, _)) => p1 == p2,
                         (Literal::Color(c1, _), Literal::Color(c2, _)) => c1 == c2,
                         (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 == e2 && v1 == v2,
                         _ => false,
@@ -1438,6 +1527,7 @@ pub(super) fn resolve_ident_or_member_to_literal<'a>(
                         (Literal::Duration(d1, _, _), Literal::Integer(0, _))
                         | (Literal::Integer(0, _), Literal::Duration(d1, _, _)) => *d1 != 0,
                         (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 != b2,
+                        (Literal::Path(p1, _), Literal::Path(p2, _)) => p1 != p2,
                         (Literal::Color(c1, _), Literal::Color(c2, _)) => c1 != c2,
                         (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 != e2 || v1 != v2,
                         _ => true,
@@ -2135,6 +2225,7 @@ fn infer_expr_type(
             Literal::Area(_, _, _) => StaticType::Area,
             Literal::Duration(_, _, _) => StaticType::Duration,
             Literal::String(_, _) => StaticType::String,
+            Literal::Path(_, _) => StaticType::Path,
             Literal::Bool(_, _) => StaticType::Boolean,
             Literal::Color(_, _) => StaticType::Color,
             Literal::Enum(enum_name, _, _) => StaticType::Enum(enum_name.clone()),
@@ -3061,6 +3152,8 @@ fn infer_call_type(
         "text_width"
         | "text_height"
         | "text_baseline_offset"
+        | "__image_intrinsic_width"
+        | "__image_intrinsic_height"
         | "span_metric"
         | "font_cap_height"
         | "font_x_height"
@@ -3072,6 +3165,12 @@ fn infer_call_type(
                 let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
             }
             Ok(StaticType::Distance)
+        }
+        "__image_aspect_ratio" | "__image_file_dpi" => {
+            for arg in &call.args {
+                let _ = infer_expr_type(arg, doc, enums, registry, cache)?;
+            }
+            Ok(StaticType::Float)
         }
         "max" | "min" | "sum" | "abs" | "clamp" | "only" | "hypot" => {
             if call.args.is_empty() {

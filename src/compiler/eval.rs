@@ -13,6 +13,10 @@ pub trait EvalEnv {
     fn get_var(&self, node: NodeId, port: &str) -> Option<&Value> {
         self.get_var_sym(node, Symbol::new(port))
     }
+
+    fn image_assets(&self) -> Option<&crate::compiler::image::ImageAssetStore> {
+        None
+    }
 }
 
 impl EvalEnv for HashMap<VarId, Value> {
@@ -38,6 +42,11 @@ impl<'a> EvalEnv for IndexedEvalEnv<'a> {
         };
         let idx = self.graph.lookup_var_index_sym(resolved_node, port)?;
         self.slots.get(idx.0 as usize)?.as_ref()
+    }
+
+    #[inline]
+    fn image_assets(&self) -> Option<&crate::compiler::image::ImageAssetStore> {
+        Some(&self.graph.image_assets)
     }
 }
 
@@ -413,6 +422,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
             }
             Literal::Duration(d, _, _) => Ok(Value::Duration(*d)),
             Literal::String(s, _) => Ok(Value::String(s.clone())),
+            Literal::Path(p, _) => Ok(Value::Path(p.clone())),
             Literal::Bool(b, _) => Ok(Value::Bool(*b)),
             Literal::Color(c, _) => Ok(Value::Color(c.clone())),
             Literal::Enum(e, v, _) => Ok(Value::Enum {
@@ -1286,6 +1296,83 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
 
                     let offset = crate::compiler::text::text_baseline_offset(size, weight, family, start_at, line_height);
                     Ok(Value::Distance(offset))
+                }
+                "__image_intrinsic_width" => {
+                    let path = evaluated_args
+                        .first()
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| CompileError::Custom {
+                            message: "__image_intrinsic_width() expects a Path".to_string(),
+                            span: c.span,
+                        })?;
+                    let dpi = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or_else(|| window_dpi(env));
+                    let win_dpi = evaluated_args.get(2).and_then(|v| v.as_f64()).unwrap_or_else(|| window_dpi(env));
+                    if dpi <= 0.0 {
+                        return Err(CompileError::Custom {
+                            message: format!("Image 'dpi' must be positive, got {}", dpi),
+                            span: c.span,
+                        });
+                    }
+                    let asset = crate::compiler::image::lookup_loaded_image(path, env.image_assets())
+                        .map_err(|msg| CompileError::Custom {
+                            message: msg,
+                            span: c.span,
+                        })?;
+                    Ok(Value::Distance(asset.metadata.intrinsic_width(dpi, win_dpi)))
+                }
+                "__image_intrinsic_height" => {
+                    let path = evaluated_args
+                        .first()
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| CompileError::Custom {
+                            message: "__image_intrinsic_height() expects a Path".to_string(),
+                            span: c.span,
+                        })?;
+                    let dpi = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or_else(|| window_dpi(env));
+                    let win_dpi = evaluated_args.get(2).and_then(|v| v.as_f64()).unwrap_or_else(|| window_dpi(env));
+                    if dpi <= 0.0 {
+                        return Err(CompileError::Custom {
+                            message: format!("Image 'dpi' must be positive, got {}", dpi),
+                            span: c.span,
+                        });
+                    }
+                    let asset = crate::compiler::image::lookup_loaded_image(path, env.image_assets())
+                        .map_err(|msg| CompileError::Custom {
+                            message: msg,
+                            span: c.span,
+                        })?;
+                    Ok(Value::Distance(asset.metadata.intrinsic_height(dpi, win_dpi)))
+                }
+                "__image_aspect_ratio" => {
+                    let path = evaluated_args
+                        .first()
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| CompileError::Custom {
+                            message: "__image_aspect_ratio() expects a Path".to_string(),
+                            span: c.span,
+                        })?;
+                    let asset = crate::compiler::image::lookup_loaded_image(path, env.image_assets())
+                        .map_err(|msg| CompileError::Custom {
+                            message: msg,
+                            span: c.span,
+                        })?;
+                    Ok(Value::Float(asset.metadata.aspect_ratio))
+                }
+                "__image_file_dpi" => {
+                    let path = evaluated_args
+                        .first()
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| CompileError::Custom {
+                            message: "__image_file_dpi() expects a Path".to_string(),
+                            span: c.span,
+                        })?;
+                    let win_dpi = evaluated_args.get(1).and_then(|v| v.as_f64()).unwrap_or_else(|| window_dpi(env));
+                    let asset = crate::compiler::image::lookup_loaded_image(path, env.image_assets())
+                        .map_err(|msg| CompileError::Custom {
+                            message: msg,
+                            span: c.span,
+                        })?;
+                    Ok(Value::Float(asset.metadata.resolved_file_dpi(win_dpi)))
                 }
                 "text_width" => {
                     let text = evaluated_args.first().and_then(|v| v.as_str()).unwrap_or("");

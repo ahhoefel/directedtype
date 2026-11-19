@@ -10,6 +10,7 @@ pub enum Value {
     Area(f64),
     Duration(i64),
     String(String),
+    Path(String),
     Bool(bool),
     Color(String),
     Node(NodeId),
@@ -133,8 +134,15 @@ impl Value {
 
     pub fn as_str(&self) -> Option<&str> {
         match self {
-            Value::String(s) | Value::Color(s) => Some(s.as_str()),
+            Value::String(s) | Value::Path(s) | Value::Color(s) => Some(s.as_str()),
             Value::Enum { variant, .. } => Some(variant.as_str()),
+            _ => None,
+        }
+    }
+
+    pub fn as_path(&self) -> Option<&str> {
+        match self {
+            Value::Path(p) => Some(p.as_str()),
             _ => None,
         }
     }
@@ -158,7 +166,7 @@ impl Value {
 
     pub fn to_display_string(&self) -> String {
         match self {
-            Value::String(s) => s.clone(),
+            Value::String(s) | Value::Path(s) => s.clone(),
             Value::Integer(n) => format!("{n}"),
             Value::Float(n) => {
                 if n.fract() == 0.0 && n.is_finite() {
@@ -207,6 +215,7 @@ impl Value {
             Value::Area(_) => "Area",
             Value::Duration(_) => "Duration",
             Value::String(_) => "String",
+            Value::Path(_) => "Path",
             Value::Bool(_) => "Boolean",
             Value::Color(_) => "Color",
             Value::Node(_) => "Node",
@@ -225,6 +234,7 @@ impl Value {
             "Area" => matches!(self, Value::Area(_) | Value::Integer(0)),
             "Duration" => matches!(self, Value::Duration(_) | Value::Integer(0)),
             "String" => matches!(self, Value::String(_)),
+            "Path" => matches!(self, Value::Path(_)),
             "Boolean" => matches!(self, Value::Bool(_)),
             "Color" => matches!(self, Value::Color(_)),
             "Node" | "ViewPort" => matches!(self, Value::Node(_)),
@@ -260,7 +270,7 @@ impl fmt::Display for Value {
                 }
             }
             Value::Duration(us) => write!(f, "{}", crate::ast::DurationUnit::S.format_micros(*us)),
-            Value::String(s) => write!(f, "\"{}\"", s),
+            Value::String(s) | Value::Path(s) => write!(f, "\"{}\"", s),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Color(c) => write!(f, "{}", c),
             Value::Node(id) => write!(f, "{}", id.canonical_name()),

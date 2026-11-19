@@ -533,6 +533,7 @@ pub fn build_property_dag_trace(
             Value::Area(_) => "Area".to_string(),
             Value::Duration(_) => "Duration".to_string(),
             Value::String(_) => "String".to_string(),
+            Value::Path(_) => "Path".to_string(),
             Value::Bool(_) => "Boolean".to_string(),
             Value::Color(_) => "Color".to_string(),
             Value::Node(_) => "Node Reference".to_string(),

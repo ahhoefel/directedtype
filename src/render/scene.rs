@@ -176,7 +176,7 @@ pub fn compute_clip_content_hash(clip_id: NodeId, layout: &ResolvedLayout) -> u6
                 match v {
                     Value::Integer(i) => i.hash(&mut hasher),
                     Value::Float(n) | Value::Distance(n) => n.to_bits().hash(&mut hasher),
-                    Value::String(s) => s.hash(&mut hasher),
+                    Value::String(s) | Value::Path(s) => s.hash(&mut hasher),
                     Value::Bool(b) => b.hash(&mut hasher),
                     Value::Color(c) => c.hash(&mut hasher),
                     _ => {}
@@ -703,6 +703,12 @@ pub fn build_scene(
             }
         }
 
+        // Render image (for \Image paint primitives)
+        if node.name == "Image" {
+            crate::render::image::draw_image_node(active_scene, node, layout);
+            continue;
+        }
+
         // Render text
         let is_standalone_span_text = node.text_content.is_some()
             && !node
@@ -1180,6 +1186,7 @@ mod tests {
             values: HashMap::new(),
             scope_tree: Default::default(),
             graph: None,
+            image_assets: Default::default(),
         };
 
         // Frame 1: Initial render (cache miss)
@@ -1328,6 +1335,7 @@ mod tests {
             values,
             scope_tree: Default::default(),
             graph: None,
+            image_assets: Default::default(),
         };
 
         // Frame 1: Cache Miss

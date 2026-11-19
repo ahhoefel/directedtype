@@ -1012,7 +1012,11 @@ pub(super) fn expand_caller_slot_envs(
                                 Some(comp_def.name.as_str()),
                                 comp_scope_ports,
                             );
-                            rewrite_expr(raw_expr, &scope_ctx)?
+                            let pre = super::typecheck::pre_coerce_ast_for_type(
+                                raw_expr,
+                                env_binding.type_annotation.as_ref(),
+                            );
+                            rewrite_expr(&pre, &scope_ctx)?
                         };
                         let rewritten = coerce_typed_binding_expr(
                             rewritten,
@@ -1070,7 +1074,11 @@ pub(super) fn expand_caller_slot_envs(
                             Some(comp_def.name.as_str()),
                             comp_scope_ports,
                         );
-                        rewrite_expr(raw_expr, &scope_ctx)?
+                        let pre = super::typecheck::pre_coerce_ast_for_type(
+                            raw_expr,
+                            let_binding.type_annotation.as_ref(),
+                        );
+                        rewrite_expr(&pre, &scope_ctx)?
                     };
                     let rewritten = coerce_typed_binding_expr(
                         rewritten,

@@ -365,6 +365,7 @@ pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
             }
             (Literal::Duration(d1, _, _), Literal::Duration(d2, _, _)) => d1 == d2,
             (Literal::String(s1, _), Literal::String(s2, _)) => s1 == s2,
+            (Literal::Path(p1, _), Literal::Path(p2, _)) => p1 == p2,
             (Literal::Bool(b1, _), Literal::Bool(b2, _)) => b1 == b2,
             (Literal::Color(c1, _), Literal::Color(c2, _)) => c1 == c2,
             (Literal::Enum(e1, v1, _), Literal::Enum(e2, v2, _)) => e1 == e2 && v1 == v2,
@@ -1021,6 +1022,7 @@ pub enum Literal {
     Area(f64, DistanceUnit, Span),
     Duration(i64, DurationUnit, Span),
     String(String, Span),
+    Path(String, Span),
     Bool(bool, Span),
     Color(String, Span),
     Enum(String, String, Span),
@@ -1035,6 +1037,7 @@ impl Literal {
             | Literal::Area(_, _, span)
             | Literal::Duration(_, _, span)
             | Literal::String(_, span)
+            | Literal::Path(_, span)
             | Literal::Bool(_, span)
             | Literal::Color(_, span)
             | Literal::Enum(_, _, span) => *span,
@@ -1049,6 +1052,7 @@ impl Literal {
             Literal::Area(..) => "Area",
             Literal::Duration(..) => "Duration",
             Literal::String(..) => "String",
+            Literal::Path(..) => "Path",
             Literal::Bool(..) => "Boolean",
             Literal::Color(..) => "Color",
             Literal::Enum(enum_name, ..) => enum_name.as_str(),
@@ -1063,6 +1067,7 @@ impl Literal {
             "Area" => matches!(self, Literal::Area(..) | Literal::Integer(0, _)),
             "Duration" => matches!(self, Literal::Duration(..) | Literal::Integer(0, _)),
             "String" => matches!(self, Literal::String(..)),
+            "Path" => matches!(self, Literal::Path(..)),
             "Boolean" => matches!(self, Literal::Bool(..)),
             "Color" => matches!(self, Literal::Color(..)),
             "Expr" | "Expression" => false,
@@ -1129,7 +1134,7 @@ impl fmt::Display for Literal {
                 }
             }
             Literal::Duration(us, u, _) => write!(f, "{}", u.format_micros(*us)),
-            Literal::String(s, _) => write!(f, "\"{}\"", s),
+            Literal::String(s, _) | Literal::Path(s, _) => write!(f, "\"{}\"", s),
             Literal::Bool(b, _) => write!(f, "{}", b),
             Literal::Color(c, _) => write!(f, "{}", c),
             Literal::Enum(e, v, _) => write!(f, "{}.{}", e, v),

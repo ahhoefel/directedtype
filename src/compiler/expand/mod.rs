@@ -158,6 +158,7 @@ pub fn expand_document_with_resolver_and_dpi<R: crate::compiler::module::FileRes
     }
 
     typecheck_expanded_document(&mut expanded_doc, &known_enums, &registry)?;
+    resolve_and_preload_document_paths(&mut expanded_doc, base_dir, resolver)?;
 
     Ok(expanded_doc)
 }
@@ -278,7 +279,11 @@ fn preresolve_top_level_lets_and_envs(
                                 node_fonts,
                                 enums,
                             );
-                            rewrite_expr(raw_expr, &scope_ctx)
+                            let pre = typecheck::pre_coerce_ast_for_type(
+                                raw_expr,
+                                let_binding.type_annotation.as_ref(),
+                            );
+                            rewrite_expr(&pre, &scope_ctx)
                         };
                         if try_preresolve_expr_binding(
                             global_scope,
@@ -310,7 +315,11 @@ fn preresolve_top_level_lets_and_envs(
                                     node_fonts,
                                     enums,
                                 );
-                                rewrite_expr(raw_expr, &scope_ctx)
+                                let pre = typecheck::pre_coerce_ast_for_type(
+                                    raw_expr,
+                                    env_binding.type_annotation.as_ref(),
+                                );
+                                rewrite_expr(&pre, &scope_ctx)
                             };
                             if let Some(rewritten) = try_preresolve_expr_binding(
                                 global_scope,
@@ -425,7 +434,11 @@ fn expand_top_level_items(
                             node_fonts,
                             enums,
                         );
-                        rewrite_expr(raw_expr, &scope_ctx)?
+                        let pre = typecheck::pre_coerce_ast_for_type(
+                            raw_expr,
+                            env_binding.type_annotation.as_ref(),
+                        );
+                        rewrite_expr(&pre, &scope_ctx)?
                     };
                     let rewritten = coerce_typed_binding_expr(
                         rewritten,
@@ -491,7 +504,11 @@ fn expand_top_level_items(
                             node_fonts,
                             enums,
                         );
-                        rewrite_expr(raw_expr, &scope_ctx)?
+                        let pre = typecheck::pre_coerce_ast_for_type(
+                            raw_expr,
+                            let_binding.type_annotation.as_ref(),
+                        );
+                        rewrite_expr(&pre, &scope_ctx)?
                     };
                     let rewritten = coerce_typed_binding_expr(
                         rewritten,
@@ -1008,6 +1025,10 @@ pub(crate) fn expand_element(
             }
         }
 
+        let parent_is_text_or_span = ctx
+            .parent_id
+            .and_then(|pid| doc.get_node(pid))
+            .is_some_and(|p| p.name == "Text" || p.is_span);
         let comp_def = if overloads.len() == 1 {
             &overloads[0]
         } else {
@@ -1016,6 +1037,7 @@ pub(crate) fn expand_element(
                 elem.name.as_str(),
                 elem,
                 ctx.env_scope,
+                parent_is_text_or_span,
                 elem.span,
             )?
         };
@@ -1053,4 +1075,368 @@ pub(crate) fn expand_element(
     }
 
     Ok(node_id)
+}
+
+fn resolve_and_preload_expr_paths<R: crate::compiler::module::FileResolver>(
+    expr: &mut Expr,
+    store: &mut crate::compiler::image::ImageAssetStore,
+    base_dir: &std::path::Path,
+    resolver: &R,
+) -> Result<(), CompileError> {
+    match expr {
+        Expr::Literal(Literal::Path(ref mut p, span)) => {
+            if !p.is_empty() {
+                let canonical = store.resolve_and_preload_path(p, *span, base_dir, resolver)?;
+                *p = canonical;
+            }
+            Ok(())
+        }
+        Expr::Paren(inner, _) => {
+            resolve_and_preload_expr_paths(std::sync::Arc::make_mut(inner), store, base_dir, resolver)
+        }
+        Expr::Unary(u) => {
+            resolve_and_preload_expr_paths(
+                std::sync::Arc::make_mut(&mut u.operand),
+                store,
+                base_dir,
+                resolver,
+            )
+        }
+        Expr::Binary(b) => {
+            resolve_and_preload_expr_paths(
+                std::sync::Arc::make_mut(&mut b.left),
+                store,
+                base_dir,
+                resolver,
+            )?;
+            resolve_and_preload_expr_paths(
+                std::sync::Arc::make_mut(&mut b.right),
+                store,
+                base_dir,
+                resolver,
+            )
+        }
+        Expr::Ternary(t) => {
+            resolve_and_preload_expr_paths(
+                std::sync::Arc::make_mut(&mut t.condition),
+                store,
+                base_dir,
+                resolver,
+            )?;
+            resolve_and_preload_expr_paths(
+                std::sync::Arc::make_mut(&mut t.then_expr),
+                store,
+                base_dir,
+                resolver,
+            )?;
+            resolve_and_preload_expr_paths(
+                std::sync::Arc::make_mut(&mut t.else_expr),
+                store,
+                base_dir,
+                resolver,
+            )
+        }
+        Expr::Call(c) => {
+            for arg in &mut c.args {
+                resolve_and_preload_expr_paths(arg, store, base_dir, resolver)?;
+            }
+            Ok(())
+        }
+        Expr::MethodCall(mc) => {
+            resolve_and_preload_expr_paths(
+                std::sync::Arc::make_mut(&mut mc.target),
+                store,
+                base_dir,
+                resolver,
+            )?;
+            for arg in &mut mc.args {
+                resolve_and_preload_expr_paths(arg, store, base_dir, resolver)?;
+            }
+            Ok(())
+        }
+        Expr::MemberAccess(m) => resolve_and_preload_expr_paths(
+            std::sync::Arc::make_mut(&mut m.target),
+            store,
+            base_dir,
+            resolver,
+        ),
+        Expr::Index(ix) => {
+            resolve_and_preload_expr_paths(
+                std::sync::Arc::make_mut(&mut ix.target),
+                store,
+                base_dir,
+                resolver,
+            )?;
+            resolve_and_preload_expr_paths(
+                std::sync::Arc::make_mut(&mut ix.index),
+                store,
+                base_dir,
+                resolver,
+            )
+        }
+        Expr::Match(m) => {
+            let m_mut = std::sync::Arc::make_mut(m);
+            if let Some(s) = &mut m_mut.scrutinee {
+                resolve_and_preload_expr_paths(
+                    std::sync::Arc::make_mut(s),
+                    store,
+                    base_dir,
+                    resolver,
+                )?;
+            }
+            for arm in &mut m_mut.arms {
+                if let MatchPattern::Condition(cond) = &mut arm.pattern {
+                    resolve_and_preload_expr_paths(cond, store, base_dir, resolver)?;
+                }
+                resolve_and_preload_expr_paths(&mut arm.body, store, base_dir, resolver)?;
+            }
+            Ok(())
+        }
+        Expr::ExprDef(def) => {
+            let def_mut = std::sync::Arc::make_mut(def);
+            for param in &mut def_mut.params {
+                if let Some(d) = &mut param.default_edge {
+                    resolve_and_preload_expr_paths(d, store, base_dir, resolver)?;
+                }
+            }
+            resolve_and_preload_expr_paths(
+                std::sync::Arc::make_mut(&mut def_mut.body),
+                store,
+                base_dir,
+                resolver,
+            )
+        }
+        Expr::Node(elem) => resolve_and_preload_elem_paths(elem, None, store, base_dir, resolver),
+        Expr::Literal(_) | Expr::Ident(_) | Expr::DomNodeRef(_, _) => Ok(()),
+    }
+}
+
+fn resolve_and_preload_elem_paths<R: crate::compiler::module::FileResolver>(
+    elem: &mut ElementNode,
+    registry: Option<&HashMap<String, Vec<ComponentDef>>>,
+    store: &mut crate::compiler::image::ImageAssetStore,
+    base_dir: &std::path::Path,
+    resolver: &R,
+) -> Result<(), CompileError> {
+    let is_image_prim = elem.name.as_str() == "Image";
+    let comp_overloads = registry.and_then(|r| r.get(elem.name.as_str()));
+    for port in &mut elem.ports {
+        let expects_path = (is_image_prim && port.name.as_str() == "src")
+            || comp_overloads.is_some_and(|ovs| {
+                ovs.iter().any(|o| {
+                    o.params.iter().any(|p| {
+                        p.name.as_str() == port.name.as_str()
+                            && p.type_annotation
+                                .as_ref()
+                                .is_some_and(|t| t.name.as_str() == "Path")
+                    })
+                })
+            });
+        if expects_path {
+            port.expr = typecheck::coerce_syntactic_path_expr(&port.expr);
+        }
+        resolve_and_preload_expr_paths(&mut port.expr, store, base_dir, resolver)?;
+        if expects_path {
+            revert_resolved_path_literals_to_string(&mut port.expr);
+        }
+    }
+    if let Some(slot) = &mut elem.content {
+        for item in &mut slot.items {
+            match item {
+                ContentItem::Node(child) => {
+                    resolve_and_preload_elem_paths(child, registry, store, base_dir, resolver)?;
+                }
+                ContentItem::Let(l) => match &mut l.value {
+                    Some(LetValue::Node(n)) => {
+                        resolve_and_preload_elem_paths(n, registry, store, base_dir, resolver)?;
+                    }
+                    Some(LetValue::Expr(e)) => {
+                        let is_path = l
+                            .type_annotation
+                            .as_ref()
+                            .is_some_and(|t| t.name.as_str() == "Path");
+                        if is_path {
+                            *e = typecheck::coerce_syntactic_path_expr(e);
+                        }
+                        resolve_and_preload_expr_paths(e, store, base_dir, resolver)?;
+                        if is_path {
+                            revert_resolved_path_literals_to_string(e);
+                        }
+                    }
+                    None => {}
+                },
+                ContentItem::Env(env) => {
+                    if let Some(e) = &mut env.value {
+                        let is_path = env
+                            .type_annotation
+                            .as_ref()
+                            .is_some_and(|t| t.name.as_str() == "Path");
+                        if is_path {
+                            *e = typecheck::coerce_syntactic_path_expr(e);
+                        }
+                        resolve_and_preload_expr_paths(e, store, base_dir, resolver)?;
+                        if is_path {
+                            revert_resolved_path_literals_to_string(e);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Converts resolved `Literal::Path(canonical, span)` back to `Literal::String(canonical, span)` inside
+/// unexpanded AST nodes (like deferred `\Deposit` or `\PagedFlow` page templates) so subsequent AST expansion
+/// re-coerces them cleanly while preserving the canonical resolved path string.
+fn revert_resolved_path_literals_to_string(expr: &mut Expr) {
+    match expr {
+        Expr::Literal(lit) => {
+            if let Literal::Path(p, span) = lit {
+                *lit = Literal::String(p.clone(), *span);
+            }
+        }
+        Expr::Paren(inner, _) => {
+            revert_resolved_path_literals_to_string(std::sync::Arc::make_mut(inner));
+        }
+        Expr::Ternary(t) => {
+            revert_resolved_path_literals_to_string(std::sync::Arc::make_mut(&mut t.then_expr));
+            revert_resolved_path_literals_to_string(std::sync::Arc::make_mut(&mut t.else_expr));
+        }
+        Expr::Match(m) => {
+            let m_mut = std::sync::Arc::make_mut(m);
+            for arm in &mut m_mut.arms {
+                revert_resolved_path_literals_to_string(&mut arm.body);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn resolve_and_preload_owned_child<R: crate::compiler::module::FileResolver>(
+    child: &mut crate::compiler::expanded::OwnedConsumerChild,
+    registry: Option<&HashMap<String, Vec<ComponentDef>>>,
+    store: &mut crate::compiler::image::ImageAssetStore,
+    base_dir: &std::path::Path,
+    resolver: &R,
+) -> Result<(), CompileError> {
+    resolve_and_preload_elem_paths(&mut child.elem, registry, store, base_dir, resolver)?;
+    for binding in child.caller_lexical_scope.values_mut() {
+        match binding {
+            LexicalBinding::Expr(e) | LexicalBinding::State(e) => {
+                resolve_and_preload_expr_paths(e, store, base_dir, resolver)?;
+            }
+            _ => {}
+        }
+    }
+    for env_entry in child.caller_env_scope.values_mut() {
+        if let EnvEntry::Bound(e) = env_entry {
+            resolve_and_preload_expr_paths(e, store, base_dir, resolver)?;
+        }
+    }
+    for outer in &mut child.outer_consumer_children {
+        resolve_and_preload_owned_child(outer, registry, store, base_dir, resolver)?;
+    }
+    Ok(())
+}
+
+fn resolve_and_preload_document_paths<R: crate::compiler::module::FileResolver>(
+    expanded_doc: &mut ExpandedDocument,
+    base_dir: &std::path::Path,
+    resolver: &R,
+) -> Result<(), CompileError> {
+    let mut store = (*expanded_doc.image_assets).clone();
+    resolve_and_preload_doc_into_store(expanded_doc, &mut store, base_dir, resolver)?;
+    let shared_store = std::sync::Arc::new(store);
+    assign_shared_image_store(expanded_doc, &shared_store);
+    Ok(())
+}
+
+fn resolve_and_preload_doc_into_store<R: crate::compiler::module::FileResolver>(
+    doc: &mut ExpandedDocument,
+    store: &mut crate::compiler::image::ImageAssetStore,
+    base_dir: &std::path::Path,
+    resolver: &R,
+) -> Result<(), CompileError> {
+    for node in &mut doc.nodes {
+        for expr in node.ports.values_mut() {
+            resolve_and_preload_expr_paths(expr, store, base_dir, resolver)?;
+        }
+        for expr in node.unfiltered_ports.values_mut() {
+            resolve_and_preload_expr_paths(expr, store, base_dir, resolver)?;
+        }
+    }
+    for expr in doc.window_ports.values_mut() {
+        resolve_and_preload_expr_paths(expr, store, base_dir, resolver)?;
+    }
+    for expr in doc.page_ports.values_mut() {
+        resolve_and_preload_expr_paths(expr, store, base_dir, resolver)?;
+    }
+    for (expr, _, _) in &mut doc.local_bindings {
+        resolve_and_preload_expr_paths(expr, store, base_dir, resolver)?;
+    }
+    let reg_clone = doc.paged_registry.clone();
+    let reg_ref = reg_clone.as_deref();
+    if let Some(ref mut reg_arc) = doc.paged_registry {
+        let reg_mut = std::sync::Arc::make_mut(reg_arc);
+        for overloads in reg_mut.values_mut() {
+            for comp_def in overloads {
+                // Clear cached compiled templates if we update path literals in component definitions
+                comp_def.schema_cache = Default::default();
+                for param in &mut comp_def.params {
+                    let is_path = param
+                        .type_annotation
+                        .as_ref()
+                        .is_some_and(|t| t.name.as_str() == "Path");
+                    if let Some(d) = &mut param.default_edge {
+                        if is_path {
+                            *d = typecheck::coerce_syntactic_path_expr(d);
+                        }
+                        resolve_and_preload_expr_paths(d, store, base_dir, resolver)?;
+                        if is_path {
+                            revert_resolved_path_literals_to_string(d);
+                        }
+                    }
+                }
+                for item in &mut comp_def.body {
+                    if let ComponentBodyItem::Node(elem) = item {
+                        resolve_and_preload_elem_paths(elem, reg_ref, store, base_dir, resolver)?;
+                    }
+                }
+            }
+        }
+    }
+    let updated_reg = doc.paged_registry.clone();
+    let updated_reg_ref = updated_reg.as_deref();
+    for flow in &mut doc.paged_flows {
+        resolve_and_preload_owned_child(
+            &mut flow.page_template_elem,
+            updated_reg_ref,
+            store,
+            base_dir,
+            resolver,
+        )?;
+        resolve_and_preload_doc_into_store(&mut flow.probe_doc, store, base_dir, resolver)?;
+    }
+    for dep in &mut doc.deposits {
+        resolve_and_preload_owned_child(
+            &mut dep.payload,
+            updated_reg_ref,
+            store,
+            base_dir,
+            resolver,
+        )?;
+    }
+    Ok(())
+}
+
+fn assign_shared_image_store(
+    doc: &mut ExpandedDocument,
+    shared: &std::sync::Arc<crate::compiler::image::ImageAssetStore>,
+) {
+    doc.image_assets = std::sync::Arc::clone(shared);
+    for flow in &mut doc.paged_flows {
+        assign_shared_image_store(&mut flow.probe_doc, shared);
+    }
 }

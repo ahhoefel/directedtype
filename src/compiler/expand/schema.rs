@@ -1245,6 +1245,7 @@ pub(super) fn select_component_overload<'a>(
     comp_name: &str,
     elem: &ElementNode,
     env_scope: &HashMap<String, EnvEntry>,
+    parent_is_text_or_span: bool,
     span: Span,
 ) -> Result<&'a ComponentDef, CompileError> {
     let explicit_ports: HashSet<String> =
@@ -1285,7 +1286,10 @@ pub(super) fn select_component_overload<'a>(
                 if param.default_edge.is_none() {
                     let name = param.name.as_str();
                     let satisfied = explicit_ports.contains(name)
-                        || (param.is_env && matches!(env_scope.get(name), Some(EnvEntry::Bound(_))));
+                        || (param.is_env && matches!(env_scope.get(name), Some(EnvEntry::Bound(_))))
+                        || (parent_is_text_or_span
+                            && o.kind == ComponentKind::InlineBox
+                            && matches!(name, "x" | "y"));
 
                     if !satisfied {
                         return false;
@@ -2221,8 +2225,12 @@ impl CompiledComponentTemplates {
             if is_handler_or_expr || matches!(default_expr, Expr::Node(_) | Expr::ExprDef(_)) {
                 continue;
             }
-            if let Some(compiled) = try_compile_self_template(
+            let pre_default = super::typecheck::pre_coerce_ast_for_type(
                 default_expr,
+                param.type_annotation.as_ref(),
+            );
+            if let Some(compiled) = try_compile_self_template(
+                &pre_default,
                 schema,
                 enums,
                 caller_scope,
@@ -2291,8 +2299,12 @@ impl CompiledComponentTemplates {
             if is_handler_or_expr {
                 continue;
             }
-            if let Some(compiled) = try_compile_self_template(
+            let pre_let = super::typecheck::pre_coerce_ast_for_type(
                 raw_expr,
+                l.type_annotation.as_ref(),
+            );
+            if let Some(compiled) = try_compile_self_template(
+                &pre_let,
                 schema,
                 enums,
                 caller_scope,
@@ -2329,8 +2341,12 @@ impl CompiledComponentTemplates {
             if is_handler {
                 continue;
             }
-            if let Some(compiled) = try_compile_self_template(
+            let pre_env = super::typecheck::pre_coerce_ast_for_type(
                 raw_expr,
+                e.type_annotation.as_ref(),
+            );
+            if let Some(compiled) = try_compile_self_template(
+                &pre_env,
                 schema,
                 enums,
                 caller_scope,
@@ -2356,8 +2372,12 @@ impl CompiledComponentTemplates {
             if is_handler_or_expr {
                 continue;
             }
-            if let Some(compiled) = try_compile_self_template(
+            let pre_alias = super::typecheck::pre_coerce_ast_for_type(
                 &a.value,
+                a.type_annotation.as_ref(),
+            );
+            if let Some(compiled) = try_compile_self_template(
+                &pre_alias,
                 schema,
                 enums,
                 caller_scope,

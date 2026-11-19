@@ -1992,12 +1992,32 @@ impl ViewerApp {
             move |res: Result<NotifyEvent, notify::Error>| {
                 if let Ok(event) = res {
                     if !event.kind.is_access() {
-                        let matches = if let Some(target) = &target_filename {
-                            event.paths.is_empty()
-                                || event.paths.iter().any(|p| p.file_name() == Some(target.as_os_str()))
-                        } else {
-                            true
-                        };
+                        let mut is_image_change = false;
+                        for p in &event.paths {
+                            if p.extension()
+                                .and_then(|e| e.to_str())
+                                .is_some_and(|ext| {
+                                    matches!(
+                                        ext.to_ascii_lowercase().as_str(),
+                                        "png" | "jpg" | "jpeg" | "svg"
+                                    )
+                                })
+                            {
+                                crate::compiler::image::invalidate_cached_image_path(p);
+                                crate::render::image::invalidate_vello_svg_cache(p);
+                                is_image_change = true;
+                            }
+                        }
+                        let matches = is_image_change
+                            || if let Some(target) = &target_filename {
+                                event.paths.is_empty()
+                                    || event
+                                        .paths
+                                        .iter()
+                                        .any(|p| p.file_name() == Some(target.as_os_str()))
+                            } else {
+                                true
+                            };
                         if matches {
                             let _ = tx.send(());
                         }
@@ -2006,7 +2026,7 @@ impl ViewerApp {
             },
             notify::Config::default(),
         ) {
-            if watcher.watch(parent_dir, RecursiveMode::NonRecursive).is_ok() {
+            if watcher.watch(parent_dir, RecursiveMode::Recursive).is_ok() {
                 self._watcher = Some(watcher);
                 println!("[HotReload] Watching for live changes in: {}", path.display());
             }
@@ -3999,12 +4019,32 @@ fn run_viewer_app(
             move |res: Result<NotifyEvent, notify::Error>| {
                 if let Ok(event) = res {
                     if !event.kind.is_access() {
-                        let matches = if let Some(target) = &target_filename {
-                            event.paths.is_empty()
-                                || event.paths.iter().any(|p| p.file_name() == Some(target.as_os_str()))
-                        } else {
-                            true
-                        };
+                        let mut is_image_change = false;
+                        for p in &event.paths {
+                            if p.extension()
+                                .and_then(|e| e.to_str())
+                                .is_some_and(|ext| {
+                                    matches!(
+                                        ext.to_ascii_lowercase().as_str(),
+                                        "png" | "jpg" | "jpeg" | "svg"
+                                    )
+                                })
+                            {
+                                crate::compiler::image::invalidate_cached_image_path(p);
+                                crate::render::image::invalidate_vello_svg_cache(p);
+                                is_image_change = true;
+                            }
+                        }
+                        let matches = is_image_change
+                            || if let Some(target) = &target_filename {
+                                event.paths.is_empty()
+                                    || event
+                                        .paths
+                                        .iter()
+                                        .any(|p| p.file_name() == Some(target.as_os_str()))
+                            } else {
+                                true
+                            };
                         if matches {
                             let _ = tx.send(());
                         }
@@ -4014,7 +4054,7 @@ fn run_viewer_app(
             notify::Config::default(),
         )?;
 
-        watcher.watch(parent_dir, RecursiveMode::NonRecursive)?;
+        watcher.watch(parent_dir, RecursiveMode::Recursive)?;
         app._watcher = Some(watcher);
         println!("[HotReload] Watching for live changes in: {}", path.display());
     }

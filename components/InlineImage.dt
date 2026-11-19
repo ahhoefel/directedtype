@@ -1,0 +1,97 @@
+// DirectedType Standard Component Library: InlineImage
+// Atomic inline image box (\InlineBox) with 3 disjoint aspect-preserving overloads
+// matching \Image, plus baseline_offset alignment for inline prose flow.
+
+// 1. Intrinsic / DPI-sized inline image
+\InlineBox InlineImage(
+    src: Path,
+    x: Distance,
+    y: Distance,
+    env font: Font = \Font(size: 16px),
+    dpi: Float = window.dpi,
+    baseline_offset: Distance = height,
+    radius: Distance = 0px,
+    border_width: Distance = 0px,
+    border_color: Color = #00000000,
+    opacity: Float = 1.0,
+    alt: String = ""
+) {
+    \let img = \Image(
+        src: src,
+        x: x,
+        y: y,
+        dpi: dpi,
+        radius: radius,
+        border_width: border_width,
+        border_color: border_color,
+        opacity: opacity,
+        alt: alt
+    )
+    \alias width: Distance = img.width;
+    \alias height: Distance = img.height;
+    \alias aspect_ratio: Float = img.aspect_ratio;
+    \alias file_dpi: Float = img.file_dpi;
+    \alias baseline: Distance = y + baseline_offset;
+}
+
+// 2. Width-constrained inline image
+\InlineBox InlineImage(
+    src: Path,
+    x: Distance,
+    y: Distance,
+    width: Distance,
+    env font: Font = \Font(size: 16px),
+    baseline_offset: Distance = height,
+    radius: Distance = 0px,
+    border_width: Distance = 0px,
+    border_color: Color = #00000000,
+    opacity: Float = 1.0,
+    alt: String = ""
+) {
+    \let img = \Image(
+        src: src,
+        x: x,
+        y: y,
+        width: width,
+        radius: radius,
+        border_width: border_width,
+        border_color: border_color,
+        opacity: opacity,
+        alt: alt
+    )
+    \alias height: Distance = img.height;
+    \alias aspect_ratio: Float = img.aspect_ratio;
+    \alias file_dpi: Float = img.file_dpi;
+    \alias baseline: Distance = y + baseline_offset;
+}
+
+// 3. Height-constrained inline image
+\InlineBox InlineImage(
+    src: Path,
+    x: Distance,
+    y: Distance,
+    height: Distance,
+    env font: Font = \Font(size: 16px),
+    baseline_offset: Distance = height,
+    radius: Distance = 0px,
+    border_width: Distance = 0px,
+    border_color: Color = #00000000,
+    opacity: Float = 1.0,
+    alt: String = ""
+) {
+    \let img = \Image(
+        src: src,
+        x: x,
+        y: y,
+        height: height,
+        radius: radius,
+        border_width: border_width,
+        border_color: border_color,
+        opacity: opacity,
+        alt: alt
+    )
+    \alias width: Distance = img.width;
+    \alias aspect_ratio: Float = img.aspect_ratio;
+    \alias file_dpi: Float = img.file_dpi;
+    \alias baseline: Distance = y + baseline_offset;
+}

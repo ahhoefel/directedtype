@@ -286,7 +286,14 @@ impl<'a> ComponentExpander<'a> {
                         caller_child_ids,
                     )
                     .as_event_port(name.starts_with("on_") || is_handler_param);
-                    rewrite_expr(other, &caller_scope_ctx)?
+                    let param_ty = self
+                        .comp_def
+                        .params
+                        .iter()
+                        .find(|p| p.name.as_str() == name)
+                        .and_then(|p| p.type_annotation.as_ref());
+                    let pre = super::typecheck::pre_coerce_ast_for_type(other, param_ty);
+                    rewrite_expr(&pre, &caller_scope_ctx)?
                 }
             };
             explicit_ports.insert(name, expr);
@@ -358,7 +365,15 @@ impl<'a> ComponentExpander<'a> {
                 }
                 Ok(Expr::Ident(Ident::from_node(child_id, inline_elem.span)))
             }
-            other => Ok(other.clone()),
+            other => {
+                let param_ty = self
+                    .comp_def
+                    .params
+                    .iter()
+                    .find(|p| p.name.as_str() == param_name)
+                    .and_then(|p| p.type_annotation.as_ref());
+                Ok(super::typecheck::pre_coerce_ast_for_type(other, param_ty).into_owned())
+            }
         }
     }
 
@@ -369,6 +384,9 @@ impl<'a> ComponentExpander<'a> {
             if !self.comp_ports.contains_key(port_name)
                 && !self.schema.declared_aliases.contains_key(port_name)
             {
+                if !parent_is_text_or_span && self.schema.param_names.contains(port_name) {
+                    continue;
+                }
                 let default_expr = if !parent_is_text_or_span {
                     if let Some(pid) = ctx.parent_id {
                         if !pid.is_window()
@@ -1288,7 +1306,11 @@ impl<'a> ComponentExpander<'a> {
                         Some(&self.schema.declared_state_names),
                     )
                     .as_event_port(is_event_let);
-                    rewrite_expr(raw_expr, &scope_ctx)?
+                    let pre = super::typecheck::pre_coerce_ast_for_type(
+                        raw_expr,
+                        let_binding.type_annotation.as_ref(),
+                    );
+                    rewrite_expr(&pre, &scope_ctx)?
                 };
                 let rewritten =
                     coerce_typed_binding_expr(rewritten, let_binding.type_annotation.as_ref());
@@ -1449,7 +1471,11 @@ impl<'a> ComponentExpander<'a> {
                         .with_children(&inst_borrow, self.num_consumer_children)
                         .with_shadowed_ports(Some(&self.schema.comp_shadowed_ports))
                         .with_enclosing_component(Some(ctx.comp_node_id));
-                        rewrite_expr(raw_expr, &scope_ctx)?
+                        let pre = super::typecheck::pre_coerce_ast_for_type(
+                            raw_expr,
+                            env_binding.type_annotation.as_ref(),
+                        );
+                        rewrite_expr(&pre, &scope_ctx)?
                     };
                     let rewritten =
                         coerce_typed_binding_expr(rewritten, env_binding.type_annotation.as_ref());
@@ -1640,7 +1666,11 @@ impl<'a> ComponentExpander<'a> {
                                 Some(&self.comp_ports),
                                 Some(&self.schema.declared_state_names),
                             );
-                            rewrite_expr(&alias_binding.value, &scope_ctx)?
+                            let pre = super::typecheck::pre_coerce_ast_for_type(
+                                &alias_binding.value,
+                                alias_binding.type_annotation.as_ref(),
+                            );
+                            rewrite_expr(&pre, &scope_ctx)?
                         };
                         let rewritten = coerce_typed_binding_expr(
                             rewritten,
@@ -2096,6 +2126,9 @@ impl<'a> ComponentExpander<'a> {
                                     }
                                     Literal::String(s, _) => {
                                         crate::compiler::value::Value::String(s)
+                                    }
+                                    Literal::Path(p, _) => {
+                                        crate::compiler::value::Value::Path(p)
                                     }
                                     Literal::Bool(b, _) => crate::compiler::value::Value::Bool(b),
                                     Literal::Color(c, _) => crate::compiler::value::Value::Color(c),

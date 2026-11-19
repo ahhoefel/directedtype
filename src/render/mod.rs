@@ -6,6 +6,8 @@ pub mod error;
 #[cfg(feature = "vello-renderer")]
 pub mod headless;
 #[cfg(feature = "vello-renderer")]
+pub mod image;
+#[cfg(feature = "vello-renderer")]
 pub mod scene;
 #[cfg(feature = "vello-renderer")]
 pub mod viewer;

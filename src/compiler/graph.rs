@@ -82,6 +82,8 @@ pub struct VariableGraph {
     pub window_port_to_idx: HashMap<Symbol, VarIndex>,
     /// Ambient `page` port lookup from port symbol to `VarIndex`
     pub page_port_to_idx: HashMap<Symbol, VarIndex>,
+    /// Preloaded image assets referenced by this document
+    pub image_assets: std::sync::Arc<crate::compiler::image::ImageAssetStore>,
 }
 
 impl VariableGraph {
@@ -95,6 +97,7 @@ impl VariableGraph {
             node_port_to_idx: Vec::new(),
             window_port_to_idx: HashMap::new(),
             page_port_to_idx: HashMap::new(),
+            image_assets: std::sync::Arc::new(crate::compiler::image::ImageAssetStore::new()),
         }
     }
 
@@ -109,6 +112,7 @@ impl VariableGraph {
             node_port_to_idx: vec![HashMap::new(); num_nodes],
             window_port_to_idx: HashMap::with_capacity(16),
             page_port_to_idx: HashMap::with_capacity(16),
+            image_assets: std::sync::Arc::new(crate::compiler::image::ImageAssetStore::new()),
         }
     }
 
@@ -285,6 +289,7 @@ pub fn build_variable_graph_with_window_and_dpi(
     default_dpi: f64,
 ) -> Result<VariableGraph, CompileError> {
     let mut graph = VariableGraph::with_node_capacity(doc.nodes.len());
+    graph.image_assets = std::sync::Arc::clone(&doc.image_assets);
 
     // 0. Ambient Window Node Variables
     let window_span = Span::default();

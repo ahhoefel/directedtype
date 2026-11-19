@@ -8,6 +8,7 @@ pub enum Value {
     Distance(f64),
     Duration(i64),
     String(String),
+    Path(String),
     Bool(bool),
     Color(String),
     Node(u64),
@@ -113,7 +114,7 @@ impl Value {
 
     pub fn as_str(&self) -> Option<&str> {
         match self {
-            Value::String(s) | Value::Color(s) => Some(s.as_str()),
+            Value::String(s) | Value::Path(s) | Value::Color(s) => Some(s.as_str()),
             Value::Enum { variant, .. } => Some(variant.as_str()),
             _ => None,
         }
@@ -124,7 +125,7 @@ impl Value {
             Value::Bool(b) => *b,
             Value::Integer(i) | Value::Duration(i) => *i != 0,
             Value::Float(n) | Value::Distance(n) => *n != 0.0,
-            Value::String(s) => !s.is_empty(),
+            Value::String(s) | Value::Path(s) => !s.is_empty(),
             Value::Color(_) => true,
             Value::Node(_) => true,
             Value::Enum { .. } => true,

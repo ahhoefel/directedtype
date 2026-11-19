@@ -431,6 +431,7 @@ impl ExpandedNode {
         self.name == "Rect"
             || self.name == "Line"
             || self.name == "Text"
+            || self.name == "Image"
             || self.text_content.is_some()
             || self.ports.contains_key("text")
     }
@@ -457,6 +458,7 @@ pub struct ExpandedDocument {
     pub local_bindings: Vec<(Expr, Option<String>, crate::span::Span)>,
     pub scope_tree: ScopeTree,
     pub default_dpi: f64,
+    pub image_assets: Arc<crate::compiler::image::ImageAssetStore>,
 }
 
 impl ExpandedDocument {
@@ -480,6 +482,7 @@ impl ExpandedDocument {
             local_bindings: Vec::new(),
             scope_tree: ScopeTree::new(),
             default_dpi: 96.0,
+            image_assets: Arc::new(crate::compiler::image::ImageAssetStore::new()),
         }
     }
 
