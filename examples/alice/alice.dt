@@ -1,16 +1,33 @@
-// Alice's Adventures in Wonderland (1865 Macmillan Edition)
-// Front Matter ([i]–[x]) + Chapter I (Pages 1–14)
+// Alice's Adventures in Wonderland — Complete 1865 Macmillan Edition
+// Front Matter [i–x] + Chapters I–XII (Book Pages 1–192; 202 PDF pages total)
 
 \use "AliceStyle.dt"
 \use "front_matter.dt"
 \use "ch01.dt"
+\use "ch02.dt"
+\use "ch03.dt"
+\use "ch04.dt"
+\use "ch05.dt"
+\use "ch06.dt"
+\use "ch07.dt"
+\use "ch08.dt"
+\use "ch09.dt"
+\use "ch10.dt"
+\use "ch11.dt"
+\use "ch12.dt"
 
-\AliceBook(
-    folio_offset: 10,
-    start_page: 1,
-    font_size: 11.95pt,
-    line_height: 17.1pt
-) {
+\AliceBook(folio_offset: 10) {
     \FrontMatter()
     \ChapterOne()
+    \ChapterTwo()
+    \ChapterThree()
+    \ChapterFour()
+    \ChapterFive()
+    \ChapterSix()
+    \ChapterSeven()
+    \ChapterEight()
+    \ChapterNine()
+    \ChapterTen()
+    \ChapterEleven()
+    \ChapterTwelve()
 }

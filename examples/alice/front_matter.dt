@@ -11,6 +11,7 @@
 // [x]   Verso: Blank (followed by Page 1 on Recto)
 
 \use "components/Align.dt"
+\use "components/Center.dt"
 \use "components/VStackStretch.dt"
 \use "components/Spacer.dt"
 \use "components/Italic.dt"
@@ -208,7 +209,7 @@
                 font: \Font(font: font, size: 11pt, weight: 700),
                 color: #111111,
                 align: Align.Center,
-                text: "London"
+                text: "Mexico City"
             )
             \Spacer(height: 11pt)
             \Text(
@@ -216,7 +217,7 @@
                 font: \Font(font: font, size: 9.5pt),
                 color: #111111,
                 align: Align.Center,
-                text: "MACMILLAN AND CO."
+                text: "Typeset with DirectedType"
             )
             \Spacer(height: 10pt)
             \Text(
@@ -224,46 +225,29 @@
                 font: \Font(font: font, size: 9pt),
                 color: #111111,
                 align: Align.Center,
-                text: "1865."
-            )
-            \Spacer(height: 22pt)
-            \Text(
-                width: parent.width,
-                font: \Font(font: font, size: 6.8pt),
-                color: #111111,
-                align: Align.Center,
-                text: "[The Right of Translation and Reproduction is Reserved.]"
+                text: "November 2026"
             )
         }
 
         // ============================================================
-        // Page [iv] (Verso): 1865 Printer's Imprint
+        // Page [iv] (Verso): Replacing the 1865 Printer's Imprint
         // ============================================================
-        \VStackStretch(width: parent.width, gap: 0pt, pagination: \Pagination(breakable: false, break_before: Break.Verso)) {
-            \Spacer(height: 168pt)
+        \Center(
+            height: 377.2pt,
+            pagination: \Pagination(breakable: false, break_before: Break.Verso)
+        ) {
             \Text(
-                width: parent.width,
-                font: \Font(font: font, size: 7.2pt),
+                width: parent.width * 0.75,
+                font: \Font(font: font, size: 9pt, line_height: 13.5pt),
                 color: #111111,
-                align: Align.Center,
-                text: "LONDON:"
-            )
-            \Spacer(height: 8pt)
-            \Text(
-                width: parent.width,
-                font: \Font(font: font, size: 7.2pt),
-                color: #111111,
-                align: Align.Center,
-                text: "R. CLAY, SON, AND TAYLOR, PRINTERS,"
-            )
-            \Spacer(height: 8pt)
-            \Text(
-                width: parent.width,
-                font: \Font(font: font, size: 7.2pt),
-                color: #111111,
-                align: Align.Center,
-                text: "BREAD STREET HILL."
-            )
+                align: Align.Justify
+            ) {
+                This book was digitally typeset using a new typesetting system
+                called DirectedType and made to resemble the
+                original Macmillan edition produced in London in 1865.
+                The type is set in Old Standard TT which is a 2006 revival of
+                late 19th-century academic typefaces.
+            }
         }
 
         // ============================================================
