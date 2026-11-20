@@ -291,7 +291,7 @@
         }
 
         // ============================================================
-        // Page 35 (Recto, Signature D 2): Top Plate #10 (Dodo & thimble) + 5 lines
+        // Page 35 (Recto): Top Plate #10 (Dodo & thimble) + 5 lines
         // ============================================================
         \TopPlate(src: "images/tenniel_10.png", grid_lines: 17.0, img_top: 10pt)
 

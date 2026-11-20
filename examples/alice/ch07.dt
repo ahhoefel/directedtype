@@ -86,7 +86,7 @@
         }
 
         // ============================================================
-        // Page 97 (Recto, Signature H): Top Plate #25 (Mad Tea-Party) + 11 lines
+        // Page 97 (Recto, Signature O): Top Plate #25 (Mad Tea-Party) + 11 lines
         // ============================================================
         \TopPlate(src: "images/tenniel_25.png", grid_lines: 11.0, img_top: -2pt)
 

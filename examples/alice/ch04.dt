@@ -270,7 +270,7 @@
         }
 
         // ============================================================
-        // Page 51 (Recto, Signature E 2): Full-height left wrap #13 (Bill the Lizard)
+        // Page 51 (Recto): Full-height left wrap #13 (Bill the Lizard)
         // ============================================================
         \WrapLeftStack(
             src: "images/tenniel_13.png",

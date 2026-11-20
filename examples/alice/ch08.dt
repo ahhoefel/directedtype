@@ -49,7 +49,7 @@
         }
 
         // ============================================================
-        // Page 113 (Recto, Signature I): Left Inset Wrap #28 (Card Gardeners)
+        // Page 113 (Recto, Signature Q): Left Inset Wrap #28 (Card Gardeners)
         // ============================================================
         \Para(
             pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)

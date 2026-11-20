@@ -84,7 +84,7 @@
         }
 
         // ============================================================
-        // Page 177 (Recto, Signature N): Top Plate #40 (Tipping Jury-Box) + 4 lines
+        // Page 177 (Recto, Signature A A): Top Plate #40 (Tipping Jury-Box) + 4 lines
         // ============================================================
         \TopPlate(src: "images/tenniel_40.png", grid_lines: 18.0, img_top: 7pt)
 
