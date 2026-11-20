@@ -166,11 +166,11 @@
         // ============================================================
         \TopPlate(src: "images/tenniel_37.png", grid_lines: 15.5, img_top: 20pt)
 
-        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true) {
-            \VerseLine(left_margin: 26pt, indent: 0pt) { “The Queen of Hearts, she made some tarts, }
-            \VerseLine(left_margin: 26pt, indent: 14.5pt) { All on a summer day: }
-            \VerseLine(left_margin: 26pt, indent: 0pt) { The Knave of Hearts, he stole those tarts, }
-            \VerseLine(left_margin: 26pt, indent: 14.5pt) { And took them quite away!” }
+        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, left_margin: 26pt) {
+            \VerseLine { “The Queen of Hearts, she made some tarts, }
+            \VerseLine(indent: 14.5pt) { All on a summer day: }
+            \VerseLine { The Knave of Hearts, he stole those tarts, }
+            \VerseLine(indent: 14.5pt) { And took them quite away!” }
             \Spacer(height: 12pt)
         }
 

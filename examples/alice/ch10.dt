@@ -171,47 +171,47 @@
         // ============================================================
         // Page 151 (Recto): "Will you walk a little faster?" (Stanzas 1 & 2)
         // ============================================================
-        \PoemBlock(size: 10pt, leading: 16.4pt, italic: true, break_before: Break.Page) {
+        \PoemBlock(size: 10pt, leading: 16.4pt, italic: true, left_margin: 0pt, break_before: Break.Page) {
             \Spacer(height: 3pt)
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “Will you walk a little faster?” said a whiting to a snail, }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “There’s a porpoise close behind us, and he’s treading on }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { my tail. }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { See how eagerly the lobsters and the turtles all advance! }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { They are waiting on the shingle—will you come and join }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { the dance? }
-            \VerseLine(left_margin: 0pt, indent: 10pt) { Will you, won’t you, will you, won’t you, will you join }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { the dance? }
-            \VerseLine(left_margin: 0pt, indent: 10pt) { Will you, won’t you, will you, won’t you, won’t you join }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { the dance? }
+            \VerseLine { “Will you walk a little faster?” said a whiting to a snail, }
+            \VerseLine { “There’s a porpoise close behind us, and he’s treading on }
+            \VerseLine(indent: 23.8pt) { my tail. }
+            \VerseLine { See how eagerly the lobsters and the turtles all advance! }
+            \VerseLine { They are waiting on the shingle—will you come and join }
+            \VerseLine(indent: 23.8pt) { the dance? }
+            \VerseLine(indent: 10pt) { Will you, won’t you, will you, won’t you, will you join }
+            \VerseLine(indent: 23.8pt) { the dance? }
+            \VerseLine(indent: 10pt) { Will you, won’t you, will you, won’t you, won’t you join }
+            \VerseLine(indent: 23.8pt) { the dance? }
 
             \Spacer(height: 34pt)
 
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “You can really have no notion how delightful it will be }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { When they take us up and throw us, with the lobsters, out }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { to sea!” }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { But the snail replied “Too far, too far!” and gave a look }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { askance— }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { Said he thanked the whiting kindly, but he would not join }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { the dance. }
-            \VerseLine(left_margin: 0pt, indent: 10pt) { Would not, could not, would not, could not, would not }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { join the dance. }
-            \VerseLine(left_margin: 0pt, indent: 10pt) { Would not, could not, would not, could not, could not }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { join the dance. }
+            \VerseLine { “You can really have no notion how delightful it will be }
+            \VerseLine { When they take us up and throw us, with the lobsters, out }
+            \VerseLine(indent: 23.8pt) { to sea!” }
+            \VerseLine { But the snail replied “Too far, too far!” and gave a look }
+            \VerseLine(indent: 23.8pt) { askance— }
+            \VerseLine { Said he thanked the whiting kindly, but he would not join }
+            \VerseLine(indent: 23.8pt) { the dance. }
+            \VerseLine(indent: 10pt) { Would not, could not, would not, could not, would not }
+            \VerseLine(indent: 23.8pt) { join the dance. }
+            \VerseLine(indent: 10pt) { Would not, could not, would not, could not, could not }
+            \VerseLine(indent: 23.8pt) { join the dance. }
         }
 
         // ============================================================
         // Page 152 (Verso): Stanza 3 + Whiting & Porpoise dialogue (pp. 152–156)
         // ============================================================
-        \PoemBlock(size: 10pt, leading: 16.4pt, italic: true, break_before: Break.Page) {
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “What matters it how far we go?” his scaly friend replied, }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “There is another shore, you know, upon the other side. }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { The further off from England the nearer is to France— }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { Then turn not pale, beloved snail, but come and join the }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { dance. }
-            \VerseLine(left_margin: 0pt, indent: 10pt) { Will you, won’t you, will you, won’t you, will you join }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { the dance? }
-            \VerseLine(left_margin: 0pt, indent: 10pt) { Will you, won’t you, will you, won’t you, won’t you join }
-            \VerseLine(left_margin: 0pt, indent: 23.8pt) { the dance?” }
+        \PoemBlock(size: 10pt, leading: 16.4pt, italic: true, left_margin: 0pt, break_before: Break.Page) {
+            \VerseLine { “What matters it how far we go?” his scaly friend replied, }
+            \VerseLine { “There is another shore, you know, upon the other side. }
+            \VerseLine { The further off from England the nearer is to France— }
+            \VerseLine { Then turn not pale, beloved snail, but come and join the }
+            \VerseLine(indent: 23.8pt) { dance. }
+            \VerseLine(indent: 10pt) { Will you, won’t you, will you, won’t you, will you join }
+            \VerseLine(indent: 23.8pt) { the dance? }
+            \VerseLine(indent: 10pt) { Will you, won’t you, will you, won’t you, won’t you join }
+            \VerseLine(indent: 23.8pt) { the dance?” }
             \Spacer(height: 14.4pt)
         }
 
@@ -438,11 +438,11 @@
             }
         }
 
-        \PoemBlock(size: 10pt, leading: 16.0pt, italic: true) {
-            \VerseLine(left_margin: 10pt, indent: 0pt) { “’Tis the voice of the lobster; I heard him declare, }
-            \VerseLine(left_margin: 10pt, indent: 0pt) { ‘You have baked me too brown, I must sugar my hair.’ }
-            \VerseLine(left_margin: 10pt, indent: 0pt) { As a duck with its eyelids, so he with his nose }
-            \VerseLine(left_margin: 10pt, indent: 0pt) { Trims his belt and his buttons, and turns out his toes.” }
+        \PoemBlock(size: 10pt, leading: 16.0pt, italic: true, left_margin: 10pt) {
+            \VerseLine { “’Tis the voice of the lobster; I heard him declare, }
+            \VerseLine { ‘You have baked me too brown, I must sugar my hair.’ }
+            \VerseLine { As a duck with its eyelids, so he with his nose }
+            \VerseLine { Trims his belt and his buttons, and turns out his toes.” }
             \Spacer(height: 6pt)
         }
 
@@ -504,10 +504,10 @@
         // ============================================================
         // Page 159 (Recto): 1866 2-line Owl & Oyster verse + Turtle Soup intro
         // ============================================================
-        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, break_before: Break.Page) {
+        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, left_margin: 10pt, break_before: Break.Page) {
             \Spacer(height: 4pt)
-            \VerseLine(left_margin: 10pt, indent: 0pt) { “I passed by his garden, and marked, with one eye, }
-            \VerseLine(left_margin: 10pt, indent: 0pt) { How the owl and the oyster were sharing a pie—” }
+            \VerseLine { “I passed by his garden, and marked, with one eye, }
+            \VerseLine { How the owl and the oyster were sharing a pie—” }
             \Spacer(height: 24pt)
         }
 
@@ -549,27 +549,27 @@
         // ============================================================
         \PoemBlock(size: 10pt, leading: 16.0pt, italic: true, break_before: Break.Page) {
             \Spacer(height: 6pt)
-            \VerseLine(left_margin: 36pt, indent: 0pt) { “Beautiful Soup, so rich and green, }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Waiting in a hot tureen! }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Who for such dainties would not stoop? }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Soup of the evening, beautiful Soup! }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Soup of the evening, beautiful Soup! }
-            \VerseLine(left_margin: 36pt, indent: 20pt) { Beau—ootiful Soo—oop! }
-            \VerseLine(left_margin: 36pt, indent: 20pt) { Beau—ootiful Soo—oop! }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Soo—oop of the e—e—evening, }
-            \VerseLine(left_margin: 36pt, indent: 20pt) { Beautiful, beautiful Soup! }
+            \VerseLine { “Beautiful Soup, so rich and green, }
+            \VerseLine { Waiting in a hot tureen! }
+            \VerseLine { Who for such dainties would not stoop? }
+            \VerseLine { Soup of the evening, beautiful Soup! }
+            \VerseLine { Soup of the evening, beautiful Soup! }
+            \VerseLine(indent: 20pt) { Beau—ootiful Soo—oop! }
+            \VerseLine(indent: 20pt) { Beau—ootiful Soo—oop! }
+            \VerseLine { Soo—oop of the e—e—evening, }
+            \VerseLine(indent: 20pt) { Beautiful, beautiful Soup! }
 
             \Spacer(height: 36pt)
 
-            \VerseLine(left_margin: 36pt, indent: 0pt) { “Beautiful Soup! Who cares for fish, }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Game, or any other dish? }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Who would not give all else for two p }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { ennyworth only of beautiful Soup? }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Pennyworth only of beautiful Soup? }
-            \VerseLine(left_margin: 36pt, indent: 20pt) { Beau—ootiful Soo—oop! }
-            \VerseLine(left_margin: 36pt, indent: 20pt) { Beau—ootiful Soo—oop! }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Soo—oop of the e—e—evening, }
-            \VerseLine(left_margin: 36pt, indent: 20pt) { Beautiful, beauti—FUL SOUP!” }
+            \VerseLine { “Beautiful Soup! Who cares for fish, }
+            \VerseLine { Game, or any other dish? }
+            \VerseLine { Who would not give all else for two p }
+            \VerseLine { ennyworth only of beautiful Soup? }
+            \VerseLine { Pennyworth only of beautiful Soup? }
+            \VerseLine(indent: 20pt) { Beau—ootiful Soo—oop! }
+            \VerseLine(indent: 20pt) { Beau—ootiful Soo—oop! }
+            \VerseLine { Soo—oop of the e—e—evening, }
+            \VerseLine(indent: 20pt) { Beautiful, beauti—FUL SOUP!” }
             \Spacer(height: 30pt)
         }
 
@@ -594,10 +594,10 @@
             the melancholy words:—
         }
 
-        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true) {
+        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, left_margin: 33pt) {
             \Spacer(height: 10pt)
-            \VerseLine(left_margin: 33pt, indent: 0pt) { “Soo—oop of the e—e—evening, }
-            \VerseLine(left_margin: 54pt, indent: 0pt) { Beautiful, beautiful Soup!” }
+            \VerseLine { “Soo—oop of the e—e—evening, }
+            \VerseLine(left_margin: 54pt) { Beautiful, beautiful Soup!” }
         }
     };
 

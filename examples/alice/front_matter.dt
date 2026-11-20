@@ -264,20 +264,20 @@
             \DoubleRule(rule_width: 56.25pt)
             \Spacer(height: 30pt)
 
-            \VerseLine(indent: 0pt) { All in the golden afternoon }
+            \VerseLine { All in the golden afternoon }
             \VerseLine(indent: 11.2pt) { Full leisurely we glide; }
-            \VerseLine(indent: 0pt) { For both our oars, with little skill, }
+            \VerseLine { For both our oars, with little skill, }
             \VerseLine(indent: 11.2pt) { By little arms are plied, }
-            \VerseLine(indent: 0pt) { While little hands make vain pretence }
+            \VerseLine { While little hands make vain pretence }
             \VerseLine(indent: 11.2pt) { Our wanderings to guide. }
 
             \Spacer(height: 42pt)
 
-            \VerseLine(indent: 0pt) { Ah, cruel Three! In such an hour, }
+            \VerseLine { Ah, cruel Three! In such an hour, }
             \VerseLine(indent: 11.2pt) { Beneath such dreamy weather, }
-            \VerseLine(indent: 0pt) { To beg a tale of breath too weak }
+            \VerseLine { To beg a tale of breath too weak }
             \VerseLine(indent: 11.2pt) { To stir the tiniest feather! }
-            \VerseLine(indent: 0pt) { Yet what can one poor voice avail }
+            \VerseLine { Yet what can one poor voice avail }
             \VerseLine(indent: 11.2pt) { Against three tongues together? }
         }
 
@@ -287,29 +287,29 @@
         \PoemBlock(leading: 16.0pt, pagination: \Pagination(breakable: false, break_before: Break.Verso)) {
             \Spacer(height: 2pt)
 
-            \VerseLine(indent: 0pt) { Imperious Prima flashes forth }
+            \VerseLine { Imperious Prima flashes forth }
             \VerseLine(indent: 11.2pt) { Her edict “to begin it”— }
-            \VerseLine(indent: 0pt) { In gentler tone Secunda hopes }
+            \VerseLine { In gentler tone Secunda hopes }
             \VerseLine(indent: 11.2pt) { “There will be nonsense in it!”— }
-            \VerseLine(indent: 0pt) { While Tertia interrupts the tale }
+            \VerseLine { While Tertia interrupts the tale }
             \VerseLine(indent: 11.2pt) { Not \Italic{more} than once a minute. }
 
             \Spacer(height: 42pt)
 
-            \VerseLine(indent: 0pt) { Anon, to sudden silence won, }
+            \VerseLine { Anon, to sudden silence won, }
             \VerseLine(indent: 11.2pt) { In fancy they pursue }
-            \VerseLine(indent: 0pt) { The dream-child moving through a land }
+            \VerseLine { The dream-child moving through a land }
             \VerseLine(indent: 11.2pt) { Of wonders wild and new, }
-            \VerseLine(indent: 0pt) { In friendly chat with bird or beast— }
+            \VerseLine { In friendly chat with bird or beast— }
             \VerseLine(indent: 11.2pt) { And half believe it true. }
 
             \Spacer(height: 42pt)
 
-            \VerseLine(indent: 0pt) { And ever, as the story drained }
+            \VerseLine { And ever, as the story drained }
             \VerseLine(indent: 11.2pt) { The wells of fancy dry, }
-            \VerseLine(indent: 0pt) { And faintly strove that weary one }
+            \VerseLine { And faintly strove that weary one }
             \VerseLine(indent: 11.2pt) { To put the subject by, }
-            \VerseLine(indent: 0pt) { “The rest next time—” “It \Italic{is} next time!” }
+            \VerseLine { “The rest next time—” “It \Italic{is} next time!” }
             \VerseLine(indent: 11.2pt) { The happy voices cry. }
         }
 
@@ -319,20 +319,20 @@
         \PoemBlock(pagination: \Pagination(breakable: false, break_before: Break.Recto)) {
             \Spacer(height: 62pt)
 
-            \VerseLine(indent: 0pt) { Thus grew the tale of Wonderland: }
+            \VerseLine { Thus grew the tale of Wonderland: }
             \VerseLine(indent: 11.2pt) { Thus slowly, one by one, }
-            \VerseLine(indent: 0pt) { Its quaint events were hammered out— }
+            \VerseLine { Its quaint events were hammered out— }
             \VerseLine(indent: 11.2pt) { And now the tale is done, }
-            \VerseLine(indent: 0pt) { And home we steer, a merry crew, }
+            \VerseLine { And home we steer, a merry crew, }
             \VerseLine(indent: 11.2pt) { Beneath the setting sun. }
 
             \Spacer(height: 42pt)
 
-            \VerseLine(indent: 0pt) { Alice! a childish story take, }
+            \VerseLine { Alice! a childish story take, }
             \VerseLine(indent: 11.2pt) { And with a gentle hand }
-            \VerseLine(indent: 0pt) { Lay it where Childhood’s dreams are twined }
+            \VerseLine { Lay it where Childhood’s dreams are twined }
             \VerseLine(indent: 11.2pt) { In Memory’s mystic band, }
-            \VerseLine(indent: 0pt) { Like pilgrim’s withered wreath of flowers }
+            \VerseLine { Like pilgrim’s withered wreath of flowers }
             \VerseLine(indent: 11.2pt) { Plucked in a far-off land. }
         }
 

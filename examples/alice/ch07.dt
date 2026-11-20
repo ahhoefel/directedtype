@@ -341,9 +341,9 @@
         // ============================================================
         \TopPlate(src: "images/tenniel_26.png", grid_lines: 10.5, img_top: 12pt)
 
-        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true) {
-            \VerseLine(left_margin: 37pt, indent: 0pt) { ‘Twinkle, twinkle, little bat! }
-            \VerseLine(left_margin: 37pt, indent: 0pt) { How I wonder what you’re at!” }
+        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, left_margin: 37pt) {
+            \VerseLine { ‘Twinkle, twinkle, little bat! }
+            \VerseLine { How I wonder what you’re at!” }
             \Spacer(height: 8pt)
         }
 
@@ -362,9 +362,9 @@
 
         \PoemBlock(size: 10pt, leading: 15.5pt, italic: true) {
             \Spacer(height: 8pt)
-            \VerseLine(left_margin: 36pt, indent: 0pt) { ‘Up above the world you fly, }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Like a teatray in the sky. }
-            \VerseLine(left_margin: 94pt, indent: 0pt) { Twinkle, twinkle\DoubleEmDash(ems: 4.0){}’” }
+            \VerseLine { ‘Up above the world you fly, }
+            \VerseLine { Like a teatray in the sky. }
+            \VerseLine(left_margin: 94pt) { Twinkle, twinkle\DoubleEmDash(ems: 4.0){}’” }
             \Spacer(height: 8pt)
         }
 

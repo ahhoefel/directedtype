@@ -188,17 +188,17 @@
         }
 
         // 2-stanza poem occupying <= 154pt at bottom of Page 20
-        \PoemBlock(size: 10pt, leading: 14.8pt, italic: true) {
+        \PoemBlock(size: 10pt, leading: 14.8pt, italic: true, left_margin: 53pt) {
             \Spacer(height: 10pt)
-            \VerseLine(left_margin: 53pt, indent: 0pt) { “How doth the little crocodile }
-            \VerseLine(left_margin: 53pt, indent: 13.3pt) { Improve his shining tail, }
-            \VerseLine(left_margin: 53pt, indent: 0pt) { And pour the waters of the Nile }
-            \VerseLine(left_margin: 53pt, indent: 13.3pt) { On every golden scale! }
+            \VerseLine { “How doth the little crocodile }
+            \VerseLine(indent: 13.3pt) { Improve his shining tail, }
+            \VerseLine { And pour the waters of the Nile }
+            \VerseLine(indent: 13.3pt) { On every golden scale! }
             \Spacer(height: 18pt)
-            \VerseLine(left_margin: 53pt, indent: 0pt) { “How cheerfully he seems to grin, }
-            \VerseLine(left_margin: 53pt, indent: 13.3pt) { How neatly spreads his claws, }
-            \VerseLine(left_margin: 53pt, indent: 0pt) { And welcomes little fishes in }
-            \VerseLine(left_margin: 53pt, indent: 13.3pt) { With gently smiling jaws!” }
+            \VerseLine { “How cheerfully he seems to grin, }
+            \VerseLine(indent: 13.3pt) { How neatly spreads his claws, }
+            \VerseLine { And welcomes little fishes in }
+            \VerseLine(indent: 13.3pt) { With gently smiling jaws!” }
         }
 
         // ============================================================

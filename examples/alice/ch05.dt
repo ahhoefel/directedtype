@@ -186,64 +186,64 @@
         // Page 63 (Recto): Father William Plate 1 (Standing on his head)
         // ============================================================
         \TopPlate(src: "images/tenniel_16.png", grid_lines: 12.5, img_top: 4pt)
-        \PoemBlock(size: 10pt, leading: 16.0pt, italic: true) {
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “You are old, father William,” the young man said, }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { “And your hair has become very white; }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { And yet you incessantly stand on your head— }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { Do you think, at your age, it is right?” }
+        \PoemBlock(size: 10pt, leading: 16.0pt, italic: true, left_margin: 0pt) {
+            \VerseLine { “You are old, father William,” the young man said, }
+            \VerseLine(indent: 12pt) { “And your hair has become very white; }
+            \VerseLine { And yet you incessantly stand on your head— }
+            \VerseLine(indent: 12pt) { Do you think, at your age, it is right?” }
             \Spacer(height: 28pt)
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “In my youth,” father William replied to his son, }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { “I feared it might injure the brain; }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { But now that I’m perfectly sure I have none, }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { Why, I do it again and again.” }
+            \VerseLine { “In my youth,” father William replied to his son, }
+            \VerseLine(indent: 12pt) { “I feared it might injure the brain; }
+            \VerseLine { But now that I’m perfectly sure I have none, }
+            \VerseLine(indent: 12pt) { Why, I do it again and again.” }
         }
 
         // ============================================================
         // Page 64 (Verso): Father William Plate 2 (Back-somersault)
         // ============================================================
         \TopPlate(src: "images/tenniel_18.png", grid_lines: 12.5, img_top: 5pt)
-        \PoemBlock(size: 10pt, leading: 16.0pt, italic: true) {
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “You are old,” said the youth, “as I mentioned before, }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { And have grown most uncommonly fat; }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { Yet you turned a back\=somersault in at the door— }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { Pray, what is the reason of that?” }
+        \PoemBlock(size: 10pt, leading: 16.0pt, italic: true, left_margin: 0pt) {
+            \VerseLine { “You are old,” said the youth, “as I mentioned before, }
+            \VerseLine(indent: 12pt) { And have grown most uncommonly fat; }
+            \VerseLine { Yet you turned a back\=somersault in at the door— }
+            \VerseLine(indent: 12pt) { Pray, what is the reason of that?” }
             \Spacer(height: 28pt)
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “In my youth,” said the sage, as he shook his grey locks, }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { “I kept all my limbs very supple }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { By the use of this ointment—one shilling the box— }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { Allow me to sell you a couple.” }
+            \VerseLine { “In my youth,” said the sage, as he shook his grey locks, }
+            \VerseLine(indent: 12pt) { “I kept all my limbs very supple }
+            \VerseLine { By the use of this ointment—one shilling the box— }
+            \VerseLine(indent: 12pt) { Allow me to sell you a couple.” }
         }
 
         // ============================================================
         // Page 65 (Recto): Father William Plate 3 (The goose)
         // ============================================================
         \TopPlate(src: "images/tenniel_17.png", grid_lines: 12.5, img_top: 5pt)
-        \PoemBlock(size: 10pt, leading: 16.0pt, italic: true) {
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “You are old,” said the youth, “and your jaws are too weak }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { For anything tougher than suet; }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { Yet you finished the goose, with the bones and the beak— }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { Pray, how did you manage to do it?” }
+        \PoemBlock(size: 10pt, leading: 16.0pt, italic: true, left_margin: 0pt) {
+            \VerseLine { “You are old,” said the youth, “and your jaws are too weak }
+            \VerseLine(indent: 12pt) { For anything tougher than suet; }
+            \VerseLine { Yet you finished the goose, with the bones and the beak— }
+            \VerseLine(indent: 12pt) { Pray, how did you manage to do it?” }
             \Spacer(height: 28pt)
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “In my youth,” said his father, “I took to the law, }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { And argued each case with my wife; }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { And the muscular strength, which it gave to my jaw, }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { Has lasted the rest of my life.” }
+            \VerseLine { “In my youth,” said his father, “I took to the law, }
+            \VerseLine(indent: 12pt) { And argued each case with my wife; }
+            \VerseLine { And the muscular strength, which it gave to my jaw, }
+            \VerseLine(indent: 12pt) { Has lasted the rest of my life.” }
         }
 
         // ============================================================
         // Page 66 (Verso): Father William Plate 4 (Balancing the eel)
         // ============================================================
         \TopPlate(src: "images/tenniel_19.png", grid_lines: 12.5, img_top: 4pt)
-        \PoemBlock(size: 10pt, leading: 16.0pt, italic: true) {
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “You are old,” said the youth; “one would hardly suppose }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { That your eye was as steady as ever; }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { Yet you balanced an eel on the end of your nose— }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { What made you so awfully clever?” }
+        \PoemBlock(size: 10pt, leading: 16.0pt, italic: true, left_margin: 0pt) {
+            \VerseLine { “You are old,” said the youth; “one would hardly suppose }
+            \VerseLine(indent: 12pt) { That your eye was as steady as ever; }
+            \VerseLine { Yet you balanced an eel on the end of your nose— }
+            \VerseLine(indent: 12pt) { What made you so awfully clever?” }
             \Spacer(height: 28pt)
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “I have answered three questions, and that is enough,” }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { Said his father; “don’t give yourself airs! }
-            \VerseLine(left_margin: 0pt, indent: 0pt) { Do you think I can listen all day to such stuff? }
-            \VerseLine(left_margin: 0pt, indent: 12pt) { Be off, or I’ll kick you down stairs!” }
+            \VerseLine { “I have answered three questions, and that is enough,” }
+            \VerseLine(indent: 12pt) { Said his father; “don’t give yourself airs! }
+            \VerseLine { Do you think I can listen all day to such stuff? }
+            \VerseLine(indent: 12pt) { Be off, or I’ll kick you down stairs!” }
         }
 
         // ============================================================

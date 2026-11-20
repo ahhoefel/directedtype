@@ -346,12 +346,12 @@
 
         \PoemBlock(size: 10pt, leading: 15pt, italic: true) {
             \Spacer(height: 10pt)
-            \VerseLine(left_margin: 36pt, indent: 0pt) { “Speak roughly to your little boy, }
-            \VerseLine(left_margin: 36pt, indent: 17pt) { And beat him when he sneezes; }
-            \VerseLine(left_margin: 36pt, indent: 6pt) { He only does it to annoy, }
-            \VerseLine(left_margin: 36pt, indent: 17pt) { Because he knows it teases.” }
+            \VerseLine { “Speak roughly to your little boy, }
+            \VerseLine(indent: 17pt) { And beat him when he sneezes; }
+            \VerseLine(indent: 6pt) { He only does it to annoy, }
+            \VerseLine(indent: 17pt) { Because he knows it teases.” }
             \ChorusHeader(with_note: true)
-            \VerseLine(left_margin: 82pt, indent: 0pt) { “Wow! wow! wow!” }
+            \VerseLine(left_margin: 82pt) { “Wow! wow! wow!” }
             \Spacer(height: 12pt)
         }
 
@@ -364,12 +364,12 @@
 
         \PoemBlock(size: 10pt, leading: 15pt, italic: true) {
             \Spacer(height: 10pt)
-            \VerseLine(left_margin: 36pt, indent: 0pt) { “I speak severely to my boy, }
-            \VerseLine(left_margin: 36pt, indent: 17pt) { I beat him when he sneezes; }
-            \VerseLine(left_margin: 36pt, indent: 6pt) { For he can thoroughly enjoy }
-            \VerseLine(left_margin: 36pt, indent: 17pt) { The pepper when he pleases!” }
+            \VerseLine { “I speak severely to my boy, }
+            \VerseLine(indent: 17pt) { I beat him when he sneezes; }
+            \VerseLine(indent: 6pt) { For he can thoroughly enjoy }
+            \VerseLine(indent: 17pt) { The pepper when he pleases!” }
             \ChorusHeader(with_note: false)
-            \VerseLine(left_margin: 82pt, indent: 0pt) { “Wow! wow! wow!” }
+            \VerseLine(left_margin: 82pt) { “Wow! wow! wow!” }
         }
 
         // ============================================================

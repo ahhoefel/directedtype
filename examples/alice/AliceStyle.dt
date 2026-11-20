@@ -472,7 +472,8 @@
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false, break_before: break_before),
-    env font: Font
+    env font: Font,
+    env left_margin: Distance = 36pt
 ) {
     \env font = \Font(font: self.font, size: size, line_height: leading, italic: italic);
     \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
@@ -488,7 +489,7 @@
 // Single verse line for poems and songs
 \Component VerseLine(
     indent: Distance = 0pt,
-    left_margin: Distance = 36pt,
+    env left_margin: Distance = 36pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,

@@ -318,51 +318,51 @@
         // ============================================================
         // Page 183 (Recto): Stanzas 1–4 of the Evidence Poem
         // ============================================================
-        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, break_before: Break.Page) {
+        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, left_margin: 44pt, break_before: Break.Page) {
             \Spacer(height: 2pt)
-            \VerseLine(left_margin: 44pt, indent: 0pt) { “They told me you had been to her, }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { And mentioned me to him: }
-            \VerseLine(left_margin: 44pt, indent: 0pt) { She gave me a good character, }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { But said I could not swim. }
+            \VerseLine { “They told me you had been to her, }
+            \VerseLine(indent: 14.5pt) { And mentioned me to him: }
+            \VerseLine { She gave me a good character, }
+            \VerseLine(indent: 14.5pt) { But said I could not swim. }
 
             \Spacer(height: 36pt)
 
-            \VerseLine(left_margin: 44pt, indent: 0pt) { He sent them word I had not gone }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { \RomanParen{(}We know it to be true\RomanParen{)}: }
-            \VerseLine(left_margin: 44pt, indent: 0pt) { If she should push the matter on, }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { What would become of you? }
+            \VerseLine { He sent them word I had not gone }
+            \VerseLine(indent: 14.5pt) { \RomanParen{(}We know it to be true\RomanParen{)}: }
+            \VerseLine { If she should push the matter on, }
+            \VerseLine(indent: 14.5pt) { What would become of you? }
 
             \Spacer(height: 36pt)
 
-            \VerseLine(left_margin: 44pt, indent: 0pt) { I gave her one, they gave him two, }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { You gave us three or more; }
-            \VerseLine(left_margin: 44pt, indent: 0pt) { They all returned from him to you, }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { Though they were mine before. }
+            \VerseLine { I gave her one, they gave him two, }
+            \VerseLine(indent: 14.5pt) { You gave us three or more; }
+            \VerseLine { They all returned from him to you, }
+            \VerseLine(indent: 14.5pt) { Though they were mine before. }
 
             \Spacer(height: 36pt)
 
-            \VerseLine(left_margin: 44pt, indent: 0pt) { If I or she should chance to be }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { Involved in this affair, }
-            \VerseLine(left_margin: 44pt, indent: 0pt) { He trusts to you to set them free, }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { Exactly as we were. }
+            \VerseLine { If I or she should chance to be }
+            \VerseLine(indent: 14.5pt) { Involved in this affair, }
+            \VerseLine { He trusts to you to set them free, }
+            \VerseLine(indent: 14.5pt) { Exactly as we were. }
         }
 
         // ============================================================
         // Pages 184–185: Stanzas 5–6 & Dissecting the Verses
         // ============================================================
-        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, break_before: Break.Page) {
+        \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, left_margin: 44pt, break_before: Break.Page) {
             \Spacer(height: 6pt)
-            \VerseLine(left_margin: 44pt, indent: 0pt) { My notion was that you had been }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { (Before she had this fit) }
-            \VerseLine(left_margin: 44pt, indent: 0pt) { An obstacle that came between }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { Him, and ourselves, and it. }
+            \VerseLine { My notion was that you had been }
+            \VerseLine(indent: 14.5pt) { (Before she had this fit) }
+            \VerseLine { An obstacle that came between }
+            \VerseLine(indent: 14.5pt) { Him, and ourselves, and it. }
 
             \Spacer(height: 38pt)
 
-            \VerseLine(left_margin: 44pt, indent: 0pt) { Don’t let him know she liked them best, }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { For this must ever be }
-            \VerseLine(left_margin: 44pt, indent: 0pt) { A secret, kept from all the rest, }
-            \VerseLine(left_margin: 44pt, indent: 14.5pt) { Between yourself and me.” }
+            \VerseLine { Don’t let him know she liked them best, }
+            \VerseLine(indent: 14.5pt) { For this must ever be }
+            \VerseLine { A secret, kept from all the rest, }
+            \VerseLine(indent: 14.5pt) { Between yourself and me.” }
             \Spacer(height: 48pt)
         }
 
