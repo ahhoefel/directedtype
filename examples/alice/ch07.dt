@@ -648,16 +648,12 @@
         // ============================================================
         // Page 110 (Verso): 5 lines + Mid Plate #27 (Dormouse in teapot) + 5 lines
         // ============================================================
-        \Para(
-            pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
-        ) {
+        \PageBreak()
+        \Para {
             “Then you shouldn’t talk,” said the Hatter.
         }
 
-        \Para(
-            align: Align.JustifyAll,
-            pagination: \Pagination(breakable: false, keep_with_next: true)
-        ) {
+        \Para(align: Align.JustifyAll) {
             This piece of rudeness was more than Alice\|
             could bear: she got up in great disgust, and\|
             walked off; the Dormouse fell asleep instantly,\|

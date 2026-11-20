@@ -236,7 +236,8 @@
         // ============================================================
         // Pages 82–84: The Cheshire Cat on the hearth & flying saucepans
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             There was certainly too much of it in the\|
             air. Even the Duchess sneezed occasionally;\|
             and as for the baby, it was sneezing and howl\-\|
@@ -386,7 +387,8 @@
         // ============================================================
         // Pages 86–87: Nursing the queer-shaped baby
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “Here! you may nurse it a bit, if you like!”\|
             said the Duchess to Alice, flinging the baby at\|
             her as she spoke. “I must go and get ready to\|
@@ -448,10 +450,8 @@
         // ============================================================
         // Page 88 (Verso): Left Inset Wrap #22 (Alice holding pig-baby)
         // ============================================================
-        \Para(
-            align: Align.JustifyAll,
-            pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
-        ) {
+        \PageBreak()
+        \Para(align: Align.JustifyAll) {
             Alice was just beginning to think to herself,\|
             “Now, what am I to do with this creature\|
             when I get it home?” when it grunted again,
@@ -625,7 +625,8 @@
         // ============================================================
         // Page 92 (Verso): 22 lines leading into the vanishing grin
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “I should like it very much,” said Alice, “but\|
             I haven’t been invited yet.”
         }
@@ -699,7 +700,8 @@
         // ============================================================
         // Page 94 (Verso): 16 closing lines (March Hare's fur-thatched house)
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “Well! I’ve often seen a cat without a grin,”\|
             thought Alice; “but a grin without a cat!\|
             It’s the most curious thing I ever saw in all\|

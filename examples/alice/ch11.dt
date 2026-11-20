@@ -182,7 +182,8 @@
         // ============================================================
         // Pages 167–169: Calling the First Witness (The Hatter)
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “Not yet, not yet!” the Rabbit hastily in\-\|
             terrupted. “There’s a great deal to come before\|
             that!”
@@ -475,7 +476,8 @@
         // ============================================================
         // Page 173 (Recto): 2 lines + Mid Plate #39 (Fleeing Hatter) + 9 lines
         // ============================================================
-        \Para(pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)) {
+        \PageBreak()
+        \Para {
             Here the other guinea\=pig cheered, and was\|
             suppressed.
         }

@@ -54,9 +54,8 @@
         // ============================================================
         // Page 113 (Recto): Left Inset Wrap #28 (Card Gardeners)
         // ============================================================
-        \Para(
-            pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
-        ) {
+        \PageBreak()
+        \Para {
             “\Italic{You’d} better not talk!” said Five. “I heard\|
             the Queen say only yesterday you deserved to be\|
             beheaded!”
@@ -103,7 +102,8 @@
         // ============================================================
         // Pages 114–116: The Royal Procession
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “Would you tell me, please,” said Alice,\|
             a little timidly, “why you are painting those\|
             roses?”
@@ -211,7 +211,8 @@
         // ============================================================
         // Pages 118–120: Saving the Gardeners & the White Rabbit's news
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “Nonsense!” said Alice, very loudly and\|
             decidedly, and the Queen was silent.
         }
@@ -349,10 +350,8 @@
         // ============================================================
         // Page 121 (Recto): Left Inset Wrap #30 (Alice with flamingo mallet)
         // ============================================================
-        \Para(
-            align: Align.JustifyAll,
-            pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
-        ) {
+        \PageBreak()
+        \Para(align: Align.JustifyAll) {
             Alice thought she had never seen such a\|
             curious croquet\=ground in her life: it was all\|
             ridges and furrows; the croquet\=balls were live\|

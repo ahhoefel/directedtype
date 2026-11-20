@@ -249,7 +249,8 @@
         // ============================================================
         // Pages 67–69: Mushroom instructions & 5-4-5 Asterism
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “That is not said right,” said the Caterpillar.
         }
 
@@ -374,7 +375,8 @@
         // ============================================================
         // Pages 70–75: The Pigeon & returning to normal height
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “Come, my head’s free at last!” said Alice in\|
             a tone of delight, which changed into alarm in\|
             another moment, when she found that her\|

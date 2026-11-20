@@ -92,7 +92,8 @@
         // ============================================================
         // Pages 178–182: Rule Forty-Two & the Unopened Verses
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “The trial cannot proceed,” said the King in\|
             a very grave voice, “until all the jurymen are\|
             back in their proper places—\Italic{all,}” he repeated\|

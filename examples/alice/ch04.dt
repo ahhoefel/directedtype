@@ -378,7 +378,8 @@
         // ============================================================
         // Pages 52–54: Pebbles turning into cakes & meeting the Puppy
         // ============================================================
-        \FlushPara(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \FlushPara {
             silence, and then another confusion of voices—\|
             “Hold up his head—Brandy now—Don’t choke\|
             him—How was it, old fellow? What happened\|

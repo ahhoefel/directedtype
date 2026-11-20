@@ -454,7 +454,8 @@
         // ============================================================
         // Page 158 (Verso): Explaining the Lobster's toes
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “Well, I never heard it before,” said the Mock\|
             Turtle; “but it sounds uncommon nonsense.”
         }

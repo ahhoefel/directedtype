@@ -204,7 +204,8 @@
         // ============================================================
         // Pages 21–22: Shrinking with the fan & slipping into salt water
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “I’m sure those are not the right words,”\|
             said poor Alice, and her eyes filled with tears\|
             again as she went on, “I must be Mabel after\|

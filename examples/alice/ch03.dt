@@ -335,7 +335,8 @@
         // ============================================================
         // Page 36 (Verso): 22 lines leading into The Mouse's Tale
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             Alice thought the whole thing very absurd,\|
             but they all looked so grave that she did not\|
             dare to laugh, and as she could not think of\|
@@ -387,7 +388,8 @@
         // ============================================================
         // Pages 38–40: Knot misunderstanding & Dinah scares off the birds
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \PageBreak()
+        \Para {
             “You are not attending!” said the Mouse\|
             to Alice, severely. “What are you thinking of?”
         }
