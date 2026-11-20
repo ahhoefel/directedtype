@@ -215,7 +215,7 @@
         }
 
         // ============================================================
-        // Page 65 (Recto, Signature K): Father William Plate 3 (The goose)
+        // Page 65 (Recto): Father William Plate 3 (The goose)
         // ============================================================
         \TopPlate(src: "images/tenniel_17.png", grid_lines: 12.5, img_top: 5pt)
         \PoemBlock(size: 10pt, leading: 16.0pt, italic: true) {

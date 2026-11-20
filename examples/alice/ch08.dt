@@ -52,7 +52,7 @@
         }
 
         // ============================================================
-        // Page 113 (Recto, Signature Q): Left Inset Wrap #28 (Card Gardeners)
+        // Page 113 (Recto): Left Inset Wrap #28 (Card Gardeners)
         // ============================================================
         \Para(
             pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
@@ -347,7 +347,7 @@
         }
 
         // ============================================================
-        // Page 121 (Recto, Signature R): Left Inset Wrap #30 (Alice with flamingo mallet)
+        // Page 121 (Recto): Left Inset Wrap #30 (Alice with flamingo mallet)
         // ============================================================
         \Para(
             align: Align.JustifyAll,

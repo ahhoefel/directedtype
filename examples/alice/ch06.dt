@@ -215,7 +215,7 @@
         }
 
         // ============================================================
-        // Page 81 (Recto, Signature M): Top Plate #21 (Smoky Kitchen) + 8 lines
+        // Page 81 (Recto): Top Plate #21 (Smoky Kitchen) + 8 lines
         // ============================================================
         \TopPlate(src: "images/tenniel_21.png", grid_lines: 14.0, img_top: 6pt)
 

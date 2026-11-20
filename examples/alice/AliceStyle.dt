@@ -915,50 +915,6 @@
         width: body_width,
         height: flow_height
     )
-
-    // 1866 8-page half-sheet Crown Octavo signature marks in the bottom margin
-    // (italic "b" on Prefatory Poem p. 3 [vii]; "B".."Z", "A A", "B B" every 8 pages skipping J, V, W)
-    \let offset_in_gathering = (folio - 1) % 8;
-    \let gathering = ((folio - 1) - offset_in_gathering) / 8;
-    \let sig_letter = gathering == 0 ? "B"
-        : (gathering == 1 ? "C"
-        : (gathering == 2 ? "D"
-        : (gathering == 3 ? "E"
-        : (gathering == 4 ? "F"
-        : (gathering == 5 ? "G"
-        : (gathering == 6 ? "H"
-        : (gathering == 7 ? "I"
-        : (gathering == 8 ? "K"
-        : (gathering == 9 ? "L"
-        : (gathering == 10 ? "M"
-        : (gathering == 11 ? "N"
-        : (gathering == 12 ? "O"
-        : (gathering == 13 ? "P"
-        : (gathering == 14 ? "Q"
-        : (gathering == 15 ? "R"
-        : (gathering == 16 ? "S"
-        : (gathering == 17 ? "T"
-        : (gathering == 18 ? "U"
-        : (gathering == 19 ? "X"
-        : (gathering == 20 ? "Y"
-        : (gathering == 21 ? "Z"
-        : (gathering == 22 ? "A A"
-        : (gathering == 23 ? "B B" : "")))))))))))))))))))))));
-    \let is_prelim_sig = folio == -3;
-    \let sig_text = is_prelim_sig
-        ? "b"
-        : ((folio >= 1 && folio <= 192 && offset_in_gathering == 0) ? sig_letter : "");
-    \let sig_font = \Font(font: folio_font, italic: is_prelim_sig);
-
-    \Text(
-        x: body_x,
-        y: y + body_top + 396.0pt + 8.5pt,
-        width: body_width,
-        font: sig_font,
-        color: #111111,
-        align: Align.Center,
-        text: sig_text
-    )
 }
 
 // Top-level Alice Book wrapper
