@@ -13,7 +13,8 @@
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true),
     env font: Font,
-    env chapter_meta: PageValue
+    env chapter_meta: PageValue,
+    env chapter_end_meta: PageValue
 ) {
     \let ch = \AliceChapterPlain(
         x: x,
@@ -608,6 +609,8 @@
             \Italic{then}—she found herself at last in the beautiful garden,
             among the bright flower\=beds and the cool fountains.
         }
+
+        \ChapterEnd()
     };
 
     \alias right: Distance = x + width;

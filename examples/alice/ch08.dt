@@ -12,7 +12,8 @@
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true),
     env font: Font,
-    env chapter_meta: PageValue
+    env chapter_meta: PageValue,
+    env chapter_end_meta: PageValue
 ) {
     \let ch = \AliceChapterPlain(
         x: x,
@@ -536,6 +537,8 @@
             so the King and the executioner ran wildly up and down looking for
             it, while the rest of the party went back to the game.
         }
+
+        \ChapterEnd()
     };
 
     \alias right: Distance = x + width;

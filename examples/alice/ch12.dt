@@ -58,9 +58,9 @@
         width: width,
         number: "XII",
         title: "ALICE’S EVIDENCE",
-        verso_header: "ALICE’S EVIDENCE",
-        recto_header: "ALICE’S EVIDENCE",
-        full_header: "ALICE’S EVIDENCE",
+        verso_header: "ALICE’S EVIDENCE.",
+        recto_header: "ALICE’S EVIDENCE.",
+        full_header: "ALICE’S EVIDENCE.",
         header_lines: 10.0,
         break_before: Break.Page
     ) {

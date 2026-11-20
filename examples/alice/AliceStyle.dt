@@ -861,25 +861,26 @@
         color: page_bg
     )
 
-    // 1865 Macmillan Running Header & Folio Conventions:
+    // 1866 Macmillan Running Header & Folio Conventions:
     // 1. Chapter-start pages suppress both running title and folio.
     // 2. Closing dream sequence (pp. 190–192) suppresses running title and centers bare folio.
     // 3. Recto page immediately facing a verso chapter-opener (pp. 113, 131, 163, 177) prints full_header.
-    // 4. End-of-chapter pages print full_header; early verso chapter-ends (pp. 14, 28, 40, 58) & p. 113 omit folio.
+    // 4. Verso chapter-end pages (pp. 14, 28, 40, 58, 94, 146) & p. 161 print full_header;
+    //    recto chapter-end pages (pp. 75, 111, 129, 175) complete the spread with recto_header.
+    // 5. All non-chapter-start body pages print their folio (no suppressed folios).
     \let is_dream_page = folio >= 190 && folio <= 192;
     \let is_body_page = folio >= 1 && folio <= 189;
     \let show_header = is_body_page && !has_chapter_start && running_verso != "";
     \let is_chapter_end = chapter_end_meta[page].has_value;
     \let prev_was_chapter_start = page.prev ? page.prev.did_start_chapter : false;
-    \let use_full_header = is_chapter_end || (!is_verso && prev_was_chapter_start);
-    \let suppress_folio = (is_verso && is_chapter_end && folio < 100) || folio == 113;
+    \let use_full_header = (is_chapter_end && (is_verso || folio == 161)) || (!is_verso && prev_was_chapter_start);
 
     \let header_title = show_header
         ? (use_full_header ? running_full : (is_verso ? running_verso : running_recto))
         : "";
     \let folio_text = is_dream_page
         ? ("" + folio)
-        : ((show_header && !suppress_folio) ? ("" + folio) : "");
+        : (show_header ? ("" + folio) : "");
     \let folio_align = is_dream_page ? Align.Center : (is_verso ? Align.Left : Align.Right);
 
     \let hdr_font = \Font(font: font, size: 8.25pt, line_height: 10pt);

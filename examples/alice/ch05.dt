@@ -13,7 +13,8 @@
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true),
     env font: Font,
-    env chapter_meta: PageValue
+    env chapter_meta: PageValue,
+    env chapter_end_meta: PageValue
 ) {
     // 19 * 17.1pt = 324.9pt leaves exact 3 opening lines on Page 59
     \let ch = \AliceChapterWithImage(
@@ -491,6 +492,8 @@
             right\=hand bit again, and did not venture to go near the house till
             she had brought herself down to nine~inches~high.
         }
+
+        \ChapterEnd()
     };
 
     \alias right: Distance = x + width;
