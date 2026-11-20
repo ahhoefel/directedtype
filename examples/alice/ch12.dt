@@ -22,18 +22,10 @@
     env font: Font
 ) {
     \Text(
-        x: x + 225pt,
-        y: y + 14pt,
-        font: \Font(font: font, size: 7.5pt, line_height: 9pt),
-        color: #111111,
-        text: "(6)"
-    )
-
-    \Text(
         x: x,
-        y: y + 36pt,
+        y: y + 28pt,
         width: width,
-        font: \Font(font: font, size: 10pt, line_height: 12pt),
+        font: \Font(font: font, size: 9.5pt, line_height: 12pt),
         color: #111111,
         align: Align.Center,
         text: "THE END."
