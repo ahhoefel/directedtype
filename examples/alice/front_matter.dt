@@ -1,11 +1,11 @@
-// 1865 Macmillan Front Matter (Pages [i] through [x])
+// 1866 Macmillan Front Matter (Pages [i] through [x])
 // [i]   Recto: Half-Title
 // [ii]  Verso: Frontispiece (Tenniel #1 — Courtroom Trial)
-// [iii] Recto: 1865 Macmillan Title Page
-// [iv]  Verso: R. Clay, Son, and Taylor Printer's Imprint
+// [iii] Recto: Title Page
+// [iv]  Verso: Colophon (replacing the 1866 Printer's Emblem)
 // [v]   Recto: Prefatory Poem ("All in the golden afternoon", Stanzas 1–2)
 // [vi]  Verso: Prefatory Poem (Stanzas 3–5)
-// [vii] Recto: Prefatory Poem (Stanzas 6–7)
+// [vii] Recto: Prefatory Poem (Stanzas 6–7, signature b)
 // [viii] Verso: Blank
 // [ix]  Recto: CONTENTS.
 // [x]   Verso: Blank (followed by Page 1 on Recto)
@@ -56,8 +56,8 @@
 \Component ContentsRow(
     roman: String,
     title: String,
-    dots: String,
     page_num: String,
+    leader_step: Distance = 11.5pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
@@ -77,23 +77,29 @@
         text: roman + "."
     )
 
-    \Text(
+    \let t_title = \Text(
         x: x + 26pt,
         y: y,
         font: row_font,
         color: #111111,
         text: title
-    )
+    );
 
-    \Text(
-        x: x,
-        y: y,
-        width: width - 22pt,
-        font: dot_font,
-        color: #111111,
-        align: Align.Right,
-        text: dots
-    )
+    // Uniform 1866 vertical-column dot leaders (right-aligned grid columns stopping clear of title)
+    \let min_dot_x = t_title.right + 6pt;
+    \let col0 = x + width - 26pt;
+    \Text(x: col0 - leader_step * 11.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step * 11.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step * 10.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step * 10.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  9.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  9.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  8.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  8.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  7.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  7.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  6.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  6.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  5.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  5.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  4.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  4.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  3.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  3.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  2.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  2.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  1.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  1.0) > min_dot_x ? "." : "")
+    \Text(x: col0,                      y: y, font: dot_font, color: #111111, text: col0 > min_dot_x ? "." : "")
 
     \Text(
         x: x,
@@ -152,7 +158,7 @@
         \FrontispiecePlate()
 
         // ============================================================
-        // Page [iii] (Recto): 1865 Macmillan Title Page
+        // Page [iii] (Recto): Title Page
         // ============================================================
         \VStackStretch(width: parent.width, gap: 0pt, pagination: \Pagination(breakable: false, break_before: Break.Recto)) {
             \Spacer(height: 28pt)
@@ -230,7 +236,7 @@
         }
 
         // ============================================================
-        // Page [iv] (Verso): Replacing the 1865 Printer's Imprint
+        // Page [iv] (Verso): Replacing the 1866 Printer's Emblem
         // ============================================================
         \Center(
             height: 396pt,
@@ -244,7 +250,7 @@
             ) {
                 This book was digitally typeset using a new typesetting system
                 called DirectedType and made to resemble the
-                original Macmillan edition produced in London in 1865.
+                original Macmillan edition produced in London in 1866.
                 The type is set in Old Standard TT which is a 2006 revival of
                 late 19th-century academic typefaces.
             }
@@ -348,18 +354,18 @@
             \ContentsHeaderRow()
             \Spacer(height: 15pt)
 
-            \ContentsRow(roman: "I", title: "DOWN THE RABBIT-HOLE", dots: ".  .  .  .  .  .  .  .  .  .  .  .  .  .", page_num: "1")
-            \ContentsRow(roman: "II", title: "THE POOL OF TEARS", dots: ".  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .", page_num: "15")
-            \ContentsRow(roman: "III", title: "A CAUCUS-RACE AND A LONG TALE", dots: ".  .  .  .  .  .  .  .", page_num: "29")
-            \ContentsRow(roman: "IV", title: "THE RABBIT SENDS IN A LITTLE BILL", dots: ".  .  .  .  .  .", page_num: "41")
-            \ContentsRow(roman: "V", title: "ADVICE FROM A CATERPILLAR", dots: ".  .  .  .  .  .  .  .  .  .  .", page_num: "59")
-            \ContentsRow(roman: "VI", title: "PIG AND PEPPER", dots: ".  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .", page_num: "67")
-            \ContentsRow(roman: "VII", title: "A MAD TEA-PARTY", dots: ".  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .", page_num: "95")
-            \ContentsRow(roman: "VIII", title: "THE QUEEN’S CROQUET-GROUND", dots: ".  .  .  .  .  .  .  .  .  .", page_num: "112")
-            \ContentsRow(roman: "IX", title: "THE MOCK TURTLE’S STORY", dots: ".  .  .  .  .  .  .  .  .  .  .  .  .", page_num: "130")
-            \ContentsRow(roman: "X", title: "THE LOBSTER QUADRILLE", dots: ".  .  .  .  .  .  .  .  .  .  .  .  .  .", page_num: "147")
-            \ContentsRow(roman: "XI", title: "WHO STOLE THE TARTS?", dots: ".  .  .  .  .  .  .  .  .  .  .  .  .  .  .", page_num: "162")
-            \ContentsRow(roman: "XII", title: "ALICE’S EVIDENCE", dots: ".  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .", page_num: "176")
+            \ContentsRow(roman: "I", title: "DOWN THE RABBIT-HOLE", page_num: "1")
+            \ContentsRow(roman: "II", title: "THE POOL OF TEARS", page_num: "15")
+            \ContentsRow(roman: "III", title: "A CAUCUS-RACE AND A LONG TALE", page_num: "29")
+            \ContentsRow(roman: "IV", title: "THE RABBIT SENDS IN A LITTLE BILL", page_num: "41")
+            \ContentsRow(roman: "V", title: "ADVICE FROM A CATERPILLAR", page_num: "59")
+            \ContentsRow(roman: "VI", title: "PIG AND PEPPER", page_num: "67")
+            \ContentsRow(roman: "VII", title: "A MAD TEA-PARTY", page_num: "95")
+            \ContentsRow(roman: "VIII", title: "THE QUEEN’S CROQUET-GROUND", page_num: "112")
+            \ContentsRow(roman: "IX", title: "THE MOCK TURTLE’S STORY", page_num: "130")
+            \ContentsRow(roman: "X", title: "THE LOBSTER QUADRILLE", page_num: "147")
+            \ContentsRow(roman: "XI", title: "WHO STOLE THE TARTS?", page_num: "162")
+            \ContentsRow(roman: "XII", title: "ALICE’S EVIDENCE", page_num: "176")
         }
     };
 
