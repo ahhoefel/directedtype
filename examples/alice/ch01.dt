@@ -199,21 +199,12 @@
             wondering how she was ever to get out again.
         }
 
-        // Bottom of Page 7 (4 lines, justified flush into Page 8)
+        // Bottom of Page 7 (4 lines, justified flush into Page 8) -> Page 8
         \Para(align: Align.JustifyAll) {
             Suddenly she came upon a little three\=legged\|
             table, all made of solid glass; there was nothing\|
             on it but a tiny golden key, and Alice’s first\|
-            idea was that this might belong to one of the
-        }
-
-        // ============================================================
-        // Page 8: Left-wrapped Tenniel #3 (Alice at the tiny curtain door)
-        // ============================================================
-        \FlushPara(
-            align: Align.JustifyAll,
-            pagination: \Pagination(breakable: false, keep_with_next: true)
-        ) {
+            idea was that this might belong to one of the\|
             doors of the hall; but, alas! either the locks\|
             were too large, or the key was too small, but\|
             at any rate it would not open any of them.\|
@@ -273,19 +264,10 @@
             in large letters.
         }
 
-        // Bottom of Page 9 (2 lines, justified flush into Page 10)
+        // Bottom of Page 9 (2 lines, justified flush into Page 10) -> Page 10
         \Para(align: Align.JustifyAll) {
             It was all very well to say “Drink me,” but\|
-            the wise little Alice was not going to do \Italic{that}
-        }
-
-        // ============================================================
-        // Page 10: Right-wrapped Tenniel #4 (Alice with "DRINK ME" bottle)
-        // ============================================================
-        \FlushPara(
-            align: Align.JustifyAll,
-            pagination: \Pagination(breakable: false, keep_with_next: true)
-        ) {
+            the wise little Alice was not going to do \Italic{that}\|
             in a hurry. “No, I’ll look first,” she said, “and
         }
 

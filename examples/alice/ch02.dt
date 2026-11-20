@@ -344,16 +344,7 @@
 
         \Para(align: Align.JustifyAll) {
             “Well, perhaps not,” said Alice in a sooth\-\|
-            ing tone: “don’t be angry about it. And yet
-        }
-
-        // ============================================================
-        // Page 26 (Verso): 4 lines + Mid Plate #8 (Alice & Mouse) + 7 lines
-        // ============================================================
-        \FlushPara(
-            align: Align.JustifyAll,
-            pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
-        ) {
+            ing tone: “don’t be angry about it. And yet\|
             I wish I could show you our cat Dinah: I\|
             think you’d take a fancy to cats if you could\|
             only see her. She is such a dear quiet thing,”\|

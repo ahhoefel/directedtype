@@ -213,18 +213,9 @@
             get in at the window.”
         }
 
-        // Bottom of Page 47 (1 line justified flush into Page 48)
+        // Bottom of Page 47 (1 line justified flush into Page 48) -> Page 48
         \Para(align: Align.JustifyAll) {
-            “\Italic{That} you won’t!” thought Alice, and, after
-        }
-
-        // ============================================================
-        // Page 48 (Verso): Left Inset Wrap #12 (Giant hand snatching)
-        // ============================================================
-        \FlushPara(
-            align: Align.JustifyAll,
-            pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
-        ) {
+            “\Italic{That} you won’t!” thought Alice, and, after\|
             waiting till she fancied she heard the Rabbit\|
             just under the window, she suddenly spread
         }

@@ -366,19 +366,11 @@
             Mouse, turning to Alice, and sighing.
         }
 
-        \Para(align: Align.JustifyAll) {
+        \Para {
             “It \Italic{is} a long tail, certainly,” said Alice,\|
             looking down with wonder at the Mouse’s tail;\|
             “but why do you call it sad?” And she kept on\|
-            puzzling about it while the Mouse was speaking,
-        }
-
-        // ============================================================
-        // Page 37 (Recto): 2 lead lines + S-curve Mouse's Tale Calligram
-        // ============================================================
-        \FlushPara(
-            pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
-        ) {
+            puzzling about it while the Mouse was speaking,\|
             so that her idea of the tale was something like\|
             this:\DoubleEmDash{}“Fury said to
         }

@@ -77,18 +77,9 @@
             side as she spoke.
         }
 
-        // Bottom of Page 131 (1 line justified flush into Page 132)
+        // Bottom of Page 131 (1 line justified flush into Page 132) -> Page 132
         \Para(align: Align.JustifyAll) {
-            Alice did not much like her keeping so close
-        }
-
-        // ============================================================
-        // Page 132 (Verso): Left Inset Wrap #32 (Duchess's sharp chin)
-        // ============================================================
-        \FlushPara(
-            align: Align.JustifyAll,
-            pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
-        ) {
+            Alice did not much like her keeping so close\|
             to her: first, because the Duchess was \Italic{very}\|
             ugly, and secondly, because she was exactly the
         }

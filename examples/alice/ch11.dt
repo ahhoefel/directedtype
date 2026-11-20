@@ -312,16 +312,7 @@
 
         \Para(align: Align.JustifyAll) {
             All this time the Queen had never left off\|
-            staring at the Hatter, and, just as the Dormouse
-        }
-
-        // ============================================================
-        // Page 170 (Verso): Left Inset Wrap #38 (Trembling Hatter, 23 lines)
-        // ============================================================
-        \FlushPara(
-            align: Align.JustifyAll,
-            pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
-        ) {
+            staring at the Hatter, and, just as the Dormouse\|
             crossed the court, she said to one of the officers of\|
             the court, “Bring me the list of the singers in the\|
             last concert!” on which the wretched Hatter

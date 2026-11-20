@@ -83,18 +83,12 @@
         // ============================================================
         \TopPlate(src: "images/tenniel_20.png", grid_lines: 17.0, img_top: 2pt)
 
-        \Para(align: Align.JustifyAll) {
+        \Para {
             The Fish\=Footman began by producing from\|
             under his arm a great letter, nearly as large\|
             as himself, and this he handed over to the\|
             other, saying, in a solemn tone, “For the\|
-            Duchess. An invitation from the Queen to play
-        }
-
-        // ============================================================
-        // Pages 78–80: Conversation with the Frog-Footman
-        // ============================================================
-        \FlushPara {
+            Duchess. An invitation from the Queen to play\|
             croquet.” The Frog\=Footman repeated, in the\|
             same solemn tone, only changing the order of\|
             the words a little, “From the Queen. An invi\-\|
@@ -342,16 +336,10 @@
             hours, I \Italic{think}; or is it twelve? I\DoubleEmDash{}”
         }
 
-        \Para(align: Align.JustifyAll) {
+        \Para {
             “Oh, don’t bother \Italic{me,}” said the Duchess; “I\|
             never could abide figures!” And with that she\|
-            began nursing her child again, singing a sort of
-        }
-
-        // ============================================================
-        // Page 85 (Recto): Duchess's Lullaby & CHORUS
-        // ============================================================
-        \FlushPara(pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)) {
+            began nursing her child again, singing a sort of\|
             lullaby to it as she did so, and giving it a violent\|
             shake at the end of every line:—
         }
