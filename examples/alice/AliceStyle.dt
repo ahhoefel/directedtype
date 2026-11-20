@@ -607,7 +607,7 @@
     title: String,
     img_src: Path,
     img_offset_x: Distance = -4pt,
-    narrow_x: Distance = 149pt,
+    narrow_x: Distance = 153.5,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
@@ -626,7 +626,7 @@
 
     \Text(
         x: x + narrow_x,
-        y: y + 17pt,
+        y: y + 31pt,
         width: col_w,
         font: \Font(font: font, size: 12.5pt, letter_spacing: 0.75pt),
         color: #111111,
@@ -636,7 +636,7 @@
 
     \Text(
         x: x + narrow_x,
-        y: y + 55pt,
+        y: y + 68pt,
         width: col_w,
         font: \Font(font: font, size: 8.25pt, letter_spacing: 0.45pt),
         color: #111111,
