@@ -94,10 +94,10 @@
     color: Color = #111111,
     x: Distance = parent.left,
     y: Distance = parent.top,
-    env font: Font
+    env font: Font,
+    env text_bounds: TextBounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight)
 ) {
-    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
-    \let t = \Text(x: x, y: y, font: font, color: color, text_bounds: grid_bounds) {
+    \let t = \Text(x: x, y: y, font: font, color: color) {
         \Children
     };
 
@@ -199,9 +199,9 @@
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false),
-    env font: Font
+    env font: Font,
+    env text_bounds: TextBounds
 ) {
-    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let img = \Image(
         src: src,
         x: x + img_offset_x,
@@ -215,8 +215,7 @@
         width: width - narrow_x,
         font: font,
         color: #111111,
-        align: align,
-        text_bounds: grid_bounds
+        align: align
     ) {
         \Children
     };
@@ -281,9 +280,9 @@
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false),
-    env font: Font
+    env font: Font,
+    env text_bounds: TextBounds
 ) {
-    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let img = \Image(
         src: src,
         x: x + width + img_right_bleed - img.width,
@@ -297,8 +296,7 @@
         width: narrow_width,
         font: font,
         color: #111111,
-        align: align,
-        text_bounds: grid_bounds
+        align: align
     ) {
         \Children
     };
@@ -317,30 +315,30 @@
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false),
-    env font: Font
+    env font: Font,
+    env text_bounds: TextBounds
 ) {
-    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let cx = x + width * 0.5;
     \let row1_y = y + star_drop;
     \let row2_y = y + line_step + star_drop;
     \let row3_y = y + line_step * 2.0 + star_drop;
 
     // Row 1: 4 stars at -1.5, -0.5, +0.5, +1.5 * step
-    \Text(x: cx - step * 1.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx - step * 0.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx + step * 0.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx + step * 1.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx - step * 1.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx - step * 0.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + step * 0.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + step * 1.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
 
     // Row 2: 3 stars staggered at -1.0, 0.0, +1.0 * step
-    \Text(x: cx - step - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx + step - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx - step - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + step - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
 
     // Row 3: 4 stars at -1.5, -0.5, +0.5, +1.5 * step
-    \Text(x: cx - step * 1.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx - step * 0.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx + step * 0.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx + step * 1.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx - step * 1.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx - step * 0.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + step * 0.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + step * 1.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
 
     \alias right: Distance = x + width;
     \alias height: Distance = line_step * 3.0;
@@ -356,33 +354,33 @@
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false),
-    env font: Font
+    env font: Font,
+    env text_bounds: TextBounds
 ) {
-    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let cx = x + width * 0.5;
     \let row1_y = y + star_drop;
     \let row2_y = y + line_step + star_drop;
     \let row3_y = y + line_step * 2.0 + star_drop;
 
     // Row 1: 5 stars
-    \Text(x: cx - step * 2.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx - step * 1.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx - 4pt,              y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx + step * 1.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx + step * 2.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx - step * 2.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx - step * 1.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx - 4pt,              y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + step * 1.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + step * 2.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
 
     // Row 2: 4 stars
-    \Text(x: cx - step * 1.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx - step * 0.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx + step * 0.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx + step * 1.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx - step * 1.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx - step * 0.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + step * 0.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + step * 1.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
 
     // Row 3: 5 stars
-    \Text(x: cx - step * 2.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx - step * 1.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx - 4pt,              y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx + step * 1.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
-    \Text(x: cx + step * 2.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
+    \Text(x: cx - step * 2.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx - step * 1.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx - 4pt,              y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + step * 1.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + step * 2.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
 
     \alias right: Distance = x + width;
     \alias height: Distance = line_step * 3.0;
@@ -397,9 +395,9 @@
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true),
-    env font: Font
+    env font: Font,
+    env text_bounds: TextBounds
 ) {
-    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let t = \Text(
         x: x,
         y: y,
@@ -407,7 +405,6 @@
         font: font,
         color: #111111,
         align: align,
-        text_bounds: grid_bounds,
         pagination: \Pagination(breakable: true)
     ) {
         \Indent(width: indent)//
@@ -426,9 +423,9 @@
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true),
-    env font: Font
+    env font: Font,
+    env text_bounds: TextBounds
 ) {
-    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let t = \Text(
         x: x,
         y: y,
@@ -436,7 +433,6 @@
         font: font,
         color: #111111,
         align: align,
-        text_bounds: grid_bounds,
         pagination: \Pagination(breakable: true)
     ) {
         \Children
@@ -479,6 +475,7 @@
     env font: Font
 ) {
     \env font = \Font(font: self.font, size: size, line_height: leading, italic: italic);
+    \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let stack = \VStackStretch(x: x, y: y, width: width, gap: 0pt, pagination: \Pagination(breakable: false)) {
         \Children
     };
@@ -496,16 +493,15 @@
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false),
-    env font: Font
+    env font: Font,
+    env text_bounds: TextBounds
 ) {
-    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let t = \Text(
         x: x + left_margin + indent,
         y: y,
         width: width - left_margin - indent,
         font: font,
-        color: #111111,
-        text_bounds: grid_bounds
+        color: #111111
     ) {
         \Children
     };
@@ -612,9 +608,9 @@
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false),
-    env font: Font
+    env font: Font,
+    env text_bounds: TextBounds
 ) {
-    \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let col_w = width - narrow_x;
 
     \let img = \Image(
@@ -631,6 +627,7 @@
         font: \Font(font: font, size: 12.5pt, letter_spacing: 0.75pt),
         color: #111111,
         align: Align.Center,
+        text_bounds: \TextBounds(),
         text: "CHAPTER " + number + "."
     )
 
@@ -641,6 +638,7 @@
         font: \Font(font: font, size: 8.25pt, letter_spacing: 0.45pt),
         color: #111111,
         align: Align.Center,
+        text_bounds: \TextBounds(),
         text: title + "."
     )
 
@@ -650,8 +648,7 @@
         width: col_w,
         font: font,
         color: #111111,
-        align: Align.JustifyAll,
-        text_bounds: grid_bounds
+        align: Align.JustifyAll
     ) {
         \Indent(width: 16pt)//
         \Children
@@ -688,6 +685,7 @@
         )
     }
 
+    \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let body = \VStackStretch(
         x: x,
         y: y,
@@ -745,6 +743,7 @@
         sub_gap: sub_gap
     );
 
+    \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let body = \VStackStretch(
         x: x,
         y: hdr.bottom,
@@ -802,6 +801,7 @@
         sub_gap: sub_gap
     );
 
+    \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let body = \VStackStretch(
         x: x,
         y: hdr.bottom,
