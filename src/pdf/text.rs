@@ -309,7 +309,6 @@ pub(super) fn draw_text_node(
         layout_text.break_all_lines(Some(node.rect.width as f32));
     }
 
-    let is_justify_all = matches!(align_str, Some("justify_all") | Some("JustifyAll"));
     let alignment = match align_str {
         Some("center") | Some("Center") => Alignment::Center,
         Some("right") | Some("Right") | Some("end") | Some("End") => Alignment::End,
@@ -444,62 +443,15 @@ pub(super) fn draw_text_node(
             }
         }
 
-        // When `Align.JustifyAll` is active, Parley justifies lines `0..total_lines-1` but leaves
-        // the final line (or any explicit `\n` line) ragged. Compute per-space extra advance here.
-        let is_unjustified_line = is_justify_all
-            && node.rect.width > 0.0
-            && (line_idx + 1 == total_lines
-                || active_text
-                    .get(line.text_range())
-                    .is_some_and(|s| s.ends_with('\n')));
-
-        let (line_space_extra, line_space_limit) = if is_unjustified_line {
-            let lm = line.metrics();
-            let free = (node.rect.width as f32) - lm.offset - (lm.advance - lm.trailing_whitespace);
-            if free > 0.05 {
-                let mut temp_cursor: Option<(usize, usize)> = None;
-                let mut space_flags: Vec<bool> = Vec::new();
-                for item in line.items() {
-                    if let PositionedLayoutItem::GlyphRun(gr) = item {
-                        let r = gr.run();
-                        let gc = gr.glyphs().count();
-                        let s_idx = match temp_cursor {
-                            Some((ri, idx)) if ri == r.index() => idx,
-                            _ => 0,
-                        };
-                        let gs: Vec<Range<usize>> = r
-                            .visual_clusters()
-                            .flat_map(|c| {
-                                let tr = c.text_range();
-                                c.glyphs().map(move |_| tr.clone())
-                            })
-                            .skip(s_idx)
-                            .take(gc)
-                            .collect();
-                        temp_cursor = Some((r.index(), s_idx + gs.len()));
-                        for cr in gs {
-                            let is_sp = active_text
-                                .get(cr)
-                                .is_some_and(|s| !s.is_empty() && s.chars().all(|ch| ch == ' ' || ch == '\u{00A0}'));
-                            space_flags.push(is_sp);
-                        }
-                    }
-                }
-                while space_flags.last() == Some(&true) {
-                    space_flags.pop();
-                }
-                let n_spaces = space_flags.iter().filter(|&&b| b).count();
-                if n_spaces > 0 {
-                    (free / (n_spaces as f32), n_spaces)
-                } else {
-                    (0.0, 0)
-                }
-            } else {
-                (0.0, 0)
-            }
-        } else {
-            (0.0, 0)
-        };
+        let (line_space_extra, line_space_limit) =
+            crate::compiler::text::compute_manual_justify_line_spaces(
+                &line,
+                line_idx,
+                total_lines,
+                active_text,
+                align_str,
+                node.rect.width,
+            );
 
         let mut spaces_applied = 0usize;
         let mut line_extra_x = 0.0f32;

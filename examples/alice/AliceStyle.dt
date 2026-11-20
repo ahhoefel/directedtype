@@ -1,6 +1,6 @@
 // Alice's Adventures in Wonderland — 1866 Macmillan Crown Octavo Stylesheet
 // Page trim: 365pt x 540pt (5.07in x 7.50in Crown Octavo)
-// Type block: 257.5pt (+3.0%) measure x 22 lines at 18.0pt leading (12pt Old Standard TT, 190 DPI engravings)
+// Type block: 270.0pt (+8.0%) measure x 22 lines at 18.0pt leading (12pt Old Standard TT, 190 DPI engravings)
 
 \use "components/Align.dt"
 \use "components/TextBounds.dt"
@@ -823,8 +823,8 @@
     height: Distance = 540pt,
     x: Distance = page.left,
     y: Distance = page.top,
-    margin_inner: Distance = 53.0pt,
-    margin_outer: Distance = 54.5pt,
+    margin_inner: Distance = 46.75pt,
+    margin_outer: Distance = 48.25pt,
     header_y: Distance = 50.0pt,
     body_top: Distance = 67.4pt,
     flow_height: Distance = 397.0pt,
@@ -986,7 +986,7 @@
         page: \AlicePage(folio_offset: folio_offset)
     ) {
         \VStackStretch(
-            width: 257.5pt,
+            width: 270.0pt,
             gap: 0pt,
             pagination: \Pagination(breakable: true)
         ) {

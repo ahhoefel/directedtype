@@ -277,6 +277,88 @@ pub fn measure_rich_text_bounds(
 const SOFT_HYPHEN: char = '\u{00AD}';
 const SOFT_HYPHEN_LEN: usize = SOFT_HYPHEN.len_utf8(); // 2 UTF-8 bytes
 
+/// Marker string emitted by parser escape `\|` for a forced justified line break.
+/// Parley breaks at `'\n'` and suppresses `'\u{2060}'` (Word Joiner) with zero glyph output;
+/// renderers and inline-box layout recognize `s.ends_with(FORCED_JUSTIFY_BREAK)` to justify
+/// the line under `Align.Justify` while keeping plain `"\n"` and the final paragraph line ragged.
+pub const FORCED_JUSTIFY_BREAK: &str = "\u{2060}\n";
+
+/// Computes `(space_extra_advance, space_count)` for lines requiring manual space-stretching:
+/// - Under `Align.JustifyAll`: the final line (`line_idx + 1 == total_lines`) or any `\n`-broken line.
+/// - Under `Align.Justify`: any non-final forced justified break (`\|` -> `FORCED_JUSTIFY_BREAK`),
+///   leaving soft-wrapped lines (already justified by Parley), plain `"\n"` lines, and the final
+///   paragraph line ragged.
+pub fn compute_manual_justify_line_spaces<B: parley::style::Brush>(
+    line: &parley::layout::Line<'_, B>,
+    line_idx: usize,
+    total_lines: usize,
+    active_text: &str,
+    align_str: Option<&str>,
+    target_width: f64,
+) -> (f32, usize) {
+    let is_justify_all = matches!(align_str, Some("justify_all") | Some("JustifyAll"));
+    let is_justify = is_justify_all || matches!(align_str, Some("justify") | Some("Justify"));
+    let line_slice = active_text.get(line.text_range());
+    let needs_manual_justify = target_width > 0.0
+        && ((is_justify_all
+            && (line_idx + 1 == total_lines || line_slice.is_some_and(|s| s.ends_with('\n'))))
+            || (is_justify
+                && line_idx + 1 < total_lines
+                && line_slice.is_some_and(|s| s.ends_with(FORCED_JUSTIFY_BREAK))));
+    if !needs_manual_justify {
+        return (0.0, 0);
+    }
+
+    let lm = line.metrics();
+    let free = (target_width as f32) - lm.offset - (lm.advance - lm.trailing_whitespace);
+    if free <= 0.05 {
+        return (0.0, 0);
+    }
+
+    let mut temp_cursor: Option<(usize, usize)> = None;
+    let mut space_flags: Vec<bool> = Vec::new();
+    for item in line.items() {
+        match item {
+            parley::layout::PositionedLayoutItem::GlyphRun(gr) => {
+                let r = gr.run();
+                let gc = gr.glyphs().count();
+                let s_idx = match temp_cursor {
+                    Some((ri, idx)) if ri == r.index() => idx,
+                    _ => 0,
+                };
+                let gs: Vec<std::ops::Range<usize>> = r
+                    .visual_clusters()
+                    .flat_map(|c| {
+                        let tr = c.text_range();
+                        c.glyphs().map(move |_| tr.clone())
+                    })
+                    .skip(s_idx)
+                    .take(gc)
+                    .collect();
+                temp_cursor = Some((r.index(), s_idx + gs.len()));
+                for cr in gs {
+                    let is_sp = active_text.get(cr).is_some_and(|s| {
+                        !s.is_empty() && s.chars().all(|ch| ch == ' ' || ch == '\u{00A0}')
+                    });
+                    space_flags.push(is_sp);
+                }
+            }
+            parley::layout::PositionedLayoutItem::InlineBox(_) => {
+                space_flags.push(false);
+            }
+        }
+    }
+    while space_flags.last() == Some(&true) {
+        space_flags.pop();
+    }
+    let n_spaces = space_flags.iter().filter(|&&b| b).count();
+    if n_spaces > 0 {
+        (free / (n_spaces as f32), n_spaces)
+    } else {
+        (0.0, 0)
+    }
+}
+
 /// Result of resolving soft hyphens (`U+00AD`) for a given `max_width`:
 /// taken line-ending breaks become literal `'-'`, while untaken soft hyphens are stripped.
 #[derive(Debug, Clone)]
@@ -1579,11 +1661,73 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
         }
         origin_y += m.baseline - default_first_baseline;
 
-        for line in layout.lines() {
+        let all_lines: Vec<_> = layout.lines().collect();
+        let total_lines = all_lines.len();
+        let target_w = max_width.unwrap_or(0.0);
+
+        for (line_idx, line) in all_lines.into_iter().enumerate() {
             let line_metrics = line.metrics();
             let line_top_base = origin_y + line_metrics.block_min_coord as f64;
             let line_height_val = (line_metrics.block_max_coord - line_metrics.block_min_coord) as f64;
             let line_baseline_base = origin_y + line_metrics.baseline as f64;
+
+            let (line_space_extra, line_space_limit) = compute_manual_justify_line_spaces(
+                &line,
+                line_idx,
+                total_lines,
+                eff_text,
+                align,
+                target_w,
+            );
+            let mut spaces_applied = 0usize;
+            let mut line_extra_x = 0.0f32;
+            let mut run_cursor: Option<(usize, usize)> = None;
+            let mut adjusted_glyphs: Vec<(u8, f32, f32)> = Vec::new();
+            for item in line.items() {
+                if let parley::layout::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                    let run = glyph_run.run();
+                    let glyph_count = glyph_run.glyphs().count();
+                    let start_idx = match run_cursor {
+                        Some((ri, idx)) if ri == run.index() => idx,
+                        _ => 0,
+                    };
+                    let cluster_ranges: Vec<Range<usize>> = if line_space_limit > 0 {
+                        let crs: Vec<Range<usize>> = run
+                            .visual_clusters()
+                            .flat_map(|c| {
+                                let r = c.text_range();
+                                c.glyphs().map(move |_| r.clone())
+                            })
+                            .skip(start_idx)
+                            .take(glyph_count)
+                            .collect();
+                        run_cursor = Some((run.index(), start_idx + crs.len()));
+                        crs
+                    } else {
+                        Vec::new()
+                    };
+                    let b0 = glyph_run.style().brush[0];
+                    for (idx_g, g) in glyph_run.positioned_glyphs().enumerate() {
+                        let gx = g.x + line_extra_x;
+                        let is_sp = spaces_applied < line_space_limit
+                            && cluster_ranges
+                                .get(idx_g)
+                                .and_then(|cr| eff_text.get(cr.clone()))
+                                .is_some_and(|s| {
+                                    !s.is_empty()
+                                        && s.chars().all(|ch| ch == ' ' || ch == '\u{00A0}')
+                                });
+                        let adv = if is_sp {
+                            spaces_applied += 1;
+                            line_extra_x += line_space_extra;
+                            g.advance + line_space_extra
+                        } else {
+                            g.advance
+                        };
+                        adjusted_glyphs.push((b0, gx, gx + adv));
+                    }
+                }
+            }
 
             for &child_id in &all_node_ids {
                 let own_shift = child_shifts
@@ -1603,18 +1747,13 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
                 for (idx, span) in spans.iter().enumerate() {
                     if span.node_id == Some(child_id) || span.node_ids.contains(&child_id) {
                         let expected_brush_id = ((idx + 1) % 250 + 1) as u8;
-                        for item in line.items() {
-                            if let parley::layout::PositionedLayoutItem::GlyphRun(glyph_run) = item {
-                                if glyph_run.style().brush[0] == expected_brush_id {
-                                    for g in glyph_run.positioned_glyphs() {
-                                        if g.x < min_gx {
-                                            min_gx = g.x;
-                                        }
-                                        let gx_end = g.x + g.advance;
-                                        if gx_end > max_gx {
-                                            max_gx = gx_end;
-                                        }
-                                    }
+                        for &(b0, gx, gx_end) in &adjusted_glyphs {
+                            if b0 == expected_brush_id {
+                                if gx < min_gx {
+                                    min_gx = gx;
+                                }
+                                if gx_end > max_gx {
+                                    max_gx = gx_end;
                                 }
                             }
                         }
@@ -1873,30 +2012,126 @@ pub fn compute_span_range_metrics_with_boxes(
         };
         origin_y = text_y + y_offset;
 
-        for line in layout.lines() {
+        let all_lines: Vec<_> = layout.lines().collect();
+        let total_lines = all_lines.len();
+        let target_w = max_width.unwrap_or(0.0);
+
+        for (line_idx, line) in all_lines.into_iter().enumerate() {
             let line_metrics = line.metrics();
             let line_top_base = origin_y + line_metrics.block_min_coord as f64;
             let line_height_val = (line_metrics.block_max_coord - line_metrics.block_min_coord) as f64;
             let line_baseline_base = origin_y + line_metrics.baseline as f64;
 
+            let (line_space_extra, line_space_limit) = compute_manual_justify_line_spaces(
+                &line,
+                line_idx,
+                total_lines,
+                eff_text,
+                align,
+                target_w,
+            );
+            let mut spaces_applied = 0usize;
+            let mut line_extra_x = 0.0f32;
+            let mut run_cursor: Option<(usize, usize)> = None;
+
             if let Some(box_node_id) = target_inline_box {
                 for item in line.items() {
-                    if let parley::layout::PositionedLayoutItem::InlineBox(pib) = item {
-                        if pib.id == box_node_id.0 as u64 {
-                            let ib_info = eff_boxes.iter().find(|b| b.node_id == box_node_id);
-                            let b_w = ib_info.map(|b| b.width).unwrap_or(pib.width as f64);
-                            let b_h = ib_info.map(|b| b.height).unwrap_or(pib.height as f64);
-                            let b_off = ib_info.map(|b| b.baseline_offset).unwrap_or(b_h);
-                            let box_x = origin_x + pib.x as f64;
-                            let box_y = line_baseline_base - b_off;
-                            fragments.push(Rect::new(box_x, box_y, b_w, b_h));
-                            if first_line_baseline.is_none() {
-                                first_line_baseline = Some(line_baseline_base);
+                    match item {
+                        parley::layout::PositionedLayoutItem::GlyphRun(glyph_run) => {
+                            if line_space_limit > 0 {
+                                let run = glyph_run.run();
+                                let glyph_count = glyph_run.glyphs().count();
+                                let start_idx = match run_cursor {
+                                    Some((ri, idx)) if ri == run.index() => idx,
+                                    _ => 0,
+                                };
+                                let crs: Vec<Range<usize>> = run
+                                    .visual_clusters()
+                                    .flat_map(|c| {
+                                        let r = c.text_range();
+                                        c.glyphs().map(move |_| r.clone())
+                                    })
+                                    .skip(start_idx)
+                                    .take(glyph_count)
+                                    .collect();
+                                run_cursor = Some((run.index(), start_idx + crs.len()));
+                                for cr in crs {
+                                    if spaces_applied < line_space_limit
+                                        && eff_text.get(cr).is_some_and(|s| {
+                                            !s.is_empty()
+                                                && s.chars().all(|ch| ch == ' ' || ch == '\u{00A0}')
+                                        })
+                                    {
+                                        spaces_applied += 1;
+                                        line_extra_x += line_space_extra;
+                                    }
+                                }
+                            }
+                        }
+                        parley::layout::PositionedLayoutItem::InlineBox(pib) => {
+                            if pib.id == box_node_id.0 as u64 {
+                                let ib_info = eff_boxes.iter().find(|b| b.node_id == box_node_id);
+                                let b_w = ib_info.map(|b| b.width).unwrap_or(pib.width as f64);
+                                let b_h = ib_info.map(|b| b.height).unwrap_or(pib.height as f64);
+                                let b_off = ib_info.map(|b| b.baseline_offset).unwrap_or(b_h);
+                                let box_x = origin_x + (pib.x + line_extra_x) as f64;
+                                let box_y = line_baseline_base - b_off;
+                                fragments.push(Rect::new(box_x, box_y, b_w, b_h));
+                                if first_line_baseline.is_none() {
+                                    first_line_baseline = Some(line_baseline_base);
+                                }
                             }
                         }
                     }
                 }
                 continue;
+            }
+
+            let mut adjusted_glyphs: Vec<(u8, f32, f32)> = Vec::new();
+            for item in line.items() {
+                if let parley::layout::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                    let run = glyph_run.run();
+                    let glyph_count = glyph_run.glyphs().count();
+                    let start_idx = match run_cursor {
+                        Some((ri, idx)) if ri == run.index() => idx,
+                        _ => 0,
+                    };
+                    let cluster_ranges: Vec<Range<usize>> = if line_space_limit > 0 {
+                        let crs: Vec<Range<usize>> = run
+                            .visual_clusters()
+                            .flat_map(|c| {
+                                let r = c.text_range();
+                                c.glyphs().map(move |_| r.clone())
+                            })
+                            .skip(start_idx)
+                            .take(glyph_count)
+                            .collect();
+                        run_cursor = Some((run.index(), start_idx + crs.len()));
+                        crs
+                    } else {
+                        Vec::new()
+                    };
+                    let b0 = glyph_run.style().brush[0];
+                    for (idx_g, g) in glyph_run.positioned_glyphs().enumerate() {
+                        let gx = g.x + line_extra_x;
+                        let is_sp = spaces_applied < line_space_limit
+                            && cluster_ranges
+                                .get(idx_g)
+                                .and_then(|cr| eff_text.get(cr.clone()))
+                                .is_some_and(|s| {
+                                    !s.is_empty()
+                                        && s.chars().all(|ch| ch == ' ' || ch == '\u{00A0}')
+                                });
+                        let adv = if is_sp {
+                            spaces_applied += 1;
+                            line_extra_x += line_space_extra;
+                            g.advance + line_space_extra
+                        } else {
+                            g.advance
+                        };
+                        adjusted_glyphs.push((b0, gx, gx + adv));
+                    }
+                }
             }
 
             let eff_span_range = match &mat {
@@ -1912,18 +2147,13 @@ pub fn compute_span_range_metrics_with_boxes(
                     && span.range.end <= eff_span_range.end
                 {
                     let expected_brush_id = ((idx + 1) % 250 + 1) as u8;
-                    for item in line.items() {
-                        if let parley::layout::PositionedLayoutItem::GlyphRun(glyph_run) = item {
-                            if glyph_run.style().brush[0] == expected_brush_id {
-                                for g in glyph_run.positioned_glyphs() {
-                                    if g.x < min_gx {
-                                        min_gx = g.x;
-                                    }
-                                    let gx_end = g.x + g.advance;
-                                    if gx_end > max_gx {
-                                        max_gx = gx_end;
-                                    }
-                                }
+                    for &(b0, gx, gx_end) in &adjusted_glyphs {
+                        if b0 == expected_brush_id {
+                            if gx < min_gx {
+                                min_gx = gx;
+                            }
+                            if gx_end > max_gx {
+                                max_gx = gx_end;
                             }
                         }
                     }

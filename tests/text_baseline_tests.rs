@@ -110,3 +110,85 @@ fn test_font_letter_spacing_widens_text_and_inherits() {
         texts[0].rect.width
     );
 }
+
+#[test]
+fn test_forced_justified_line_break_escape() {
+    let source = r#"
+\Enum Align {
+    Left,
+    Center,
+    Right,
+    Justify,
+    JustifyAll,
+}
+
+\InlineBox DashBox(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    env font: Font
+) {
+    \alias width: Distance = 24px;
+    \alias height: Distance = 4px;
+    \alias baseline: Distance = y + 4px;
+}
+
+\Span Mark(env font: Font) {
+    \Children
+}
+
+\let t = \Text(x: 0px, y: 0px, width: 300px, font: \Font(size: 16px), align: Align.Justify) {
+    Alice was \DashBox{}\Mark{point\-\|
+    ing} at \Mark{sing}
+}
+"#;
+
+    let doc = parse_document(source).expect("parse ok");
+    let compiled = CompiledDocument::compile(&doc).expect("compile ok");
+    let layout = compiled.layout();
+
+    let t_node = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Text" && n.text_content.is_some())
+        .expect("Text node");
+    assert_eq!(
+        t_node.text_content.as_deref(),
+        Some("Alice was point-\u{2060}\ning at sing")
+    );
+
+    let dash = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "DashBox")
+        .expect("DashBox");
+    let marks: Vec<_> = layout
+        .nodes
+        .iter()
+        .filter(|n| n.name == "Mark")
+        .collect();
+    assert_eq!(marks.len(), 2);
+
+    // First line (`Alice was [DashBox]point-`) is justified to right edge ~300px:
+    // `point-` fragment on line 0 should touch ~300px, and `DashBox` should sit immediately before `point-`.
+    let line0_frag = &marks[0].fragments[0];
+    assert!(
+        (line0_frag.x + line0_frag.width - 300.0).abs() < 2.0,
+        "Expected line 0 trailing word 'point-' to reach justified right edge 300px, got {}",
+        line0_frag.x + line0_frag.width
+    );
+    assert!(
+        (dash.rect.x + dash.rect.width - line0_frag.x).abs() < 1.5,
+        "Expected DashBox right edge ({}) to align with justified 'point-' start ({})",
+        dash.rect.x + dash.rect.width,
+        line0_frag.x
+    );
+
+    // Final line (`ing at sing`) must remain ragged (well short of 300px).
+    let last_frag = &marks[1].fragments[0];
+    assert!(
+        last_frag.x + last_frag.width < 180.0,
+        "Expected final line of Align.Justify to remain ragged, got right edge {}",
+        last_frag.x + last_frag.width
+    );
+}
+

@@ -31,3 +31,10 @@
     \ChapterEleven()
     \ChapterTwelve()
 }
+
+// Editorial note: Fixed punctuation on 5 obvious locations where 1866 has mistakes:
+// 1. minutes. instead of minutes, at paragraph end on p. 67,
+// 2. opening “ before that’s on p. 87,
+// 3. no stray double-close asked.” on p. 102,
+// 4. no stray opening “ before narrative The soldiers were silent on p. 119,
+// 5. closing ” after Duchess?” on p. 120.

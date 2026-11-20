@@ -247,7 +247,8 @@ impl<'a> ParserCursor<'a> {
                         let prev_is_visual = items.last().is_some_and(is_visual_content_item);
                         let prev_text_ends_with_space = matches!(
                             items.last(),
-                            Some(ContentItem::Text(t)) if t.text.ends_with(' ')
+                            Some(ContentItem::Text(t))
+                                if t.text.ends_with(' ') || t.text.ends_with(FORCED_BREAK_SENTINEL)
                         );
 
                         let mut slice = seg_raw;
@@ -265,7 +266,10 @@ impl<'a> ParserCursor<'a> {
                         let normalized = normalize_ascii_whitespace(slice);
                         if !normalized.is_empty() {
                             if let Some(ContentItem::Text(prev_text)) = items.last_mut() {
-                                if prev_text.text.ends_with(' ') && normalized.starts_with(' ') {
+                                if (prev_text.text.ends_with(' ')
+                                    || prev_text.text.ends_with(FORCED_BREAK_SENTINEL))
+                                    && normalized.starts_with(' ')
+                                {
                                     prev_text.text.push_str(&normalized[1..]);
                                 } else {
                                     prev_text.text.push_str(&normalized);
@@ -415,6 +419,59 @@ impl<'a> ParserCursor<'a> {
                         raw_buf.push_str("\u{2060}-\u{2060}");
                         self.pos += 2;
                         continue;
+                    } else if after_backslash.starts_with('|') {
+                        while raw_buf
+                            .chars()
+                            .next_back()
+                            .is_some_and(|c| c.is_ascii_whitespace())
+                        {
+                            raw_buf.pop();
+                        }
+                        if raw_buf.is_empty() {
+                            if let Some(ContentItem::Text(prev_t)) = items.last_mut() {
+                                let trimmed = prev_t.text.trim_ascii_end().len();
+                                prev_t.text.truncate(trimmed);
+                            }
+                        }
+                        if raw_buf.ends_with('\u{00AD}') {
+                            raw_buf.pop();
+                            raw_buf.push('-');
+                        } else if raw_buf.is_empty() {
+                            if let Some(ContentItem::Text(prev_t)) = items.last_mut() {
+                                if prev_t.text.ends_with('\u{00AD}') {
+                                    prev_t.text.pop();
+                                    prev_t.text.push('-');
+                                }
+                            }
+                        }
+                        raw_buf.push(FORCED_BREAK_SENTINEL);
+                        self.pos += 2;
+                        while self.pos < self.source.len() {
+                            let b = self.source.as_bytes()[self.pos];
+                            if b == b' ' || b == b'\t' || b == b'\r' {
+                                self.pos += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        if self.pos < self.source.len() && self.source.as_bytes()[self.pos] == b'\n'
+                        {
+                            self.pos += 1;
+                            while self.pos < self.source.len() {
+                                let b = self.source.as_bytes()[self.pos];
+                                if b == b' ' || b == b'\t' || b == b'\r' {
+                                    self.pos += 1;
+                                } else {
+                                    break;
+                                }
+                            }
+                            if self.pos < self.source.len()
+                                && self.source.as_bytes()[self.pos] == b'\n'
+                            {
+                                raw_buf.push('\n');
+                            }
+                        }
+                        continue;
                     }
                 }
 
@@ -537,6 +594,10 @@ impl<'a> ParserCursor<'a> {
 /// so that it is preserved across ASCII whitespace trimming before being converted to `' '`.
 const ESCAPED_SPACE_SENTINEL: char = '\u{E000}';
 
+/// Sentinel character used internally during content slot parsing to represent a forced justified
+/// line break (`\|`) before being converted to `FORCED_JUSTIFY_BREAK` (`"\u{2060}\n"`).
+const FORCED_BREAK_SENTINEL: char = '\u{E001}';
+
 fn is_visual_content_item(item: &ContentItem) -> bool {
     match item {
         ContentItem::Text(_) | ContentItem::Node(_) | ContentItem::Children(_) => true,
@@ -606,7 +667,13 @@ fn normalize_ascii_whitespace(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
     let mut in_ws = false;
     for c in input.chars() {
-        if c.is_ascii_whitespace() {
+        if c == FORCED_BREAK_SENTINEL {
+            if in_ws && result.ends_with(' ') {
+                result.pop();
+            }
+            result.push(c);
+            in_ws = true;
+        } else if c.is_ascii_whitespace() {
             if !in_ws {
                 result.push(' ');
                 in_ws = true;
@@ -620,7 +687,7 @@ fn normalize_ascii_whitespace(input: &str) -> String {
 }
 
 /// Cleans up trailing paragraph breaks, trailing unescaped spaces on the last visual text chunk,
-/// and converts `ESCAPED_SPACE_SENTINEL` back to `' '`.
+/// and converts `ESCAPED_SPACE_SENTINEL` and `FORCED_BREAK_SENTINEL`.
 fn finalize_content_slot_items(items: &mut Vec<ContentItem>) {
     // 1. Remove any ParagraphBreak that appears after the last visual item
     while let Some(pos) = items
@@ -647,11 +714,16 @@ fn finalize_content_slot_items(items: &mut Vec<ContentItem>) {
         }
     }
 
-    // 3. Replace ESCAPED_SPACE_SENTINEL with literal ' ' in all Text chunks
+    // 3. Replace ESCAPED_SPACE_SENTINEL and FORCED_BREAK_SENTINEL in all Text chunks
     for item in items.iter_mut() {
         if let ContentItem::Text(chunk) = item {
             if chunk.text.contains(ESCAPED_SPACE_SENTINEL) {
                 chunk.text = chunk.text.replace(ESCAPED_SPACE_SENTINEL, " ");
+            }
+            if chunk.text.contains(FORCED_BREAK_SENTINEL) {
+                chunk.text = chunk
+                    .text
+                    .replace(FORCED_BREAK_SENTINEL, crate::compiler::text::FORCED_JUSTIFY_BREAK);
             }
         }
     }
