@@ -28,6 +28,7 @@ use crate::compiler::expand::rewrite::{
 use crate::compiler::expand::schema::{ComponentSchema, PortMask};
 use crate::compiler::expand::text_flow::{
     finalize_inline_box_component_ports, finalize_span_component_ports, is_non_flow_decl_name,
+    is_non_layout_pagination_directive,
 };
 use crate::compiler::expand::typecheck::{
     coerce_typed_binding_expr, resolve_ident_or_member_to_literal,
@@ -135,7 +136,15 @@ impl<'a> ComponentExpander<'a> {
             ctx,
             instance.content.as_ref(),
             schema.is_span_def || is_single_text_context,
-            ctx.consumer_children.map_or(0, |c| c.len()),
+            ctx.consumer_children.map_or(0, |c| {
+                if schema.is_span_def || is_single_text_context {
+                    c.len()
+                } else {
+                    c.iter()
+                        .filter(|e| !is_non_layout_pagination_directive(e.elem.name.as_str()))
+                        .count()
+                }
+            }),
             lexical_scope,
             caller_env_scope,
             doc,
@@ -814,7 +823,14 @@ impl<'a> ComponentExpander<'a> {
         )?;
         debug_assert_eq!(
             self.num_consumer_children,
-            self.consumer_child_entries.len()
+            if self.schema.is_span_def || self.is_single_text_context {
+                self.consumer_child_entries.len()
+            } else {
+                self.consumer_child_entries
+                    .iter()
+                    .filter(|e| !is_non_layout_pagination_directive(e.elem.name.as_str()))
+                    .count()
+            }
         );
         Ok(())
     }

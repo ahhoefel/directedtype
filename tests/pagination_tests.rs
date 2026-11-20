@@ -591,3 +591,61 @@ fn test_multipage_pdf_export_and_sliced_links() {
         "Expected PDF /Link annotations across split paragraphs"
     );
 }
+
+#[test]
+fn test_page_break_inside_vstack_and_forwarded_wrapper() {
+    let src = r#"
+    \use "components/VStackStretch.dt"
+
+    \Component Wrapper(
+        x: Distance = parent.left,
+        y: Distance = parent.top,
+        width: Distance = parent.width,
+        pagination: Pagination = \Pagination(breakable: true)
+    ) {
+        \let body = \VStackStretch(x: x, y: y, width: width, gap: 4pt, pagination: \Pagination(breakable: true)) {
+            \Children
+        };
+        \alias height: Distance = body.height;
+    }
+
+    \Component SimplePage(width: Distance = 300pt, height: Distance = 200pt) {
+        \FlowBody(x: 20pt, y: 20pt, width: 260pt, height: 160pt)
+    }
+
+    \PagedFlow(page: \SimplePage(), start_page: 1) {
+        \VStackStretch(width: 260pt, gap: 4pt) {
+            \Rect(id: "direct_a", width: 100pt, height: 20pt, color: #000000)
+            \PageBreak()
+            \Rect(id: "direct_b", width: 100pt, height: 20pt, color: #111111)
+        }
+        \Wrapper(width: 260pt) {
+            \Rect(id: "wrapped_a", width: 100pt, height: 20pt, color: #222222)
+            \PageBreak()
+            \Rect(id: "wrapped_b", width: 100pt, height: 20pt, color: #333333)
+        }
+    }
+    "#;
+
+    let paginated = compile_and_paginate(src).expect("PageBreak inside VStackStretch should compile and paginate");
+    let find_page = |id_val: &str| {
+        let nid = paginated
+            .layout
+            .nodes
+            .iter()
+            .find(|n| n.properties.get("id").and_then(|v| v.as_str()) == Some(id_val))
+            .unwrap()
+            .id;
+        paginated
+            .layout
+            .get_value(nid, "page")
+            .and_then(|v| v.as_i64())
+            .unwrap()
+    };
+
+    assert_eq!(find_page("direct_a"), 1);
+    assert_eq!(find_page("direct_b"), 2);
+    assert_eq!(find_page("wrapped_a"), 2);
+    assert_eq!(find_page("wrapped_b"), 3);
+    assert_eq!(paginated.page_count, 3);
+}

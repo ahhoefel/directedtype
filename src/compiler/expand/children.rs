@@ -132,8 +132,7 @@ pub(super) fn count_consumer_children(
             }
             ContentItem::Node(child_elem) => {
                 if child_elem.name.as_str() == "Deposit" {
-                    // Inline deposit is absorbed into enclosing paragraph if present, or emitted alone otherwise.
-                    pending_inline_boxes += 1;
+                    // Inline deposit is absorbed into enclosing paragraph if present, or skipped as non-layout directive otherwise.
                 } else if child_elem.name.as_str() == "Collect" {
                     flush(
                         &mut count,
@@ -156,9 +155,6 @@ pub(super) fn count_consumer_children(
                         &mut pending_has_text_or_span,
                         &mut pending_inline_boxes,
                     );
-                    if child_elem.name.as_str() == "PageBreak" {
-                        count += 1;
-                    }
                 } else if is_span_element(child_elem, registry) {
                     pending_has_text_or_span = true;
                 } else if is_inline_box_element(child_elem, registry) {
@@ -177,7 +173,7 @@ pub(super) fn count_consumer_children(
                     if is_non_flow_decl_name(child_elem.name.as_str()) {
                         // Bucket/pagination declarations do not emit consumer children.
                     } else if child_elem.name.as_str() == "Deposit" {
-                        pending_inline_boxes += 1;
+                        // Inline deposit is absorbed into enclosing paragraph if present, or skipped as non-layout directive otherwise.
                     } else if child_elem.name.as_str() == "Collect" {
                         flush(
                             &mut count,
@@ -200,9 +196,6 @@ pub(super) fn count_consumer_children(
                             &mut pending_has_text_or_span,
                             &mut pending_inline_boxes,
                         );
-                        if child_elem.name.as_str() == "PageBreak" {
-                            count += 1;
-                        }
                     } else if is_span_element(child_elem, registry) {
                         pending_has_text_or_span = true;
                     } else if is_inline_box_element(child_elem, registry) {
