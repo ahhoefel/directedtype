@@ -31,9 +31,8 @@
         // ============================================================
         // Pages 162–165: The Courtroom & Jury-Box
         // ============================================================
-        \FlushPara {
-            \DropInitial{T}//
-            \SmallCaps{HE} King and Queen of Hearts were seated on their throne
+        \Para {
+            T\SmallCaps{HE} King and Queen of Hearts were seated on their throne
             when they arrived, with a great crowd assembled about them—all sorts
             of little birds and beasts, as well as the whole pack of cards: the
             Knave was standing before them, in chains, with a soldier on each

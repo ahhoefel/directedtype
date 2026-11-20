@@ -34,9 +34,8 @@
         // ============================================================
         // Pages 59–62: Dialogue with the Caterpillar
         // ============================================================
-        \FlushPara {
-            \DropInitial{T}//
-            \SmallCaps{HE} Caterpillar and Alice looked at each other for some
+        \Para {
+            T\SmallCaps{HE} Caterpillar and Alice looked at each other for some
             time in silence: at last the Caterpillar took the hookah out of its
             mouth, and addressed her in a languid, sleepy voice.
         }

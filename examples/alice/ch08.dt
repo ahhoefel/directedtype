@@ -28,9 +28,8 @@
         // ============================================================
         // Page 112 (Verso): Chapter VIII Opener (12 lines)
         // ============================================================
-        \FlushPara {
-            \DropInitial{A} //
-            \SmallCaps{LARGE} rose\=tree stood near the entrance of the garden:
+        \Para {
+            A \SmallCaps{LARGE} rose\=tree stood near the entrance of the garden:
             the roses growing on it were white, but there were three gardeners
             at it, busily painting them red. Alice thought this a very curious
             thing, and she went nearer to watch them, and just as she came up to

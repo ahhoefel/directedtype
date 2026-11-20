@@ -58,9 +58,8 @@
         // ============================================================
         // Page 76 (Verso): Chapter VI Opener (12 lines)
         // ============================================================
-        \FlushPara(align: Align.JustifyAll) {
-            \DropInitial{F}//
-            \SmallCaps{OR} a minute or two she stood looking at the house, and
+        \Para(align: Align.JustifyAll) {
+            F\SmallCaps{OR} a minute or two she stood looking at the house, and
             wondering what to do next, when suddenly a footman in livery came
             run\-ning out of the wood—(she considered him to be a footman because
             he was in livery: other\-wise, judging by his face only, she would

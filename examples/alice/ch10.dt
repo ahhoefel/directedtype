@@ -31,9 +31,8 @@
         // ============================================================
         // Pages 147–149: Explaining the Lobster-Quadrille
         // ============================================================
-        \FlushPara {
-            \DropInitial{T}//
-            \SmallCaps{HE} Mock Turtle sighed deeply, and drew the back of one
+        \Para {
+            T\SmallCaps{HE} Mock Turtle sighed deeply, and drew the back of one
             flapper across his eyes. He looked at Alice, and tried to speak, but
             for a minute or two sobs choked his voice. “Same as if he had a bone
             in his throat,” said the Gryphon: and it set to work shaking him and

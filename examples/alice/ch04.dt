@@ -29,9 +29,8 @@
         // ============================================================
         // Pages 41–44: Mary Ann's errand & the unlabelled bottle
         // ============================================================
-        \FlushPara {
-            \DropInitial{I}//
-            \SmallCaps{T} was the White Rabbit, trotting slowly back again, and
+        \Para {
+            I\SmallCaps{T} was the White Rabbit, trotting slowly back again, and
             looking anxiously about as it went, as if it had lost something; and
             she heard it muttering to itself, “The Duchess! The Duchess! Oh my
             dear paws! Oh my fur and whiskers! She’ll get me executed, as sure

@@ -121,9 +121,8 @@
         // ============================================================
         // Pages 29–34: Caucus-Race & Comfit Prizes
         // ============================================================
-        \FlushPara {
-            \DropInitial{T}//
-            \SmallCaps{HEY} were indeed a queer\=looking party that assembled on
+        \Para {
+            T\SmallCaps{HEY} were indeed a queer\=looking party that assembled on
             the bank—the birds with draggled feathers, the animals with their
             fur clinging close to them, and all dripping wet, cross, and
             un\-comfortable.
