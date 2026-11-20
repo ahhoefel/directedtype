@@ -31,9 +31,7 @@
         text: "THE END."
     )
 
-    \alias right: Distance = x + width;
     \alias height: Distance = 54pt;
-    \alias bottom: Distance = y + height;
 }
 
 \Component ChapterTwelve(
@@ -630,7 +628,5 @@
         \BookEndFooter()
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = ch.height;
-    \alias bottom: Distance = y + height;
 }

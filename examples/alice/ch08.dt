@@ -639,7 +639,5 @@
         }
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = ch.height;
-    \alias bottom: Distance = y + height;
 }

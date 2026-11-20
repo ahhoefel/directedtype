@@ -370,7 +370,7 @@
             bit.
         }
 
-        \Asterism545()
+        \Asterism(cols: 5, step: 52pt)
 
         // ============================================================
         // Pages 70–75: The Pigeon & returning to normal height
@@ -561,7 +561,5 @@
         }
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = ch.height;
-    \alias bottom: Distance = y + height;
 }

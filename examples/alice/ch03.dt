@@ -88,9 +88,7 @@
     \TailLine(x: x, y: y, dx: 130.1pt, dy: 348.9pt, size:  4.3pt) { to }
     \TailLine(x: x, y: y, dx: 134.4pt, dy: 353.7pt, size:  4.3pt) { death. }
 
-    \alias right: Distance = x + width;
     \alias height: Distance = 20.0 * 18.0pt;
-    \alias bottom: Distance = y + height;
 }
 
 \Component ChapterThree(
@@ -485,7 +483,5 @@
         }
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = ch.height;
-    \alias bottom: Distance = y + height;
 }

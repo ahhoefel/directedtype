@@ -8,7 +8,6 @@
 \use "components/TextEnd.dt"
 \use "components/VStackStretch.dt"
 \use "components/Spacer.dt"
-\use "components/Bold.dt"
 \use "components/Italic.dt"
 
 // Metadata deposited at each chapter start for running headers
@@ -35,25 +34,12 @@
     \Deposit(into: chapter_end_meta) {
         \ChapterEndMeta(ended: true)
     }
-    \alias right: Distance = x + width;
     \alias height: Distance = 0pt;
-    \alias bottom: Distance = y;
 }
 
 // Inline first-line paragraph indent (16pt in the 1866 Macmillan setting)
 \InlineBox Indent(
     width: Distance = 16pt,
-    x: Distance = parent.left,
-    y: Distance = parent.top,
-    env font: Font
-) {
-    \alias height: Distance = 0pt;
-    \alias baseline: Distance = y;
-}
-
-// Inline thin space helper for 19th-century punctuation spacing where desired
-\InlineBox ThinSpace(
-    width: Distance = 1.5pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     env font: Font
@@ -89,23 +75,6 @@
     \alias baseline: Distance = y + top_above_baseline;
 }
 
-// Atomic non-breaking inline run (keeps a word, \DoubleEmDash{}, and closing quote together on one line)
-\InlineBox NoBreak(
-    color: Color = #111111,
-    x: Distance = parent.left,
-    y: Distance = parent.top,
-    env font: Font,
-    env text_bounds: TextBounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight)
-) {
-    \let t = \Text(x: x, y: y, font: font, color: color) {
-        \Children
-    };
-
-    \alias width: Distance = t.width;
-    \alias height: Distance = t.height;
-    \alias baseline: Distance = t.baseline;
-}
-
 // Inline Small Caps span (scales uppercase glyphs to match Victorian small-cap optical height)
 \Span SmallCaps(env font: Font, scale: Float = 0.74) {
     \env font = \Font(font: self.font, size: self.font.size * scale);
@@ -116,29 +85,6 @@
 \Span DropInitial(env font: Font, size: Distance = 17.5pt) {
     \env font = \Font(font: self.font, size: size);
     \Children
-}
-
-// Centered DPI-sized illustration block compatible with VStackStretch (uses embedded PNG pHYs DPI)
-\Component CenteredPlate(
-    src: Path,
-    top_pad: Distance = 0pt,
-    bottom_pad: Distance = 0pt,
-    shift_x: Distance = 0pt,
-    x: Distance = parent.left,
-    y: Distance = parent.top,
-    width: Distance = parent.width,
-    pagination: Pagination = \Pagination(breakable: false)
-) {
-    \let img = \Image(
-        src: src,
-        x: x + (width - img.width) * 0.5 + shift_x,
-        y: y + top_pad,
-        dpi: img.file_dpi
-    );
-
-    \alias right: Distance = x + width;
-    \alias height: Distance = top_pad + img.height + bottom_pad;
-    \alias bottom: Distance = y + height;
 }
 
 // Top-of-page wood-engraving locked to an integer number of 18.0pt grid lines
@@ -160,9 +106,7 @@
         dpi: img.file_dpi
     );
 
-    \alias right: Distance = x + width;
     \alias height: Distance = grid_lines * 18.0pt;
-    \alias bottom: Distance = y + height;
 }
 
 // Mid-page wood-engraving locked to an integer number of 18.0pt grid lines
@@ -183,9 +127,7 @@
         dpi: img.file_dpi
     );
 
-    \alias right: Distance = x + width;
     \alias height: Distance = grid_lines * 18.0pt;
-    \alias bottom: Distance = y + height;
 }
 
 // Left-aligned wood-engraving with single narrow justified text block wrapped along its right side
@@ -220,9 +162,7 @@
         \Children
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = t.height;
-    \alias bottom: Distance = y + height;
 }
 
 // Left-aligned wood-engraving with multi-paragraph VStackStretch along its right side
@@ -264,9 +204,7 @@
     \let natural_h = top_pad + col.height;
     \let min_h = min_grid_lines * 18.0pt;
 
-    \alias right: Distance = x + width;
     \alias height: Distance = natural_h > min_h ? natural_h : min_h;
-    \alias bottom: Distance = y + height;
 }
 
 // Right-aligned wood-engraving with narrow justified text wrapped along its left side
@@ -301,13 +239,29 @@
         \Children
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = t.height;
-    \alias bottom: Distance = y + height;
 }
 
-// Staggered 4-3-4 asterisk transformation break occupying exact 3 grid lines (3 * 18.0pt = 54.0pt)
+// Staggered asterisk break row helper (supports 3, 4, or 5 stars centered on cx)
+\Component AsterismRow(
+    n: Integer,
+    cx: Distance,
+    y: Distance,
+    step: Distance,
+    env font: Font,
+    env text_bounds: TextBounds
+) {
+    \let half = (n - 1) * 0.5;
+    \Text(x: cx + (0.0 - half) * step - 4pt, y: y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + (1.0 - half) * step - 4pt, y: y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + (2.0 - half) * step - 4pt, y: y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
+    \Text(x: cx + (3.0 - half) * step - 4pt, y: y, width: 8pt, font: font, color: #111111, align: Align.Center, text: n >= 4 ? "*" : "")
+    \Text(x: cx + (4.0 - half) * step - 4pt, y: y, width: 8pt, font: font, color: #111111, align: Align.Center, text: n >= 5 ? "*" : "")
+}
+
+// Staggered asterisk break (default 4-3-4; cols: 5, step: 52pt for 5-4-5 on p. 69) occupying exact 3 grid lines
 \Component Asterism(
+    cols: Integer = 4,
     step: Distance = 64pt,
     line_step: Distance = 18.0pt,
     star_drop: Distance = 3.5pt,
@@ -319,72 +273,11 @@
     env text_bounds: TextBounds
 ) {
     \let cx = x + width * 0.5;
-    \let row1_y = y + star_drop;
-    \let row2_y = y + line_step + star_drop;
-    \let row3_y = y + line_step * 2.0 + star_drop;
+    \AsterismRow(n: cols,     cx: cx, y: y + star_drop,                   step: step)
+    \AsterismRow(n: cols - 1, cx: cx, y: y + line_step + star_drop,       step: step)
+    \AsterismRow(n: cols,     cx: cx, y: y + line_step * 2.0 + star_drop, step: step)
 
-    // Row 1: 4 stars at -1.5, -0.5, +0.5, +1.5 * step
-    \Text(x: cx - step * 1.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx - step * 0.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx + step * 0.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx + step * 1.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-
-    // Row 2: 3 stars staggered at -1.0, 0.0, +1.0 * step
-    \Text(x: cx - step - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx + step - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-
-    // Row 3: 4 stars at -1.5, -0.5, +0.5, +1.5 * step
-    \Text(x: cx - step * 1.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx - step * 0.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx + step * 0.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx + step * 1.5 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-
-    \alias right: Distance = x + width;
     \alias height: Distance = line_step * 3.0;
-    \alias bottom: Distance = y + height;
-}
-
-// Staggered 5-4-5 asterisk break on p. 69 occupying exact 3 grid lines
-\Component Asterism545(
-    step: Distance = 52pt,
-    line_step: Distance = 18.0pt,
-    star_drop: Distance = 3.5pt,
-    x: Distance = parent.left,
-    y: Distance = parent.top,
-    width: Distance = parent.width,
-    pagination: Pagination = \Pagination(breakable: false),
-    env font: Font,
-    env text_bounds: TextBounds
-) {
-    \let cx = x + width * 0.5;
-    \let row1_y = y + star_drop;
-    \let row2_y = y + line_step + star_drop;
-    \let row3_y = y + line_step * 2.0 + star_drop;
-
-    // Row 1: 5 stars
-    \Text(x: cx - step * 2.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx - step * 1.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx - 4pt,              y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx + step * 1.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx + step * 2.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-
-    // Row 2: 4 stars
-    \Text(x: cx - step * 1.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx - step * 0.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx + step * 0.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx + step * 1.5 - 4pt, y: row2_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-
-    // Row 3: 5 stars
-    \Text(x: cx - step * 2.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx - step * 1.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx - 4pt,              y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx + step * 1.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-    \Text(x: cx + step * 2.0 - 4pt, y: row3_y, width: 8pt, font: font, color: #111111, align: Align.Center, text: "*")
-
-    \alias right: Distance = x + width;
-    \alias height: Distance = line_step * 3.0;
-    \alias bottom: Distance = y + height;
 }
 
 // Standard justified body paragraph locked to the 18.0pt baseline grid with 16pt first-line indent
@@ -411,9 +304,7 @@
         \Children
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = t.height;
-    \alias bottom: Distance = y + height;
 }
 
 // Flush-left paragraph (used for chapter openings and continuations after display/wrap blocks)
@@ -438,9 +329,7 @@
         \Children
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = t.height;
-    \alias bottom: Distance = y + height;
 }
 
 // Centered double ornamental rule (used above the prefatory poem and on p. 190)
@@ -457,9 +346,7 @@
     \Rect(x: rx, y: y, width: rule_width, height: thickness, color: #111111)
     \Rect(x: rx, y: y + thickness + gap, width: rule_width, height: thickness, color: #111111)
 
-    \alias right: Distance = x + width;
     \alias height: Distance = thickness * 2.0 + gap;
-    \alias bottom: Distance = y + height;
 }
 
 // Unbreakable poem page container that scopes 10pt verse font and leading to its children
@@ -481,9 +368,7 @@
         \Children
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = stack.height;
-    \alias bottom: Distance = y + height;
 }
 
 // Single verse line for poems and songs
@@ -507,9 +392,7 @@
         \Children
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = t.height;
-    \alias bottom: Distance = y + height;
 }
 
 // Unbreakable chapter header block (illustration + CHAPTER N. + subtitle) sized to leave exact opening lines
@@ -554,9 +437,7 @@
         text: title + "."
     )
 
-    \alias right: Distance = x + width;
     \alias height: Distance = total_height;
-    \alias bottom: Distance = y + height;
 }
 
 // Unbreakable plain chapter header block (CHAPTER N. + subtitle without illustration)
@@ -593,9 +474,7 @@
         text: title + title_punct
     )
 
-    \alias right: Distance = x + width;
     \alias height: Distance = grid_lines * 18.0pt;
-    \alias bottom: Distance = y + height;
 }
 
 // Chapter II full-height side-wrapped chapter opener (Giant stretched Alice on left, title + 17 lines on right)
@@ -655,9 +534,7 @@
         \Children
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = 22.0 * 18.0pt;
-    \alias bottom: Distance = y + height;
 }
 
 // Shared Chapter shell (deposits running-header metadata, scopes baseline grid, auto-emits ChapterEnd)
@@ -699,9 +576,7 @@
         \ChapterEnd()
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = body.height;
-    \alias bottom: Distance = y + height;
 }
 
 // 1. Chapter with top Tenniel wood-engraving (Chapters I, III, V)
@@ -748,9 +623,7 @@
         \Children
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = ch.height;
-    \alias bottom: Distance = y + height;
 }
 
 // 2. Chapter without top illustration (Chapters IV, VI, VII, VIII, IX, X, XI, XII)
@@ -796,9 +669,7 @@
         \Children
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = ch.height;
-    \alias bottom: Distance = y + height;
 }
 
 // 3. Custom-opener Chapter (Chapter II)
@@ -831,9 +702,7 @@
         \Children
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = ch.height;
-    \alias bottom: Distance = y + height;
 }
 
 // 1866 Macmillan Crown Octavo Page Template
@@ -869,9 +738,6 @@
     \alias running_full: String = has_chapter_start
         ? chapter_meta[page].value.full_header
         : (page.prev ? page.prev.running_full : "");
-
-    \alias right: Distance = x + width;
-    \alias bottom: Distance = y + height;
 
     // Cream paper ground
     \Rect(
@@ -973,6 +839,4 @@
     \alias end_page: Integer = flow.end_page;
     \alias width: Distance = flow.width;
     \alias height: Distance = flow.height;
-    \alias right: Distance = x + width;
-    \alias bottom: Distance = y + height;
 }

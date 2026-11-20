@@ -31,9 +31,7 @@
         text: with_note ? "(In which the cook and the baby joined):—" : ""
     )
 
-    \alias right: Distance = x + width;
     \alias height: Distance = with_note ? 34pt : 20pt;
-    \alias bottom: Distance = y + height;
 }
 
 \Component ChapterSix(
@@ -712,7 +710,5 @@
         }
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = ch.height;
-    \alias bottom: Distance = y + height;
 }

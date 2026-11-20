@@ -32,9 +32,7 @@
         dpi: img.file_dpi
     );
 
-    \alias right: Distance = x + width;
     \alias height: Distance = 392pt;
-    \alias bottom: Distance = y + height;
 }
 
 \Component ContentsHeaderRow(
@@ -48,9 +46,7 @@
     \Text(x: x, y: y, font: col_font, color: #111111, text: "CHAPTER")
     \Text(x: x, y: y, width: width, font: col_font, color: #111111, align: Align.Right, text: "PAGE")
 
-    \alias right: Distance = x + width;
     \alias height: Distance = 8pt;
-    \alias bottom: Distance = y + height;
 }
 
 \Component ContentsRow(
@@ -111,9 +107,7 @@
         text: page_num
     )
 
-    \alias right: Distance = x + width;
     \alias height: Distance = 21pt;
-    \alias bottom: Distance = y + height;
 }
 
 \Component FrontMatter(
@@ -369,7 +363,5 @@
         }
     };
 
-    \alias right: Distance = x + width;
     \alias height: Distance = stack.height;
-    \alias bottom: Distance = y + height;
 }
