@@ -310,8 +310,9 @@
 
 // Staggered 4-3-4 asterisk transformation break occupying exact 3 grid lines (3 * 18.0pt = 54.0pt)
 \Component Asterism(
-    step: Distance = 56pt,
+    step: Distance = 64pt,
     line_step: Distance = 18.0pt,
+    star_drop: Distance = 3.5pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
@@ -320,9 +321,9 @@
 ) {
     \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let cx = x + width * 0.5;
-    \let row1_y = y;
-    \let row2_y = y + line_step;
-    \let row3_y = y + line_step * 2.0;
+    \let row1_y = y + star_drop;
+    \let row2_y = y + line_step + star_drop;
+    \let row3_y = y + line_step * 2.0 + star_drop;
 
     // Row 1: 4 stars at -1.5, -0.5, +0.5, +1.5 * step
     \Text(x: cx - step * 1.5 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
@@ -348,8 +349,9 @@
 
 // Staggered 5-4-5 asterisk break on p. 69 occupying exact 3 grid lines
 \Component Asterism545(
-    step: Distance = 50pt,
+    step: Distance = 52pt,
     line_step: Distance = 18.0pt,
+    star_drop: Distance = 3.5pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
@@ -358,9 +360,9 @@
 ) {
     \let grid_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
     \let cx = x + width * 0.5;
-    \let row1_y = y;
-    \let row2_y = y + line_step;
-    \let row3_y = y + line_step * 2.0;
+    \let row1_y = y + star_drop;
+    \let row2_y = y + line_step + star_drop;
+    \let row3_y = y + line_step * 2.0 + star_drop;
 
     // Row 1: 5 stars
     \Text(x: cx - step * 2.0 - 4pt, y: row1_y, width: 8pt, font: font, color: #111111, align: Align.Center, text_bounds: grid_bounds, text: "*")
