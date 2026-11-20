@@ -592,9 +592,9 @@
         // ============================================================
         \WrapLeftStack(
             src: "images/tenniel_23.png",
-            img_offset_x: -6pt,
-            img_offset_y: 4pt,
-            narrow_x: 114pt,
+            img_offset_x: 0pt,
+            img_offset_y: -3pt,
+            narrow_x: 124.5pt,
             top_blank_lines: 9.0,
             break_before: Break.Page
         ) {
@@ -671,7 +671,7 @@
         // ============================================================
         // Page 93 (Recto): Top Plate #24 (Vanishing Cheshire Cat Grin) + 11 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_24.png", grid_lines: 11.0, img_top: 8pt)
+        \TopPlate(src: "images/tenniel_24.png", grid_lines: 11.0, img_top: -3pt, shift_x: -8.54pt)
 
         \FlushPara {
             at least not so mad as it was in March.” As she\|
