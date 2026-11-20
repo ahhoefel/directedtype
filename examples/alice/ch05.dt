@@ -17,7 +17,7 @@
     env chapter_end_meta: PageValue
 ) {
     // 18 * 18.0pt = 324.0pt leaves exact 4 opening lines on Page 59
-    \let ch = \AliceChapterWithImage(
+    \let ch = \AliceChapter(
         x: x,
         y: y,
         width: width,
@@ -559,8 +559,6 @@
             house till she had brought herself down to nine\|
             inches high.
         }
-
-        \ChapterEnd()
     };
 
     \alias right: Distance = x + width;

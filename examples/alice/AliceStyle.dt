@@ -659,8 +659,8 @@
     \alias bottom: Distance = y + height;
 }
 
-// Generic Chapter container (deposits chapter running-header metadata and flows chapter blocks)
-\Component AliceChapter(
+// Shared Chapter shell (deposits running-header metadata, scopes baseline grid, auto-emits ChapterEnd)
+\Component AliceChapterShell(
     number: String,
     title: String,
     verso_header: String,
@@ -672,7 +672,8 @@
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true, break_before: break_before),
     env font: Font,
-    env chapter_meta: PageValue
+    env chapter_meta: PageValue,
+    env chapter_end_meta: PageValue
 ) {
     \let eff_full = full_header != "" ? full_header : (title + ".");
     \Deposit(into: chapter_meta) {
@@ -694,6 +695,7 @@
         pagination: \Pagination(breakable: true)
     ) {
         \Children
+        \ChapterEnd()
     };
 
     \alias right: Distance = x + width;
@@ -701,8 +703,8 @@
     \alias bottom: Distance = y + height;
 }
 
-// Chapter container with top Tenniel wood-engraving (Chapters I, III, V)
-\Component AliceChapterWithImage(
+// 1. Chapter with top Tenniel wood-engraving (Chapters I, III, V)
+\Component AliceChapter(
     number: String,
     title: String,
     verso_header: String,
@@ -712,62 +714,53 @@
     img_top: Distance = 8pt,
     ch_gap: Distance = 16pt,
     sub_gap: Distance = 22pt,
+    full_header: String = "",
     break_before: Break = Break.Page,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true, break_before: break_before),
     env font: Font,
-    env chapter_meta: PageValue
+    env chapter_meta: PageValue,
+    env chapter_end_meta: PageValue
 ) {
-    \Deposit(into: chapter_meta) {
-        \AliceChapterMeta(
-            number: number,
-            title: title,
-            verso_header: verso_header,
-            recto_header: recto_header,
-            full_header: title + "."
-        )
-    }
-
-    \let hdr = \ChapterImageHeader(
+    \let ch = \AliceChapterShell(
         x: x,
         y: y,
         width: width,
         number: number,
         title: title,
-        img_src: img_src,
-        total_height: header_height,
-        img_top: img_top,
-        ch_gap: ch_gap,
-        sub_gap: sub_gap
-    );
-
-    \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
-    \let body = \VStackStretch(
-        x: x,
-        y: hdr.bottom,
-        width: width,
-        gap: 0pt,
-        pagination: \Pagination(breakable: true)
+        verso_header: verso_header,
+        recto_header: recto_header,
+        full_header: full_header,
+        break_before: Break.Auto
     ) {
+        \ChapterImageHeader(
+            number: number,
+            title: title,
+            img_src: img_src,
+            total_height: header_height,
+            img_top: img_top,
+            ch_gap: ch_gap,
+            sub_gap: sub_gap
+        )
         \Children
     };
 
     \alias right: Distance = x + width;
-    \alias height: Distance = hdr.height + body.height;
+    \alias height: Distance = ch.height;
     \alias bottom: Distance = y + height;
 }
 
-// Chapter container without top illustration (Chapters IV, VI, VII, VIII, IX, X, XI, XII)
-\Component AliceChapterPlain(
+// 2. Chapter without top illustration (Chapters IV, VI, VII, VIII, IX, X, XI, XII)
+\Component AliceChapter(
     number: String,
     title: String,
     title_punct: String = ".",
     verso_header: String,
     recto_header: String,
     full_header: String = "",
-    header_lines: Float = 10.0,
+    header_lines: Float,
     ch_top: Distance = 118pt,
     sub_gap: Distance = 19pt,
     break_before: Break = Break.Page,
@@ -776,44 +769,69 @@
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true, break_before: break_before),
     env font: Font,
-    env chapter_meta: PageValue
+    env chapter_meta: PageValue,
+    env chapter_end_meta: PageValue
 ) {
     \let eff_full = full_header != "" ? full_header : (title + title_punct);
-    \Deposit(into: chapter_meta) {
-        \AliceChapterMeta(
-            number: number,
-            title: title,
-            verso_header: verso_header,
-            recto_header: recto_header,
-            full_header: eff_full
-        )
-    }
-
-    \let hdr = \ChapterPlainHeader(
+    \let ch = \AliceChapterShell(
         x: x,
         y: y,
         width: width,
         number: number,
         title: title,
-        title_punct: title_punct,
-        grid_lines: header_lines,
-        ch_top: ch_top,
-        sub_gap: sub_gap
-    );
+        verso_header: verso_header,
+        recto_header: recto_header,
+        full_header: eff_full,
+        break_before: Break.Auto
+    ) {
+        \ChapterPlainHeader(
+            number: number,
+            title: title,
+            title_punct: title_punct,
+            grid_lines: header_lines,
+            ch_top: ch_top,
+            sub_gap: sub_gap
+        )
+        \Children
+    };
 
-    \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
-    \let body = \VStackStretch(
+    \alias right: Distance = x + width;
+    \alias height: Distance = ch.height;
+    \alias bottom: Distance = y + height;
+}
+
+// 3. Custom-opener Chapter (Chapter II)
+\Component AliceChapter(
+    number: String,
+    title: String,
+    verso_header: String,
+    recto_header: String,
+    full_header: String = "",
+    break_before: Break = Break.Page,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: true, break_before: break_before),
+    env font: Font,
+    env chapter_meta: PageValue,
+    env chapter_end_meta: PageValue
+) {
+    \let ch = \AliceChapterShell(
         x: x,
-        y: hdr.bottom,
+        y: y,
         width: width,
-        gap: 0pt,
-        pagination: \Pagination(breakable: true)
+        number: number,
+        title: title,
+        verso_header: verso_header,
+        recto_header: recto_header,
+        full_header: full_header,
+        break_before: Break.Auto
     ) {
         \Children
     };
 
     \alias right: Distance = x + width;
-    \alias height: Distance = hdr.height + body.height;
+    \alias height: Distance = ch.height;
     \alias bottom: Distance = y + height;
 }
 

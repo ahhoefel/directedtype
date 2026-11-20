@@ -15,7 +15,7 @@
     env chapter_end_meta: PageValue
 ) {
     // Break.Recto leaves front-matter page [x] (verso) blank and starts Page 1 on Recto
-    \let ch = \AliceChapterWithImage(
+    \let ch = \AliceChapter(
         x: x,
         y: y,
         width: width,
@@ -396,8 +396,6 @@
         }
 
         \Asterism()
-
-        \ChapterEnd()
     };
 
     \alias right: Distance = x + width;

@@ -16,7 +16,7 @@
     env chapter_meta: PageValue,
     env chapter_end_meta: PageValue
 ) {
-    \let ch = \AliceChapterPlain(
+    \let ch = \AliceChapter(
         x: x,
         y: y,
         width: width,
@@ -599,8 +599,6 @@
             \VerseLine(left_margin: 33pt, indent: 0pt) { “Soo—oop of the e—e—evening, }
             \VerseLine(left_margin: 54pt, indent: 0pt) { Beautiful, beautiful Soup!” }
         }
-
-        \ChapterEnd()
     };
 
     \alias right: Distance = x + width;

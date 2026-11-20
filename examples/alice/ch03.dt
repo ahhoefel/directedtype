@@ -103,7 +103,7 @@
     env chapter_end_meta: PageValue
 ) {
     // 15 * 18.0pt = 270.0pt header leaves exact 7 opening lines on Page 29
-    \let ch = \AliceChapterWithImage(
+    \let ch = \AliceChapter(
         x: x,
         y: y,
         width: width,
@@ -483,8 +483,6 @@
             changed his mind, and was coming back to\|
             finish his story.
         }
-
-        \ChapterEnd()
     };
 
     \alias right: Distance = x + width;

@@ -36,7 +36,7 @@
     env chapter_meta: PageValue,
     env chapter_end_meta: PageValue
 ) {
-    \let ch = \AliceChapterPlain(
+    \let ch = \AliceChapter(
         x: x,
         y: y,
         width: width,
@@ -575,8 +575,6 @@
             Rabbit read out, at the top of his shrill little\|
             voice, the name “Alice!”
         }
-
-        \ChapterEnd()
     };
 
     \alias right: Distance = x + width;

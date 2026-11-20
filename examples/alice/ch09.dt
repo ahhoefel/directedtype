@@ -15,7 +15,7 @@
     env chapter_meta: PageValue,
     env chapter_end_meta: PageValue
 ) {
-    \let ch = \AliceChapterPlain(
+    \let ch = \AliceChapter(
         x: x,
         y: y,
         width: width,
@@ -647,8 +647,6 @@
             interrupted in a very decided tone: “tell her\|
             something about the games now.”
         }
-
-        \ChapterEnd()
     };
 
     \alias right: Distance = x + width;

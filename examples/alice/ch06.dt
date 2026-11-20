@@ -45,7 +45,7 @@
     env chapter_meta: PageValue,
     env chapter_end_meta: PageValue
 ) {
-    \let ch = \AliceChapterPlain(
+    \let ch = \AliceChapter(
         x: x,
         y: y,
         width: width,
@@ -710,8 +710,6 @@
             be raving mad after all! I almost wish I’d gone\|
             to see the Hatter instead!”
         }
-
-        \ChapterEnd()
     };
 
     \alias right: Distance = x + width;

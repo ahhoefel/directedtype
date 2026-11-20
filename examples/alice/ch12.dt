@@ -42,9 +42,10 @@
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true),
     env font: Font,
-    env chapter_meta: PageValue
+    env chapter_meta: PageValue,
+    env chapter_end_meta: PageValue
 ) {
-    \let ch = \AliceChapterPlain(
+    \let ch = \AliceChapter(
         x: x,
         y: y,
         width: width,
