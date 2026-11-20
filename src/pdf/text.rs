@@ -157,6 +157,11 @@ pub(super) fn draw_text_node(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let font_letter_spacing = fnode
+        .and_then(|f| f.properties.get("letter_spacing"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as f32;
+
     let text_rgba = node
         .properties
         .get("color")
@@ -215,6 +220,9 @@ pub(super) fn draw_text_node(
     }
     if font_italic {
         builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+    }
+    if font_letter_spacing.abs() > 1e-4 {
+        builder.push_default(StyleProperty::LetterSpacing(font_letter_spacing));
     }
     if let Some(lh) = line_height_prop {
         builder.push_default(StyleProperty::LineHeight(

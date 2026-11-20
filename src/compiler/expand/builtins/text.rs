@@ -568,6 +568,28 @@ fn build_text_line_height_arg(state: &PrimitiveExpandState<'_, '_>) -> Expr {
     Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span))
 }
 
+fn build_text_letter_spacing_arg(state: &PrimitiveExpandState<'_, '_>) -> Expr {
+    let span = state.elem.span;
+    if let Some(fid) = state
+        .font_node_id
+        .or_else(|| state.node_fonts.get(&state.node_id).copied())
+    {
+        if state
+            .doc
+            .get_node(fid)
+            .is_some_and(|fn_node| fn_node.ports.contains_key("letter_spacing"))
+        {
+            let font_ident = Expr::Ident(Ident::from_node(fid, span));
+            return Expr::MemberAccess(MemberAccessExpr {
+                target: std::sync::Arc::new(font_ident),
+                member: Ident::new("letter_spacing", span),
+                span,
+            });
+        }
+    }
+    Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span))
+}
+
 /// Resolves bidirectional `baseline` <-> `y` equations using `text_baseline_offset(...)`.
 fn resolve_baseline_and_y(
     state: &mut PrimitiveExpandState<'_, '_>,
@@ -1105,7 +1127,14 @@ fn resolve_text_dimensions(
     // Width defaults / resolution
     if !state.ports.contains_key("width") {
         if has_text {
-            let mut width_args = vec![text_arg_expr, size_expr, weight_expr, font_expr];
+            let letter_spacing_arg = build_text_letter_spacing_arg(state);
+            let mut width_args = vec![
+                text_arg_expr,
+                size_expr,
+                weight_expr,
+                font_expr,
+                letter_spacing_arg,
+            ];
             width_args.extend(span_style_args.iter().cloned());
             let width_call = Expr::Call(CallExpr {
                 callee: Ident::new("text_width", elem.span),

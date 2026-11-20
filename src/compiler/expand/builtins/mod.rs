@@ -224,6 +224,7 @@ pub(in crate::compiler::expand) fn default_builtin_port_type(port_name: &str) ->
         | "bottom"
         | "size"
         | "line_height"
+        | "letter_spacing"
         | "baseline"
         | "cap_height"
         | "x_height"

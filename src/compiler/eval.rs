@@ -1383,7 +1383,13 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
 
                     let mut spans = Vec::new();
                     let mut inline_boxes = Vec::new();
-                    let mut idx = 4;
+                    let has_ls = evaluated_args.len() >= 5 && (evaluated_args.len() - 4) % 7 == 1;
+                    let letter_spacing = if has_ls {
+                        evaluated_args.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0)
+                    } else {
+                        0.0
+                    };
+                    let mut idx = if has_ls { 5 } else { 4 };
                     while idx + 6 < evaluated_args.len() {
                         let raw_first = evaluated_args[idx].as_f64().unwrap_or(0.0);
                         if raw_first < 0.0 {
@@ -1426,11 +1432,12 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         idx += 7;
                     }
 
-                    let (w, _) = crate::compiler::text::measure_rich_text_bounds_with_boxes(
+                    let (w, _) = crate::compiler::text::measure_rich_text_bounds_with_boxes_and_spacing(
                         text,
                         size,
                         weight,
                         family,
+                        letter_spacing,
                         None,
                         None,
                         None,

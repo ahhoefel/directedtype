@@ -1,5 +1,5 @@
 use crate::ast::{
-    BinaryExpr, BinaryOp, CallExpr, ComponentDef, ElementNode, Expr, Ident, Literal,
+    BinaryExpr, BinaryOp, CallExpr, ComponentDef, DistanceUnit, ElementNode, Expr, Ident, Literal,
     MemberAccessExpr,
 };
 use crate::compiler::error::{CompileError, NoMatchingOverloadDetails};
@@ -15,7 +15,15 @@ use std::collections::HashMap;
 
 pub struct FontPrimitive;
 
-const FONT_PUBLIC_PORTS: &[&str] = &["font", "family", "size", "weight", "line_height", "italic"];
+const FONT_PUBLIC_PORTS: &[&str] = &[
+    "font",
+    "family",
+    "size",
+    "weight",
+    "line_height",
+    "italic",
+    "letter_spacing",
+];
 
 pub(super) struct PreResolvedFont {
     pub font_node_id: Option<NodeId>,
@@ -179,8 +187,8 @@ impl BuiltinPrimitive for FontPrimitive {
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
-            "size" | "line_height" | "cap_height" | "x_height" | "ascent" | "descent"
-            | "em_top" | "line_gap" | "gap_bottom" => Some(StaticType::Distance),
+            "size" | "line_height" | "letter_spacing" | "cap_height" | "x_height" | "ascent"
+            | "descent" | "em_top" | "line_gap" | "gap_bottom" => Some(StaticType::Distance),
             "weight" => Some(StaticType::Integer),
             "family" => Some(StaticType::String),
             "italic" => Some(StaticType::Boolean),
@@ -195,6 +203,7 @@ impl BuiltinPrimitive for FontPrimitive {
             "size".to_string(),
             "weight".to_string(),
             "line_height".to_string(),
+            "letter_spacing".to_string(),
             "cap_height".to_string(),
             "x_height".to_string(),
             "descent".to_string(),
@@ -222,6 +231,7 @@ impl BuiltinPrimitive for FontPrimitive {
                         "family".to_string(),
                         "line_height".to_string(),
                         "italic".to_string(),
+                        "letter_spacing".to_string(),
                     ],
                     vec![
                         "font".to_string(),
@@ -230,6 +240,7 @@ impl BuiltinPrimitive for FontPrimitive {
                         "family".to_string(),
                         "line_height".to_string(),
                         "italic".to_string(),
+                        "letter_spacing".to_string(),
                     ],
                 ];
                 return Err(CompileError::NoMatchingOverload(Box::new(
@@ -320,6 +331,16 @@ impl BuiltinPrimitive for FontPrimitive {
                     }),
                 );
             }
+            if !state.ports.contains_key("letter_spacing") {
+                state.ports.insert(
+                    "letter_spacing".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: std::sync::Arc::new(base_target.clone()),
+                        member: Ident::new("letter_spacing", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            }
             let size_overridden = elem.ports.iter().any(|p| p.name.as_str() == "size");
             if !state.ports.contains_key("line_height") && !size_overridden {
                 let base_has_authored_lh = base_font_id
@@ -363,6 +384,13 @@ impl BuiltinPrimitive for FontPrimitive {
                 state.ports.insert(
                     "italic".to_string(),
                     Expr::Literal(Literal::Bool(false, elem.span)),
+                );
+            }
+            // Default letter_spacing to 0px if not specified
+            if !state.ports.contains_key("letter_spacing") {
+                state.ports.insert(
+                    "letter_spacing".to_string(),
+                    Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)),
                 );
             }
         }

@@ -75,3 +75,38 @@ fn test_traditional_y_still_generates_baseline() {
     let baseline = node.properties.get("baseline").and_then(|v| v.as_f64()).unwrap();
     assert!(baseline > 40.0);
 }
+
+#[test]
+fn test_font_letter_spacing_widens_text_and_inherits() {
+    let source = r#"
+\let f_plain = \Font(size: 16px)
+\let f_spaced = \Font(font: f_plain, letter_spacing: 2px)
+\let f_inherited = \Font(font: f_spaced, weight: 700)
+\let t_plain = \Text(x: 0px, y: 0px, font: f_plain, text: "CHAPTER IV.")
+\let t_spaced = \Text(x: 0px, y: 30px, font: f_spaced, text: "CHAPTER IV.")
+\let t_inherited = \Text(x: 0px, y: 60px, font: f_inherited, text: "CHAPTER IV.")
+"#;
+
+    let doc = parse_document(source).expect("parse ok");
+    let compiled = CompiledDocument::compile(&doc).expect("compile ok");
+    let layout = compiled.layout();
+
+    let texts: Vec<_> = layout
+        .nodes
+        .iter()
+        .filter(|n| n.name == "Text" && n.properties.contains_key("text"))
+        .collect();
+    assert_eq!(texts.len(), 3);
+    assert!(
+        texts[1].rect.width > texts[0].rect.width + 15.0,
+        "2px letter_spacing across 11 chars should widen text significantly ({} vs {})",
+        texts[1].rect.width,
+        texts[0].rect.width
+    );
+    assert!(
+        texts[2].rect.width > texts[0].rect.width + 15.0,
+        "inherited letter_spacing should also widen text ({} vs {})",
+        texts[2].rect.width,
+        texts[0].rect.width
+    );
+}

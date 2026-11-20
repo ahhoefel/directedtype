@@ -44,7 +44,7 @@
     pagination: Pagination = \Pagination(breakable: false),
     env font: Font
 ) {
-    \let col_font = \Font(font: font, size: 5.5pt);
+    \let col_font = \Font(font: font, size: 5.5pt, letter_spacing: 0.35pt);
     \Text(x: x, y: y, font: col_font, color: #111111, text: "CHAPTER")
     \Text(x: x, y: y, width: width, font: col_font, color: #111111, align: Align.Right, text: "PAGE")
 
@@ -64,7 +64,7 @@
     pagination: Pagination = \Pagination(breakable: false),
     env font: Font
 ) {
-    \let row_font = \Font(font: font, size: 7.5pt, line_height: 10pt);
+    \let row_font = \Font(font: font, size: 7.5pt, line_height: 10pt, letter_spacing: 0.25pt);
     \let dot_font = \Font(font: font, size: 8pt, line_height: 10pt);
 
     \Text(
@@ -137,7 +137,7 @@
             \Spacer(height: 118pt)
             \Text(
                 width: parent.width,
-                font: \Font(font: font, size: 13.5pt),
+                font: \Font(font: font, size: 13.5pt, letter_spacing: 0.85pt),
                 color: #111111,
                 align: Align.Center,
                 text: "ALICE’S ADVENTURES"
@@ -145,7 +145,7 @@
             \Spacer(height: 22pt)
             \Text(
                 width: parent.width,
-                font: \Font(font: font, size: 13.5pt),
+                font: \Font(font: font, size: 13.5pt, letter_spacing: 0.85pt),
                 color: #111111,
                 align: Align.Center,
                 text: "IN WONDERLAND."
@@ -164,7 +164,7 @@
             \Spacer(height: 28pt)
             \Text(
                 width: parent.width,
-                font: \Font(font: font, size: 17.5pt),
+                font: \Font(font: font, size: 17.5pt, letter_spacing: 1.1pt),
                 color: #111111,
                 align: Align.Center,
                 text: "ALICE’S ADVENTURES"
@@ -172,7 +172,7 @@
             \Spacer(height: 28pt)
             \Text(
                 width: parent.width,
-                font: \Font(font: font, size: 17.5pt),
+                font: \Font(font: font, size: 17.5pt, letter_spacing: 1.1pt),
                 color: #111111,
                 align: Align.Center,
                 text: "IN WONDERLAND."
@@ -180,7 +180,7 @@
             \Spacer(height: 56pt)
             \Text(
                 width: parent.width,
-                font: \Font(font: font, size: 8.5pt),
+                font: \Font(font: font, size: 8.5pt, letter_spacing: 0.5pt),
                 color: #111111,
                 align: Align.Center,
                 text: "BY"
@@ -188,7 +188,7 @@
             \Spacer(height: 12pt)
             \Text(
                 width: parent.width,
-                font: \Font(font: font, size: 10.5pt),
+                font: \Font(font: font, size: 10.5pt, letter_spacing: 0.8pt),
                 color: #111111,
                 align: Align.Center,
                 text: "LEWIS CARROLL."
@@ -196,7 +196,7 @@
             \Spacer(height: 56pt)
             \Text(
                 width: parent.width,
-                font: \Font(font: font, size: 8.8pt, italic: true),
+                font: \Font(font: font, size: 8.8pt, italic: true, letter_spacing: 0.6pt),
                 color: #111111,
                 align: Align.Center,
                 text: "WITH FORTY-TWO ILLUSTRATIONS"
@@ -204,7 +204,7 @@
             \Spacer(height: 11pt)
             \Text(
                 width: parent.width,
-                font: \Font(font: font, size: 8.8pt, italic: true),
+                font: \Font(font: font, size: 8.8pt, italic: true, letter_spacing: 0.6pt),
                 color: #111111,
                 align: Align.Center,
                 text: "BY JOHN TENNIEL."
@@ -343,7 +343,7 @@
             \Spacer(height: 36pt)
             \Text(
                 width: parent.width,
-                font: \Font(font: font, size: 12pt),
+                font: \Font(font: font, size: 12pt, letter_spacing: 0.8pt),
                 color: #111111,
                 align: Align.Center,
                 text: "CONTENTS."

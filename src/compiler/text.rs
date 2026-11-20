@@ -571,6 +571,35 @@ pub fn measure_rich_text_bounds_with_boxes(
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
 ) -> (f64, f64) {
+    measure_rich_text_bounds_with_boxes_and_spacing(
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        0.0,
+        max_width,
+        end_at,
+        start_at,
+        line_height,
+        spans,
+        inline_boxes,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn measure_rich_text_bounds_with_boxes_and_spacing(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    letter_spacing: f64,
+    max_width: Option<f64>,
+    end_at: Option<&str>,
+    start_at: Option<&str>,
+    line_height: Option<f64>,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+) -> (f64, f64) {
     if text.is_empty() && inline_boxes.is_empty() {
         return (0.0, 0.0);
     }
@@ -610,6 +639,9 @@ pub fn measure_rich_text_bounds_with_boxes(
                 if !family.is_empty() {
                     builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
                 }
+            }
+            if letter_spacing.abs() > 1e-4 {
+                builder.push_default(StyleProperty::LetterSpacing(letter_spacing as f32));
             }
             if let Some(lh) = line_height {
                 if lh > 0.0 {

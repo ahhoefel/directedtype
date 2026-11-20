@@ -541,7 +541,7 @@
         x: x,
         y: art.bottom + ch_gap,
         width: width,
-        font: \Font(font: font, size: 12.5pt),
+        font: \Font(font: font, size: 12.5pt, letter_spacing: 0.75pt),
         color: #111111,
         align: Align.Center,
         text: "CHAPTER " + number + "."
@@ -551,7 +551,7 @@
         x: x,
         y: ch_label.bottom + sub_gap,
         width: width,
-        font: \Font(font: font, size: 8.25pt),
+        font: \Font(font: font, size: 8.25pt, letter_spacing: 0.45pt),
         color: #111111,
         align: Align.Center,
         text: title + "."
@@ -580,7 +580,7 @@
         x: x,
         y: y + ch_top,
         width: width,
-        font: \Font(font: font, size: 12.5pt),
+        font: \Font(font: font, size: 12.5pt, letter_spacing: 0.75pt),
         color: #111111,
         align: Align.Center,
         text: "CHAPTER " + number + "."
@@ -590,7 +590,7 @@
         x: x,
         y: ch_label.bottom + sub_gap,
         width: width,
-        font: \Font(font: font, size: 8.25pt),
+        font: \Font(font: font, size: 8.25pt, letter_spacing: 0.45pt),
         color: #111111,
         align: Align.Center,
         text: title + title_punct
@@ -628,7 +628,7 @@
         x: x + narrow_x,
         y: y + 17pt,
         width: col_w,
-        font: \Font(font: font, size: 12.5pt),
+        font: \Font(font: font, size: 12.5pt, letter_spacing: 0.75pt),
         color: #111111,
         align: Align.Center,
         text: "CHAPTER " + number + "."
@@ -638,7 +638,7 @@
         x: x + narrow_x,
         y: y + 55pt,
         width: col_w,
-        font: \Font(font: font, size: 8.25pt),
+        font: \Font(font: font, size: 8.25pt, letter_spacing: 0.45pt),
         color: #111111,
         align: Align.Center,
         text: title + "."
@@ -885,7 +885,7 @@
         : (show_header ? ("" + folio) : "");
     \let folio_align = is_dream_page ? Align.Center : (is_verso ? Align.Left : Align.Right);
 
-    \let hdr_font = \Font(font: font, size: 8.25pt, line_height: 10pt);
+    \let hdr_font = \Font(font: font, size: 8.25pt, line_height: 10pt, letter_spacing: 0.35pt);
     \let folio_font = \Font(font: font, size: 8pt, line_height: 10pt);
 
     \Text(

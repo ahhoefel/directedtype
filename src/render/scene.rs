@@ -43,6 +43,7 @@ pub struct TextRenderKey {
     pub inline_boxes: Vec<(usize, usize, u64, u64)>,
     pub start_at: Option<String>,
     pub line_height: Option<u64>,
+    pub letter_spacing: u64,
 }
 
 /// A cached local `vello::Scene` rendered at origin `(0.0, 0.0)` for a single text node.
@@ -760,6 +761,11 @@ pub fn build_scene(
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
 
+                let font_letter_spacing = fnode
+                    .and_then(|f| f.properties.get("letter_spacing"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0) as f32;
+
                 let text_color = node
                     .properties
                     .get("color")
@@ -860,6 +866,7 @@ pub fn build_scene(
                     inline_boxes: inline_box_keys,
                     start_at: start_at_prop.map(|s| s.to_string()),
                     line_height: line_height_prop.map(|h| h.to_bits()),
+                    letter_spacing: font_letter_spacing.to_bits() as u64,
                 };
 
                 // Check 1-element cache:
@@ -912,6 +919,9 @@ pub fn build_scene(
                 }
                 if font_italic {
                     builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+                }
+                if font_letter_spacing.abs() > 1e-4 {
+                    builder.push_default(StyleProperty::LetterSpacing(font_letter_spacing));
                 }
                 if let Some(lh) = line_height_prop {
                     builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
