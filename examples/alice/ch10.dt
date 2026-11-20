@@ -33,18 +33,18 @@
         // ============================================================
         \Para {
             T\SmallCaps{HE} Mock Turtle sighed deeply, and drew the back of one
-            flapper across his eyes. He looked at Alice, and tried to speak, but
+            flapper across his eyes. He looked at Alice and tried to speak, but
             for a minute or two sobs choked his voice. “Same as if he had a bone
-            in his throat,” said the Gryphon: and it set to work shaking him and
+            in his throat,” said the Gryphon, and it set to work shaking him and
             punching him in the back. At last the Mock Turtle recovered his
             voice, and, with tears running down his cheeks, he went on again:—
         }
 
         \Para {
-            “You may not have lived much under the \NoBreak{sea\DoubleEmDash{}”} (“I haven’t,” said
-            Alice)—“and perhaps you were never even introduced to a lobster\DoubleEmDash{}”
-            (Alice began to say “I once tasted\DoubleEmDash{}” but checked herself hastily,
-            and said “No, never”)—“so you can have no idea what a delightful
+            “You may not have lived much under the sea—” (“I haven’t,” said
+            Alice)—“and perhaps you were never even introduced to a lobster—”
+            (Alice began to say “I once tasted—” but checked herself hastily,
+            and said, “No, never”)—“so you can have no idea what a delightful
             thing a Lobster\=Quadrille is!”
         }
 
@@ -54,12 +54,12 @@
 
         \Para {
             “Why,” said the Gryphon, “you first form into a line along the
-            sea\=shore\DoubleEmDash{}”
+            sea\=shore—”
         }
 
         \Para {
-            “Two lines!” cried the Mock Turtle. “Seals, turtles, salmon, and so
-            on; then, when you’ve cleared all the jelly\=fish out of the way\DoubleEmDash{}”
+            “Two lines!” cried the Mock Turtle. “Seals, turtles, salmon, and
+            so on: then, when you’ve cleared all the jelly\=fish out of the way—”
         }
 
         \Para {
@@ -67,7 +67,7 @@
         }
 
         \Para {
-            “\DoubleEmDash{}you advance twice\DoubleEmDash{}”
+            “—you advance twice—”
         }
 
         \Para {
@@ -75,17 +75,17 @@
         }
 
         \Para {
-            “Of course,” the Mock Turtle said: “advance twice, set to
-            partners\DoubleEmDash{}”
+            “Of course,” the Mock Turtle said: “advance twice, set
+            to partners—”
         }
 
         \Para {
-            “\DoubleEmDash{}change lobsters, and retire in same order,” continued the
+            “—change lobsters, and retire in same order,” continued the
             Gryphon.
         }
 
         \Para {
-            “Then, you know,” the Mock Turtle went on, “you throw the\DoubleEmDash{}”
+            “Then, you know,” the Mock Turtle went on, “you throw the—”
         }
 
         \Para {
@@ -93,7 +93,7 @@
         }
 
         \Para {
-            “\DoubleEmDash{}as far out to sea as you can\DoubleEmDash{}”
+            “—as far out to sea as you can—”
         }
 
         \Para {
@@ -110,8 +110,8 @@
         }
 
         \Para {
-            “Back to land again, and that’s all the first figure,” said the Mock
-            Turtle, suddenly dropping his voice; and the two creatures, who had
+            “Back to land again, and—that’s all the first figure,” said the Mock
+            Turtle, suddenly dropping his voice, and the two creatures, who had
             been jumping about like mad things all this time, sat down again
             very sadly and quietly, and looked at Alice.
         }
@@ -130,7 +130,7 @@
 
         \Para {
             “Come, let’s try the first figure!” said the Mock Turtle to the
-            Gryphon. “We can do without lobsters, you know. Which shall sing?”
+            Gryphon. “We can do it without lobsters, you know. Which shall sing?”
         }
 
         // ============================================================
@@ -145,8 +145,8 @@
 
         \Para {
             So they began solemnly dancing round and round Alice, every now and
-            then treading on her toes when they passed too close, and waving
-            their forepaws to mark the time, while the Mock Turtle sang this,
+            then treading on her toes when they passed too close, and waving their
+            fore\=paws to mark the time, while the Mock Turtle sang this,
             very slowly and sadly:—
         }
 
@@ -185,7 +185,7 @@
         // Page 152 (Verso): Stanza 3 + Whiting & Porpoise dialogue (pp. 152–156)
         // ============================================================
         \PoemBlock(size: 10pt, leading: 16.4pt, italic: true, break_before: Break.Page) {
-            \VerseLine(left_margin: 0pt, indent: 0pt) { “What matters it how far we go?” his scaly friend replied. }
+            \VerseLine(left_margin: 0pt, indent: 0pt) { “What matters it how far we go?” his scaly friend replied, }
             \VerseLine(left_margin: 0pt, indent: 0pt) { “There is another shore, you know, upon the other side. }
             \VerseLine(left_margin: 0pt, indent: 0pt) { The further off from England the nearer is to France— }
             \VerseLine(left_margin: 0pt, indent: 0pt) { Then turn not pale, beloved snail, but come and join the dance. }
@@ -198,7 +198,7 @@
 
         \Para {
             “Thank you, it’s a very interesting dance to watch,” said Alice,
-            feeling very glad that it was over at last: “and I do so like that
+            feeling very glad that it was over at last; “and I do so like that
             curious song about the whiting!”
         }
 
@@ -208,7 +208,7 @@
         }
 
         \Para {
-            “Yes,” said Alice, “I’ve often seen them at dinn\DoubleEmDash{}” she checked
+            “Yes,” said Alice, “I’ve often seen them at dinn—” she checked
             herself hastily.
         }
 
@@ -219,13 +219,13 @@
 
         \Para {
             “I believe so,” Alice replied thoughtfully. “They have their tails
-            in their mouths—and they’re all over crumbs.”
+            in their mouths;—and they’re all over crumbs.”
         }
 
         \Para {
             “You’re wrong about the crumbs,” said the Mock Turtle: “crumbs would
             all wash off in the sea. But they \Italic{have} their tails in their
-            mouths; and the reason is\DoubleEmDash{}” here the Mock Turtle yawned and shut
+            mouths; and the reason is—” here the Mock Turtle yawned and shut
             his eyes.—“Tell her about the reason and all that,” he said to the
             Gryphon.
         }
@@ -308,12 +308,12 @@
         }
 
         \Para {
-            “Don’t you mean ‘purpose’?” said Alice.
+            “Don’t you mean ‘purpose?’” said Alice.
         }
 
         \Para {
             “I mean what I say,” the Mock Turtle replied in an offended tone.
-            And the Gryphon added “Come, let’s hear some of \Italic{your}
+            And the Gryphon added, “Come, let’s hear some of \Italic{your}
             adventures.”
         }
 
@@ -328,19 +328,19 @@
         }
 
         \Para {
-            “No, no! The adventures first,” said the Gryphon in an impatient
+            “No, no! the adventures first,” said the Gryphon in an impatient
             tone: “explanations take such a dreadful time.”
         }
 
         \Para {
             So Alice began telling them her adventures from the time when she
-            first saw the White Rabbit. She was a little nervous about it just
+            first saw the White Rabbit: she was a little nervous about it just
             at first, the two creatures got so close to her, one on each side,
             and opened their eyes and mouths so \Italic{very} wide, but she
             gained courage as she went on. Her listeners were perfectly quiet
             till she got to the part about her repeating “\Italic{You are old,
             Father William,}” to the Cater\-pillar, and the words all coming
-            different, and then the Mock Turtle drew a long breath, and said
+            different, and then the Mock Turtle drew a long breath, and said,
             “That’s very curious.”
         }
 
@@ -373,7 +373,7 @@
         ) {
             \Para {
                 “How the crea\-tures order one about, and make one re\-peat
-                les\-sons!” thought Alice; “I might just as well be at school at
+                les\-sons!” thought Alice, “I might just as well be at school at
                 once.” How\-ever, she got up, and began to re\-peat it, but her head
                 was so full of the Lob\-ster\=Quadrille, that she hardly knew what
                 she was say\-ing, and the words came very queer indeed:—
@@ -402,7 +402,7 @@
         }
 
         \Para {
-            Alice said nothing; she had sat down again with her face in her
+            Alice said nothing: she had sat down again with her face in her
             hands, wondering if any\-thing would \Italic{ever} happen in a natural
             way again.
         }
@@ -422,8 +422,8 @@
         }
 
         \Para {
-            “It’s the first position in dancing,” Alice said; but was dreadfully
-            puzzled by the whole thing, and longed to change the subject.
+            “It’s the first position in dancing,” Alice said; but
+            she was dreadfully puzzled by the whole thing, and longed to change the subject.
         }
 
         \Para {
@@ -442,7 +442,7 @@
         \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, break_before: Break.Page) {
             \Spacer(height: 4pt)
             \VerseLine(left_margin: 10pt, indent: 0pt) { “I passed by his garden, and marked, with one eye, }
-            \VerseLine(left_margin: 10pt, indent: 0pt) { How the owl and the oyster were sharing a pie\DoubleEmDash{}” }
+            \VerseLine(left_margin: 10pt, indent: 0pt) { How the owl and the oyster were sharing a pie—” }
             \Spacer(height: 24pt)
         }
 
@@ -453,7 +453,7 @@
         }
 
         \Para {
-            “Yes, I think you’d better leave off,” said the Gryphon: and Alice
+            “Yes, I think you’d better leave off,” said the Gryphon, and Alice
             was only too glad to do so.
         }
 
@@ -514,7 +514,7 @@
         }
 
         \Para {
-            “What trial is it?” Alice panted as she ran; but the Gryphon only
+            “What trial is it?” Alice panted as she ran, but the Gryphon only
             answered “Come on!” and ran the faster, while more and more faintly
             came, carried on the breeze that followed them, the melancholy
             words:—

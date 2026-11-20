@@ -288,9 +288,9 @@
             \Spacer(height: 2pt)
 
             \VerseLine(indent: 0pt) { Imperious Prima flashes forth }
-            \VerseLine(indent: 11.2pt) { Her edict ‘to begin it’— }
+            \VerseLine(indent: 11.2pt) { Her edict “to begin it”— }
             \VerseLine(indent: 0pt) { In gentler tone Secunda hopes }
-            \VerseLine(indent: 11.2pt) { ‘There will be nonsense in it!’— }
+            \VerseLine(indent: 11.2pt) { “There will be nonsense in it!”— }
             \VerseLine(indent: 0pt) { While Tertia interrupts the tale }
             \VerseLine(indent: 11.2pt) { Not \Italic{more} than once a minute. }
 

@@ -19,7 +19,7 @@
     \let rfont = \Font(font: self.font, size: 9.8pt, line_height: 14pt, italic: false);
     \env font = rfont;
     \Text(x: x, y: y + 4pt, width: width, font: rfont, color: #111111, align: Align.Center) {
-        C\SmallCaps{HORUS}//
+        C\SmallCaps{HORUS.}//
     }
     \Text(
         x: x,
@@ -28,7 +28,7 @@
         font: rfont,
         color: #111111,
         align: Align.Center,
-        text: with_note ? "(in which the cook and the baby joined):—" : ""
+        text: with_note ? "(In which the cook and the baby joined):—" : ""
     )
 
     \alias right: Distance = x + width;
@@ -66,7 +66,7 @@
             he was in livery: other\-wise, judging by his face only, she would
             have called him a fish)—and rapped loudly at the door with his
             knuckles. It was opened by another footman in livery, with a round
-            face, and large eyes like a frog; and both footmen, Alice noticed,
+            face and large eyes like a frog; and both footmen, Alice noticed,
             had powdered hair that curled all over their heads. She felt very
             curious
         }
@@ -112,7 +112,7 @@
             “There’s no sort of use in knocking,” said the Footman, “and that
             for two reasons. First, because I’m on the same side of the door as
             you are; secondly, because they’re making such a noise inside, no
-            one could possibly hear you.”—And certainly there \Italic{was} a
+            one could possibly hear you.” And certainly there \Italic{was} a
             most extraordinary noise going on within—a constant howling and
             sneezing, and every now and then a great crash, as if a dish or
             kettle had been broken to pieces.
@@ -123,8 +123,8 @@
         }
 
         \Para {
-            “There might be some sense in your knock\-ing,” the Footman went on
-            without attending to her, “if we had the door between us. For
+            “There might be some sense in your knock\-ing,” the Footman went
+            on, without attending to her, “if we had the door between us. For
             instance, if you were \Italic{inside,} you might knock, and I could
             let you out, you know.” He was looking up into the sky all the time
             he was speaking, and this Alice thought decidedly uncivil. “But
@@ -149,7 +149,7 @@
         }
 
         \Para {
-            “How am I to get in?” asked Alice again, in a louder tone.
+            “How am I to get in?” asked Alice again in a louder tone.
         }
 
         \Para {
@@ -164,8 +164,8 @@
         }
 
         \Para {
-            The Footman seemed to think this a good opportunity for repeating
-            his remark, with variations. “I shall sit here,” he said, “on and
+            The Footman seemed to think this a good opportunity of
+            repeating his remark, with variations. “I shall sit here,” he said, “on and
             off, for days and days.”
         }
 
@@ -211,7 +211,7 @@
         }
 
         \Para {
-            “Please would you tell me,” said Alice, a little timidly, for she
+            “Please, would you tell me,” said Alice, a little timidly, for she
             was not quite sure whether it was good manners for her to speak
             first, “why your cat grins like that?”
         }
@@ -271,7 +271,7 @@
         \Para {
             “Which would \Italic{not} be an advantage,” said Alice, who felt
             very glad to get an opportunity of showing off a little of her
-            knowledge. “Just think of what work it would make with the day and
+            knowledge. “Just think what work it would make with the day and
             night! You see the earth takes twenty\=four hours to turn round on
             its axis\DoubleEmDash{}”
         }
@@ -283,8 +283,8 @@
         \Para {
             Alice glanced rather anxiously at the cook, to see if she meant to
             take the hint; but the cook was busily stirring the soup, and seemed
-            not to be listening, so she went on again: “Twenty-four hours, I
-            \Italic{think;} or is it twelve? I\DoubleEmDash{}”
+            not to be listening, so she went on again: “Twenty-four hours, I \Italic{think}; or
+            is it twelve? I\DoubleEmDash{}”
         }
 
         \Para(align: Align.JustifyAll) {
@@ -304,7 +304,7 @@
         \PoemBlock(size: 10pt, leading: 15pt, italic: true) {
             \Spacer(height: 10pt)
             \VerseLine(left_margin: 36pt, indent: 0pt) { “Speak roughly to your little boy, }
-            \VerseLine(left_margin: 36pt, indent: 17pt) { And beat him when he sneezes: }
+            \VerseLine(left_margin: 36pt, indent: 17pt) { And beat him when he sneezes; }
             \VerseLine(left_margin: 36pt, indent: 6pt) { He only does it to annoy, }
             \VerseLine(left_margin: 36pt, indent: 17pt) { Because he knows it teases.” }
             \ChorusHeader(with_note: true)
@@ -332,11 +332,11 @@
         // Pages 86–87: Nursing the queer-shaped baby
         // ============================================================
         \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
-            “Here! you may nurse it a bit, if you like!” the Duchess said to
-            Alice, flinging the baby at her as she spoke. “I must go and get
+            “Here! you may nurse it a bit, if you like!” said
+            the Duchess to Alice, flinging the baby at her as she spoke. “I must go and get
             ready to play croquet with the Queen,” and she hurried out of the
-            room. The cook threw a frying\=pan after her as she went out, but it
-            just missed her.
+            room. The cook threw a frying\=pan after her as she
+            went, but it just missed her.
         }
 
         \Para {
@@ -422,16 +422,16 @@
         }
 
         \Para {
-            The Cat only grinned when it saw Alice. It looked good\=natured, she
-            thought: still it had \Italic{very} long claws and a great many
-            teeth, so she felt that it ought to be treated with respect.
+            The Cat only grinned when it saw Alice. It looked
+            good\-natured, she thought: still it had \Italic{very} long claws and a great many
+            teeth, so she felt it ought to be treated with respect.
         }
 
         \Para {
             “Cheshire Puss,” she began, rather timidly, as she did not at all
             know whether it would like the name: however, it only grinned a
-            little wider. “Come, it’s pleased so far,” thought Alice, and she
-            went on. “Would you tell me, please, which way I ought to walk from
+            little wider. “Come, it’s pleased so far,” thought Alice, and she went on,
+            “Would you tell me, please, which way I ought to walk from
             here?”
         }
 
@@ -487,7 +487,7 @@
         }
 
         \Para {
-            Alice didn’t think that proved it at all; however, she went on: “And
+            Alice didn’t think that proved it at all; however, she went on: “and
             how do you know that you’re mad?”
         }
 
@@ -512,7 +512,7 @@
             break_before: Break.Page
         ) {
             \Para {
-                “Well, then,” the Cat went on, “you see, a dog growls when it’s
+                “Well then,” the Cat went on, “you see a dog growls when it’s
                 angry, and wags its tail when it’s pleased. Now \Italic{I} growl
                 when I’m pleased, and wag my tail when I’m angry. There\-fore I’m
                 mad.”
@@ -542,8 +542,8 @@
         }
 
         \Para {
-            Alice was not much surprised at this, she was getting so used to
-            queer things hap\-pening. While she was looking at the place where it
+            Alice was not much surprised at this, she was getting so well used to queer
+            things hap\-pening. While she was still looking at the place where it
             had been, it suddenly appeared again.
         }
 
@@ -553,8 +553,8 @@
         }
 
         \Para {
-            “It turned into a pig,” Alice quietly said, just as if it had come
-            back in a natural way.
+            “It turned into a pig,” Alice answered very quietly, just as
+            if the Cat had come back in a natural way.
         }
 
         \Para {
@@ -565,7 +565,7 @@
             Alice waited a little, half expecting to see it again, but it did
             not appear, and after a minute or two she walked on in the direction
             in which the March Hare was said to live. “I’ve seen hatters
-            before,” she said to herself; “the March Hare will be much the most
+            before,” she said to herself: “the March Hare will be much the most
             interesting, and
         }
 

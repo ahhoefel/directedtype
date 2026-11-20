@@ -82,7 +82,7 @@
 
         \Para {
             “You should learn not to make personal remarks,” Alice said with
-            some severity; “it’s very rude.”
+            some severity: “it’s very rude.”
         }
 
         // ============================================================
@@ -97,7 +97,7 @@
 
         \Para {
             “Come, we shall have some fun now!” thought Alice. “I’m glad they’ve
-            begun ask\-ing riddles.—I believe I can guess that,” she added aloud.
+            begun ask\-ing riddles—I believe I can guess that,” she added aloud.
         }
 
         \Para {
@@ -153,7 +153,7 @@
         }
 
         \Para {
-            Alice considered a little, and then said, “The fourth.”
+            Alice considered a little, and said, “The fourth.”
         }
 
         \Para {
@@ -198,14 +198,14 @@
         }
 
         \Para {
-            Alice felt dreadfully puzzled. The Hatter’s remark seemed to have no
-            sort of meaning in it, and yet it was certainly English. “I don’t
+            Alice felt dreadfully puzzled. The Hatter’s remark seemed to her to
+            have no sort of meaning in it, and yet it was certainly English. “I don’t
             quite understand you,” she said, as politely as she could.
         }
 
         \Para {
-            “The Dormouse is asleep again,” said the Hatter, and he poured a
-            little hot tea upon its nose.
+            “The Dormouse is asleep again,” said the Hatter, and he poured a little hot
+            tea on to its nose.
         }
 
         \Para {
@@ -286,18 +286,18 @@
         \Para(align: Align.JustifyAll) {
             The Hatter shook his head mournfully. “Not I!” he replied. “We
             quarrelled last March\DoubleEmDash{}just before \Italic{he} went mad, you
-            know\DoubleEmDash{}” (point\-ing with his tea\=spoon at the March Hare,) “\DoubleEmDash{}it was
+            know\DoubleEmDash{}” (point\-ing with his teaspoon at the March Hare,) “\DoubleEmDash{}it was
             at the great concert given by the Queen of Hearts, and I had to sing
         }
 
         // ============================================================
         // Page 103 (Recto): Top Plate #26 (Hatter singing) + Twinkle, twinkle
         // ============================================================
-        \TopPlate(src: "images/tenniel_26.png", grid_lines: 11.5, img_top: 24pt)
+        \TopPlate(src: "images/tenniel_26.png", grid_lines: 10.5, img_top: 12pt)
 
         \PoemBlock(size: 10pt, leading: 15.5pt, italic: true) {
             \VerseLine(left_margin: 37pt, indent: 0pt) { ‘Twinkle, twinkle, little bat! }
-            \VerseLine(left_margin: 37pt, indent: 0pt) { How I wonder what you’re at!’ }
+            \VerseLine(left_margin: 37pt, indent: 0pt) { How I wonder what you’re at!” }
             \Spacer(height: 8pt)
         }
 
@@ -310,20 +310,21 @@
         }
 
         \Para {
-            “It goes on, you know,” the Hatter continued, “in this way:—
+            “It goes on you know,” the Hatter continued, “in this way:—
         }
 
         \PoemBlock(size: 10pt, leading: 15.5pt, italic: true) {
             \Spacer(height: 8pt)
             \VerseLine(left_margin: 36pt, indent: 0pt) { ‘Up above the world you fly, }
-            \VerseLine(left_margin: 36pt, indent: 0pt) { Like a tea\=tray in the sky. }
+            \VerseLine(left_margin: 36pt, indent: 0pt) { Like a teatray in the sky. }
             \VerseLine(left_margin: 94pt, indent: 0pt) { Twinkle, twinkle\DoubleEmDash(ems: 4.0){}’” }
+            \Spacer(height: 8pt)
         }
 
         // ============================================================
-        // Pages 104–109: The Dormouse's Treacle-Well Story
+        // Pages 103 (bottom line) -> 104–109: The Dormouse's Treacle-Well Story
         // ============================================================
-        \Para(pagination: \Pagination(breakable: true, break_before: Break.Page)) {
+        \Para {
             Here the Dormouse shook itself, and began singing in its sleep
             “\Italic{Twinkle, twinkle, twinkle, twinkle\DoubleEmDash{}}” and went on so long
             that they had to pinch it to make it stop.
@@ -362,7 +363,7 @@
         }
 
         \Para {
-            “But what happens when you come to the beginning again?” Alice
+            “But when you come to the beginning again?” Alice
             ventured to ask.
         }
 
@@ -417,8 +418,8 @@
         }
 
         \Para {
-            “They couldn’t have done that, you know,” Alice gently remarked;
-            “they’d have been ill.”
+            “They couldn’t have done that, you know,” Alice gently remarked: “they’d
+            have been ill.”
         }
 
         \Para {
@@ -473,8 +474,8 @@
         }
 
         \Para {
-            “No, please go on!” Alice said very hum\-bly; “I won’t interrupt
-            again. I dare say there may be \Italic{one.}”
+            “No, please go on!” Alice said very hum\-bly: “I
+            won’t interrupt you again. I dare say there may be \Italic{one.}”
         }
 
         \Para {
@@ -523,7 +524,7 @@
         }
 
         \Para {
-            “Of course they were,” said the Dormouse;—“well in.”
+            “Of course they were,” said the Dormouse,—“well in.”
         }
 
         \Para {
@@ -552,8 +553,8 @@
         \Para {
             The Dormouse had closed its eyes by this time, and was going off
             into a doze; but, on being pinched by the Hatter, it woke up again
-            with a little shriek, and went on:—“\DoubleEmDash{}that begins with an M, such as
-            mouse\=traps, and the moon, and memory, and muchness—you know you say
+            with a little shriek, and went on: “\DoubleEmDash{}that begins with
+            an M, such as mousetraps, and the moon, and memory, and muchness—you know you say
             things are ‘much of a muchness’—did you ever see such a thing as a
             drawing of a muchness?”
         }
@@ -603,7 +604,7 @@
             Once more she found herself in the long hall, and close to the
             little glass table. “Now, I’ll manage better this time,” she said to
             herself, and began by taking the little golden key, and unlocking
-            the door that led into the garden. Then she went to work nibbling at
+            the door that led into the garden. Then she set to work nibbling at
             the mushroom (she had kept a piece of it in her pocket) till she was
             about a foot high: then she walked down the little passage: and
             \Italic{then}—she found herself at last in the beautiful garden,

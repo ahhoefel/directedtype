@@ -140,7 +140,7 @@
 
         \Para {
             “\Italic{Un}important, of course, I meant,” the King hastily said,
-            and went on to himself in an under\-tone,
+            and went on to himself in an under\=tone,
             “important—unimportant—unimportant—important\DoubleEmDash{}” as if he were trying
             which word sounded best.
         }
@@ -175,7 +175,7 @@
         }
 
         \Para {
-            “Well, I shan’t go, at any rate,” said Alice: “besides, that’s not a
+            “Well, I shan’t go, at any rate,” said Alice; “besides, that’s not a
             regular rule: you invented it just now.”
         }
 
@@ -189,7 +189,7 @@
 
         \Para {
             The King turned pale, and shut his note-book hastily. “Consider your
-            verdict,” he said to the jury, in a low, trembling voice.
+            verdict,” he said to the jury, in a low trembling voice.
         }
 
         \Para {
@@ -218,8 +218,8 @@
 
         \Para {
             “It isn’t directed at all,” said the White Rabbit; “in fact, there’s
-            nothing written on the \Italic{outside.}” He unfolded the paper as
-            he spoke, and added “It isn’t a letter, after all: it’s a set of
+            nothing written on the \Italic{outside.}” He unfolded the paper as he spoke,
+            and added, “It isn’t a letter after all: it’s a set of
             verses.”
         }
 
@@ -273,7 +273,7 @@
         }
 
         \Para {
-            “Begin at the beginning,” the King said gravely, “and go on till you
+            “Begin at the beginning,” the King said, gravely, “and go on till you
             come to the end: then stop.”
         }
 
@@ -368,11 +368,11 @@
             “All right, so far,” said the King, and he went on mut\-ter\-ing over
             the verses to him\-self: “‘\Italic{We know it to be true—}’ that’s the
             jury, of course—‘\Italic{I gave her one, they gave him two—}’ why,
-            that must be what he did with the tarts, you know\DoubleEmDash{}”
+            that must be what he did with the tarts, you know—”
         }
 
         \Para {
-            “But, it goes on ‘\Italic{they all returned from him to you,}’” said
+            “But it goes on ‘\Italic{they all returned from him to you,}’” said
             Alice.
         }
 
@@ -415,7 +415,7 @@
         }
 
         \Para {
-            “It’s a pun!” the King added in an offended tone, and everybody
+            “It’s a pun!” the King added in an angry tone, and everybody
             laughed. “Let the jury consider their verdict,” the King said, for
             about the twentieth time that day.
         }
@@ -453,19 +453,19 @@
         \TopPlate(src: "images/tenniel_42.png", grid_lines: 20.0, img_top: 7pt)
 
         \Para {
-            At this the whole pack rose up into the air, and came flying down
-            upon her: she gave a little scream, half of fright and half of
+            At this the whole pack rose up into the air, and came flying down upon
+            her; she gave a little scream, half of fright and half of
             anger, and tried to beat them off, and found herself lying on the
             bank, with her head in the lap of her sister, who was gently
-            brushing away some dead leaves that had fluttered down from the
-            trees upon her face.
+            brushing away some dead leaves that had fluttered down from the trees
+            on to her face.
         }
 
         // ============================================================
         // Page 189 (Recto): Waking up on the river bank
         // ============================================================
         \Para {
-            “Wake up, Alice dear!” said her sister. “Why, what a long sleep
+            “Wake up, Alice dear!” said her sister; “why, what a long sleep
             you’ve had!”
         }
 
@@ -515,16 +515,16 @@
             pool—she could hear the rattle of the teacups as the March Hare and
             his friends shared their never\=ending meal, and the shrill voice of
             the Queen ordering off her unfortunate guests to execution—once more
-            the pig\=baby was sneezing on the Duchess’s knee, while plates and
+            the pig\=baby was sneezing on the Duchess’ knee, while plates and
             dishes crashed around it—once more the shriek of the Gryphon, the
             squeaking of the Lizard’s slate-pencil, and the choking of the
             suppressed guinea-pigs, filled the air, mixed up with the distant
-            sobs of the miserable Mock Turtle.
+            sob of the miserable Mock Turtle.
         }
 
         \Para {
             So she sat on, with closed eyes, and half believed herself in
-            Wonderland, though she knew she had but to open them again, and all
+            Wonderland, though she knew she had but to open them again and all
             would change to dull reality—the grass would be only rustling in the
             wind, and the pool rip\-pling to the waving of the reeds—the rattling
             teacups would change to tinkling sheep\=bells, and the Queen’s shrill
@@ -541,7 +541,7 @@
             would keep, through all her riper years, the simple and loving heart
             of her childhood: and how she would gather about her other little
             children, and make \Italic{their} eyes bright and eager with many a
-            strange tale, perhaps even with the dream of Wonderland of long ago:
+            strange tale, perhaps even with the dream of Wonderland of long\=ago:
             and how she would feel with all their simple sorrows, and find a
             pleasure in all their simple joys, remembering her own child\=life,
             and the happy summer days.

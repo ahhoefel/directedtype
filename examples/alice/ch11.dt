@@ -43,7 +43,7 @@
             upon it: they looked so good, that it made Alice quite hungry to
             look at them—“I wish they’d get the trial done,” she thought, “and
             hand round the refreshments!” But there seemed to be no chance of
-            this, so she began looking at everything about her, to pass away the
+            this, so she began looking at everything about her to pass away the
             time.
         }
 
@@ -55,7 +55,7 @@
         }
 
         \Para {
-            The judge, by the way, was the King; and as he wore his crown over
+            The judge, by the way, was the King, and as he wore his crown over
             the wig, (look at the frontispiece if you want to see how he did
             it,) he did not look at all comfortable, and it was certainly not
             becoming.
@@ -83,7 +83,7 @@
         }
 
         \Para {
-            “Stupid things!” Alice began in a loud, indignant voice, but she
+            “Stupid things!” Alice began in a loud indignant voice, but she
             stopped herself hastily, for the White Rabbit cried out, “Silence in
             the court!” and the King put on his spectacles and looked anxiously
             round, to make out who was talking.
@@ -99,8 +99,8 @@
         }
 
         \Para {
-            One of the jurors had a pencil that squeaked. This of course, Alice
-            could \Italic{not} stand, and she went round the court and got
+            One of the jurors had a pencil that squeaked. This, of
+            course, Alice could \Italic{not} stand, and she went round the court and got
             behind him, and very soon found an opportunity of taking it away.
             She did it so quickly that the poor little juror (it was Bill, the
             Lizard) could not make out at all what had become of it; so, after
@@ -193,13 +193,13 @@
         }
 
         \Para {
-            “I keep them to sell,” the Hatter added as an explanation; “I’ve
-            none of my own. I’m a hatter.”
+            “I keep them to sell,” the Hatter added as an
+            explanation: “I’ve none of my own. I’m a hatter.”
         }
 
         \Para {
-            Here the Queen put on her spectacles, and began staring at the
-            Hatter, who turned pale and fidgeted.
+            Here the Queen put on her spectacles, and began staring hard
+            at the Hatter, who turned pale and fidgeted.
         }
 
         \Para {
@@ -277,8 +277,8 @@
                 you execu\-ted, wheth\-er you’re ner\-vous or not.”
             }
             \Para(align: Align.JustifyAll) {
-                “I’m a poor man, your Maj\-esty,” the Hatter began, in a trem\-bling
-                voice,
+                “I’m a poor man, your Maj\-esty,” the Hatter began
+                in a trem\-bling voice,
             }
         }
 
@@ -326,7 +326,7 @@
         }
 
         \Para {
-            “Well, at any rate, the Dormouse said\DoubleEmDash{}” the Hatter went on, looking
+            “Well, at any rate, the Dormouse said—” the Hatter went on, looking
             anxiously round to see if he would deny it too: but the Dormouse
             denied nothing, being fast asleep.
         }
@@ -361,7 +361,7 @@
         \Para {
             Here one of the guinea\=pigs cheered, and was immediately suppressed
             by the officers of the court. (As that is rather a hard word, I will
-            just explain to you how it was done. They had a large canvas bag,
+            just explain to you how it was done. They had a large canvass bag,
             which tied up at the mouth with strings: into this they slipped the
             guinea-pig, head first, and then sat upon it.)
         }
@@ -400,7 +400,7 @@
         \MidPlate(src: "images/tenniel_39.png", grid_lines: 10.0, img_top: 12pt)
 
         \Para {
-            “Come, that finished the guinea\=pigs!” thought Alice. “Now we shall
+            “Come, that finishes the guinea\=pigs!” thought Alice. “Now we shall
             get on better.”
         }
 
@@ -428,7 +428,7 @@
         }
 
         \Para {
-            The next witness was the Duchess’s cook. She carried the pepper\=box
+            The next witness was the Duchess’ cook. She carried the pepper\=box
             in her hand, and Alice guessed who it was, even before she got into
             the court, by the way the people near the door began sneezing all at
             once.
@@ -476,7 +476,7 @@
 
         \Para {
             “Never mind!” said the King, with an air of great relief. “Call the
-            next witness.” And he added in an undertone to the Queen, “Really,
+            next witness.” And he added in an under\=tone to the Queen, “Really,
             my dear, \Italic{you} must cross\=examine the next witness. It quite
             makes my forehead ache!”
         }

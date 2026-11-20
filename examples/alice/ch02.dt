@@ -65,10 +65,10 @@
         // Stepped 4-line address occupying exact 3 grid lines (3 * 18.0pt = 54.0pt)
         \PoemBlock(size: 10pt, leading: 13pt, italic: true) {
             \Spacer(height: 1pt)
-            \VerseLine(left_margin: 64pt) { Alice’s Right Foot, Esq., }
+            \VerseLine(left_margin: 64pt) { Alice’s Right Foot, Esq. }
             \VerseLine(left_margin: 99pt) { Hearthrug, }
             \VerseLine(left_margin: 118pt) { near the Fender, }
-            \VerseLine(left_margin: 138pt) { (with Alice’s love). }
+            \VerseLine(left_margin: 138pt) { (with Alice’s love.) }
             \Spacer(height: 1pt)
         }
 
@@ -127,7 +127,7 @@
         \Para {
             Alice took up the fan and gloves, and, as the hall was very hot, she
             kept fanning herself all the time she went on talking: “Dear, dear!
-            How queer everything is to\=day! And yester\-day things went on just as
+            How queer every thing is to\=day! And yester\-day things went on just as
             usual. I wonder if I’ve been changed in the night? Let me think: was
             I the same when I got up this morning? I almost think I can remember
             feeling a little different. But if I’m not the same, the next
@@ -150,7 +150,7 @@
             the capital of Paris, and Paris is the capital of Rome, and Rome—no,
             \Italic{that’s} all wrong, I’m certain! I must have been changed for
             Mabel! I’ll try and say ‘\Italic{How doth the little—}’” and she
-            crossed her hands on her lap, as if she were saying lessons, and
+            crossed her hands on her lap as if she were saying lessons, and
             began to repeat it, but her voice sounded hoarse and strange, and
             the words did not come the same as they used to do:—
         }
@@ -177,18 +177,18 @@
             eyes filled with tears again as she went on, “I must be Mabel after
             all, and I shall have to go and live in that poky little house, and
             have next to no toys to play with, and oh! ever so many lessons to
-            learn! No, I’ve made up my mind about it: if I’m Mabel, I’ll stay
+            learn! No, I’ve made up my mind about it; if I’m Mabel, I’ll stay
             down here! It’ll be no use their putting their heads down and
             saying, ‘Come up again, dear!’ I shall only look up and say, ‘Who am
             I then? Tell me that first, and then, if I like being that person,
-            I’ll come up: if not, I’ll stay down here till I’m some\-body
-            else’—but, oh dear!” cried Alice, with a sudden burst of tears, “I
+            I’ll come up: if not I’ll stay down here till I’m some\-body
+            else’—but, oh dear!” cried Alice with a sudden burst of tears, “I
             do wish they \Italic{would} put their heads down! I am so
             \Italic{very} tired of being all alone here!”
         }
 
         \Para {
-            As she said this, she looked down at her hands, and was surprised to
+            As she said this she looked down at her hands, and was surprised to
             see that she had put on one of the Rabbit’s little white kid gloves
             while she was talking. “How \Italic{can} I have done that?” she
             thought. “I must be growing small again.” She got up and went to the
@@ -203,7 +203,7 @@
             “That \Italic{was} a narrow escape!” said Alice, a good deal
             frightened at the sudden change, but very glad to find herself still
             in existence; “and now for the garden!” and she ran with all speed
-            back to the little door: but, alas! the little door was shut again,
+            back to the little door: but alas! the little door was shut again,
             and the little golden key was lying on the glass table as before,
             “and things are worse than ever,” thought the poor child, “for I
             never was so small as this before, never! And I declare it’s too
@@ -227,7 +227,7 @@
             con\-clusion, that wherever you go to on the English coast you find a
             number of bathing machines in the sea, some children digging in the
             sand with wooden spades, then a row of lodging houses, and behind
-            them a railway station.) However, she soon made out that she was in
+            them a railway station.) However she soon made out that she was in
             the pool of tears which she had wept when she was nine feet high.
         }
 
@@ -245,14 +245,14 @@
             Just then she heard something splashing about in the pool a little
             way off, and she swam nearer to make out what it was: at first she
             thought it must be a walrus or hippopotamus, but then she remembered
-            how small she was now, and she soon made out that it was only a
-            mouse, that had slipped in like herself.
+            how small she was now, and she soon made out that it was only a mouse
+            that had slipped in like herself.
         }
 
         \Para {
             “Would it be of any use, now,” thought Alice, “to speak to this
             mouse? Everything is so out\=of\=the\=way down here, that I should
-            think very likely it can talk: at any rate, there’s no harm in
+            think very likely it can talk: at any rate there’s no harm in
             trying.” So she began: “O Mouse, do you know the way out of this
             pool? I am very tired of swimming about here, O Mouse!” (Alice
             thought this must be the right way of speaking to a mouse: she had
@@ -320,21 +320,21 @@
 
         \Para {
             “I won’t indeed!” said Alice, in a great hurry to change the subject
-            of conversation. “Are you—are you fond—of—of dogs?” The Mouse did
-            not answer, so Alice went on eagerly: “There is such a nice little
+            of conversation. “Are you—are you fond—of—of dogs?” The mouse
+            did not answer, so Alice went on eagerly: “There is such a nice little
             dog near our house I should like to show you! A little bright-eyed
-            terrier, you know, with oh, such long curly brown hair! And it’ll
+            terrier, you know, with oh! such long curly brown hair! And it’ll
             fetch things when you throw them, and it’ll sit up and beg for its
             dinner, and all sorts of things—I can’t re\-member half of them—and it
             belongs to a farmer, you know, and he says it’s so useful, it’s
             worth a hundred pounds! He says it kills all the rats and—oh dear!”
-            cried Alice in a sorrowful tone, “I’m afraid I’ve offended it
+            cried Alice in a sorrowful tone. “I’m afraid I’ve offended it
             again!” For the Mouse was swimming away from her as hard as it could
             go, and making quite a commotion in the pool as it went.
         }
 
         \Para {
-            So she called softly after it, “Mouse dear! Do come back again, and
+            So she called softly after it: “Mouse dear! Do come back again, and
             we won’t talk about cats or dogs either, if you don’t like them!”
             When the Mouse heard this, it turned round and swam slowly back to
             her: its face was quite pale (with passion, Alice thought), and it

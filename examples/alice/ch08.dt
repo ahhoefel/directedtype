@@ -80,8 +80,8 @@
         }
 
         \FlushPara {
-            down his brush, and had just begun “Well, of all the unjust
-            things\DoubleEmDash{}” when his eye chanced to fall upon Alice, as she stood
+            down his brush, and had just begun, “Well, of all
+            the unjust things—” when his eye chanced to fall upon Alice, as she stood
             watching them, and he checked himself suddenly: the others looked
             round also, and all of them bowed low.
         }
@@ -95,12 +95,12 @@
         }
 
         \Para {
-            Five and Seven said nothing, but looked at Two. Two began in a low
-            voice, “Why the fact is, you see, Miss, this here ought to have been
-            a \Italic{red} rose\=tree, and we put a white one in by mistake; and
-            if the Queen was to find it out, we should all have our heads cut
+            Five and Seven said nothing, but looked at Two. Two began, in a low
+            voice, “Why, the fact is, you see, Miss, this here ought to have been
+            a \Italic{red} rose\=tree, and we put a white one in by
+            mistake, and if the Queen was to find it out, we should all have our heads cut
             off, you know. So you see, Miss, we’re doing our best, afore she
-            comes, \NoBreak{to\DoubleEmDash{}”} At this moment Five, who had been anxiously looking
+            comes, to—” At this moment Five, who had been anxiously looking
             across the garden, called out “The Queen! The Queen!” and the three
             gardeners instantly threw them\-selves flat upon their faces. There
             was a sound of many footsteps, and Alice looked round, eager to see
@@ -127,14 +127,14 @@
             Alice was rather doubtful whether she ought not to lie down on her
             face like the three gardeners, but she could not remember ever
             having heard of such a rule at processions; “and besides, what would
-            be the use of a procession,” thought she, “if people had all to lie
-            down upon their faces, so that they couldn’t see it?” So she stood
-            still where she was, and waited.
+            be the use of a procession,” she thought, “if people had
+            all to lie down on their faces, so that they couldn’t see it?” So she stood where
+            she was, and waited.
         }
 
         \Para {
             When the procession came opposite to Alice, they all stopped and
-            looked at her, and the Queen said severely “Who is this?” She said
+            looked at her, and the Queen said severely, “Who is this?” She said
             it to the Knave of Hearts, who only bowed and smiled in reply.
         }
 
@@ -151,7 +151,7 @@
 
         \Para {
             “And who are \Italic{these?}” said the Queen, point\-ing to the three
-            gardeners who were lying round the rose\=tree; for, you see, as they
+            gardeners who were lying round the rose\=tree; for you see, as they
             were lying on their faces, and the pattern on their backs was the
             same as the rest of the pack, she could not tell whether they were
             gardeners, or soldiers, or courtiers, or three of her own children.
@@ -170,7 +170,7 @@
         \Para {
             The Queen turned crim\-son with fury, and, after glar\-ing at her for a
             mo\-ment like a wild beast, began scream\-ing, “Off with her head!
-            Off\DoubleEmDash{}”
+            Off—”
         }
 
         // ============================================================
@@ -196,7 +196,7 @@
         }
 
         \Para {
-            “Get up!” said the Queen, in a shrill, loud voice, and the three
+            “Get up!” said the Queen in a shrill, loud voice, and the three
             gardeners instantly jumped up, and began bowing to the King, the
             Queen, the royal children, and everybody else.
         }
@@ -209,7 +209,7 @@
 
         \Para {
             “May it please your Majesty,” said Two, in a very humble tone, going
-            down on one knee as he spoke, “we were trying\DoubleEmDash{}”
+            down on one knee as he spoke, “we were trying—”
         }
 
         \Para {
@@ -249,7 +249,7 @@
         }
 
         \Para {
-            “Come on, then!” roared the Queen, and Alice joined the procession,
+            “Come on then!” roared the Queen, and Alice joined the procession,
             wondering very much what would happen next.
         }
 
@@ -284,16 +284,16 @@
         }
 
         \Para {
-            “She boxed the Queen’s ears\DoubleEmDash{}” the Rabbit began. Alice gave a little
+            “She boxed the Queen’s ears—” the Rabbit began. Alice gave a little
             scream of laughter. “Oh, hush!” the Rabbit whispered in a frightened
-            tone. “The Queen will hear you! You see, she came rather late, and
-            the Queen said\DoubleEmDash{}”
+            tone. “The Queen will hear you! You see she came rather
+            late, and the Queen said—”
         }
 
         \Para {
             “Get to your places!” shouted the Queen in a voice of thunder, and
             people began running about in all directions, tumbling up against
-            each other; however, they got settled down in a minute or two, and
+            each other: however, they got settled down in a minute or two, and
             the game began.
         }
 
@@ -305,8 +305,8 @@
             pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
         ) {
             Alice thought she had never seen such a curious croquet\=ground in
-            her life; it was all ridges and furrows; the balls were live
-            hedgehogs, the mallets live flamingoes, and
+            her life: it was all ridges and furrows; the
+            croquet\=balls were live hedgehogs, and the mallets live flamingoes, and
         }
 
         \WrapLeftStack(
@@ -316,13 +316,13 @@
             narrow_x: 152.5pt
         ) {
             \FlushPara {
-                the sol\-diers had to dou\-ble them\-selves up and to stand on their
+                the sol\-diers had to dou\-ble them\-selves up and stand on their
                 hands and feet, to make the arch\-es.
             }
             \Para(align: Align.JustifyAll) {
                 The chief diffi\-culty Alice found at first was in man\-aging her
                 flamingo: she suc\-ceeded in get\-ting its body tucked away,
-                comfortably enough, under her arm, with
+                com\-fort\-ably enough, under her arm, with
             }
         }
 
@@ -332,12 +332,12 @@
         \FlushPara {
             its legs hanging down, but generally, just as she had got its neck
             nicely straightened out, and was going to give the hedgehog a blow
-            with its head, it \Italic{would} twist itself round and look up in
-            her face, with such a puzzled expres\-sion that she could not help
+            with its head, it \Italic{would} twist itself round and look up
+            into her face, with such a puzzled expres\-sion that she could not help
             bursting out laugh\-ing: and when she had got its head down, and was
             going to begin again, it was very provoking to find that the
             hedgehog had unrolled itself, and was in the act of crawling away:
-            besides all this, there was generally a ridge or furrow in the way
+            besides all this, there was generally a ridge or a furrow in the way
             wherever she wanted to send the hedgehog to, and, as the doubled\=up
             soldiers were always getting up and walking off to other parts of
             the ground, Alice soon came to the conclusion that it was a very
@@ -348,7 +348,7 @@
             The players all played at once without wait\-ing for turns,
             quarrelling all the while, and fighting for the hedgehogs; and in a
             very short time the Queen was in a furious passion, and went
-            stamping about, and shouting “Off with his head!” or “Off with her
+            stamping about, and shouting, “Off with his head!” or “Off with her
             head!” about once in a minute.
         }
 
@@ -356,16 +356,15 @@
             Alice began to feel very uneasy: to be sure, she had not as yet had
             any dispute with the Queen, but she knew that it might happen any
             minute, “and then,” thought she, “what would become of me? They’re
-            dreadfully fond of beheading people here; the great wonder is, that
+            dreadfully fond of beheading people here: the great wonder is, that
             there’s any one left alive!”
         }
 
         \Para {
             She was looking about for some way of escape, and wondering whether
             she could get away without being seen, when she noticed a curious
-            appearance in the air: it puzzled her very much at first, but, after
-            watching it a minute or two, she made it out to be a grin, and she
-            said to herself “It’s the Cheshire Cat: now I shall have somebody to
+            appearance in the air: it puzzled her very much at first, but after watching it a minute or two she made
+            it out to be a grin, and she said to herself, “It’s the Cheshire Cat: now I shall have somebody to
             talk to.”
         }
 
@@ -379,7 +378,7 @@
             speaking to it,” she thought, “till its ears have come, or at least
             one of them.” In another minute the whole head appeared, and then
             Alice put down her flamingo, and began an account of the game,
-            feeling very glad she had someone to listen to her. The Cat seemed
+            feeling very glad she had some one to listen to her. The Cat seemed
             to think that there was enough of it now in sight, and no more of it
             appeared.
         }
@@ -387,7 +386,7 @@
         \Para {
             “I don’t think they play at all fairly,” Alice began, in rather a
             complaining tone, “and they all quarrel so dreadfully one can’t hear
-            oneself speak—and they don’t seem to have any rules in particular;
+            one’s\=self speak—and they don’t seem to have any rules in particular;
             at least, if there are, nobody attends to them—and you’ve no idea
             how con\-fusing it is all the things being alive; for in\-stance,
             there’s the arch I’ve got to go through next walking about at the
@@ -400,9 +399,9 @@
         }
 
         \Para {
-            “Not at all,” said Alice: “she’s so ex\-\NoBreak{tremely\DoubleEmDash{}”} Just then she
+            “Not at all,” said Alice: “she’s so ex\-tremely—” Just then she
             noticed that the Queen was close behind her, listening: so she went
-            on, “\DoubleEmDash{}likely to win, that it’s hardly worth while finishing the
+            on “—likely to win, that it’s hardly worth while finishing the
             game.”
         }
 
@@ -411,7 +410,7 @@
         }
 
         \Para {
-            “Who \Italic{are} you talking to?” said the King, going up to Alice,
+            “Who \Italic{are} you talking to?” said the King, coming up to Alice,
             and looking at the Cat’s head with great curiosity.
         }
 
@@ -440,14 +439,14 @@
         }
 
         \Para {
-            “Well, it must be removed,” said the King very decidedly, and he
-            called the Queen, who was passing at the moment, “My dear! I wish
+            “Well, it must be removed,” said the King very decidedly, and he called to the
+            Queen, who was passing at the moment, “My dear! I wish
             you would have this cat removed!”
         }
 
         \Para {
             The Queen had only one way of settling all difficulties, great or
-            small. “Off with his head!” she said, without even looking round.
+            small. “Off with his head!” she said without even looking round.
         }
 
         \Para {
@@ -456,13 +455,13 @@
         }
 
         \Para {
-            Alice thought she might as well go back, and see how the game was
+            Alice thought she might as well go back and see how the game was
             going on, as she heard the Queen’s voice in the distance, screaming
             with passion. She had already heard her sen\-tence three of the
             players to be executed for having missed their turns, and she did
             not like the look of things at all, as the game was in such
-            confusion that she never knew whether it was her turn or not. So she
-            went in search of her hedgehog.
+            confusion that she never knew whether it was her turn or not. So she went off
+            in search of her hedgehog.
         }
 
         \Para {
@@ -478,8 +477,8 @@
             fight was over, and both the hedgehogs were out of sight: “but it
             doesn’t matter much,” thought Alice, “as all the arches are gone
             from this side of the ground.” So she tucked it away under her arm,
-            that it might not escape again, and went back for a little more
-            conversation with her friend.
+            that it might not escape again, and went back to have
+            a little more conversation with her friend.
         }
 
         \Para {
@@ -493,8 +492,8 @@
         \Para {
             The moment Alice appeared, she was ap\-pealed to by all three to
             settle the question, and they repeated their arguments to her,
-            though, as they all spoke at once, she found it very hard indeed to
-            make out exactly what they said.
+            though, as they all spoke at once, she found it very hard
+            to make out exactly what they said.
         }
 
         \Para {
@@ -515,8 +514,8 @@
         }
 
         \Para {
-            The Queen’s argument was, that if some\-thing wasn’t done about it in
-            less than no time, she’d have everybody executed, all round. (It was
+            The Queen’s argument was, that if some\-thing wasn’t done about it in less than no
+            time she’d have everybody executed, all round. (It was
             this last remark that had made the whole party look so grave and
             anxious.)
         }
