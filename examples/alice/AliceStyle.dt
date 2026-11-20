@@ -1,4 +1,4 @@
-// Alice's Adventures in Wonderland — 1865 Macmillan Crown Octavo Stylesheet
+// Alice's Adventures in Wonderland — 1866 Macmillan Crown Octavo Stylesheet
 // Page trim: 365pt x 540pt (5.07in x 7.50in Crown Octavo)
 // Type block: 257.5pt (+3.0%) measure x 22 lines at 18.0pt leading (12pt Old Standard TT, 190 DPI engravings)
 
@@ -20,7 +20,7 @@
     full_header: String = ""
 ) {}
 
-// Marker deposited at the end of a chapter so closing pages follow 1865 header rules
+// Marker deposited at the end of a chapter so closing pages follow 1866 header rules
 \Component ChapterEndMeta(
     ended: Boolean = true
 ) {}
@@ -40,7 +40,7 @@
     \alias bottom: Distance = y;
 }
 
-// Inline first-line paragraph indent (16pt in the 1865 Macmillan setting)
+// Inline first-line paragraph indent (16pt in the 1866 Macmillan setting)
 \InlineBox Indent(
     width: Distance = 16pt,
     x: Distance = parent.left,
@@ -817,7 +817,7 @@
     \alias bottom: Distance = y + height;
 }
 
-// 1865 Macmillan Crown Octavo Page Template
+// 1866 Macmillan Crown Octavo Page Template
 \Component AlicePage(
     width: Distance = 365pt,
     height: Distance = 540pt,

@@ -437,7 +437,7 @@
         }
 
         // ============================================================
-        // Page 159 (Recto): 1865 2-line Owl & Oyster verse + Turtle Soup intro
+        // Page 159 (Recto): 1866 2-line Owl & Oyster verse + Turtle Soup intro
         // ============================================================
         \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, break_before: Break.Page) {
             \Spacer(height: 4pt)
