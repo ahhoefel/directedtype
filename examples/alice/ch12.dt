@@ -543,14 +543,15 @@
         // ============================================================
         // Pages 190–192: Closing Dream Sequence (Double Rule + Bare Centered Folios)
         // ============================================================
+        // 6 * 18.0pt = 108.0pt (50.0pt + 3.5pt DoubleRule + 54.5pt) locks the 16 lines to the 22-line baseline grid
         \VStackStretch(
             width: parent.width,
             gap: 0pt,
             pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
         ) {
-            \Spacer(height: 46pt)
-            \DoubleRule(rule_width: 66pt, gap: 2.5pt)
             \Spacer(height: 50pt)
+            \DoubleRule(rule_width: 66pt, gap: 2.5pt)
+            \Spacer(height: 54.5pt)
         }
 
         \Para {
