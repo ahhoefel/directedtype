@@ -3,16 +3,55 @@
 
 \use "components/Align.dt"
 \use "components/LineBreak.dt"
+\use "components/TextBounds.dt"
+\use "components/TextStart.dt"
+\use "components/TextEnd.dt"
 \use "components/VStackStretch.dt"
 \use "components/SmallCaps.dt"
 \use "components/Spacer.dt"
 \use "components/Italic.dt"
 \use "AliceStyle.dt"
 
+\Component CorrectionList(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    gap: Distance = 6pt,
+    comma_gap: Distance = 2.5pt,
+    bullet_gap: Distance = 7pt,
+    indent: Distance = 12pt,
+    pagination: Pagination = \Pagination(breakable: true)
+) {
+    \let max_page_w = max(children.page_w);
+    \let max_line_w = max(children.line_w);
+    \let max_loc_w = max(children.loc_w);
+    \let max_before_bullet = max(max_loc_w, max_page_w + comma_gap + max_line_w);
+
+    \let comma_x = indent + max_before_bullet - max_line_w - comma_gap;
+    \let bullet_x = indent + max_before_bullet + bullet_gap;
+
+    \Children(
+        x: x,
+        y: prev ? prev.bottom + gap : y,
+        width: width,
+        comma_x: comma_x,
+        comma_gap: comma_gap,
+        bullet_x: bullet_x,
+        bullet_gap: bullet_gap
+    )
+
+    \alias height: Distance = sum(children.height) + max(0, children.len - 1) * gap;
+    \alias bottom: Distance = y + height;
+}
+
 \Component CorrectionRow(
-    loc: String,
-    loc_width: Distance = 54pt,
-    bullet_width: Distance = 14pt,
+    loc: String = "",
+    page_ref: String = "",
+    line_ref: String = "",
+    comma_x: Distance = 0pt,
+    comma_gap: Distance = 2.5pt,
+    bullet_x: Distance = 0pt,
+    bullet_gap: Distance = 7pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
@@ -20,34 +59,51 @@
     env font: Font
 ) {
     \let row_font = \Font(font: font, size: 8.5pt, line_height: 13pt);
+    \let row_ps = \ParagraphStyle(align: Align.Left);
 
-    \let loc_t = \Text(
-        x: x,
+    \let page_t = \Text(
+        x: x + comma_x - page_t.width,
         y: y,
-        width: loc_width,
         font: row_font,
-        paragraph_style: \ParagraphStyle(align: Align.Right),
+        paragraph_style: row_ps,
+        text: page_ref != "" ? (page_ref + ",") : ""
+    );
+    \let line_t = \Text(
+        x: x + comma_x + comma_gap,
+        y: y,
+        font: row_font,
+        paragraph_style: row_ps,
+        text: line_ref
+    );
+    \let loc_t = \Text(
+        x: x + bullet_x - bullet_gap - loc_t.width,
+        y: y,
+        font: row_font,
+        paragraph_style: row_ps,
         text: loc
     );
-    \Text(
-        x: x + loc_width,
+    \let bullet_t = \Text(
+        x: x + bullet_x - bullet_t.width * 0.5,
         y: y,
-        width: bullet_width,
         font: row_font,
-        paragraph_style: \ParagraphStyle(align: Align.Center),
+        paragraph_style: row_ps,
         text: "•"
-    )
+    );
     \let detail = \Text(
-        x: x + loc_width + bullet_width,
+        x: x + bullet_x + bullet_gap,
         y: y,
-        width: width - loc_width - bullet_width,
+        width: width - bullet_x - bullet_gap,
         font: row_font,
-        paragraph_style: \ParagraphStyle(align: Align.Left)
+        paragraph_style: row_ps
     ) {
         \Children
     };
 
-    \alias height: Distance = detail.height > loc_t.height ? detail.height : loc_t.height;
+    \alias page_w: Distance = page_t.width;
+    \alias line_w: Distance = line_t.width;
+    \alias loc_w: Distance = loc_t.width;
+    \alias height: Distance = max(detail.height, max(page_t.height, loc_t.height));
+    \alias bottom: Distance = y + height;
 }
 
 \Component EndMatter(
@@ -57,20 +113,23 @@
     pagination: Pagination = \Pagination(breakable: true, break_before: Break.Recto),
     env font: Font
 ) {
-    \let intro_font = \Font(font: font, size: 9pt, line_height: 13pt);
-    \let intro_ps = \ParagraphStyle(align: Align.Justify, line_break: LineBreak.Optimal);
+    \let title_font = \Font(font: font, size: 11pt, letter_spacing: 0.75pt);
+
+    \env font = \Font(font: self.font, size: 9pt, line_height: 13pt);
+    \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
+    \env paragraph_style = \ParagraphStyle(align: Align.Justify, indent: 12pt, line_break: LineBreak.Optimal);
 
     \let stack = \VStackStretch(
         x: x,
         y: y,
         width: width,
         gap: 0pt,
-        pagination: \Pagination(breakable: true, break_before: Break.Recto)
+        pagination: \Pagination(breakable: true)
     ) {
         \Spacer(height: 12pt)
         \Text(
             width: parent.width,
-            font: \Font(font: font, size: 11pt, letter_spacing: 0.75pt),
+            font: title_font,
             paragraph_style: \ParagraphStyle(align: Align.Center),
             text: "TYPESETTING NOTES."
         )
@@ -78,41 +137,32 @@
         \DoubleRule(rule_width: 56.25pt)
         \Spacer(height: 14pt)
 
-        \Text(width: parent.width, font: intro_font, paragraph_style: intro_ps) {
-            This edition is set in 12pt Old Standard TT across a 265pt measure (18pt leading)
-            and we ensured every line break matched the original 1866 \SmallCaps{MacMillan} printing.
+        \FlushPara {
+            This edition is set in Old Standard TT 12pt with 18pt leading
+            across a 265pt measure.
+            Every line break matches the original 1866 \SmallCaps{Macmillan} printing.
         }
-        \Spacer(height: 14pt)
 
-        \Text(width: parent.width, font: intro_font, paragraph_style: intro_ps) {
-            The 1866 edition used generous word and sentence spacing. It also
-            included extra space around certain punctuation marks that are no longer common
-            practice and haven't been reproduced here.
-        }
-        \Spacer(height: 14pt)
+        The 1866 edition used generous word and sentence spacing, as well
+        as extra space around certain punctuation marks—a convention no 
+        longer in common practice and not reproduced here.
 
-        \Text(width: parent.width, font: intro_font, paragraph_style: intro_ps) {
-            We matched the line breaks in the original using a combination of the Knuth\=Plass
-            line\=breaking algorithm (word spacing +3.0pt, stretch 90%, shrink 53%, sentence
-            space +50%). But, we still needed to manually break 779/2,625 (25.8%) of the interior
-            line breaks.
-        }
-        \Spacer(height: 14pt)
+        We matched the line breaks in the original using the Knuth\=Plass
+        line\=breaking algorithm (word spacing 6.36pt, range 2.99–12.08pt, sentence
+        space 8.04pt). But we still needed to manually break 678/2,625 (25.8%) of the interior
+        line breaks.
 
-        \Text(width: parent.width, font: intro_font, paragraph_style: intro_ps) {
-            Five minor punctuation slips in the 1866 \SmallCaps{MacMillan} printing were corrected:
-        }
+        Six minor typographical slips in the 1866 \SmallCaps{Macmillan} printing were corrected:
+
         \Spacer(height: 8pt)
-
-        \CorrectionRow(loc: "p.67, l.6")   { minutes, → minutes. }
-        \Spacer(height: 6pt)
-        \CorrectionRow(loc: "p.87, l.5")   { Alice; that’s → Alice; “that’s }
-        \Spacer(height: 6pt)
-        \CorrectionRow(loc: "p.102, l.16") { asked.” → asked. }
-        \Spacer(height: 6pt)
-        \CorrectionRow(loc: "p.119, l.14") { “The soldiers → The soldiers }
-        \Spacer(height: 6pt)
-        \CorrectionRow(loc: "p.120, l.1")  { Duchess? → Duchess?” }
+        \CorrectionList(gap: 6pt) {
+            \CorrectionRow(loc: "Contents")                     { 67 → 76 }
+            \CorrectionRow(page_ref: "p.67",  line_ref: "l.6")  { minutes, → minutes. }
+            \CorrectionRow(page_ref: "p.87",  line_ref: "l.5")  { Alice; that’s → Alice; “that’s }
+            \CorrectionRow(page_ref: "p.102", line_ref: "l.16") { asked.” → asked. }
+            \CorrectionRow(page_ref: "p.119", line_ref: "l.14") { “The soldiers → The soldiers }
+            \CorrectionRow(page_ref: "p.120", line_ref: "l.1")  { Duchess? → Duchess?” }
+        }
     };
 
     \alias height: Distance = stack.height;

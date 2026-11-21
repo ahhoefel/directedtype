@@ -11,6 +11,7 @@
 // [x]   Verso: Blank (followed by Page 1 on Recto)
 
 \use "components/Align.dt"
+\use "components/LineBreak.dt"
 \use "components/Center.dt"
 \use "components/VStackStretch.dt"
 \use "components/Spacer.dt"
@@ -225,13 +226,12 @@
             \Text(
                 width: parent.width * 0.75,
                 font: \Font(font: font, size: 9pt, line_height: 13.5pt),
-                paragraph_style: \ParagraphStyle(align: Align.Justify)
+                paragraph_style: \ParagraphStyle(align: Align.Justify, line_break: LineBreak.Optimal)
             ) {
-                This book was digitally typeset using a new typesetting system
-                called DirectedType and made to resemble the
+                This book was digitally typeset with DirectedType and made to resemble the
                 original Macmillan edition produced in London in 1866.
-                The type is set in Old Standard TT which is a 2006 revival of
-                late 19th-century academic typefaces.
+                The type is set in Old Standard TT, a 2006 revival of
+                late nineteenth-century academic typefaces.
             }
         }
 
