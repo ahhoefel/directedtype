@@ -712,7 +712,7 @@ pub(super) fn validate_and_coerce_primitive_port_literal(
                 });
             }
         }
-    } else if matches!(port_name, "italic" | "underline") {
+    } else if matches!(port_name, "italic" | "small_caps" | "underline") {
         let unlowered_lit = match orig_expr {
             Expr::Literal(lit) => Some(lit.clone()),
             _ => None,
@@ -3775,7 +3775,7 @@ fn infer_deposit_elem_public_ports(
         let candidate_ports = [
             "x", "y", "width", "height", "left", "top", "right", "bottom", "z", "opacity",
             "color", "text", "align", "indent", "paragraph_style", "size", "weight", "family",
-            "italic", "baseline", "page", "end_page",
+            "italic", "small_caps", "baseline", "page", "end_page",
         ];
         for pname in candidate_ports {
             if matches!(pname, "left" | "top" | "right" | "bottom") && !prim.is_non_spatial() {

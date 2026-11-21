@@ -226,6 +226,7 @@ fn shape_resolved_text_node(node: &ResolvedNode, layout: &ResolvedLayout) -> Sha
             last_bottom_coord: 0.0,
             full_y_offset: 0.0,
             byte_deltas: Vec::new(),
+            sc_entries: Vec::new(),
         };
     };
     let fnode = node
@@ -244,6 +245,14 @@ fn shape_resolved_text_node(node: &ResolvedNode, layout: &ResolvedLayout) -> Sha
     let font_family = fnode
         .and_then(|f| f.properties.get("family"))
         .and_then(|v| v.as_str());
+    let font_italic = fnode
+        .and_then(|f| f.properties.get("italic"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let font_small_caps = fnode
+        .and_then(|f| f.properties.get("small_caps"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let line_height = fnode
         .filter(|f| f.formulas.has_custom_line_height())
         .and_then(|f| f.properties.get("line_height"))
@@ -271,6 +280,8 @@ fn shape_resolved_text_node(node: &ResolvedNode, layout: &ResolvedLayout) -> Sha
         line_height,
         align,
         indent,
+        font_italic,
+        font_small_caps,
         &resolved_spans,
         &resolved_boxes,
     )

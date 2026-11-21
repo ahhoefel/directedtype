@@ -24,6 +24,7 @@ pub struct SpanRenderKey {
     pub font_weight: Option<u64>,
     pub font_family: Option<String>,
     pub italic: bool,
+    pub small_caps: Option<bool>,
     pub baseline_shift: u64,
 }
 
@@ -37,6 +38,7 @@ pub struct TextRenderKey {
     pub font_weight: f32,
     pub font_family: Option<String>,
     pub font_italic: bool,
+    pub font_small_caps: bool,
     pub color: [u8; 4],
     pub align: Option<String>,
     pub indent: u64,
@@ -762,6 +764,11 @@ pub fn build_scene(
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
 
+                let font_small_caps = fnode
+                    .and_then(|f| f.properties.get("small_caps"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
                 let font_letter_spacing = fnode
                     .and_then(|f| f.properties.get("letter_spacing"))
                     .and_then(|v| v.as_f64())
@@ -830,6 +837,7 @@ pub fn build_scene(
                         font_weight: span.style.font_weight.map(|v| v.to_bits()),
                         font_family: span.style.font_family.clone(),
                         italic: span.style.italic,
+                        small_caps: span.style.small_caps,
                         baseline_shift: span.style.baseline_shift.to_bits(),
                     });
                 }
@@ -865,6 +873,7 @@ pub fn build_scene(
                     font_weight,
                     font_family: font_family.map(|s| s.to_string()),
                     font_italic,
+                    font_small_caps,
                     color: color_to_rgba8(&text_color),
                     align: align_str.map(|s| s.to_string()),
                     indent: indent.to_bits(),
@@ -887,29 +896,34 @@ pub fn build_scene(
                 // CACHE MISS: Build local scene at origin (0.0, 0.0)
                 let mut local_scene = Scene::new();
 
-                let mat = crate::compiler::text::materialize_soft_hyphens_with_font_cx(
+                let prep = crate::compiler::text::prepare_rich_text_for_shaping(
                     font_cx,
                     text,
                     font_size,
                     font_weight,
                     font_family,
                     font_italic,
+                    font_small_caps,
                     line_height_prop,
                     (node.rect.width > 0.0).then_some(node.rect.width),
                     indent,
                     &node.text_spans,
                     &node.inline_boxes,
                 );
-                let (text, spans_slice, boxes_slice) = match &mat {
-                    Some(m_rt) => (
-                        m_rt.text.as_str(),
-                        m_rt.spans.as_slice(),
-                        m_rt.inline_boxes.as_slice(),
+                let (text, spans_slice, boxes_slice, smcp_ranges, synth_ranges) = match &prep {
+                    Some(p) => (
+                        p.text.as_str(),
+                        p.spans.as_slice(),
+                        p.inline_boxes.as_slice(),
+                        p.smcp_ranges.as_slice(),
+                        p.synthetic_size_ranges.as_slice(),
                     ),
                     None => (
                         text.as_str(),
                         node.text_spans.as_slice(),
                         node.inline_boxes.as_slice(),
+                        &[][..],
+                        &[][..],
                     ),
                 };
 
@@ -986,6 +1000,13 @@ pub fn build_scene(
                         builder.push(StyleProperty::Underline(true), span.range.clone());
                     }
                 }
+
+                crate::compiler::text::push_small_caps_styles(
+                    &mut builder,
+                    smcp_ranges,
+                    synth_ranges,
+                    text.len(),
+                );
 
                 crate::compiler::text::push_first_line_indent_box(
                     &mut builder,

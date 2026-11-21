@@ -668,6 +668,28 @@ fn build_text_letter_spacing_arg(state: &PrimitiveExpandState<'_, '_>) -> Expr {
     Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span))
 }
 
+fn build_text_small_caps_arg(state: &PrimitiveExpandState<'_, '_>) -> Expr {
+    let span = state.elem.span;
+    if let Some(fid) = state
+        .font_node_id
+        .or_else(|| state.node_fonts.get(&state.node_id).copied())
+    {
+        if state
+            .doc
+            .get_node(fid)
+            .is_some_and(|fn_node| fn_node.ports.contains_key("small_caps"))
+        {
+            let font_ident = Expr::Ident(Ident::from_node(fid, span));
+            return Expr::MemberAccess(MemberAccessExpr {
+                target: std::sync::Arc::new(font_ident),
+                member: Ident::new("small_caps", span),
+                span,
+            });
+        }
+    }
+    Expr::Literal(Literal::Bool(false, span))
+}
+
 /// Resolves bidirectional `baseline` <-> `y` equations using `text_baseline_offset(...)`.
 fn resolve_baseline_and_y(
     state: &mut PrimitiveExpandState<'_, '_>,
@@ -774,7 +796,7 @@ fn collect_span_and_inline_box_style_args(
                         .copied()
                         .or(state.doc.nodes[nid.0].font)
                 });
-            let (ts_size, ts_weight, ts_family, ts_italic) = if let Some(fid) = fid_opt {
+            let (ts_size, ts_weight, ts_family, ts_italic, ts_small_caps) = if let Some(fid) = fid_opt {
                 let f_ident = Expr::Ident(Ident::from_node(fid, elem.span));
                 let sz = Expr::MemberAccess(MemberAccessExpr {
                     target: std::sync::Arc::new(f_ident.clone()),
@@ -793,20 +815,30 @@ fn collect_span_and_inline_box_style_args(
                 });
                 let it = if state.doc.nodes[fid.0].ports.contains_key("italic") {
                     Expr::MemberAccess(MemberAccessExpr {
-                        target: std::sync::Arc::new(f_ident),
+                        target: std::sync::Arc::new(f_ident.clone()),
                         member: Ident::new("italic", elem.span),
                         span: elem.span,
                     })
                 } else {
                     Expr::Literal(Literal::Bool(false, elem.span))
                 };
-                (sz, wt, fam, it)
+                let sc = if state.doc.nodes[fid.0].ports.contains_key("small_caps") {
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: std::sync::Arc::new(f_ident),
+                        member: Ident::new("small_caps", elem.span),
+                        span: elem.span,
+                    })
+                } else {
+                    Expr::Literal(Literal::Integer(-1, elem.span))
+                };
+                (sz, wt, fam, it, sc)
             } else {
                 (
                     size_expr.clone(),
                     weight_expr.clone(),
                     font_expr.clone(),
                     Expr::Literal(Literal::Bool(false, elem.span)),
+                    Expr::Literal(Literal::Integer(-1, elem.span)),
                 )
             };
             let bs_expr = ts
@@ -836,6 +868,7 @@ fn collect_span_and_inline_box_style_args(
             span_style_args.push(ts_weight);
             span_style_args.push(ts_family);
             span_style_args.push(ts_italic);
+            span_style_args.push(ts_small_caps);
             span_style_args.push(bs_expr);
         }
     }
@@ -875,6 +908,7 @@ fn collect_span_and_inline_box_style_args(
         span_style_args.push(ib_width);
         span_style_args.push(ib_height);
         span_style_args.push(ib_baseline_offset);
+        span_style_args.push(ib_false.clone());
         span_style_args.push(ib_false);
         span_style_args.push(ib_zero);
     }
@@ -950,6 +984,7 @@ fn synthesize_span_and_inline_box_metrics(
     } else {
         Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span))
     };
+    let font_small_caps_arg = build_text_small_caps_arg(state);
 
     let shared_has_unresolved = crate::compiler::expand::rewrite::has_any_pending_fwd_refs()
         && (crate::compiler::expand::rewrite::expr_has_unresolved_ident(size_expr)
@@ -960,6 +995,7 @@ fn synthesize_span_and_inline_box_metrics(
             || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&line_height_arg)
             || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&align_arg)
             || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&indent_arg)
+            || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&font_small_caps_arg)
             || span_style_args
                 .iter()
                 .any(crate::compiler::expand::rewrite::expr_has_unresolved_ident));
@@ -1000,6 +1036,7 @@ fn synthesize_span_and_inline_box_metrics(
                 line_height_arg.clone(),
                 align_arg.clone(),
                 indent_arg.clone(),
+                font_small_caps_arg.clone(),
             ];
             m_args.extend(span_style_args.iter().cloned());
             let call = Expr::Call(CallExpr {
@@ -1043,6 +1080,7 @@ fn synthesize_span_and_inline_box_metrics(
                 line_height_arg.clone(),
                 align_arg.clone(),
                 indent_arg.clone(),
+                font_small_caps_arg.clone(),
             ];
             m_args.extend(span_style_args.iter().cloned());
             let call = Expr::Call(CallExpr {
@@ -1170,6 +1208,7 @@ fn resolve_text_dimensions(
     } else {
         Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span))
     };
+    let font_small_caps_arg = build_text_small_caps_arg(state);
 
     // Height defaults / resolution
     if !state.ports.contains_key("height") {
@@ -1203,6 +1242,7 @@ fn resolve_text_dimensions(
                 start_at_expr,
                 line_height_arg,
                 indent_arg.clone(),
+                font_small_caps_arg.clone(),
             ];
             height_args.extend(span_style_args.iter().cloned());
             let height_call = Expr::Call(CallExpr {
@@ -1236,6 +1276,7 @@ fn resolve_text_dimensions(
                 font_expr,
                 letter_spacing_arg,
                 indent_arg,
+                font_small_caps_arg,
             ];
             width_args.extend(span_style_args.iter().cloned());
             let width_call = Expr::Call(CallExpr {

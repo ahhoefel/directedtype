@@ -5,6 +5,7 @@
 \use "components/Align.dt"
 \use "components/Spacer.dt"
 \use "components/Italic.dt"
+\use "components/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterSeven(
@@ -30,7 +31,7 @@
         // ============================================================
         // Pages 95–96: Arrival at the Tea-Party
         // ============================================================
-        T\SmallCaps{HERE} was a table set out under a tree in\|
+        \SmallCaps{There} was a table set out under a tree in\|
         front of the house, and the March Hare and the\|
         Hatter were having tea at it: a Dormouse was\|
         sitting between them, fast asleep, and the other\|

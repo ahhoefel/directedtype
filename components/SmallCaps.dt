@@ -1,0 +1,7 @@
+// DirectedType Standard Component Library: SmallCaps
+// Inline span that enables small capitals while preserving inherited font properties.
+
+\Span SmallCaps(env font: Font) {
+    \env font = \Font(font: self.font, small_caps: true);
+    \Children
+}

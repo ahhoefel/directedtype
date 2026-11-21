@@ -419,6 +419,11 @@ pub(super) fn finalize_span_component_ports(
             if let Some(Expr::Literal(Literal::Bool(b, _))) = fnode.ports.get("italic") {
                 own_style.italic = *b;
             }
+            if let Some(Expr::Literal(Literal::Bool(b, _))) = fnode.ports.get("small_caps") {
+                if *b || fnode.authored_ports.contains_key("small_caps") {
+                    own_style.small_caps = Some(*b);
+                }
+            }
             if own_style.color.is_none() && fnode.authored_ports.contains_key("color") {
                 if let Some(
                     Expr::Literal(Literal::Color(c, _)) | Expr::Literal(Literal::String(c, _)),
@@ -457,6 +462,9 @@ pub(super) fn finalize_span_component_ports(
         }
         if !sub_span.style.italic && own_style.italic {
             sub_span.style.italic = true;
+        }
+        if sub_span.style.small_caps.is_none() {
+            sub_span.style.small_caps = own_style.small_caps;
         }
         if sub_span.style.baseline_shift == 0.0 && own_style.baseline_shift != 0.0 {
             sub_span.style.baseline_shift = own_style.baseline_shift;

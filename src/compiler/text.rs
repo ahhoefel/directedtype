@@ -1,4 +1,4 @@
-use parley::style::{FontFamily, FontStyle, FontWeight, StyleProperty};
+use parley::style::{FontFamily, FontFeature, FontFeatures, FontStyle, FontWeight, StyleProperty};
 use parley::{FontContext, LayoutContext};
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -100,6 +100,8 @@ thread_local! {
     static LAYOUT_CONTEXT: RefCell<LayoutContext<()>> = RefCell::new(LayoutContext::new());
     static FONT_METRICS_CACHE: RefCell<std::collections::HashMap<(u64, u64, String), FontMetrics>> =
         RefCell::new(std::collections::HashMap::new());
+    static FONT_SMCP_CACHE: RefCell<std::collections::HashMap<(String, u32, bool), bool>> =
+        RefCell::new(std::collections::HashMap::new());
 }
 
 #[inline]
@@ -109,6 +111,7 @@ fn sync_thread_local_font_context() {
         if cell.get() != global_gen {
             FONT_CONTEXT.with(|fc| *fc.borrow_mut() = create_font_context());
             FONT_METRICS_CACHE.with(|c| c.borrow_mut().clear());
+            FONT_SMCP_CACHE.with(|c| c.borrow_mut().clear());
             cell.set(global_gen);
         }
     });
@@ -359,6 +362,192 @@ pub fn compute_manual_justify_line_spaces<B: parley::style::Brush>(
     }
 }
 
+/// Synthesized small-caps height ratio used when a font lacks OpenType `smcp`.
+pub const SYNTHETIC_SMALL_CAPS_SCALE: f64 = 0.74;
+
+type OffsetEntry = (usize, usize, usize, usize);
+
+#[inline]
+fn map_pos_floor(x: usize, entries: &[OffsetEntry]) -> usize {
+    let mut delta: isize = 0;
+    for &(s_start, s_len, d_start, d_len) in entries {
+        if x < s_start {
+            break;
+        }
+        if x < s_start + s_len {
+            return d_start;
+        }
+        delta += (d_len as isize) - (s_len as isize);
+    }
+    ((x as isize) + delta).max(0) as usize
+}
+
+#[inline]
+fn map_pos_ceil(x: usize, entries: &[OffsetEntry]) -> usize {
+    let mut delta: isize = 0;
+    for &(s_start, s_len, d_start, d_len) in entries {
+        if x <= s_start {
+            break;
+        }
+        if x < s_start + s_len {
+            return d_start + d_len;
+        }
+        delta += (d_len as isize) - (s_len as isize);
+    }
+    ((x as isize) + delta).max(0) as usize
+}
+
+/// Checks whether the font resolved for `(font_family, font_weight, font_italic)` contains an OpenType `smcp` feature in its `GSUB` table.
+pub fn font_supports_smcp_with_font_cx(
+    font_cx: &mut FontContext,
+    font_family: Option<&str>,
+    font_weight: f32,
+    font_italic: bool,
+) -> bool {
+    use skrifa::raw::TableProvider;
+
+    let fam_key = font_family.unwrap_or("").to_string();
+    let weight_bits = if font_weight > 0.0 {
+        font_weight.to_bits()
+    } else {
+        400.0f32.to_bits()
+    };
+    let cache_key = (fam_key, weight_bits, font_italic);
+    if let Some(cached) = FONT_SMCP_CACHE.with(|c| c.borrow().get(&cache_key).copied()) {
+        return cached;
+    }
+
+    let mut probe_layout_cx = LayoutContext::<()>::new();
+    let sample = "x";
+    let mut builder = probe_layout_cx.ranged_builder(font_cx, sample, 1.0, true);
+    builder.push_default(StyleProperty::FontSize(16.0));
+    if (font_weight - 400.0).abs() > 1.0 && font_weight > 0.0 {
+        builder.push_default(StyleProperty::FontWeight(FontWeight::new(font_weight)));
+    }
+    if let Some(family) = font_family {
+        if !family.is_empty() {
+            builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
+        }
+    }
+    if font_italic {
+        builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+    }
+    let mut layout = builder.build(sample);
+    layout.break_all_lines(None);
+
+    let mut supported = false;
+    'outer: for line in layout.lines() {
+        for item in line.items() {
+            if let parley::layout::PositionedLayoutItem::GlyphRun(gr) = item {
+                let font = gr.run().font();
+                if let Ok(font_ref) = skrifa::FontRef::from_index(font.data.as_ref(), font.index) {
+                    if let Ok(gsub) = font_ref.gsub() {
+                        if let Ok(fl) = gsub.feature_list() {
+                            if fl
+                                .feature_records()
+                                .iter()
+                                .any(|rec| rec.feature_tag() == skrifa::Tag::new(b"smcp"))
+                            {
+                                supported = true;
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    FONT_SMCP_CACHE.with(|c| {
+        c.borrow_mut().insert(cache_key, supported);
+    });
+    supported
+}
+
+/// Convenience wrapper checking OpenType `smcp` support on the thread-local `FontContext`.
+pub fn font_supports_smcp(
+    font_family: Option<&str>,
+    font_weight: f64,
+    font_italic: bool,
+) -> bool {
+    sync_thread_local_font_context();
+    FONT_CONTEXT.with(|fc_cell| {
+        let mut font_cx = fc_cell.borrow_mut();
+        let w = if font_weight > 0.0 {
+            font_weight as f32
+        } else {
+            400.0
+        };
+        font_supports_smcp_with_font_cx(&mut font_cx, font_family, w, font_italic)
+    })
+}
+
+/// Result of resolving both small caps (native OpenType `smcp` or synthesized uppercase+scale)
+/// and soft hyphens (`U+00AD`) for shaping, together with original-casing `pdf_text` for PDF `/ToUnicode`.
+#[derive(Debug, Clone)]
+pub struct PreparedRichText {
+    pub text: String,
+    pub pdf_text: String,
+    pub spans: Vec<TextSpan>,
+    pub inline_boxes: Vec<InlineBoxSpan>,
+    pub smcp_ranges: Vec<(Range<usize>, bool)>,
+    pub synthetic_size_ranges: Vec<(Range<usize>, f32)>,
+    pub byte_deltas: Vec<(usize, isize)>,
+    pub orig_to_sc_entries: Vec<OffsetEntry>,
+    pub shaped_to_pdf_entries: Vec<OffsetEntry>,
+}
+
+impl PreparedRichText {
+    #[inline]
+    pub fn map_orig_offset_floor(&self, orig_offset: usize) -> usize {
+        let sc = map_pos_floor(orig_offset, &self.orig_to_sc_entries);
+        map_byte_offset_with_deltas(sc, &self.byte_deltas)
+    }
+
+    #[inline]
+    pub fn map_orig_range(&self, orig_range: Range<usize>) -> Range<usize> {
+        let sc_s = map_pos_floor(orig_range.start, &self.orig_to_sc_entries);
+        let sc_e = map_pos_ceil(orig_range.end, &self.orig_to_sc_entries).max(sc_s);
+        let s = map_byte_offset_with_deltas(sc_s, &self.byte_deltas);
+        let e = map_byte_offset_with_deltas(sc_e, &self.byte_deltas);
+        s..e.max(s)
+    }
+
+    #[inline]
+    pub fn map_shaped_to_pdf_range(&self, shaped_range: Range<usize>) -> Range<usize> {
+        if self.shaped_to_pdf_entries.is_empty() {
+            return shaped_range;
+        }
+        let s = map_pos_floor(shaped_range.start, &self.shaped_to_pdf_entries);
+        let e = map_pos_ceil(shaped_range.end, &self.shaped_to_pdf_entries).max(s);
+        s..e
+    }
+}
+
+/// Pushes native OpenType `smcp` feature ranges and synthesized small-caps size overrides
+/// onto a `parley::RangedBuilder`. Must be called AFTER span `FontSize` styles are pushed.
+pub fn push_small_caps_styles<B: parley::style::Brush>(
+    builder: &mut parley::RangedBuilder<'_, B>,
+    smcp_ranges: &[(Range<usize>, bool)],
+    synthetic_size_ranges: &[(Range<usize>, f32)],
+    text_len: usize,
+) {
+    const SMCP_ON: &[FontFeature] = &[FontFeature::new(parley::setting::Tag::new(b"smcp"), 1)];
+    for (range, enabled) in smcp_ranges {
+        if *enabled && !range.is_empty() && range.end <= text_len {
+            builder.push(
+                StyleProperty::FontFeatures(FontFeatures::List(std::borrow::Cow::Borrowed(SMCP_ON))),
+                range.clone(),
+            );
+        }
+    }
+    for (range, scaled_sz) in synthetic_size_ranges {
+        if *scaled_sz > 0.0 && !range.is_empty() && range.end <= text_len {
+            builder.push(StyleProperty::FontSize(*scaled_sz), range.clone());
+        }
+    }
+}
+
 /// Result of resolving soft hyphens (`U+00AD`) for a given `max_width`:
 /// taken line-ending breaks become literal `'-'`, while untaken soft hyphens are stripped.
 #[derive(Debug, Clone)]
@@ -434,6 +623,44 @@ fn splice_rich_text(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn splice_prepared_rich_text(
+    text: &mut String,
+    pdf_text: &mut String,
+    spans: &mut [TextSpan],
+    boxes: &mut [InlineBoxSpan],
+    smcp_ranges: &mut Vec<(Range<usize>, bool)>,
+    synthetic_size_ranges: &mut Vec<(Range<usize>, f32)>,
+    shaped_to_pdf_entries: &mut [OffsetEntry],
+    shy_sc_and_pdf: &mut Vec<(usize, usize)>,
+    sc_pos: usize,
+    pdf_pos: usize,
+    old_len: usize,
+    replacement: &str,
+) {
+    let new_len = replacement.len();
+    splice_rich_text(text, spans, boxes, sc_pos, old_len, replacement);
+    pdf_text.replace_range(pdf_pos..pdf_pos + old_len, replacement);
+    for (r, _) in smcp_ranges.iter_mut() {
+        let s = adjust_offset_for_splice(r.start, sc_pos, old_len, new_len);
+        let e = adjust_offset_for_splice(r.end, sc_pos, old_len, new_len);
+        *r = s..e.max(s);
+    }
+    for (r, _) in synthetic_size_ranges.iter_mut() {
+        let s = adjust_offset_for_splice(r.start, sc_pos, old_len, new_len);
+        let e = adjust_offset_for_splice(r.end, sc_pos, old_len, new_len);
+        *r = s..e.max(s);
+    }
+    for entry in shaped_to_pdf_entries.iter_mut() {
+        entry.0 = adjust_offset_for_splice(entry.0, sc_pos, old_len, new_len);
+        entry.2 = adjust_offset_for_splice(entry.2, pdf_pos, old_len, new_len);
+    }
+    for (sp, pp) in shy_sc_and_pdf.iter_mut() {
+        *sp = adjust_offset_for_splice(*sp, sc_pos, old_len, new_len);
+        *pp = adjust_offset_for_splice(*pp, pdf_pos, old_len, new_len);
+    }
+}
+
 /// Reserved inline-box ID representing a paragraph's first-line indent.
 pub const INDENT_INLINE_BOX_ID: u64 = u64::MAX;
 
@@ -467,6 +694,8 @@ fn build_probe_layout(
     max_width: f32,
     indent: f64,
     spans: &[TextSpan],
+    smcp_ranges: &[(Range<usize>, bool)],
+    synthetic_size_ranges: &[(Range<usize>, f32)],
     inline_boxes: &[InlineBoxSpan],
 ) -> parley::Layout<()> {
     let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
@@ -517,6 +746,7 @@ fn build_probe_layout(
             }
         }
     }
+    push_small_caps_styles(&mut builder, smcp_ranges, synthetic_size_ranges, text.len());
     push_first_line_indent_box(
         &mut builder,
         indent,
@@ -534,6 +764,312 @@ fn build_probe_layout(
     let mut layout = builder.build(text);
     layout.break_all_lines(Some(max_width));
     layout
+}
+
+/// Resolves small caps (native OpenType `smcp` or synthesized uppercase+scale) and discretionary soft
+/// hyphens (`U+00AD`) for `max_width`. Returns `None` on the zero-cost fast path when neither
+/// small caps nor `U+00AD` is active.
+#[allow(clippy::too_many_arguments)]
+pub fn prepare_rich_text_for_shaping(
+    font_cx: &mut FontContext,
+    text: &str,
+    font_size: f32,
+    font_weight: f32,
+    font_family: Option<&str>,
+    font_italic: bool,
+    font_small_caps: bool,
+    line_height: Option<f64>,
+    max_width: Option<f64>,
+    indent: f64,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+) -> Option<PreparedRichText> {
+    let any_small_caps =
+        font_small_caps || spans.iter().any(|s| s.style.small_caps == Some(true));
+    let has_shy_raw = text.contains(SOFT_HYPHEN);
+    if !any_small_caps && !has_shy_raw {
+        return None;
+    }
+
+    let mut cur_text = String::with_capacity(text.len());
+    let mut cur_spans = spans.to_vec();
+    let mut cur_boxes = inline_boxes.to_vec();
+    let mut smcp_ranges: Vec<(Range<usize>, bool)> = Vec::new();
+    let mut synthetic_size_ranges: Vec<(Range<usize>, f32)> = Vec::new();
+    let mut orig_to_sc_entries: Vec<OffsetEntry> = Vec::new();
+    let mut shaped_to_pdf_entries: Vec<OffsetEntry> = Vec::new();
+
+    if any_small_caps {
+        let mut boundaries: Vec<usize> = Vec::with_capacity(spans.len() * 2 + 2);
+        boundaries.push(0);
+        boundaries.push(text.len());
+        for s in spans {
+            if !s.range.is_empty() {
+                let cs = s.range.start.min(text.len());
+                let ce = s.range.end.min(text.len());
+                if cs < ce && text.is_char_boundary(cs) && text.is_char_boundary(ce) {
+                    boundaries.push(cs);
+                    boundaries.push(ce);
+                }
+            }
+        }
+        boundaries.sort_unstable();
+        boundaries.dedup();
+
+        for w in boundaries.windows(2) {
+            let (seg_start, seg_end) = (w[0], w[1]);
+            if seg_start >= seg_end {
+                continue;
+            }
+            let mut eff_size = font_size as f64;
+            let mut eff_weight = font_weight;
+            let mut eff_family = font_family;
+            let mut eff_italic = font_italic;
+            let mut eff_small_caps = font_small_caps;
+            for sp in spans {
+                let rs = sp.range.start.min(text.len());
+                let re = sp.range.end.min(text.len());
+                if rs <= seg_start && seg_end <= re {
+                    if let Some(sz) = sp.style.font_size {
+                        if sz > 0.0 {
+                            eff_size = sz;
+                        }
+                    }
+                    if let Some(wt) = sp.style.font_weight {
+                        if wt > 0.0 {
+                            eff_weight = wt as f32;
+                        }
+                    }
+                    if let Some(ref fam) = sp.style.font_family {
+                        if !fam.is_empty() {
+                            eff_family = Some(fam.as_str());
+                        }
+                    }
+                    if sp.style.italic {
+                        eff_italic = true;
+                    }
+                    if let Some(sc) = sp.style.small_caps {
+                        eff_small_caps = sc;
+                    }
+                }
+            }
+
+            let seg_slice = &text[seg_start..seg_end];
+            if !eff_small_caps {
+                cur_text.push_str(seg_slice);
+                continue;
+            }
+
+            if font_supports_smcp_with_font_cx(font_cx, eff_family, eff_weight, eff_italic) {
+                let out_start = cur_text.len();
+                cur_text.push_str(seg_slice);
+                let out_end = cur_text.len();
+                if smcp_ranges
+                    .last()
+                    .is_some_and(|(last_r, enabled)| *enabled && last_r.end == out_start)
+                {
+                    smcp_ranges.last_mut().unwrap().0.end = out_end;
+                } else {
+                    smcp_ranges.push((out_start..out_end, true));
+                }
+            } else {
+                let scaled_sz = (eff_size * SYNTHETIC_SMALL_CAPS_SCALE) as f32;
+                for (rel_off, ch) in seg_slice.char_indices() {
+                    let orig_pos = seg_start + rel_off;
+                    let ch_len = ch.len_utf8();
+                    let out_start = cur_text.len();
+                    if ch.is_lowercase() {
+                        let mut upper_chars = 0usize;
+                        for uch in ch.to_uppercase() {
+                            cur_text.push(uch);
+                            upper_chars += 1;
+                        }
+                        let out_end = cur_text.len();
+                        let upper_len = out_end - out_start;
+                        if upper_len != ch_len || upper_chars != 1 || ch_len > 1 {
+                            orig_to_sc_entries.push((orig_pos, ch_len, out_start, upper_len));
+                            shaped_to_pdf_entries.push((out_start, upper_len, orig_pos, ch_len));
+                        }
+                        if synthetic_size_ranges.last().is_some_and(|(last_r, prev_sz)| {
+                            last_r.end == out_start && (*prev_sz - scaled_sz).abs() < 1e-4
+                        }) {
+                            synthetic_size_ranges.last_mut().unwrap().0.end = out_end;
+                        } else {
+                            synthetic_size_ranges.push((out_start..out_end, scaled_sz));
+                        }
+                    } else {
+                        cur_text.push(ch);
+                    }
+                }
+            }
+        }
+
+        if !orig_to_sc_entries.is_empty() {
+            for span in cur_spans.iter_mut() {
+                let s = map_pos_floor(span.range.start, &orig_to_sc_entries);
+                let e = map_pos_ceil(span.range.end, &orig_to_sc_entries).max(s);
+                span.range = s..e;
+            }
+            for ib in cur_boxes.iter_mut() {
+                ib.index = map_pos_floor(ib.index, &orig_to_sc_entries);
+            }
+        }
+    } else {
+        cur_text.push_str(text);
+    }
+
+    let mut pdf_text = text.to_string();
+    let mut byte_deltas: Vec<(usize, isize)> = Vec::new();
+
+    if cur_text.contains(SOFT_HYPHEN) {
+        let mut shy_sc_and_pdf: Vec<(usize, usize)> = cur_text
+            .match_indices(SOFT_HYPHEN)
+            .map(|(idx, _)| idx)
+            .zip(pdf_text.match_indices(SOFT_HYPHEN).map(|(idx, _)| idx))
+            .collect();
+        let mut orig_sc_shys: Vec<usize> = cur_text
+            .match_indices(SOFT_HYPHEN)
+            .map(|(idx, _)| idx)
+            .collect();
+        byte_deltas.reserve(orig_sc_shys.len());
+
+        if let Some(w) = max_width.filter(|&w| w > 0.0) {
+            let mut probe_layout_cx = LayoutContext::<()>::new();
+            let w_f32 = w as f32;
+
+            while cur_text.contains(SOFT_HYPHEN) {
+                let layout = build_probe_layout(
+                    font_cx,
+                    &mut probe_layout_cx,
+                    &cur_text,
+                    font_size,
+                    font_weight,
+                    font_family,
+                    font_italic,
+                    line_height,
+                    w_f32,
+                    indent,
+                    &cur_spans,
+                    &smcp_ranges,
+                    &synthetic_size_ranges,
+                    &cur_boxes,
+                );
+                let lines: Vec<_> = layout.lines().collect();
+                let num_lines = lines.len();
+                let mut found_break: Option<(usize, usize)> = None;
+                for (idx, line) in lines.iter().enumerate() {
+                    if idx + 1 >= num_lines {
+                        break;
+                    }
+                    let r = line.text_range();
+                    if r.end >= SOFT_HYPHEN_LEN && cur_text[..r.end].ends_with(SOFT_HYPHEN) {
+                        found_break = Some((idx, r.end - SOFT_HYPHEN_LEN));
+                        break;
+                    }
+                }
+
+                let Some((line_idx, sc_shy_pos)) = found_break else {
+                    break;
+                };
+
+                let k = cur_text[..sc_shy_pos].matches(SOFT_HYPHEN).count();
+                let orig_sc_pos = orig_sc_shys.remove(k);
+                let (_, pdf_shy_pos) = shy_sc_and_pdf.remove(k);
+
+                splice_prepared_rich_text(
+                    &mut cur_text,
+                    &mut pdf_text,
+                    &mut cur_spans,
+                    &mut cur_boxes,
+                    &mut smcp_ranges,
+                    &mut synthetic_size_ranges,
+                    &mut shaped_to_pdf_entries,
+                    &mut shy_sc_and_pdf,
+                    sc_shy_pos,
+                    pdf_shy_pos,
+                    SOFT_HYPHEN_LEN,
+                    "-",
+                );
+                // Find shifted pdf_shy_pos for potential rollback below (at pdf_shy_pos with len 1)
+                let inserted_pdf_pos = pdf_shy_pos;
+
+                let verify_layout = build_probe_layout(
+                    font_cx,
+                    &mut probe_layout_cx,
+                    &cur_text,
+                    font_size,
+                    font_weight,
+                    font_family,
+                    font_italic,
+                    line_height,
+                    w_f32,
+                    indent,
+                    &cur_spans,
+                    &smcp_ranges,
+                    &synthetic_size_ranges,
+                    &cur_boxes,
+                );
+                let fits_with_hyphen = verify_layout.lines().nth(line_idx).is_some_and(|l| {
+                    let nr = l.text_range();
+                    nr.start <= sc_shy_pos && sc_shy_pos < nr.end
+                });
+
+                if fits_with_hyphen {
+                    byte_deltas.push((orig_sc_pos, -1));
+                } else {
+                    splice_prepared_rich_text(
+                        &mut cur_text,
+                        &mut pdf_text,
+                        &mut cur_spans,
+                        &mut cur_boxes,
+                        &mut smcp_ranges,
+                        &mut synthetic_size_ranges,
+                        &mut shaped_to_pdf_entries,
+                        &mut shy_sc_and_pdf,
+                        sc_shy_pos,
+                        inserted_pdf_pos,
+                        1,
+                        "",
+                    );
+                    byte_deltas.push((orig_sc_pos, -(SOFT_HYPHEN_LEN as isize)));
+                }
+            }
+        }
+
+        while let Some(sc_shy_pos) = cur_text.find(SOFT_HYPHEN) {
+            let orig_sc_pos = orig_sc_shys.remove(0);
+            let (_, pdf_shy_pos) = shy_sc_and_pdf.remove(0);
+            splice_prepared_rich_text(
+                &mut cur_text,
+                &mut pdf_text,
+                &mut cur_spans,
+                &mut cur_boxes,
+                &mut smcp_ranges,
+                &mut synthetic_size_ranges,
+                &mut shaped_to_pdf_entries,
+                &mut shy_sc_and_pdf,
+                sc_shy_pos,
+                pdf_shy_pos,
+                SOFT_HYPHEN_LEN,
+                "",
+            );
+            byte_deltas.push((orig_sc_pos, -(SOFT_HYPHEN_LEN as isize)));
+        }
+
+        byte_deltas.sort_by_key(|&(pos, _)| pos);
+    }
+
+    Some(PreparedRichText {
+        text: cur_text,
+        pdf_text,
+        spans: cur_spans,
+        inline_boxes: cur_boxes,
+        smcp_ranges,
+        synthetic_size_ranges,
+        byte_deltas,
+        orig_to_sc_entries,
+        shaped_to_pdf_entries,
+    })
 }
 
 /// Resolves discretionary soft hyphens (`U+00AD`) for `max_width` using `font_cx`.
@@ -555,117 +1091,25 @@ pub fn materialize_soft_hyphens_with_font_cx(
     if !text.contains(SOFT_HYPHEN) {
         return None;
     }
-
-    let mut cur_text = text.to_string();
-    let mut cur_spans = spans.to_vec();
-    let mut cur_boxes = inline_boxes.to_vec();
-    let mut shy_orig_positions: Vec<usize> = text
-        .match_indices(SOFT_HYPHEN)
-        .map(|(idx, _)| idx)
-        .collect();
-    let mut byte_deltas: Vec<(usize, isize)> = Vec::with_capacity(shy_orig_positions.len());
-
-    if let Some(w) = max_width.filter(|&w| w > 0.0) {
-        let mut probe_layout_cx = LayoutContext::<()>::new();
-        let w_f32 = w as f32;
-
-        while cur_text.contains(SOFT_HYPHEN) {
-            let layout = build_probe_layout(
-                font_cx,
-                &mut probe_layout_cx,
-                &cur_text,
-                font_size,
-                font_weight,
-                font_family,
-                font_italic,
-                line_height,
-                w_f32,
-                indent,
-                &cur_spans,
-                &cur_boxes,
-            );
-            let lines: Vec<_> = layout.lines().collect();
-            let num_lines = lines.len();
-            let mut found_break: Option<(usize, usize)> = None;
-            for (idx, line) in lines.iter().enumerate() {
-                if idx + 1 >= num_lines {
-                    break;
-                }
-                let r = line.text_range();
-                if r.end >= SOFT_HYPHEN_LEN && cur_text[..r.end].ends_with(SOFT_HYPHEN) {
-                    found_break = Some((idx, r.end - SOFT_HYPHEN_LEN));
-                    break;
-                }
-            }
-
-            let Some((line_idx, shy_pos)) = found_break else {
-                break;
-            };
-
-            let k = cur_text[..shy_pos].matches(SOFT_HYPHEN).count();
-            let orig_pos = shy_orig_positions.remove(k);
-
-            // Tentatively materialize this broken U+00AD as ASCII '-'
-            splice_rich_text(
-                &mut cur_text,
-                &mut cur_spans,
-                &mut cur_boxes,
-                shy_pos,
-                SOFT_HYPHEN_LEN,
-                "-",
-            );
-
-            // Verify that the syllable plus real '-' glyph still fits on `line_idx`
-            let verify_layout = build_probe_layout(
-                font_cx,
-                &mut probe_layout_cx,
-                &cur_text,
-                font_size,
-                font_weight,
-                font_family,
-                font_italic,
-                line_height,
-                w_f32,
-                indent,
-                &cur_spans,
-                &cur_boxes,
-            );
-            let fits_with_hyphen = verify_layout.lines().nth(line_idx).is_some_and(|l| {
-                let nr = l.text_range();
-                nr.start <= shy_pos && shy_pos < nr.end
-            });
-
-            if fits_with_hyphen {
-                byte_deltas.push((orig_pos, -1));
-            } else {
-                // Adding '-' overflowed `max_width`; remove this break candidate so Parley breaks earlier
-                splice_rich_text(&mut cur_text, &mut cur_spans, &mut cur_boxes, shy_pos, 1, "");
-                byte_deltas.push((orig_pos, -(SOFT_HYPHEN_LEN as isize)));
-            }
-        }
-    }
-
-    // Strip all remaining untaken soft hyphens so renderers never emit U+00AD or .notdef glyphs
-    while let Some(shy_pos) = cur_text.find(SOFT_HYPHEN) {
-        let orig_pos = shy_orig_positions.remove(0);
-        splice_rich_text(
-            &mut cur_text,
-            &mut cur_spans,
-            &mut cur_boxes,
-            shy_pos,
-            SOFT_HYPHEN_LEN,
-            "",
-        );
-        byte_deltas.push((orig_pos, -(SOFT_HYPHEN_LEN as isize)));
-    }
-
-    byte_deltas.sort_by_key(|&(pos, _)| pos);
-
+    let prep = prepare_rich_text_for_shaping(
+        font_cx,
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        font_italic,
+        false,
+        line_height,
+        max_width,
+        indent,
+        spans,
+        inline_boxes,
+    )?;
     Some(MaterializedRichText {
-        text: cur_text,
-        spans: cur_spans,
-        inline_boxes: cur_boxes,
-        byte_deltas,
+        text: prep.text,
+        spans: prep.spans,
+        inline_boxes: prep.inline_boxes,
+        byte_deltas: prep.byte_deltas,
     })
 }
 
@@ -695,6 +1139,7 @@ pub fn measure_rich_text_bounds_with_boxes(
         0.0,
         spans,
         inline_boxes,
+        false,
     )
 }
 
@@ -712,6 +1157,7 @@ pub fn measure_rich_text_bounds_with_boxes_and_spacing(
     indent: f64,
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
+    font_small_caps: bool,
 ) -> (f64, f64) {
     if text.is_empty() && inline_boxes.is_empty() {
         return (0.0, 0.0);
@@ -726,22 +1172,35 @@ pub fn measure_rich_text_bounds_with_boxes_and_spacing(
             let mut font_cx = font_cx_cell.borrow_mut();
             let mut layout_cx = layout_cx_cell.borrow_mut();
 
-            let mat = materialize_soft_hyphens_with_font_cx(
+            let prep = prepare_rich_text_for_shaping(
                 &mut font_cx,
                 text,
                 size,
                 weight,
                 font_family,
                 false,
+                font_small_caps,
                 line_height,
                 max_width,
                 indent,
                 spans,
                 inline_boxes,
             );
-            let (eff_text, eff_spans, eff_boxes) = match &mat {
-                Some(m_rt) => (m_rt.text.as_str(), m_rt.spans.as_slice(), m_rt.inline_boxes.as_slice()),
-                None => (text, spans, inline_boxes),
+            let (eff_text, eff_spans, eff_boxes, smcp_ranges, synth_ranges): (
+                &str,
+                &[TextSpan],
+                &[InlineBoxSpan],
+                &[(Range<usize>, bool)],
+                &[(Range<usize>, f32)],
+            ) = match &prep {
+                Some(p) => (
+                    p.text.as_str(),
+                    p.spans.as_slice(),
+                    p.inline_boxes.as_slice(),
+                    p.smcp_ranges.as_slice(),
+                    p.synthetic_size_ranges.as_slice(),
+                ),
+                None => (text, spans, inline_boxes, &[], &[]),
             };
 
             let mut builder = layout_cx.ranged_builder(&mut font_cx, eff_text, 1.0, true);
@@ -784,6 +1243,7 @@ pub fn measure_rich_text_bounds_with_boxes_and_spacing(
                     }
                 }
             }
+            push_small_caps_styles(&mut builder, smcp_ranges, synth_ranges, eff_text.len());
             push_first_line_indent_box(
                 &mut builder,
                 indent,
@@ -924,6 +1384,7 @@ pub struct ShapedParagraph {
     pub last_bottom_coord: f64,
     pub full_y_offset: f64,
     pub byte_deltas: Vec<(usize, isize)>,
+    pub sc_entries: Vec<(usize, usize, usize, usize)>,
 }
 
 impl ShapedParagraph {
@@ -975,7 +1436,10 @@ impl ShapedParagraph {
             .char_indices()
             .rev()
             .find(|&(_, ch)| !ch.is_whitespace() && ch != SOFT_HYPHEN)
-            .map(|(idx, _)| map_byte_offset_with_deltas(idx, &self.byte_deltas));
+            .map(|(idx, _)| {
+                let sc = map_pos_floor(idx, &self.sc_entries);
+                map_byte_offset_with_deltas(sc, &self.byte_deltas)
+            });
         let Some(anchor_byte) = target_byte else {
             return 0;
         };
@@ -1007,6 +1471,8 @@ pub fn shape_paragraph_lines(
     line_height: Option<f64>,
     align: Option<&str>,
     indent: f64,
+    font_italic: bool,
+    font_small_caps: bool,
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
 ) -> ShapedParagraph {
@@ -1019,6 +1485,7 @@ pub fn shape_paragraph_lines(
             last_bottom_coord: 0.0,
             full_y_offset: 0.0,
             byte_deltas: Vec::new(),
+            sc_entries: Vec::new(),
         };
     }
 
@@ -1031,27 +1498,39 @@ pub fn shape_paragraph_lines(
             let mut font_cx = font_cx_cell.borrow_mut();
             let mut layout_cx = layout_cx_cell.borrow_mut();
 
-            let mat = materialize_soft_hyphens_with_font_cx(
+            let prep = prepare_rich_text_for_shaping(
                 &mut font_cx,
                 text,
                 size,
                 weight,
                 font_family,
-                false,
+                font_italic,
+                font_small_caps,
                 line_height,
                 max_width,
                 indent,
                 spans,
                 inline_boxes,
             );
-            let (eff_text, eff_spans, eff_boxes, byte_deltas) = match &mat {
-                Some(m_rt) => (
-                    m_rt.text.as_str(),
-                    m_rt.spans.as_slice(),
-                    m_rt.inline_boxes.as_slice(),
-                    m_rt.byte_deltas.clone(),
+            let (eff_text, eff_spans, eff_boxes, smcp_ranges, synth_ranges, byte_deltas, sc_entries): (
+                &str,
+                &[TextSpan],
+                &[InlineBoxSpan],
+                &[(Range<usize>, bool)],
+                &[(Range<usize>, f32)],
+                Vec<(usize, isize)>,
+                Vec<(usize, usize, usize, usize)>,
+            ) = match &prep {
+                Some(p) => (
+                    p.text.as_str(),
+                    p.spans.as_slice(),
+                    p.inline_boxes.as_slice(),
+                    p.smcp_ranges.as_slice(),
+                    p.synthetic_size_ranges.as_slice(),
+                    p.byte_deltas.clone(),
+                    p.orig_to_sc_entries.clone(),
                 ),
-                None => (text, spans, inline_boxes, Vec::new()),
+                None => (text, spans, inline_boxes, &[], &[], Vec::new(), Vec::new()),
             };
 
             let mut builder = layout_cx.ranged_builder(&mut font_cx, eff_text, 1.0, true);
@@ -1063,6 +1542,9 @@ pub fn shape_paragraph_lines(
                 if !family.is_empty() {
                     builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
                 }
+            }
+            if font_italic {
+                builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
             }
             if let Some(lh) = line_height {
                 if lh > 0.0 {
@@ -1093,6 +1575,7 @@ pub fn shape_paragraph_lines(
                     }
                 }
             }
+            push_small_caps_styles(&mut builder, smcp_ranges, synth_ranges, eff_text.len());
             push_first_line_indent_box(
                 &mut builder,
                 indent,
@@ -1277,6 +1760,7 @@ pub fn shape_paragraph_lines(
                 last_bottom_coord: bottom_coord,
                 full_y_offset: -top_coord,
                 byte_deltas,
+                sc_entries,
             }
         })
     })
@@ -1557,6 +2041,8 @@ pub fn compute_span_fragments_with_metrics(
         line_height,
         align,
         0.0,
+        false,
+        false,
         spans,
         &[],
         child_shifts,
@@ -1567,6 +2053,7 @@ pub fn compute_span_fragments_with_metrics(
 
 /// Measures a rich text layout (with inline boxes) and returns full `SpanLayoutMetrics`
 /// for every inline `NodeId` referenced in `spans`.
+#[allow(clippy::too_many_arguments)]
 pub fn compute_span_fragments_with_metrics_and_boxes(
     text: &str,
     font_size: f64,
@@ -1576,6 +2063,8 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
     line_height: Option<f64>,
     align: Option<&str>,
     indent: f64,
+    font_italic: bool,
+    font_small_caps: bool,
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
     child_shifts: &HashMap<NodeId, f64>,
@@ -1615,22 +2104,35 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
         let mut font_cx = font_cx_cell.borrow_mut();
         let mut layout_cx = LayoutContext::<[u8; 4]>::new();
 
-        let mat = materialize_soft_hyphens_with_font_cx(
+        let prep = prepare_rich_text_for_shaping(
             &mut font_cx,
             text,
             size,
             weight,
             font_family,
-            false,
+            font_italic,
+            font_small_caps,
             line_height,
             max_width,
             indent,
             spans,
             inline_boxes,
         );
-        let (eff_text, eff_spans, eff_boxes) = match &mat {
-            Some(m_rt) => (m_rt.text.as_str(), m_rt.spans.as_slice(), m_rt.inline_boxes.as_slice()),
-            None => (text, spans, inline_boxes),
+        let (eff_text, eff_spans, eff_boxes, smcp_ranges, synth_ranges): (
+            &str,
+            &[TextSpan],
+            &[InlineBoxSpan],
+            &[(Range<usize>, bool)],
+            &[(Range<usize>, f32)],
+        ) = match &prep {
+            Some(p) => (
+                p.text.as_str(),
+                p.spans.as_slice(),
+                p.inline_boxes.as_slice(),
+                p.smcp_ranges.as_slice(),
+                p.synthetic_size_ranges.as_slice(),
+            ),
+            None => (text, spans, inline_boxes, &[], &[]),
         };
 
         let mut builder = layout_cx.ranged_builder(&mut font_cx, eff_text, 1.0, true);
@@ -1643,6 +2145,9 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
             if !family.is_empty() {
                 builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
             }
+        }
+        if font_italic {
+            builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
         }
         if let Some(lh) = line_height {
             if lh > 0.0 {
@@ -1676,6 +2181,7 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
                 }
             }
         }
+        push_small_caps_styles(&mut builder, smcp_ranges, synth_ranges, eff_text.len());
         push_first_line_indent_box(
             &mut builder,
             indent,
@@ -1860,6 +2366,7 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
                     indent,
                     spans,
                     inline_boxes,
+                    font_small_caps,
                 );
                 if prefix_text.is_empty() && inline_boxes.is_empty() && !text.is_empty() && indent > 0.0 {
                     px = indent;
@@ -1918,6 +2425,7 @@ pub fn compute_span_range_metrics(
         line_height,
         align,
         0.0,
+        false,
         spans,
         &[],
         text_x,
@@ -1930,6 +2438,7 @@ pub fn compute_span_range_metrics(
 
 /// Computes the post-shaping `SpanLayoutMetrics` for a specific byte range `span_range` (or a specific `InlineBox` node)
 /// inside a rich text block containing styled spans and inline boxes.
+#[allow(clippy::too_many_arguments)]
 pub fn compute_span_range_metrics_with_boxes(
     text: &str,
     font_size: f64,
@@ -1940,6 +2449,7 @@ pub fn compute_span_range_metrics_with_boxes(
     line_height: Option<f64>,
     align: Option<&str>,
     indent: f64,
+    font_small_caps: bool,
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
     text_x: f64,
@@ -1971,22 +2481,35 @@ pub fn compute_span_range_metrics_with_boxes(
         let mut font_cx = font_cx_cell.borrow_mut();
         let mut layout_cx = LayoutContext::<[u8; 4]>::new();
 
-        let mat = materialize_soft_hyphens_with_font_cx(
+        let prep = prepare_rich_text_for_shaping(
             &mut font_cx,
             text,
             size,
             weight,
             font_family,
             false,
+            font_small_caps,
             line_height,
             max_width,
             indent,
             spans,
             inline_boxes,
         );
-        let (eff_text, eff_spans, eff_boxes) = match &mat {
-            Some(m_rt) => (m_rt.text.as_str(), m_rt.spans.as_slice(), m_rt.inline_boxes.as_slice()),
-            None => (text, spans, inline_boxes),
+        let (eff_text, eff_spans, eff_boxes, smcp_ranges, synth_ranges): (
+            &str,
+            &[TextSpan],
+            &[InlineBoxSpan],
+            &[(Range<usize>, bool)],
+            &[(Range<usize>, f32)],
+        ) = match &prep {
+            Some(p) => (
+                p.text.as_str(),
+                p.spans.as_slice(),
+                p.inline_boxes.as_slice(),
+                p.smcp_ranges.as_slice(),
+                p.synthetic_size_ranges.as_slice(),
+            ),
+            None => (text, spans, inline_boxes, &[], &[]),
         };
 
         let mut builder = layout_cx.ranged_builder(&mut font_cx, eff_text, 1.0, true);
@@ -2032,6 +2555,7 @@ pub fn compute_span_range_metrics_with_boxes(
                 }
             }
         }
+        push_small_caps_styles(&mut builder, smcp_ranges, synth_ranges, eff_text.len());
         push_first_line_indent_box(
             &mut builder,
             indent,
@@ -2199,8 +2723,8 @@ pub fn compute_span_range_metrics_with_boxes(
                 }
             }
 
-            let eff_span_range = match &mat {
-                Some(m_rt) => m_rt.map_range(span_range.clone()),
+            let eff_span_range = match &prep {
+                Some(p) => p.map_orig_range(span_range.clone()),
                 None => span_range.clone(),
             };
             let mut min_gx = f32::MAX;
@@ -2255,6 +2779,7 @@ pub fn compute_span_range_metrics_with_boxes(
             indent,
             spans,
             inline_boxes,
+            font_small_caps,
         );
         if prefix_text.is_empty() && inline_boxes.is_empty() && !text.is_empty() && indent > 0.0 {
             px = indent;
@@ -2344,6 +2869,7 @@ pub struct SpanStyle {
     pub font_weight: Option<f64>,
     pub font_family: Option<String>,
     pub italic: bool,
+    pub small_caps: Option<bool>,
     pub underline: bool,
     pub baseline_shift: f64,
     pub url: Option<String>,
@@ -2736,6 +3262,8 @@ mod tests {
             None,
             None,
             0.0,
+            false,
+            false,
             &[],
             &[],
         );
@@ -2750,6 +3278,8 @@ mod tests {
             None,
             None,
             0.0,
+            false,
+            false,
             &[],
             &[],
         );
@@ -2762,6 +3292,224 @@ mod tests {
             shaped_nb.lines[0].byte_range.end <= "eating ".len(),
             "Non-breaking hyphen must keep 'bread-and-butter' intact on line 1"
         );
+    }
+
+    #[test]
+    fn test_font_supports_smcp_detection() {
+        register_local_fonts_for_base_dir(std::path::Path::new("examples/alice"));
+        assert!(
+            !font_supports_smcp(Some("Old Standard TT"), 400.0, false),
+            "Old Standard TT lacks OpenType smcp and should use synthetic fallback"
+        );
+        assert!(
+            !font_supports_smcp(Some("Arial"), 400.0, false),
+            "Arial lacks OpenType smcp and should use synthetic fallback"
+        );
+        for native_family in ["STIX Two Text", "Avenir Next"] {
+            if font_family_exists(native_family) {
+                assert!(
+                    font_supports_smcp(Some(native_family), 400.0, false),
+                    "{} should report native OpenType smcp support",
+                    native_family
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_small_caps_synthetic_and_native_shaping() {
+        sync_thread_local_font_context();
+        FONT_CONTEXT.with(|fc| {
+            let mut font_cx = fc.borrow_mut();
+
+            // 1. Synthetic fallback preserves uppercase/punctuation sizes and keeps lowercase pdf_text
+            let prep_for = prepare_rich_text_for_shaping(
+                &mut font_cx,
+                "For.",
+                16.0,
+                400.0,
+                Some("Arial"),
+                false,
+                true,
+                None,
+                None,
+                0.0,
+                &[],
+                &[],
+            )
+            .expect("synthetic small caps should prepare text");
+            assert_eq!(prep_for.text, "FOR.");
+            assert_eq!(prep_for.pdf_text, "For.");
+            assert!(prep_for.smcp_ranges.is_empty());
+            assert_eq!(
+                prep_for.synthetic_size_ranges,
+                vec![(1..3, (16.0 * SYNTHETIC_SMALL_CAPS_SCALE) as f32)]
+            );
+
+            // 2. Multi-byte uppercase expansion ("ß" -> "SS") maps clusters back to valid UTF-8 boundaries in pdf_text
+            let prep_strasse = prepare_rich_text_for_shaping(
+                &mut font_cx,
+                "straße",
+                16.0,
+                400.0,
+                Some("Arial"),
+                false,
+                true,
+                None,
+                None,
+                0.0,
+                &[],
+                &[],
+            )
+            .expect("synthetic small caps should prepare strasse");
+            assert_eq!(prep_strasse.text, "STRASSE");
+            assert_eq!(prep_strasse.pdf_text, "straße");
+            assert_eq!(prep_strasse.map_shaped_to_pdf_range(4..5), 4..6);
+            assert_eq!(prep_strasse.map_shaped_to_pdf_range(5..6), 4..6);
+            assert_eq!(prep_strasse.map_shaped_to_pdf_range(6..7), 6..7);
+            assert!(prep_strasse.pdf_text.is_char_boundary(4));
+            assert!(prep_strasse.pdf_text.is_char_boundary(6));
+            assert_eq!(&prep_strasse.pdf_text[4..6], "ß");
+        });
+
+        let (sc_w, _) = measure_rich_text_bounds_with_boxes_and_spacing(
+            "Hello",
+            16.0,
+            400.0,
+            Some("Arial"),
+            0.0,
+            None,
+            None,
+            None,
+            None,
+            0.0,
+            &[],
+            &[],
+            true,
+        );
+        let (all_caps_w, _) = measure_rich_text_bounds_with_boxes_and_spacing(
+            "HELLO",
+            16.0,
+            400.0,
+            Some("Arial"),
+            0.0,
+            None,
+            None,
+            None,
+            None,
+            0.0,
+            &[],
+            &[],
+            false,
+        );
+        let (normal_w, _) = measure_rich_text_bounds_with_boxes_and_spacing(
+            "Hello",
+            16.0,
+            400.0,
+            Some("Arial"),
+            0.0,
+            None,
+            None,
+            None,
+            None,
+            0.0,
+            &[],
+            &[],
+            false,
+        );
+        assert!(sc_w < all_caps_w, "sc_w ({}) < all_caps_w ({})", sc_w, all_caps_w);
+        assert!(
+            (sc_w - normal_w).abs() > 0.1,
+            "sc_w ({}) should differ from normal_w ({})",
+            sc_w,
+            normal_w
+        );
+
+        // 3. Native OpenType smcp path keeps original text without synthetic size scaling
+        if font_family_exists("STIX Two Text") && font_supports_smcp(Some("STIX Two Text"), 400.0, false) {
+            FONT_CONTEXT.with(|fc| {
+                LAYOUT_CONTEXT.with(|lc| {
+                    let mut font_cx = fc.borrow_mut();
+                    let prep_native = prepare_rich_text_for_shaping(
+                        &mut font_cx,
+                        "Hello",
+                        16.0,
+                        400.0,
+                        Some("STIX Two Text"),
+                        false,
+                        true,
+                        None,
+                        None,
+                        0.0,
+                        &[],
+                        &[],
+                    )
+                    .expect("native smcp should prepare text");
+                    assert_eq!(prep_native.text, "Hello");
+                    assert_eq!(prep_native.pdf_text, "Hello");
+                    assert!(prep_native.synthetic_size_ranges.is_empty());
+                    assert_eq!(prep_native.smcp_ranges, vec![(0..5, true)]);
+
+                    let mut layout_cx = lc.borrow_mut();
+                    let smcp_layout = build_probe_layout(
+                        &mut font_cx,
+                        &mut layout_cx,
+                        &prep_native.text,
+                        16.0,
+                        400.0,
+                        Some("STIX Two Text"),
+                        false,
+                        None,
+                        f32::MAX,
+                        0.0,
+                        &[],
+                        &prep_native.smcp_ranges,
+                        &prep_native.synthetic_size_ranges,
+                        &[],
+                    );
+                    let plain_layout = build_probe_layout(
+                        &mut font_cx,
+                        &mut layout_cx,
+                        "Hello",
+                        16.0,
+                        400.0,
+                        Some("STIX Two Text"),
+                        false,
+                        None,
+                        f32::MAX,
+                        0.0,
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                    );
+                    let collect_glyph_ids = |layout: &parley::Layout<()>| -> Vec<u16> {
+                        layout
+                            .lines()
+                            .flat_map(|line| {
+                                line.items().filter_map(|item| match item {
+                                    parley::layout::PositionedLayoutItem::GlyphRun(gr) => {
+                                        Some(gr.positioned_glyphs().map(|g| g.id as u16).collect::<Vec<_>>())
+                                    }
+                                    _ => None,
+                                })
+                            })
+                            .flatten()
+                            .collect()
+                    };
+                    let smcp_ids = collect_glyph_ids(&smcp_layout);
+                    let plain_ids = collect_glyph_ids(&plain_layout);
+                    assert_eq!(smcp_ids.len(), 5);
+                    assert_eq!(plain_ids.len(), 5);
+                    assert_eq!(smcp_ids[0], plain_ids[0], "Uppercase 'H' should use the same glyph");
+                    assert_ne!(
+                        &smcp_ids[1..],
+                        &plain_ids[1..],
+                        "Lowercase 'ello' should substitute native smcp glyph IDs"
+                    );
+                });
+            });
+        }
     }
 }
 

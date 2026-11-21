@@ -22,6 +22,7 @@ const FONT_PUBLIC_PORTS: &[&str] = &[
     "weight",
     "line_height",
     "italic",
+    "small_caps",
     "letter_spacing",
     "color",
 ];
@@ -195,7 +196,7 @@ impl BuiltinPrimitive for FontPrimitive {
             | "descent" | "em_top" | "line_gap" | "gap_bottom" => Some(StaticType::Distance),
             "weight" => Some(StaticType::Integer),
             "family" => Some(StaticType::String),
-            "italic" => Some(StaticType::Boolean),
+            "italic" | "small_caps" => Some(StaticType::Boolean),
             "color" => Some(StaticType::Color),
             "font" => Some(StaticType::Node("Font".to_string())),
             _ => default_builtin_port_type(port_name),
@@ -208,6 +209,8 @@ impl BuiltinPrimitive for FontPrimitive {
             "size".to_string(),
             "weight".to_string(),
             "line_height".to_string(),
+            "italic".to_string(),
+            "small_caps".to_string(),
             "letter_spacing".to_string(),
             "color".to_string(),
             "cap_height".to_string(),
@@ -237,6 +240,7 @@ impl BuiltinPrimitive for FontPrimitive {
                         "family".to_string(),
                         "line_height".to_string(),
                         "italic".to_string(),
+                        "small_caps".to_string(),
                         "letter_spacing".to_string(),
                         "color".to_string(),
                     ],
@@ -247,6 +251,7 @@ impl BuiltinPrimitive for FontPrimitive {
                         "family".to_string(),
                         "line_height".to_string(),
                         "italic".to_string(),
+                        "small_caps".to_string(),
                         "letter_spacing".to_string(),
                         "color".to_string(),
                     ],
@@ -339,6 +344,16 @@ impl BuiltinPrimitive for FontPrimitive {
                     }),
                 );
             }
+            if !state.ports.contains_key("small_caps") {
+                state.ports.insert(
+                    "small_caps".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: std::sync::Arc::new(base_target.clone()),
+                        member: Ident::new("small_caps", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            }
             if !state.ports.contains_key("letter_spacing") {
                 state.ports.insert(
                     "letter_spacing".to_string(),
@@ -401,6 +416,13 @@ impl BuiltinPrimitive for FontPrimitive {
             if !state.ports.contains_key("italic") {
                 state.ports.insert(
                     "italic".to_string(),
+                    Expr::Literal(Literal::Bool(false, elem.span)),
+                );
+            }
+            // Default small_caps to false if not specified
+            if !state.ports.contains_key("small_caps") {
+                state.ports.insert(
+                    "small_caps".to_string(),
                     Expr::Literal(Literal::Bool(false, elem.span)),
                 );
             }

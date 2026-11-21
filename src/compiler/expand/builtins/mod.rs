@@ -266,7 +266,7 @@ pub(in crate::compiler::expand) fn default_builtin_port_type(port_name: &str) ->
         "family" | "text" | "cursor" | "url" | "name" | "path" | "id" | "alt" => {
             Some(StaticType::String)
         }
-        "underline" | "italic" => Some(StaticType::Boolean),
+        "underline" | "italic" | "small_caps" => Some(StaticType::Boolean),
         "clip" | "up" => Some(StaticType::Node("Clip".to_string())),
         "pagination" => Some(StaticType::Node("Pagination".to_string())),
         "paragraph_style" => Some(StaticType::Node("ParagraphStyle".to_string())),

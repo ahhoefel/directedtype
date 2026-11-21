@@ -6,6 +6,7 @@
 \use "components/Align.dt"
 \use "components/Spacer.dt"
 \use "components/Italic.dt"
+\use "components/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChorusHeader(
@@ -19,7 +20,7 @@
     \let rfont = \Font(font: self.font, size: 9.8pt, line_height: 14pt, italic: false);
     \env font = rfont;
     \Text(x: x, y: y + 4pt, width: width, font: rfont, paragraph_style: \ParagraphStyle(align: Align.Center)) {
-        C\SmallCaps{HORUS.}//
+        \SmallCaps{Chorus.}//
     }
     \Text(
         x: x,
@@ -58,7 +59,7 @@
         // ============================================================
         // Page 76 (Verso): Chapter VI Opener (14 lines)
         // ============================================================
-        F\SmallCaps{OR} a minute or two she stood looking at\|
+        \SmallCaps{For} a minute or two she stood looking at\|
         the house, and wondering what to do next,\|
         when suddenly a footman in livery came run\-\|
         ning out of the wood—(she considered him to\|

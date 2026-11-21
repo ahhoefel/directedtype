@@ -64,12 +64,6 @@
     \alias baseline: Distance = y + top_above_baseline;
 }
 
-// Inline Small Caps span (scales uppercase glyphs to match Victorian small-cap optical height)
-\Span SmallCaps(env font: Font, scale: Float = 0.74) {
-    \env font = \Font(font: self.font, size: self.font.size * scale);
-    \Children
-}
-
 // Inline large initial cap for chapter openings (e.g. "A" in "ALICE")
 \Span DropInitial(env font: Font, size: Distance = 17.5pt) {
     \env font = \Font(font: self.font, size: size);

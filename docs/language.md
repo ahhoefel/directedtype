@@ -403,6 +403,8 @@ Inline child nodes inherit `font` from their parent `\Text` node and are shaped 
 | `weight` | Optional Input | `Integer` | `400` | Font weight (`100`–`900`). |
 | `family` | Optional Input | `String` | `""` | Font family name. |
 | `color` | Optional Input | `Color` | `#000000` | Fill color of the rendered glyphs. |
+| `italic` | Optional Input | `Boolean` | `false` | Enables italic posture when `true`. |
+| `small_caps` | Optional Input | `Boolean` | `false` | Enables small capitals (OpenType `smcp` when supported by the resolved font, or automatic uppercase+scaled synthesis otherwise while preserving lowercase PDF text extraction). |
 | `line_height` | Optional Input / Output | `Distance` | `font_line_height(size, weight, family)` | Explicit line height if authored, or natural font line height. |
 | `cap_height` | Output | `Distance` | `font_cap_height(size, weight, family)` | Capital letter height above baseline. |
 | `x_height` | Output | `Distance` | `font_x_height(size, weight, family)` | Lowercase `'x'` height above baseline. |

@@ -5,6 +5,7 @@
 
 \use "components/Align.dt"
 \use "components/Italic.dt"
+\use "components/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterEight(
@@ -30,7 +31,7 @@
         // ============================================================
         // Page 112 (Verso): Chapter VIII Opener (12 lines)
         // ============================================================
-        A \SmallCaps{LARGE} rose\=tree stood near the entrance of\|
+        \SmallCaps{A large} rose\=tree stood near the entrance of\|
         the garden: the roses growing on it were white,\|
         but there were three gardeners at it, busily\|
         painting them red. Alice thought this a very\|

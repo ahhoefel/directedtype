@@ -5,6 +5,7 @@
 \use "components/Align.dt"
 \use "components/Spacer.dt"
 \use "components/Italic.dt"
+\use "components/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterFive(
@@ -35,7 +36,7 @@
         // ============================================================
         // Pages 59–62: Dialogue with the Caterpillar
         // ============================================================
-        T\SmallCaps{HE} Caterpillar and Alice looked at each\|
+        \SmallCaps{The} Caterpillar and Alice looked at each\|
         other for some time in silence: at last the\|
         Caterpillar took the hookah out of its mouth,\|
         and addressed her in a languid, sleepy voice.

@@ -2107,7 +2107,7 @@ impl<'a> ComponentExpander<'a> {
                         );
                         for n in &self.doc.nodes {
                             if n.name == "Font" {
-                                for fp in ["size", "weight", "family", "italic"] {
+                                for fp in ["size", "weight", "family", "italic", "small_caps"] {
                                     if let Some(fp_expr) = n.ports.get(fp) {
                                         if let Ok(val) = eval_expr(fp_expr, &env) {
                                             env.insert(

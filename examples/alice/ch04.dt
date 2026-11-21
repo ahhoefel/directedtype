@@ -4,6 +4,7 @@
 
 \use "components/Align.dt"
 \use "components/Italic.dt"
+\use "components/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterFour(
@@ -29,7 +30,7 @@
         // ============================================================
         // Pages 41–44: Mary Ann's errand & the unlabelled bottle
         // ============================================================
-        I\SmallCaps{T} was the White Rabbit, trotting slowly\|
+        \SmallCaps{It} was the White Rabbit, trotting slowly\|
         back again, and looking anxiously about as it\|
         went, as if it had lost something; and she heard\|
         it muttering to itself, “The Duchess! The\|

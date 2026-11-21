@@ -300,3 +300,42 @@ fn test_pdf_book_demo_body_text_painted_over_page_background() {
         "Expected all 3 page content streams to paint full-page background before body text"
     );
 }
+
+#[test]
+fn test_pdf_small_caps_export_preserves_lowercase_tounicode() {
+    let src = r#"
+    \use "components/SmallCaps.dt"
+    \env font = \Font(family: "Arial", size: 16px);
+
+    \Text(x: 40pt, y: 40pt, width: 300pt) {
+        \SmallCaps{Hello} \SmallCaps{straße}
+    }
+    "#;
+
+    let opts = PdfOptions {
+        compressed: false,
+        deterministic: true,
+        fallback_width: Some(612.0),
+        fallback_height: Some(792.0),
+        ..Default::default()
+    };
+
+    let bytes = compile_source_to_pdf(src, Path::new("."), &opts)
+        .expect("SmallCaps PDF export including multi-byte uppercase 'ß' should succeed cleanly");
+    assert!(bytes.starts_with(b"%PDF-"), "Expected valid PDF header");
+
+    let pdf_text = String::from_utf8_lossy(&bytes);
+    assert!(
+        pdf_text.contains("/ToUnicode"),
+        "Expected /ToUnicode CMap in uncompressed PDF"
+    );
+    // Krilla ToUnicode CMap encodes UTF-16BE code units for original lowercase source characters
+    let pdf_upper = pdf_text.to_ascii_uppercase();
+    for code_unit in ["0048", "0065", "006C", "006F"] {
+        assert!(
+            pdf_upper.contains(code_unit),
+            "Expected original-casing UTF-16BE unit '{}' in PDF /ToUnicode CMap",
+            code_unit
+        );
+    }
+}

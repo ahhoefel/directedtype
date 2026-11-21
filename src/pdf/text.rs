@@ -157,6 +157,11 @@ pub(super) fn draw_text_node(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let font_small_caps = fnode
+        .and_then(|f| f.properties.get("small_caps"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     let font_letter_spacing = fnode
         .and_then(|f| f.properties.get("letter_spacing"))
         .and_then(|v| v.as_f64())
@@ -183,31 +188,39 @@ pub(super) fn draw_text_node(
         .and_then(|v| v.as_f64())
         .filter(|&h| h > 0.0);
 
-    let mat = crate::compiler::text::materialize_soft_hyphens_with_font_cx(
+    let prep = crate::compiler::text::prepare_rich_text_for_shaping(
         &mut font_cache.font_cx,
         active_text,
         font_size,
         font_weight,
         font_family,
         font_italic,
+        font_small_caps,
         line_height_prop,
         (node.rect.width > 0.0).then_some(node.rect.width),
         indent,
         &resolved_spans,
         &resolved_boxes,
     );
-    let (active_text, resolved_spans_slice, resolved_boxes_slice) = match &mat {
-        Some(m_rt) => (
-            m_rt.text.as_str(),
-            m_rt.spans.as_slice(),
-            m_rt.inline_boxes.as_slice(),
-        ),
-        None => (
-            active_text,
-            resolved_spans.as_slice(),
-            resolved_boxes.as_slice(),
-        ),
-    };
+    let (active_text, pdf_text, resolved_spans_slice, resolved_boxes_slice, smcp_ranges, synth_ranges) =
+        match &prep {
+            Some(p) => (
+                p.text.as_str(),
+                p.pdf_text.as_str(),
+                p.spans.as_slice(),
+                p.inline_boxes.as_slice(),
+                p.smcp_ranges.as_slice(),
+                p.synthetic_size_ranges.as_slice(),
+            ),
+            None => (
+                active_text,
+                active_text,
+                resolved_spans.as_slice(),
+                resolved_boxes.as_slice(),
+                &[][..],
+                &[][..],
+            ),
+        };
 
     let mut builder =
         font_cache
@@ -298,6 +311,13 @@ pub(super) fn draw_text_node(
             builder.push(StyleProperty::Underline(true), span.range.clone());
         }
     }
+
+    crate::compiler::text::push_small_caps_styles(
+        &mut builder,
+        smcp_ranges,
+        synth_ranges,
+        active_text.len(),
+    );
 
     crate::compiler::text::push_first_line_indent_box(
         &mut builder,
@@ -552,13 +572,18 @@ pub(super) fn draw_text_node(
                 underline_gy = origin_y as f32 + glyph_run.baseline() + g.y + cluster_y_shift;
                 cursor_x += eff_advance;
 
+                let pdf_range = prep
+                    .as_ref()
+                    .map(|p| p.map_shaped_to_pdf_range(cluster_range.clone()))
+                    .unwrap_or(cluster_range);
+
                 krilla_glyphs.push(KrillaGlyph::new(
                     GlyphId::new(g.id),
                     eff_advance / run_font_size,
                     g.x / run_font_size,
                     -(g.y + cluster_y_shift) / run_font_size,
                     0.0,
-                    cluster_range,
+                    pdf_range,
                     None,
                 ));
             }
@@ -578,7 +603,7 @@ pub(super) fn draw_text_node(
                 start,
                 &krilla_glyphs,
                 krilla_font,
-                active_text,
+                pdf_text,
                 run_font_size,
                 false,
             );

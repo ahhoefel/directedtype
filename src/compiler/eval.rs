@@ -369,6 +369,59 @@ fn validate_font_family(family: Option<&str>, span: crate::span::Span) -> Result
     Ok(())
 }
 
+/// Decodes flat 8-element span/inline-box style chunks appended to `text_height`, `text_width`, and `span_metric`.
+fn decode_rich_text_style_chunks<E: EvalEnv>(
+    chunks: &[Value],
+    env: &E,
+    span: crate::span::Span,
+) -> Result<(Vec<crate::compiler::text::TextSpan>, Vec<crate::compiler::text::InlineBoxSpan>), CompileError> {
+    let mut spans = Vec::new();
+    let mut inline_boxes = Vec::new();
+    for chunk in chunks.chunks_exact(8) {
+        let raw_first = chunk[0].as_f64().unwrap_or(0.0);
+        if raw_first < 0.0 {
+            let node_id = NodeId((-raw_first.round() as usize).saturating_sub(1));
+            let b_idx = chunk[1].as_f64().unwrap_or(0.0).max(0.0) as usize;
+            let b_w = chunk[2].as_f64().unwrap_or(0.0).max(0.0);
+            let b_h = chunk[3].as_f64().unwrap_or(0.0).max(0.0);
+            let b_off = chunk[4].as_f64().unwrap_or(b_h);
+            inline_boxes.push(crate::compiler::text::InlineBoxSpan {
+                node_id,
+                index: b_idx,
+                width: b_w,
+                height: b_h,
+                baseline_offset: b_off,
+            });
+        } else {
+            let s_start = raw_first.max(0.0) as usize;
+            let s_end = chunk[1].as_f64().unwrap_or(0.0).max(0.0) as usize;
+            let s_size = chunk[2].as_f64().filter(|&v| v > 0.0);
+            let s_weight = chunk[3].as_f64().filter(|&v| v > 0.0);
+            let s_family = get_family_from_val(Some(&chunk[4]), env).map(|s| s.to_string());
+            if let Some(ref fam) = s_family {
+                validate_font_family(Some(fam.as_str()), span)?;
+            }
+            let s_italic = chunk[5].as_bool().unwrap_or(false);
+            let s_small_caps = chunk[6].as_bool();
+            let s_shift = chunk[7].as_f64().unwrap_or(0.0);
+            spans.push(
+                crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
+                    crate::compiler::text::SpanStyle {
+                        font_size: s_size,
+                        font_weight: s_weight,
+                        font_family: s_family,
+                        italic: s_italic,
+                        small_caps: s_small_caps,
+                        baseline_shift: s_shift,
+                        ..Default::default()
+                    },
+                ),
+            );
+        }
+    }
+    Ok((spans, inline_boxes))
+}
+
 /// Evaluates an algebraic expression in the given environment.
 pub fn eval_expr(expr: &Expr, env: &HashMap<VarId, Value>) -> Result<Value, CompileError> {
     eval_expr_with_env(expr, env)
@@ -1227,58 +1280,18 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                     let line_height = evaluated_args.get(7).and_then(|v| v.as_f64());
                     validate_font_family(family, c.span)?;
 
-                    let has_indent =
-                        evaluated_args.len() >= 9 && (evaluated_args.len() - 8) % 7 == 1;
-                    let indent = if has_indent {
-                        evaluated_args.get(8).and_then(|v| v.as_f64()).unwrap_or(0.0)
+                    let has_small_caps =
+                        evaluated_args.len() >= 10 && (evaluated_args.len() - 10) % 8 == 0;
+                    let (indent, font_small_caps, spans, inline_boxes) = if has_small_caps {
+                        let indent = evaluated_args[8].as_f64().unwrap_or(0.0);
+                        let font_small_caps = evaluated_args[9].as_bool().unwrap_or(false);
+                        let (spans, inline_boxes) =
+                            decode_rich_text_style_chunks(&evaluated_args[10..], env, c.span)?;
+                        (indent, font_small_caps, spans, inline_boxes)
                     } else {
-                        0.0
+                        let indent = evaluated_args.get(8).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        (indent, false, Vec::new(), Vec::new())
                     };
-
-                    let mut spans = Vec::new();
-                    let mut inline_boxes = Vec::new();
-                    let mut idx = if has_indent { 9 } else { 8 };
-                    while idx + 6 < evaluated_args.len() {
-                        let raw_first = evaluated_args[idx].as_f64().unwrap_or(0.0);
-                        if raw_first < 0.0 {
-                            let node_id = NodeId((-raw_first.round() as usize).saturating_sub(1));
-                            let b_idx = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                            let b_w = evaluated_args[idx + 2].as_f64().unwrap_or(0.0).max(0.0);
-                            let b_h = evaluated_args[idx + 3].as_f64().unwrap_or(0.0).max(0.0);
-                            let b_off = evaluated_args[idx + 4].as_f64().unwrap_or(b_h);
-                            inline_boxes.push(crate::compiler::text::InlineBoxSpan {
-                                node_id,
-                                index: b_idx,
-                                width: b_w,
-                                height: b_h,
-                                baseline_offset: b_off,
-                            });
-                        } else {
-                            let s_start = raw_first.max(0.0) as usize;
-                            let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                            let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
-                            let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
-                            let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
-                            if let Some(ref fam) = s_family {
-                                validate_font_family(Some(fam.as_str()), c.span)?;
-                            }
-                            let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
-                            let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
-                            spans.push(
-                                crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
-                                    crate::compiler::text::SpanStyle {
-                                        font_size: s_size,
-                                        font_weight: s_weight,
-                                        font_family: s_family,
-                                        italic: s_italic,
-                                        baseline_shift: s_shift,
-                                        ..Default::default()
-                                    },
-                                ),
-                            );
-                        }
-                        idx += 7;
-                    }
 
                     let (_, h) = crate::compiler::text::measure_rich_text_bounds_with_boxes_and_spacing(
                         text,
@@ -1293,6 +1306,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         indent,
                         &spans,
                         &inline_boxes,
+                        font_small_caps,
                     );
                     Ok(Value::Distance(h))
                 }
@@ -1391,65 +1405,21 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                     let family = get_family_from_val(evaluated_args.get(3), env);
                     validate_font_family(family, c.span)?;
 
-                    let mut spans = Vec::new();
-                    let mut inline_boxes = Vec::new();
-                    let extra = evaluated_args.len().saturating_sub(4) % 7;
-                    let (letter_spacing, indent, mut idx) = if evaluated_args.len() >= 6 && extra == 2 {
-                        (
-                            evaluated_args.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0),
-                            evaluated_args.get(5).and_then(|v| v.as_f64()).unwrap_or(0.0),
-                            6usize,
-                        )
-                    } else if evaluated_args.len() >= 5 && extra == 1 {
-                        (
-                            evaluated_args.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0),
-                            0.0,
-                            5usize,
-                        )
-                    } else {
-                        (0.0, 0.0, 4usize)
-                    };
-                    while idx + 6 < evaluated_args.len() {
-                        let raw_first = evaluated_args[idx].as_f64().unwrap_or(0.0);
-                        if raw_first < 0.0 {
-                            let node_id = NodeId((-raw_first.round() as usize).saturating_sub(1));
-                            let b_idx = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                            let b_w = evaluated_args[idx + 2].as_f64().unwrap_or(0.0).max(0.0);
-                            let b_h = evaluated_args[idx + 3].as_f64().unwrap_or(0.0).max(0.0);
-                            let b_off = evaluated_args[idx + 4].as_f64().unwrap_or(b_h);
-                            inline_boxes.push(crate::compiler::text::InlineBoxSpan {
-                                node_id,
-                                index: b_idx,
-                                width: b_w,
-                                height: b_h,
-                                baseline_offset: b_off,
-                            });
+                    let has_small_caps =
+                        evaluated_args.len() >= 7 && (evaluated_args.len() - 7) % 8 == 0;
+                    let (letter_spacing, indent, font_small_caps, spans, inline_boxes) =
+                        if has_small_caps {
+                            let ls = evaluated_args[4].as_f64().unwrap_or(0.0);
+                            let ind = evaluated_args[5].as_f64().unwrap_or(0.0);
+                            let sc = evaluated_args[6].as_bool().unwrap_or(false);
+                            let (spans, inline_boxes) =
+                                decode_rich_text_style_chunks(&evaluated_args[7..], env, c.span)?;
+                            (ls, ind, sc, spans, inline_boxes)
                         } else {
-                            let s_start = raw_first.max(0.0) as usize;
-                            let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                            let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
-                            let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
-                            let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
-                            if let Some(ref fam) = s_family {
-                                validate_font_family(Some(fam.as_str()), c.span)?;
-                            }
-                            let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
-                            let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
-                            spans.push(
-                                crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
-                                    crate::compiler::text::SpanStyle {
-                                        font_size: s_size,
-                                        font_weight: s_weight,
-                                        font_family: s_family,
-                                        italic: s_italic,
-                                        baseline_shift: s_shift,
-                                        ..Default::default()
-                                    },
-                                ),
-                            );
-                        }
-                        idx += 7;
-                    }
+                            let ls = evaluated_args.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            let ind = evaluated_args.get(5).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            (ls, ind, false, Vec::new(), Vec::new())
+                        };
 
                     let (w, _) = crate::compiler::text::measure_rich_text_bounds_with_boxes_and_spacing(
                         text,
@@ -1464,6 +1434,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         indent,
                         &spans,
                         &inline_boxes,
+                        font_small_caps,
                     );
                     Ok(Value::Distance(w))
                 }
@@ -1490,61 +1461,21 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                     let align = evaluated_args.get(13).and_then(|v| v.as_str());
                     validate_font_family(family, c.span)?;
 
-                    let has_indent =
-                        evaluated_args.len() >= 15 && (evaluated_args.len() - 14) % 7 == 1;
-                    let indent = if has_indent {
-                        evaluated_args
+                    let has_small_caps =
+                        evaluated_args.len() >= 16 && (evaluated_args.len() - 16) % 8 == 0;
+                    let (indent, font_small_caps, spans, inline_boxes) = if has_small_caps {
+                        let ind = evaluated_args[14].as_f64().unwrap_or(0.0);
+                        let sc = evaluated_args[15].as_bool().unwrap_or(false);
+                        let (spans, inline_boxes) =
+                            decode_rich_text_style_chunks(&evaluated_args[16..], env, c.span)?;
+                        (ind, sc, spans, inline_boxes)
+                    } else {
+                        let ind = evaluated_args
                             .get(14)
                             .and_then(|v| v.as_f64())
-                            .unwrap_or(0.0)
-                    } else {
-                        0.0
+                            .unwrap_or(0.0);
+                        (ind, false, Vec::new(), Vec::new())
                     };
-
-                    let mut spans = Vec::new();
-                    let mut inline_boxes = Vec::new();
-                    let mut idx = if has_indent { 15 } else { 14 };
-                    while idx + 6 < evaluated_args.len() {
-                        let raw_first = evaluated_args[idx].as_f64().unwrap_or(0.0);
-                        if raw_first < 0.0 {
-                            let node_id = NodeId((-raw_first.round() as usize).saturating_sub(1));
-                            let b_idx = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                            let b_w = evaluated_args[idx + 2].as_f64().unwrap_or(0.0).max(0.0);
-                            let b_h = evaluated_args[idx + 3].as_f64().unwrap_or(0.0).max(0.0);
-                            let b_off = evaluated_args[idx + 4].as_f64().unwrap_or(b_h);
-                            inline_boxes.push(crate::compiler::text::InlineBoxSpan {
-                                node_id,
-                                index: b_idx,
-                                width: b_w,
-                                height: b_h,
-                                baseline_offset: b_off,
-                            });
-                        } else {
-                            let s_start = raw_first.max(0.0) as usize;
-                            let s_end = evaluated_args[idx + 1].as_f64().unwrap_or(0.0).max(0.0) as usize;
-                            let s_size = evaluated_args[idx + 2].as_f64().filter(|&v| v > 0.0);
-                            let s_weight = evaluated_args[idx + 3].as_f64().filter(|&v| v > 0.0);
-                            let s_family = get_family_from_val(evaluated_args.get(idx + 4), env).map(|s| s.to_string());
-                            if let Some(ref fam) = s_family {
-                                validate_font_family(Some(fam.as_str()), c.span)?;
-                            }
-                            let s_italic = evaluated_args[idx + 5].as_bool().unwrap_or(false);
-                            let s_shift = evaluated_args[idx + 6].as_f64().unwrap_or(0.0);
-                            spans.push(
-                                crate::compiler::text::TextSpan::new(s_start..s_end).with_style(
-                                    crate::compiler::text::SpanStyle {
-                                        font_size: s_size,
-                                        font_weight: s_weight,
-                                        font_family: s_family,
-                                        italic: s_italic,
-                                        baseline_shift: s_shift,
-                                        ..Default::default()
-                                    },
-                                ),
-                            );
-                        }
-                        idx += 7;
-                    }
 
                     let sm = crate::compiler::text::compute_span_range_metrics_with_boxes(
                         text,
@@ -1556,6 +1487,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         line_height,
                         align,
                         indent,
+                        font_small_caps,
                         &spans,
                         &inline_boxes,
                         text_x,

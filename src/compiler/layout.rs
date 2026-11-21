@@ -1211,7 +1211,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             continue;
         }
 
-        let (text, font_size, font_weight, font_family, max_width, line_height, align, indent, ox, oy, text_font_id, raw_spans, raw_boxes, has_dynamic_splice) = {
+        let (text, font_size, font_weight, font_family, font_italic, font_small_caps, max_width, line_height, align, indent, ox, oy, text_font_id, raw_spans, raw_boxes, has_dynamic_splice) = {
             let n = &layout.nodes[text_node_idx];
             let text_font_id = n
                 .font
@@ -1234,6 +1234,14 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                     Value::String(s) => Some(s.clone()),
                     _ => None,
                 });
+            let font_italic = fnode
+                .and_then(|f| f.properties.get("italic"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let font_small_caps = fnode
+                .and_then(|f| f.properties.get("small_caps"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let max_width = if n.rect.width > 0.0 {
                 Some(n.rect.width)
             } else {
@@ -1268,6 +1276,8 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 font_size,
                 font_weight,
                 font_family,
+                font_italic,
+                font_small_caps,
                 max_width,
                 line_height,
                 align,
@@ -1356,6 +1366,13 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                                     span.style.italic = true;
                                 }
                             }
+                            if Some(fid) != prev_font_id {
+                                if let Some(sc) =
+                                    fnode.properties.get("small_caps").and_then(|v| v.as_bool())
+                                {
+                                    span.style.small_caps = Some(sc);
+                                }
+                            }
                         }
                         prev_font_id = Some(fid);
                     }
@@ -1405,6 +1422,9 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                     if let Some(it) = snode.properties.get("italic").and_then(|v| v.as_bool()) {
                         span.style.italic = it;
                     }
+                    if let Some(sc) = snode.properties.get("small_caps").and_then(|v| v.as_bool()) {
+                        span.style.small_caps = Some(sc);
+                    }
                     if let Some(bs) = snode.properties.get("baseline_shift").and_then(|v| v.as_f64()) {
                         span.style.baseline_shift = bs;
                         child_shifts.insert(span_id, bs);
@@ -1433,6 +1453,8 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             line_height,
             align.as_deref(),
             indent,
+            font_italic,
+            font_small_caps,
             &spans,
             &inline_boxes,
             &child_shifts,

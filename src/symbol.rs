@@ -138,6 +138,7 @@ const PREINTERNED: &[&str] = &[
     "page_count",
     "start_page",
     "anchor_y",
+    "small_caps",
 ];
 
 struct SymbolInterner {
@@ -309,6 +310,7 @@ impl Symbol {
     pub const PAGE_COUNT: Self = Self(119);
     pub const START_PAGE: Self = Self(120);
     pub const ANCHOR_Y: Self = Self(121);
+    pub const SMALL_CAPS: Self = Self(122);
 
     /// Canonical node symbol for `NodeId::WINDOW` (`"__window"`).
     pub const WINDOW_NODE: Self = Self(TAG_NODE | NODE_WINDOW_RAW);
@@ -573,6 +575,7 @@ impl Symbol {
             "page_count" => Self::PAGE_COUNT,
             "start_page" => Self::START_PAGE,
             "anchor_y" => Self::ANCHOR_Y,
+            "small_caps" => Self::SMALL_CAPS,
             other => intern_dynamic_str(other),
         }
     }

@@ -5673,6 +5673,8 @@ fn test_paragraph_style_indent_wraps_and_splits_across_pages() {
         None,
         None,
         32.0,
+        false,
+        false,
         &[],
         &[],
     );
@@ -6837,6 +6839,164 @@ fn test_physical_print_units_and_72_dpi() {
     assert!((rects_96[2].rect.width - 616.54).abs() < 1e-4);
     assert!((rects_96[2].rect.height - 96.0).abs() < 1e-6);
 }
+
+#[test]
+fn test_font_small_caps_inheritance_override_and_stdlib_span() {
+    let src = r#"
+    \use "components/SmallCaps.dt"
+    \use "components/Italic.dt"
+
+    \Span NormalCaps(env font: Font) {
+        \env font = \Font(font: self.font, small_caps: false);
+        \Children
+    }
+
+    \let f_norm = \Font(family: "Arial", size: 16px);
+    \let f_sc = \Font(font: f_norm, small_caps: true);
+
+    \let t_span = \Text(x: 0, y: 0, font: f_norm) { \let sc = \SmallCaps{Hello} }
+    \let t_direct = \Text(x: 0, y: 40px, font: f_sc) { Hello }
+    \let t_allcaps = \Text(x: 0, y: 80px, font: f_norm) { HELLO }
+    \let t_normal = \Text(x: 0, y: 120px, font: f_norm) { Hello }
+    \let t_nested = \Text(x: 0, y: 160px, font: f_norm) { \SmallCaps{Hello \let it = \Italic{world}} }
+    \let t_override = \Text(x: 0, y: 200px, font: f_sc) { Hello \NormalCaps{world} }
+    \let t_full_sc = \Text(x: 0, y: 240px, font: f_sc) { Hello world }
+    \let t_manual_mix = \Text(x: 0, y: 280px, font: f_norm) { \SmallCaps{Hello} world }
+    "#;
+
+    let doc = parse(src).expect("small_caps test doc should parse");
+    let layout = directedtype::compiler::evaluate_document_with_base_dir(&doc, std::path::Path::new("."))
+        .expect("small_caps test doc should compile");
+
+    let text_width_by_content = |needle: &str| -> f64 {
+        layout
+            .nodes
+            .iter()
+            .find(|n| n.name == "Text" && n.text_content.as_deref() == Some(needle))
+            .map(|n| n.rect.width)
+            .unwrap_or_else(|| panic!("Missing Text node with content {:?}", needle))
+    };
+
+    let sc_span_node = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "SmallCaps")
+        .expect("SmallCaps span node");
+    let sc_span_w = sc_span_node.rect.width;
+    let w_allcaps = text_width_by_content("HELLO");
+    let w_norm_hello = layout
+        .nodes
+        .iter()
+        .filter(|n| n.name == "Text" && n.text_content.as_deref() == Some("Hello"))
+        .map(|n| (n.rect.y, n.rect.width))
+        .collect::<Vec<_>>();
+    assert_eq!(w_norm_hello.len(), 3, "Expected t_span, t_direct, t_normal");
+    let w_direct_sc = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Text" && n.text_content.as_deref() == Some("Hello") && (n.rect.y - 40.0).abs() < 20.0)
+        .expect("t_direct")
+        .rect
+        .width;
+    let w_plain_hello = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Text" && n.text_content.as_deref() == Some("Hello") && (n.rect.y - 120.0).abs() < 20.0)
+        .expect("t_normal")
+        .rect
+        .width;
+
+    assert!(sc_span_w > 0.0, "SmallCaps span width must be positive");
+    assert!(
+        sc_span_w < w_allcaps,
+        "SmallCaps('Hello') ({}) should be narrower than all-caps 'HELLO' ({})",
+        sc_span_w,
+        w_allcaps
+    );
+    assert!(
+        (sc_span_w - w_plain_hello).abs() > 0.1,
+        "SmallCaps('Hello') ({}) should differ from normal 'Hello' ({})",
+        sc_span_w,
+        w_plain_hello
+    );
+    assert!(
+        (sc_span_w - w_direct_sc).abs() < 1e-3,
+        "Span SmallCaps ({}) and Font(small_caps: true) ({}) should match",
+        sc_span_w,
+        w_direct_sc
+    );
+
+    // Derived font inheritance across nested \SmallCaps { ... \Italic { ... } }
+    let italic_node = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Italic")
+        .expect("Italic span node inside SmallCaps");
+    let italic_font_id = italic_node
+        .font
+        .or_else(|| italic_node.properties.get("font").and_then(|v| v.as_node()))
+        .expect("Italic span font node");
+    let italic_font = &layout.nodes[italic_font_id.0];
+    assert_eq!(
+        italic_font.properties.get("italic").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        italic_font.properties.get("small_caps").and_then(|v| v.as_bool()),
+        Some(true),
+        "Italic derived font inside SmallCaps must inherit small_caps: true"
+    );
+
+    // Explicit small_caps: false override inside a small_caps: true Text
+    let w_override = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Text" && n.text_content.as_deref() == Some("Hello world") && (n.rect.y - 200.0).abs() < 20.0)
+        .expect("t_override")
+        .rect
+        .width;
+    let w_full_sc = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Text" && n.text_content.as_deref() == Some("Hello world") && (n.rect.y - 240.0).abs() < 20.0)
+        .expect("t_full_sc")
+        .rect
+        .width;
+    let w_manual_mix = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Text" && n.text_content.as_deref() == Some("Hello world") && (n.rect.y - 280.0).abs() < 20.0)
+        .expect("t_manual_mix")
+        .rect
+        .width;
+    assert!(
+        (w_override - w_manual_mix).abs() < 1e-3,
+        "Overriding small_caps: false on 'world' ({}) should match manual mix ({})",
+        w_override,
+        w_manual_mix
+    );
+    assert!(
+        (w_override - w_full_sc).abs() > 0.1,
+        "Overridden 'Hello world' ({}) should differ from full small-caps 'Hello world' ({})",
+        w_override,
+        w_full_sc
+    );
+
+    // Type error on non-boolean small_caps
+    let bad_type_doc = parse(r#"\let f = \Font(size: 16px, small_caps: "yes"); \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000000)"#).unwrap();
+    assert!(
+        directedtype::compiler::compile_document(&bad_type_doc).is_err(),
+        "Expected type error when passing non-Boolean small_caps to Font"
+    );
+
+    // Reject small_caps directly on Text
+    let bad_port_doc = parse(r#"\Text(x: 0, y: 0, small_caps: true) { Hello }"#).unwrap();
+    assert!(
+        directedtype::compiler::compile_document(&bad_port_doc).is_err(),
+        "Expected compile error when passing small_caps directly to Text"
+    );
+}
+
 
 
 

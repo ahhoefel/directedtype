@@ -4,6 +4,7 @@
 
 \use "components/Align.dt"
 \use "components/Italic.dt"
+\use "components/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 // Exact 50-line S-curve typographic calligram from Book Page 37
@@ -118,7 +119,7 @@
         // ============================================================
         // Pages 29–34: Caucus-Race & Comfit Prizes
         // ============================================================
-        T\SmallCaps{HEY} were indeed a queer\=looking party that\|
+        \SmallCaps{They} were indeed a queer\=looking party that\|
         assembled on the bank—the birds with draggled\|
         feathers, the animals with their fur clinging close\|
         to them, and all dripping wet, cross, and un\-\|

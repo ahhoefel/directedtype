@@ -4,6 +4,7 @@
 
 \use "components/Align.dt"
 \use "components/Italic.dt"
+\use "components/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterNine(
@@ -29,7 +30,7 @@
         // ============================================================
         // Pages 130–131: The Duchess's Morals
         // ============================================================
-        “Y\SmallCaps{OU} can’t think how glad I am to see you\|
+        “\SmallCaps{You} can’t think how glad I am to see you\|
         again, you dear old thing!” said the Duchess, as\|
         she tucked her arm affectionately into Alice’s, and\|
         they walked off together.

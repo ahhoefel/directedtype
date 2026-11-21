@@ -7,6 +7,7 @@
 \use "components/VStackStretch.dt"
 \use "components/Spacer.dt"
 \use "components/Italic.dt"
+\use "components/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Span RomanParen(env font: Font) {
@@ -57,7 +58,7 @@
         // ============================================================
         // Page 176 (Verso): Chapter XII Opener (12 lines)
         // ============================================================
-        “H\SmallCaps{ERE}!” cried Alice, quite forgetting in the\|
+        “\SmallCaps{Here}!” cried Alice, quite forgetting in the\|
         flurry of the moment how large she had grown\|
         in the last few minutes, and she jumped up in\|
         such a hurry that she tipped over the jury\=box\|

@@ -6,6 +6,7 @@
 \use "components/VStackStretch.dt"
 \use "components/Spacer.dt"
 \use "components/Italic.dt"
+\use "components/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 // Tight-leaded narrow wrap column on p. 170 (13 narrow lines in exact 12 body-line height = 216pt)
@@ -50,7 +51,7 @@
         // ============================================================
         // Pages 162–165: The Courtroom & Jury-Box
         // ============================================================
-        T\SmallCaps{HE} King and Queen of Hearts were seated\|
+        \SmallCaps{The} King and Queen of Hearts were seated\|
         on their throne when they arrived, with a great\|
         crowd assembled about them—all sorts of little\|
         birds and beasts, as well as the whole pack of\|

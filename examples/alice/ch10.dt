@@ -5,6 +5,7 @@
 \use "components/Align.dt"
 \use "components/Spacer.dt"
 \use "components/Italic.dt"
+\use "components/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterTen(
@@ -31,7 +32,7 @@
         // ============================================================
         // Pages 147–149: Explaining the Lobster-Quadrille
         // ============================================================
-        T\SmallCaps{HE} Mock Turtle sighed deeply, and drew the\|
+        \SmallCaps{The} Mock Turtle sighed deeply, and drew the\|
         back of one flapper across his eyes. He looked\|
         at Alice and tried to speak, but for a minute or\|
         two sobs choked his voice. “Same as if he had\|
