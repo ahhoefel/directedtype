@@ -1,0 +1,119 @@
+// End Matter: Errata & Typesetting Notes
+// Documents line-break departures from the 1866 Macmillan edition (plus the 5 editorial punctuation fixes).
+
+\use "components/Align.dt"
+\use "components/LineBreak.dt"
+\use "components/VStackStretch.dt"
+\use "components/SmallCaps.dt"
+\use "components/Spacer.dt"
+\use "components/Italic.dt"
+\use "AliceStyle.dt"
+
+\Component CorrectionRow(
+    loc: String,
+    loc_width: Distance = 54pt,
+    bullet_width: Distance = 14pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font
+) {
+    \let row_font = \Font(font: font, size: 8.5pt, line_height: 13pt);
+
+    \let loc_t = \Text(
+        x: x,
+        y: y,
+        width: loc_width,
+        font: row_font,
+        paragraph_style: \ParagraphStyle(align: Align.Right),
+        text: loc
+    );
+    \Text(
+        x: x + loc_width,
+        y: y,
+        width: bullet_width,
+        font: row_font,
+        paragraph_style: \ParagraphStyle(align: Align.Center),
+        text: "•"
+    )
+    \let detail = \Text(
+        x: x + loc_width + bullet_width,
+        y: y,
+        width: width - loc_width - bullet_width,
+        font: row_font,
+        paragraph_style: \ParagraphStyle(align: Align.Left)
+    ) {
+        \Children
+    };
+
+    \alias height: Distance = detail.height > loc_t.height ? detail.height : loc_t.height;
+}
+
+\Component EndMatter(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: true, break_before: Break.Recto),
+    env font: Font
+) {
+    \let intro_font = \Font(font: font, size: 9pt, line_height: 13pt);
+    \let intro_ps = \ParagraphStyle(align: Align.Justify, line_break: LineBreak.Optimal);
+
+    \let stack = \VStackStretch(
+        x: x,
+        y: y,
+        width: width,
+        gap: 0pt,
+        pagination: \Pagination(breakable: true, break_before: Break.Recto)
+    ) {
+        \Spacer(height: 12pt)
+        \Text(
+            width: parent.width,
+            font: \Font(font: font, size: 11pt, letter_spacing: 0.75pt),
+            paragraph_style: \ParagraphStyle(align: Align.Center),
+            text: "TYPESETTING NOTES."
+        )
+        \Spacer(height: 12pt)
+        \DoubleRule(rule_width: 56.25pt)
+        \Spacer(height: 14pt)
+
+        \Text(width: parent.width, font: intro_font, paragraph_style: intro_ps) {
+            This edition is set in 12pt Old Standard TT across a 265pt measure (18pt leading)
+            and we ensured every line break matched the original 1866 \SmallCaps{MacMillan} printing.
+        }
+        \Spacer(height: 14pt)
+
+        \Text(width: parent.width, font: intro_font, paragraph_style: intro_ps) {
+            The 1866 edition used generous word and sentence spacing. It also
+            included extra space around certain punctuation marks that are no longer common
+            practice and haven't been reproduced here.
+        }
+        \Spacer(height: 14pt)
+
+        \Text(width: parent.width, font: intro_font, paragraph_style: intro_ps) {
+            We matched the line breaks in the original using a combination of the Knuth\=Plass
+            line\=breaking algorithm (word spacing +3.0pt, stretch 90%, shrink 53%, sentence
+            space +50%). But, we still needed to manually break 779/2,625 (25.8%) of the interior
+            line breaks.
+        }
+        \Spacer(height: 14pt)
+
+        \Text(width: parent.width, font: intro_font, paragraph_style: intro_ps) {
+            Five minor punctuation slips in the 1866 \SmallCaps{MacMillan} printing were corrected:
+        }
+        \Spacer(height: 8pt)
+
+        \CorrectionRow(loc: "p.67, l.6")   { minutes, → minutes. }
+        \Spacer(height: 6pt)
+        \CorrectionRow(loc: "p.87, l.5")   { Alice; that’s → Alice; “that’s }
+        \Spacer(height: 6pt)
+        \CorrectionRow(loc: "p.102, l.16") { asked.” → asked. }
+        \Spacer(height: 6pt)
+        \CorrectionRow(loc: "p.119, l.14") { “The soldiers → The soldiers }
+        \Spacer(height: 6pt)
+        \CorrectionRow(loc: "p.120, l.1")  { Duchess? → Duchess?” }
+    };
+
+    \alias height: Distance = stack.height;
+}

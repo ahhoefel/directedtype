@@ -15,6 +15,7 @@
 \use "ch10.dt"
 \use "ch11.dt"
 \use "ch12.dt"
+\use "end_matter.dt"
 
 \AliceBook(folio_offset: 10) {
     \FrontMatter()
@@ -30,6 +31,7 @@
     \ChapterTen()
     \ChapterEleven()
     \ChapterTwelve()
+    \EndMatter()
 }
 
 // Editorial note: Fixed punctuation on 5 obvious locations where 1866 has mistakes:

@@ -314,10 +314,13 @@ pub fn break_lines_for_layout<B: parley::style::Brush>(
 
 /// Computes `(space_extra_advance, space_count)` for lines requiring manual space-stretching
 /// or space-shrinking (e.g. Knuth–Plass tight lines):
-/// - Under `Align.JustifyAll`: the final line (`line_idx + 1 == total_lines`) or any `\n`-broken line.
-/// - Under `Align.Justify`: any non-final forced justified break (`\|` -> `FORCED_JUSTIFY_BREAK`),
-///   leaving soft-wrapped lines (already justified by Parley), plain `"\n"` lines, and the final
-///   paragraph line ragged.
+/// - Under `Align.JustifyAll`: the final line (`line_idx + 1 == total_lines`) or any `\n`-broken
+///   line stretches or shrinks to `target_width`.
+/// - Under `Align.Justify`: any non-final forced justified break (`\|` -> `FORCED_JUSTIFY_BREAK`)
+///   stretches or shrinks to `target_width`. Plain `"\n"` lines and the final paragraph line follow
+///   standard TeX `\parfillskip = 0pt plus 1fil minus 0pt` semantics: short lines (`free >= 0`)
+///   stay left-aligned at nominal spacing, while tight lines (`free < 0`, e.g. kept on-line by
+///   Knuth–Plass shrinkage) shrink their inter-word spaces to sit flush with `target_width`.
 pub fn compute_manual_justify_line_spaces<B: parley::style::Brush>(
     line: &parley::layout::Line<'_, B>,
     line_idx: usize,
@@ -328,20 +331,23 @@ pub fn compute_manual_justify_line_spaces<B: parley::style::Brush>(
 ) -> (f32, usize) {
     let is_justify_all = matches!(align_str, Some("justify_all") | Some("JustifyAll"));
     let is_justify = is_justify_all || matches!(align_str, Some("justify") | Some("Justify"));
-    let line_slice = active_text.get(line.text_range());
-    let needs_manual_justify = target_width > 0.0
-        && ((is_justify_all
-            && (line_idx + 1 == total_lines || line_slice.is_some_and(|s| s.ends_with('\n'))))
-            || (is_justify
-                && line_idx + 1 < total_lines
-                && line_slice.is_some_and(|s| s.ends_with(FORCED_JUSTIFY_BREAK))));
-    if !needs_manual_justify {
+    if target_width <= 0.0 || !is_justify {
         return (0.0, 0);
     }
+    let line_slice = active_text.get(line.text_range());
+    let is_full_justify_line = (is_justify_all
+        && (line_idx + 1 == total_lines || line_slice.is_some_and(|s| s.ends_with('\n'))))
+        || (is_justify
+            && line_idx + 1 < total_lines
+            && line_slice.is_some_and(|s| s.ends_with(FORCED_JUSTIFY_BREAK)));
 
     let lm = line.metrics();
     let free = (target_width as f32) - lm.offset - (lm.advance - lm.trailing_whitespace);
-    if free.abs() <= 0.05 {
+    if is_full_justify_line {
+        if free.abs() <= 0.05 {
+            return (0.0, 0);
+        }
+    } else if free >= -0.05 {
         return (0.0, 0);
     }
 
@@ -1205,10 +1211,12 @@ fn apply_knuth_plass_breaks(
                             && is_sentence_end_before(&probe_text, c_start);
                         let (eff_w, eff_y, eff_z) = if is_sent {
                             let s = options.sentence_space;
+                            let nat_w = (base_w - options.word_spacing).max(0.0);
+                            let sent_extra = nat_w * s;
                             (
-                                (base_w * (1.0 + s)).max(0.0),
-                                (base_w * options.space_stretch * (1.0 + 2.0 * s.max(0.0))).max(0.0),
-                                (base_w * options.space_shrink / (1.0 + s.max(0.0))).max(0.0),
+                                (base_w + sent_extra).max(0.0),
+                                (base_w * options.space_stretch * (1.0 + s.max(0.0))).max(0.0),
+                                (base_w * options.space_shrink + sent_extra.max(0.0) * 0.5).max(0.0),
                             )
                         } else {
                             (

@@ -1,8 +1,9 @@
 // Alice's Adventures in Wonderland — 1866 Macmillan Crown Octavo Stylesheet
 // Page trim: 365pt x 540pt (5.07in x 7.50in Crown Octavo)
-// Type block: 270.0pt (+8.0%) measure x 22 lines at 18.0pt leading (12pt Old Standard TT, 190 DPI engravings)
+// Type block: 265.0pt measure x 22 lines at 18.0pt leading (12pt Old Standard TT, 190 DPI engravings)
 
 \use "components/Align.dt"
+\use "components/LineBreak.dt"
 \use "components/TextBounds.dt"
 \use "components/TextStart.dt"
 \use "components/TextEnd.dt"
@@ -122,7 +123,8 @@
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false),
     env font: Font,
-    env text_bounds: TextBounds
+    env text_bounds: TextBounds,
+    env paragraph_style: ParagraphStyle
 ) {
     \let img = \Image(
         src: src,
@@ -136,7 +138,7 @@
         y: y,
         width: width - narrow_x,
         font: font,
-        paragraph_style: \ParagraphStyle(align: align)
+        paragraph_style: \ParagraphStyle(paragraph_style: paragraph_style, align: align, indent: 0pt)
     ) {
         \Children
     };
@@ -198,7 +200,8 @@
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false),
     env font: Font,
-    env text_bounds: TextBounds
+    env text_bounds: TextBounds,
+    env paragraph_style: ParagraphStyle
 ) {
     \let img = \Image(
         src: src,
@@ -212,7 +215,7 @@
         y: y,
         width: narrow_width,
         font: font,
-        paragraph_style: \ParagraphStyle(align: align)
+        paragraph_style: \ParagraphStyle(paragraph_style: paragraph_style, align: align, indent: 0pt)
     ) {
         \Children
     };
@@ -265,14 +268,64 @@
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: true),
     env font: Font,
-    env text_bounds: TextBounds
+    env text_bounds: TextBounds,
+    env paragraph_style: ParagraphStyle
 ) {
     \let t = \Text(
         x: x,
         y: y,
         width: width,
         font: font,
-        paragraph_style: \ParagraphStyle(align: align),
+        paragraph_style: \ParagraphStyle(paragraph_style: paragraph_style, align: align, indent: 0pt),
+        pagination: \Pagination(breakable: true)
+    ) {
+        \Children
+    };
+
+    \alias height: Distance = t.height;
+}
+
+// Indented paragraph justified through its final line (used before mid-paragraph illustration wraps)
+\Component JustifyAllPara(
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: true),
+    env font: Font,
+    env text_bounds: TextBounds,
+    env paragraph_style: ParagraphStyle
+) {
+    \let t = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: font,
+        paragraph_style: \ParagraphStyle(paragraph_style: paragraph_style, align: Align.JustifyAll),
+        pagination: \Pagination(breakable: true)
+    ) {
+        \Children
+    };
+
+    \alias height: Distance = t.height;
+}
+
+// Indented paragraph set one line tighter via Knuth-Plass looseness (-1) to prevent single-word final spills
+\Component TightPara(
+    space_shrink: Float = 0.56,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: true),
+    env font: Font,
+    env text_bounds: TextBounds,
+    env paragraph_style: ParagraphStyle
+) {
+    \let t = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: font,
+        paragraph_style: \ParagraphStyle(paragraph_style: paragraph_style, looseness: -1, space_shrink: space_shrink),
         pagination: \Pagination(breakable: true)
     ) {
         \Children
@@ -426,14 +479,15 @@
     number: String,
     title: String,
     img_src: Path,
-    img_offset_x: Distance = -4pt,
-    narrow_x: Distance = 153.5,
+    img_offset_x: Distance = -12.5pt,
+    narrow_x: Distance = 148.5pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false),
     env font: Font,
-    env text_bounds: TextBounds
+    env text_bounds: TextBounds,
+    env paragraph_style: ParagraphStyle
 ) {
     \let col_w = width - narrow_x;
 
@@ -469,7 +523,7 @@
         y: y + 90.0pt,
         width: col_w,
         font: font,
-        paragraph_style: \ParagraphStyle(align: Align.JustifyAll, indent: 16pt)
+        paragraph_style: \ParagraphStyle(paragraph_style: paragraph_style, align: Align.JustifyAll, indent: 16pt)
     ) {
         \Children
     };
@@ -505,7 +559,16 @@
     }
 
     \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
-    \env paragraph_style = \ParagraphStyle(align: Align.Justify, indent: 16pt);
+    \env paragraph_style = \ParagraphStyle(
+        align: Align.Justify,
+        indent: 16pt,
+        line_break: LineBreak.Optimal,
+        word_spacing: 3.00pt,
+        space_stretch: 0.90,
+        space_shrink: 0.53,
+        sentence_space: 0.50,
+        hyphen_penalty: 20.0
+    );
     \let body = \VStackStretch(
         x: x,
         y: y,
@@ -652,8 +715,8 @@
     height: Distance = 540pt,
     x: Distance = page.left,
     y: Distance = page.top,
-    margin_inner: Distance = 46.75pt,
-    margin_outer: Distance = 48.25pt,
+    margin_inner: Distance = 49.25pt,
+    margin_outer: Distance = 50.75pt,
     header_y: Distance = 50.0pt,
     body_top: Distance = 67.4pt,
     flow_height: Distance = 397.0pt,
@@ -766,7 +829,7 @@
         page: \AlicePage(folio_offset: folio_offset)
     ) {
         \VStackStretch(
-            width: 270.0pt,
+            width: 265.0pt,
             gap: 0pt,
             pagination: \Pagination(breakable: true)
         ) {
