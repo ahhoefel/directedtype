@@ -37,31 +37,28 @@
     \alias height: Distance = 0pt;
 }
 
-// Continuous multi-em dash (default 2em) matching Old Standard TT's U+2014 stroke geometry
-// (stroke thickness 0.036em, top at 0.28em above baseline, 0.06em outer sidebearings, zero internal gap)
-\InlineBox DoubleEmDash(
-    ems: Float = 2.0,
+// Continuous long dash (default 2em) matching Old Standard TT's U+2014 stroke geometry
+// (stroke thickness 0.036em, centered 0.262em above baseline, 0.06em outer sidebearings)
+\InlineBox LongDash(
+    width: Distance = 2em,
     sidebearing: Distance = 0.06em,
     thickness: Distance = 0.036em,
-    top_above_baseline: Distance = 0.28em,
+    center_above_baseline: Distance = 0.262em,
     color: Color = #111111,
     x: Distance = parent.left,
     y: Distance = parent.top,
     env font: Font
 ) {
-    \let total_w = ems * 1em;
-
-    \Rect(
-        x: x + sidebearing,
-        y: y,
-        width: total_w - 2 * sidebearing,
-        height: thickness,
+    \Line(
+        x1: x + sidebearing,
+        y1: y + thickness * 0.5,
+        x2: x + width - sidebearing,
+        y2: y + thickness * 0.5,
+        thickness: thickness,
         color: color
     )
 
-    \alias width: Distance = total_w;
-    \alias height: Distance = top_above_baseline;
-    \alias baseline: Distance = y + top_above_baseline;
+    \alias height: Distance = center_above_baseline + thickness * 0.5;
 }
 
 // Inline large initial cap for chapter openings (e.g. "A" in "ALICE")
@@ -223,22 +220,21 @@
     \alias height: Distance = t.height;
 }
 
-// Staggered asterisk break row helper (supports 3, 4, or 5 stars centered on cx)
+// Staggered asterisk break row helper (supports 3, 4, or 5 Victorian 6-spoked stars centered on cx)
 \Component AsterismRow(
     n: Integer,
     cx: Distance,
     y: Distance,
     step: Distance,
-    env font: Font,
-    env text_bounds: TextBounds
+    star_size: Distance = 7.2pt
 ) {
     \let half = (n - 1) * 0.5;
-    \let star_ps = \ParagraphStyle(align: Align.Center);
-    \Text(x: cx + (0.0 - half) * step - 4pt, y: y, width: 8pt, font: font, paragraph_style: star_ps, text: "*")
-    \Text(x: cx + (1.0 - half) * step - 4pt, y: y, width: 8pt, font: font, paragraph_style: star_ps, text: "*")
-    \Text(x: cx + (2.0 - half) * step - 4pt, y: y, width: 8pt, font: font, paragraph_style: star_ps, text: "*")
-    \Text(x: cx + (3.0 - half) * step - 4pt, y: y, width: 8pt, font: font, paragraph_style: star_ps, text: n >= 4 ? "*" : "")
-    \Text(x: cx + (4.0 - half) * step - 4pt, y: y, width: 8pt, font: font, paragraph_style: star_ps, text: n >= 5 ? "*" : "")
+    \let r = star_size * 0.5;
+    \Image(src: "images/asterism_star.svg", x: cx + (0.0 - half) * step - r, y: y - r, width: star_size)
+    \Image(src: "images/asterism_star.svg", x: cx + (1.0 - half) * step - r, y: y - r, width: star_size)
+    \Image(src: "images/asterism_star.svg", x: cx + (2.0 - half) * step - r, y: y - r, width: star_size)
+    \Image(src: "images/asterism_star.svg", x: cx + (3.0 - half) * step - r, y: y - r, width: n >= 4 ? star_size : 0pt)
+    \Image(src: "images/asterism_star.svg", x: cx + (4.0 - half) * step - r, y: y - r, width: n >= 5 ? star_size : 0pt)
 }
 
 // Staggered asterisk break (default 4-3-4; cols: 5, step: 52pt for 5-4-5 on p. 69) occupying exact 3 grid lines
@@ -246,18 +242,17 @@
     cols: Integer = 4,
     step: Distance = 64pt,
     line_step: Distance = 18.0pt,
-    star_drop: Distance = 3.5pt,
+    star_size: Distance = 7.2pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
-    pagination: Pagination = \Pagination(breakable: false),
-    env font: Font,
-    env text_bounds: TextBounds
+    pagination: Pagination = \Pagination(breakable: false)
 ) {
     \let cx = x + width * 0.5;
-    \AsterismRow(n: cols,     cx: cx, y: y + star_drop,                   step: step)
-    \AsterismRow(n: cols - 1, cx: cx, y: y + line_step + star_drop,       step: step)
-    \AsterismRow(n: cols,     cx: cx, y: y + line_step * 2.0 + star_drop, step: step)
+    \let row0_y = y + line_step * 0.5;
+    \AsterismRow(n: cols,     cx: cx, y: row0_y,                   step: step, star_size: star_size)
+    \AsterismRow(n: cols - 1, cx: cx, y: row0_y + line_step,       step: step, star_size: star_size)
+    \AsterismRow(n: cols,     cx: cx, y: row0_y + line_step * 2.0, step: step, star_size: star_size)
 
     \alias height: Distance = line_step * 3.0;
 }

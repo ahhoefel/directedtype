@@ -235,10 +235,10 @@
         asked.
 
         The Hatter shook his head mournfully. “Not\|
-        I!” he replied. “We quarrelled last March\DoubleEmDash{}\|
-        just before \Italic{he} went mad, you know\DoubleEmDash{}” (point\-\|
+        I!” he replied. “We quarrelled last March\LongDash{}\|
+        just before \Italic{he} went mad, you know\LongDash{}” (point\-\|
         ing with his teaspoon at the March Hare,)\|
-        “\DoubleEmDash{}it was at the great concert given by the\|
+        “\LongDash{}it was at the great concert given by the\|
         Queen of Hearts, and I had to sing
 
         // ============================================================
@@ -265,7 +265,7 @@
             \Spacer(height: 8pt)
             \VerseLine { ‘Up above the world you fly, }
             \VerseLine { Like a teatray in the sky. }
-            \VerseLine(left_margin: 94pt) { Twinkle, twinkle\DoubleEmDash(ems: 4.0){}’” }
+            \VerseLine(left_margin: 94pt) { Twinkle, twinkle\LongDash(width: 4em){}’” }
             \Spacer(height: 8pt)
         }
 
@@ -274,7 +274,7 @@
         // ============================================================
         Here the Dormouse shook itself, and began\|
         singing in its sleep “\Italic{Twinkle, twinkle, twinkle,\|
-        twinkle\DoubleEmDash{}}” and went on so long that they had\|
+        twinkle\LongDash{}}” and went on so long that they had\|
         to pinch it to make it stop.
 
         “Well, I’d hardly finished the first verse,”\|
@@ -329,7 +329,7 @@
         “Once upon a time there were three little\|
         sisters,” the Dormouse began in a great hurry;\|
         “and their names were Elsie, Lacie, and Tillie;\|
-        and they lived at the bottom of a well\DoubleEmDash{}”
+        and they lived at the bottom of a well\LongDash{}”
 
         “What did they live on?” said Alice, who\|
         always took a great interest in questions of\|
@@ -387,7 +387,7 @@
         “One, indeed!” said the Dormouse indig\-\|
         nantly. However, he consented to go on. “And\|
         so these three little sisters—they were learning\|
-        to draw, you know\DoubleEmDash{}”
+        to draw, you know\LongDash{}”
 
         “What did they draw?” said Alice, quite\|
         forgetting her promise.
@@ -431,7 +431,7 @@
         went on, yawning and rubbing its eyes, for it\|
         was getting very sleepy; “and they drew all\|
         manner of things—everything that begins with\|
-        an M\DoubleEmDash{}”
+        an M\LongDash{}”
 
         “Why with an M?” said Alice.
 
@@ -442,7 +442,7 @@
         The Dormouse had closed its eyes by this\|
         time, and was going off into a doze; but, on\|
         being pinched by the Hatter, it woke up again\|
-        with a little shriek, and went on: “\DoubleEmDash{}that\|
+        with a little shriek, and went on: “\LongDash{}that\|
         begins with an M, such as mousetraps, and the\|
         moon, and memory, and muchness—you know\|
         you say things are ‘much of a muchness’—did\|
@@ -450,7 +450,7 @@
         muchness?”
 
         “Really, now you ask me,” said Alice, very\|
-        much confused, “I don’t think\DoubleEmDash{}”
+        much confused, “I don’t think\LongDash{}”
 
         // ============================================================
         // Page 110 (Verso): 5 lines + Mid Plate #27 (Dormouse in teapot) + 5 lines
