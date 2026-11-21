@@ -178,8 +178,7 @@
     \let btn_text = \Text(
         x: x + max(0, (width - btn_text.width) / 2),
         y: y + max(0, (btn_height - btn_text.height) / 2),
-        font: env.font,
-        color: text_color,
+        font: \Font(font: env.font, color: text_color),
         text: label
     );
 }
@@ -351,8 +350,7 @@
     \let btn_text = \Text(
         x: x + max(0, (resolved_width - btn_text.width) / 2),
         y: y + max(0, (btn_height - btn_text.height) / 2),
-        font: env.font,
-        color: text_color,
+        font: \Font(font: env.font, color: text_color),
         text: label
     );
 }
@@ -517,8 +515,7 @@
     \let btn_text = \Text(
         x: x + max(0, (width - btn_text.width) / 2),
         y: y + max(0, (btn_height - btn_text.height) / 2),
-        font: env.font,
-        color: text_color
+        font: \Font(font: env.font, color: text_color)
     ) {
         \Children
     };
@@ -690,8 +687,7 @@
     \let btn_text = \Text(
         x: x + max(0, (resolved_width - btn_text.width) / 2),
         y: y + max(0, (btn_height - btn_text.height) / 2),
-        font: env.font,
-        color: text_color
+        font: \Font(font: env.font, color: text_color)
     ) {
         \Children
     };

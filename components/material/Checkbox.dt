@@ -47,11 +47,14 @@
     \let box_size: Distance = is_small ? 16px : 18px;
     \let box_inset: Distance = (control_size - box_size) / 2;
 
+    \let label_color = disabled ? #00000061 : #000000de;
+
     \env font = \Font(
         font: self.font,
         size: is_small ? 14px : 16px,
         weight: 400,
-        line_height: is_small ? 20px : 24px
+        line_height: is_small ? 20px : 24px,
+        color: label_color
     );
 
     \let is_primary = color == MaterialColor.Primary;
@@ -143,8 +146,6 @@
     \let box_x: Distance = x + box_inset;
     \let box_y: Distance = control_y + box_inset;
 
-    \let label_color = disabled ? #00000061 : #000000de;
-
     \alias width = resolved_w;
     \alias height = resolved_h;
     \alias right = x + resolved_w;
@@ -210,8 +211,7 @@
     \let checkbox_label = \Text(
         x: x + control_size + eff_gap,
         y: y + max(0px, (resolved_h - checkbox_label.height) / 2),
-        font: env.font,
-        color: has_label ? label_color : #00000000,
+        font: \Font(font: env.font, color: has_label ? label_color : #00000000),
         text: label
     );
 }
@@ -251,11 +251,14 @@
     \let box_size: Distance = is_small ? 16px : 18px;
     \let box_inset: Distance = (control_size - box_size) / 2;
 
+    \let label_color = disabled ? #00000061 : #000000de;
+
     \env font = \Font(
         font: self.font,
         size: is_small ? 14px : 16px,
         weight: 400,
-        line_height: is_small ? 20px : 24px
+        line_height: is_small ? 20px : 24px,
+        color: label_color
     );
 
     \let is_primary = color == MaterialColor.Primary;
@@ -350,8 +353,6 @@
     \let box_x: Distance = x + box_inset;
     \let box_y: Distance = control_y + box_inset;
 
-    \let label_color = disabled ? #00000061 : #000000de;
-
     \alias width = resolved_w;
     \alias height = resolved_h;
     \alias right = x + resolved_w;
@@ -416,7 +417,6 @@
 
     \Children(
         x: x + control_size + eff_gap,
-        y: y + max(0px, (resolved_h - child.height) / 2),
-        color: label_color
+        y: y + max(0px, (resolved_h - child.height) / 2)
     )
 }

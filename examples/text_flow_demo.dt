@@ -46,8 +46,8 @@
     color: Color = #0f172a,
     align: Align = Align.Left
 ) {
-    \let h_font = \Font(size: 28px, weight: 700, line_height: 36px);
-    \let t = \Text(x: x, y: y, width: width, font: h_font, color: color, align: align) {
+    \let h_font = \Font(size: 28px, weight: 700, line_height: 36px, color: color);
+    \let t = \Text(x: x, y: y, width: width, font: h_font, align: align) {
         \Children
     };
     \alias height = t.height;
@@ -62,8 +62,8 @@
     color: Color = #1e293b,
     align: Align = Align.Left
 ) {
-    \let h_font = \Font(size: 19px, weight: 700, line_height: 26px);
-    \let t = \Text(x: x, y: y, width: width, font: h_font, color: color, align: align) {
+    \let h_font = \Font(size: 19px, weight: 700, line_height: 26px, color: color);
+    \let t = \Text(x: x, y: y, width: width, font: h_font, align: align) {
         \Children
     };
     \alias height = t.height;
@@ -137,11 +137,11 @@
 
         \HDivider(color: #e2e8f0)
 
-        \Text(align: Align.Center, color: #334155) {
+        \Text(align: Align.Center, font: \Font(color: #334155)) {
             \Italic{"Typography is a two-dimensional architecture, based on experience and imagination."}
         }
 
-        \Text(align: Align.Right, font: sidenote_font, color: #64748b) {
+        \Text(align: Align.Right, font: \Font(font: sidenote_font, color: #64748b)) {
             — Hermann Zapf (\Code{Align.Center} & \Code{Align.Right})
         }
     }
@@ -162,8 +162,7 @@
     x: article.right + 32px,
     baseline: n1.baseline,
     width: 196px,
-    font: sidenote_font,
-    color: #1e3a8a
+    font: \Font(font: sidenote_font, color: #1e3a8a)
 ) {
     \Bold{[1] TeX-Style Rules:} Leading/trailing whitespace inside \Code{\{ ... \}} is
     trimmed, and blank lines emit \Code{ParagraphBreak}.
@@ -184,8 +183,7 @@
     x: article.right + 32px,
     baseline: n2.baseline,
     width: 196px,
-    font: sidenote_font,
-    color: #831843
+    font: \Font(font: sidenote_font, color: #831843)
 ) {
     \Bold{[2] Sidenote Alignment:} This note's \Code{baseline} is wired directly to
     \Code{n2.baseline} (\Sup{[2]} in the paragraph on the left).

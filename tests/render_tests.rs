@@ -105,7 +105,7 @@ fn test_headless_render_layout_to_image() {
 
 \Flow(gap: 20px) {
     \Rect(x: 20px, y: 20px, width: 200px, height: 60px, color: #ff0000)
-    \Text(x: 20px, y: 100px, width: 200px, font: \Font(size: 20px), color: #0000ff) {
+    \Text(x: 20px, y: 100px, width: 200px, font: \Font(size: 20px, color: #0000ff)) {
         Hello DirectedType Vello
     }
 }
@@ -162,7 +162,7 @@ fn test_headless_render_to_png_file() {
 }
 
 \ShadedBox(bg_color: #224488) {
-    \Text(width: 250px, font: \Font(size: 18px), color: #ffffff) {
+    \Text(width: 250px, font: \Font(size: 18px, color: #ffffff)) {
         DirectedType Headless PNG Rendering
     }
 }
@@ -1115,7 +1115,7 @@ fn test_stage5_inline_box_renders_internal_children_in_paragraph() {
         y: Distance = parent.top
     ) {
         \Rect(x: x, y: y, width: width, height: height, color: #ff0000)
-        \let label = \Text(x: x + 6px, y: y + 2px, font: font, color: #ffffff) {
+        \let label = \Text(x: x + 6px, y: y + 2px, font: \Font(font: font, color: #ffffff)) {
             \Children
         };
         \alias width = label.width + 12px;

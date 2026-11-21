@@ -36,11 +36,10 @@
     \let citation_line = author + ", \"" + title + "\"" + venue_part + year_part;
 
     \let row = \HStack(x: x, y: y, gap: 8px, width: width) {
-        \let num_col = \Text(font: bib_font, color: #1d4ed8, text: label);
+        \let num_col = \Text(font: \Font(font: bib_font, color: #1d4ed8), text: label);
         \Text(
             width: max(40pt, width - num_col.width - 8px),
-            font: bib_font,
-            color: #1e293b,
+            font: \Font(font: bib_font, color: #1e293b),
             text: citation_line
         )
     };
@@ -65,7 +64,8 @@
         font: font,
         size: font.size * 1.45,
         weight: 700,
-        line_height: font.line_height * 1.35
+        line_height: font.line_height * 1.35,
+        color: #0f172a
     );
 
     \let stack = \VStackStretch(
@@ -77,7 +77,6 @@
     ) {
         \Text(
             font: heading_font,
-            color: #0f172a,
             text: title,
             pagination: \Pagination(breakable: false, keep_with_next: true)
         )

@@ -209,16 +209,14 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? eff_avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? eff_avatar_color : #00000000),
         text: avatar
     );
 
     \let chip_text = \Text(
         x: text_x,
         y: y + max(0px, (chip_height - chip_text.height) / 2),
-        font: env.font,
-        color: text_color,
+        font: \Font(font: env.font, color: text_color),
         text: label
     );
 }
@@ -411,16 +409,14 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? eff_avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? eff_avatar_color : #00000000),
         text: avatar
     );
 
     \let chip_text = \Text(
         x: text_x,
         y: y + max(0px, (chip_height - chip_text.height) / 2),
-        font: env.font,
-        color: text_color,
+        font: \Font(font: env.font, color: text_color),
         text: label
     );
 }
@@ -616,16 +612,14 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? eff_avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? eff_avatar_color : #00000000),
         text: avatar
     );
 
     \let chip_text = \Text(
         x: text_x,
         y: y + max(0px, (chip_height - chip_text.height) / 2),
-        font: env.font,
-        color: text_color
+        font: \Font(font: env.font, color: text_color)
     ) {
         \Children
     };
@@ -818,16 +812,14 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? eff_avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? eff_avatar_color : #00000000),
         text: avatar
     );
 
     \let chip_text = \Text(
         x: text_x,
         y: y + max(0px, (chip_height - chip_text.height) / 2),
-        font: env.font,
-        color: text_color
+        font: \Font(font: env.font, color: text_color)
     ) {
         \Children
     };

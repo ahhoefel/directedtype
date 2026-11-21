@@ -766,9 +766,8 @@ pub fn build_scene(
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0) as f32;
 
-                let text_color = node
-                    .properties
-                    .get("color")
+                let text_color = fnode
+                    .and_then(|f| f.properties.get("color"))
                     .map(|v| match v {
                         Value::Color(c) | Value::String(c) => parse_color(c),
                         _ => Color::BLACK,

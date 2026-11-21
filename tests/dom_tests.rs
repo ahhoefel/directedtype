@@ -39,7 +39,6 @@ fn test_dom_create_and_append() {
             ("x".to_string(), Expr::distance_px(15.0)),
             ("y".to_string(), Expr::distance_px(25.0)),
             ("font".to_string(), font_expr(16.0)),
-            ("color".to_string(), Expr::color("#ffffff")),
         ],
     );
 
@@ -234,7 +233,6 @@ fn test_dom_ports_and_text_mutation() {
             ("x".to_string(), Expr::distance_px(0.0)),
             ("y".to_string(), Expr::distance_px(0.0)),
             ("font".to_string(), font_expr(16.0)),
-            ("color".to_string(), Expr::color("#000000")),
         ],
     );
     dom.append_root(text_node).unwrap();

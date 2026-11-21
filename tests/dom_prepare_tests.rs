@@ -90,7 +90,7 @@ fn test_lossless_mixed_content_inline_replace_and_directives() {
 
     \VStack(width: 400pt) {
         \let prose_color = #0f172a;
-        \Text(id: "para", color: prose_color, width: 400pt) {
+        \Text(id: "para", font: \Font(color: prose_color), width: 400pt) {
             See \InlineCite(key: "knuth84") and \Bold { TeX } for details.
         }
     }

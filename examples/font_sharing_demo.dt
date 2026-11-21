@@ -26,9 +26,9 @@
 );
 
 // 1. Reusable font resource definitions
-\let heading_font = \Font(size: 28px, weight: 700);
-\let subhead_font = \Font(size: 18px, weight: 600);
-\let badge_font = \Font(size: 13px, weight: 600);
+\let heading_font = \Font(size: 28px, weight: 700, color: #0f172a);
+\let subhead_font = \Font(size: 18px, weight: 600, color: #475569);
+\let badge_font = \Font(size: 13px, weight: 600, color: #1e40af);
 \let body_font = \Font(size: 15px, weight: 400);
 
 \let badge_pad = 8px;
@@ -40,11 +40,11 @@
     width: min(max(window.width - 80px, 400px), 800px)
 ) {
     // Section Header using shared heading_font
-    \Text(font: heading_font, color: #0f172a) {
+    \Text(font: heading_font) {
         Font Sharing & Typographic Metrics
     }
 
-    \Text(font: subhead_font, color: #475569) {
+    \Text(font: subhead_font) {
         Shared font nodes eliminate duplicate metric ports across the layout DAG
     }
 
@@ -61,16 +61,14 @@
             \Text(
                 font: badge_font,
                 x: parent.left + 14px,
-                y: parent.top + badge_pad,
-                color: #1e40af
+                y: parent.top + badge_pad
             ) {
                 TYPOGRAPHIC BADGE
             }
         }
 
         \Text(
-            font: body_font,
-            color: #334155
+            font: \Font(font: body_font, color: #334155)
         ) {
             The badge height and vertical centering adapt dynamically to the intrinsic font cap_height metric.
         }
@@ -78,7 +76,7 @@
 
     // Card 2: Shared font metrics across diverse UI elements
     \Card(style: font_card_style_2) {
-        \Text(font: body_font, color: #475569) {
+        \Text(font: \Font(font: body_font, color: #475569)) {
             All four cards and text blocks reference the same Font nodes, minimizing duplicate measurement passes.
         }
     }

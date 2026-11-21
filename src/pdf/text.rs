@@ -162,9 +162,8 @@ pub(super) fn draw_text_node(
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0) as f32;
 
-    let text_rgba = node
-        .properties
-        .get("color")
+    let text_rgba = fnode
+        .and_then(|f| f.properties.get("color"))
         .map(|v| match v {
             Value::Color(c) | Value::String(c) => parse_color_rgba8(c),
             _ => Rgba8::from_rgba8(0, 0, 0, 255),

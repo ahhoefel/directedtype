@@ -44,8 +44,7 @@
         x: x,
         y: y,
         width: width,
-        font: \Font(font: font, size: font.size * 0.85, weight: 600),
-        color: label_color,
+        font: \Font(font: font, size: font.size * 0.85, weight: 600, color: label_color),
         text: has_number ? ("CHAPTER " + number) : "",
         pagination: \Pagination(breakable: false, keep_with_next: true)
     );
@@ -59,9 +58,9 @@
             font: font,
             size: font.size * 1.9,
             weight: 700,
-            line_height: font.line_height * 1.75
+            line_height: font.line_height * 1.75,
+            color: heading_color
         ),
-        color: heading_color,
         text: title,
         pagination: \Pagination(breakable: false, keep_with_next: true)
     );
@@ -105,9 +104,9 @@
             font: font,
             size: font.size * heading_scale,
             weight: 700,
-            line_height: font.line_height * heading_scale
+            line_height: font.line_height * heading_scale,
+            color: heading_color
         ),
-        color: heading_color,
         text: full_title,
         pagination: \Pagination(breakable: false, keep_with_next: true)
     );
@@ -151,9 +150,9 @@
             font: font,
             size: font.size * heading_scale,
             weight: 600,
-            line_height: font.line_height * heading_scale
+            line_height: font.line_height * heading_scale,
+            color: heading_color
         ),
-        color: heading_color,
         text: full_title,
         pagination: \Pagination(breakable: false, keep_with_next: true)
     );
@@ -197,9 +196,9 @@
             font: font,
             size: font.size * heading_scale,
             weight: 600,
-            line_height: font.line_height * heading_scale
+            line_height: font.line_height * heading_scale,
+            color: heading_color
         ),
-        color: heading_color,
         text: full_title,
         pagination: \Pagination(breakable: false, keep_with_next: true)
     );
@@ -250,14 +249,14 @@
         font: font,
         size: font.size * 0.88,
         italic: true,
-        line_height: font.line_height * 0.88
+        line_height: font.line_height * 0.88,
+        color: caption_color
     );
     \let cap_node = \Text(
         x: x,
         y: body.bottom + (has_caption ? gap : 0pt),
         width: width,
         font: cap_font,
-        color: caption_color,
         text: full_caption
     );
 
@@ -288,8 +287,7 @@
     \let mark_node = \Text(
         x: x,
         y: y,
-        font: note_font,
-        color: marker_color,
+        font: \Font(font: note_font, color: marker_color),
         text: marker
     );
     \let indent = has_marker ? marker_indent : 0pt;
@@ -297,8 +295,7 @@
         x: x + indent,
         y: y,
         width: width - indent,
-        font: note_font,
-        color: color
+        font: \Font(font: note_font, color: color)
     ) {
         \Children
     };
@@ -320,13 +317,12 @@
     y: Distance = parent.top,
     marker_color: Color = #1e293b
 ) {
-    \let sup_font = \Font(font: font, size: font.size * 0.72, weight: 400, italic: false);
+    \let sup_font = \Font(font: font, size: font.size * 0.72, weight: 400, italic: false, color: marker_color);
     \let shift = font.size * 0.38;
     \let mark = \Text(
         x: x,
         y: y,
         font: sup_font,
-        color: marker_color,
         text: marker
     );
 
@@ -365,8 +361,7 @@
     \let mark_node = \Text(
         x: x,
         y: y,
-        font: note_font,
-        color: marker_color,
+        font: \Font(font: note_font, color: marker_color),
         text: marker
     );
     \let marker_gap = has_marker ? 4pt : 0pt;
@@ -374,8 +369,7 @@
         x: x + mark_node.width + marker_gap,
         y: y,
         width: width - mark_node.width - marker_gap,
-        font: note_font,
-        color: color
+        font: \Font(font: note_font, color: color)
     ) {
         \Children
     };
@@ -397,13 +391,12 @@
     y: Distance = parent.top,
     marker_color: Color = #1e293b
 ) {
-    \let sup_font = \Font(font: font, size: font.size * 0.72, weight: 400, italic: false);
+    \let sup_font = \Font(font: font, size: font.size * 0.72, weight: 400, italic: false, color: marker_color);
     \let shift = font.size * 0.38;
     \let mark = \Text(
         x: x,
         y: y,
         font: sup_font,
-        color: marker_color,
         text: marker
     );
 
@@ -498,8 +491,8 @@
     )
 
     // Running header (suppressed on chapter openers and before the first chapter)
-    \let chrome_font = \Font(font: font, size: font.size * 0.82, weight: 400, italic: true);
-    \let num_font = \Font(font: font, size: font.size * 0.85, weight: 400, italic: false);
+    \let chrome_font = \Font(font: font, size: font.size * 0.82, weight: 400, italic: true, color: chrome_color);
+    \let num_font = \Font(font: font, size: font.size * 0.85, weight: 400, italic: false, color: chrome_color);
     \let show_header = !has_chapter_start && running_chapter != "";
     \let verso_title = book_title != "" ? book_title : running_chapter;
     \let header_text = show_header ? (is_verso ? verso_title : running_chapter) : "";
@@ -510,7 +503,6 @@
         y: y + header_offset,
         width: body_width,
         font: chrome_font,
-        color: chrome_color,
         align: header_align,
         text: header_text
     );
@@ -584,7 +576,6 @@
         y: y + height - footer_offset,
         width: body_width,
         font: num_font,
-        color: chrome_color,
         align: footer_align,
         text: footer_text
     )

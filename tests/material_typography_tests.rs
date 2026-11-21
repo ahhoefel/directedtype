@@ -93,13 +93,13 @@ fn test_material_typography_all_13_variants() {
             .find_by_key(None, &ComponentKey::string(key))
             .unwrap_or_else(|| panic!("missing key {key}"));
         let text_node = find_descendant_text(&compiled, comp.id);
+        let font_id = text_node.font.expect("font node attached");
+        let font_node = find_node(&compiled, font_id).unwrap();
         assert_eq!(
-            text_node.properties.get("color"),
+            font_node.properties.get("color"),
             Some(&Value::Color("#000000de".to_string())),
             "default color for {key}"
         );
-        let font_id = text_node.font.expect("font node attached");
-        let font_node = find_node(&compiled, font_id).unwrap();
         assert_eq!(
             font_node.properties.get("size"),
             Some(&Value::Distance(size)),
@@ -144,7 +144,7 @@ fn test_material_typography_all_12_shorthands_and_tokens() {
         \Body2("s_body2";) { Body 2 }
         \Caption("s_caption";) { Caption }
         \Overline("s_overline";) { Overline }
-        \Text("token_btn"; font: material_font_button, color: material_text_primary) { Token Button Font }
+        \Text("token_btn"; font: \Font(font: material_font_button, color: material_text_primary)) { Token Button Font }
     }
     "#;
 
@@ -182,13 +182,13 @@ fn test_material_typography_all_12_shorthands_and_tokens() {
         assert!(comp.rect.width > 0.0, "{key} should have intrinsic width > 0");
         assert!(comp.rect.height > 0.0, "{key} should have height > 0");
         let text_node = find_descendant_text(&compiled, comp.id);
+        let font_id = text_node.font.expect("font node attached");
+        let font_node = find_node(&compiled, font_id).unwrap();
         assert_eq!(
-            text_node.properties.get("color"),
+            font_node.properties.get("color"),
             Some(&Value::Color(color.to_string())),
             "color mismatch for {key}"
         );
-        let font_id = text_node.font.expect("font node attached");
-        let font_node = find_node(&compiled, font_id).unwrap();
         assert_eq!(
             font_node.properties.get("size"),
             Some(&Value::Distance(size)),

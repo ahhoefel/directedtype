@@ -29,7 +29,7 @@
     \let pad = \PadOut(padding: 1em) {
         \let t = \Text(
             width: width - 2em,
-            color: #f8fafc
+            font: \Font(font: font, color: #f8fafc)
         ) {
             Typography is the craft of endowing human language with a durable visual form. When setting a paragraph in a box with a 1em padding on all sides, vertical metric trimming determines whether the padding is measured optically from the cap height and baseline or from the em-top and line-gap bottom.
         }

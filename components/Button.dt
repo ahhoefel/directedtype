@@ -36,8 +36,7 @@
     ) {
         \Center {
             \Text(
-                font: \Font(size: style.size, weight: style.weight),
-                color: text_color,
+                font: \Font(size: style.size, weight: style.weight, color: text_color),
                 text: label
             )
         }
@@ -79,8 +78,7 @@
     ) {
         \Center {
             \Text(
-                font: \Font(size: style.size, weight: style.weight),
-                color: text_color,
+                font: \Font(size: style.size, weight: style.weight, color: text_color),
                 text: label
             )
         }
@@ -150,8 +148,7 @@
     ) {
         \Center {
             \Text(
-                font: \Font(size: 14px, weight: 600),
-                color: text_color,
+                font: \Font(size: 14px, weight: 600, color: text_color),
                 text: label
             )
         }
@@ -224,8 +221,7 @@
     ) {
         \Center {
             \Text(
-                font: \Font(size: 14px, weight: 600),
-                color: text_color,
+                font: \Font(size: 14px, weight: 600, color: text_color),
                 text: label
             )
         }

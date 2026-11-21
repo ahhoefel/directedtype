@@ -20,8 +20,7 @@ Here's how you display "Hello world!":
 \Text(
     x: 16px, 
     y: 16px, 
-    color: #000000,
-    font: \Font(family: "Arial", size: 12pt)) { 
+    font: \Font(family: "Arial", size: 12pt, color: #000000)) { 
     Hello world!
 }
 ```
@@ -30,7 +29,7 @@ Here's how you display "Hello world!":
 
 <img src="images/intro/example_2.png" alt="Example 2" width="107" height="129">
 
-Here `\Text` is a built-in component for displaying text. It takes a list of properties as parameters: `x`, `y`, `color` and `font`.
+Here `\Text` is a built-in component for displaying text. It takes a list of properties as parameters: `x`, `y`, and `font`.
 It also has another input which is its block. In this case, its block contains the text "Hello world!".
 
 Every time you want to make a component, you start with a slash before the component name. Component names typically start with a capital letter.
@@ -51,14 +50,12 @@ Below the definition of `\LeftMargin` we create a component literal of `\LeftMar
 \LeftMargin(margin: 16px) {
     \Text(
         y: 16px,
-        color: #000000,
-        font: \Font(family: "Arial", size: 12pt)) { 
+        font: \Font(family: "Arial", size: 12pt, color: #000000)) { 
         First line.
     }
     \Text(
         y: 36px,
-        color: #000000,
-        font: \Font(family: "Arial", size: 12pt)) { 
+        font: \Font(family: "Arial", size: 12pt, color: #000000)) { 
         Second line.
     }
 }
@@ -190,8 +187,8 @@ For instance, the `font` parameter on the `\Text` component is
 an environmental parameter. So, if we declare an environmental property called `font` it will automatically be passed into any `\Text` in the same scope.
 
 ```dt
-\env font = \Font(family: "Arial", size: 12pt) 
-\Text(x: 16px, y: 16px, color: #000000) { Hello world! }
+\env font = \Font(family: "Arial", size: 12pt, color: #000000) 
+\Text(x: 16px, y: 16px) { Hello world! }
 ```
 
 <img src="images/intro/example_6.png" alt="Example 6" width="116" height="44">
@@ -200,11 +197,11 @@ Components are designed to be hermetic and modular. Environmental properties do 
 
 ```dt
 \Component Foo() {
-    \Text(x: 16px, y: 16px, color: #000000) { 
+    \Text(x: 16px, y: 16px) { 
         Hello world!
     }
 }
-\env font = \Font(family: "Arial", size: 12pt) 
+\env font = \Font(family: "Arial", size: 12pt, color: #000000) 
 \Foo() // The font does not reach the Text.
 ```
 
@@ -218,11 +215,11 @@ an environmental parameter.
 
 ```dt
 \Component Foo(env font: Font) {
-    \Text(x: 16px, y: 16px, color: #000000) { 
+    \Text(x: 16px, y: 16px) { 
         Hello world!
     }
 }
-\env font = \Font(family: "Arial", size: 12pt) 
+\env font = \Font(family: "Arial", size: 12pt, color: #000000) 
 \Foo()
 ```
 
@@ -237,9 +234,9 @@ of a component literal:
 \Component Foo() {
     \Children
 }
-\env font = \Font(family: "Arial", size: 12pt) 
+\env font = \Font(family: "Arial", size: 12pt, color: #000000) 
 \Foo {
-    \Text(x: 16px, y: 16px, color: #000000) { 
+    \Text(x: 16px, y: 16px) { 
         Hello world!
     }
 }
@@ -254,9 +251,9 @@ This works because `font` and `\Text` are in the same lexical scope. We can prev
     \let font; // font is no longer passed to children.
     \Children
 }
-\env font = \Font(family: "Arial", size: 12pt) 
+\env font = \Font(family: "Arial", size: 12pt, color: #000000) 
 \Foo {
-    \Text(x: 16px, y: 16px, color: #000000) { 
+    \Text(x: 16px, y: 16px) { 
         Hello world!
     }
 }
@@ -270,15 +267,15 @@ Finally, it's very useful for a component to define its environmental properties
 
 ```dt
 \Component Arial {
-    \env font = \Font(family: "Arial", size: 12pt) 
-    \Text(x: 16px, y: 16px, color: #000000){
+    \env font = \Font(family: "Arial", size: 12pt, color: #000000) 
+    \Text(x: 16px, y: 16px){
         Internal lexical scope
     }
     \Children
 }
 
 \Arial {
-    \Text(x: 16px, y: 36px, color: #000000) { 
+    \Text(x: 16px, y: 36px) { 
         External lexical scope
     }
 }
@@ -440,8 +437,7 @@ make expressions using `prev` and `next`.
     \let t = \Text(
         x: x + (16px - t.width)/2,
         y: x + (16px - t.height)/2,
-        font: \Font(family: "Arial", size: 12pt),
-        color: #000,
+        font: \Font(family: "Arial", size: 12pt, color: #000),
         text: n.to_fixed()
     )
 }

@@ -13,9 +13,9 @@
     Critical,
 }
 
-\let font_title = \Font(size: 22px, weight: 700);
-\let font_section = \Font(size: 15px, weight: 600);
-\let font_body = \Font(size: 13px, weight: 400);
+\let font_title = \Font(size: 22px, weight: 700, color: #f8fafc);
+\let font_section = \Font(size: 15px, weight: 600, color: #94a3b8);
+\let font_body = \Font(size: 13px, weight: 400, color: #e2e8f0);
 
 // 1. Zero-parameter \Expr: captures `prev`, `gap`, and `top` at the evaluation site
 \let vertical_flow_y: Expr = \Expr { prev ? prev.bottom + gap : top };
@@ -119,8 +119,7 @@
         x: left + 12px,
         y: top + 8px,
         text: label,
-        font: font_body,
-        color: #e2e8f0
+        font: font_body
     )
     \Rect(
         x: left + 12px,
@@ -141,11 +140,11 @@
 };
 
 \let theme = \ThemeContainer(x: 24px, y: 24px) {
-    \Text(font: font_title, color: #f8fafc) {
+    \Text(font: font_title) {
         Reusable Expressions (\\Expr) Demo
     }
 
-    \Text(font: font_section, color: #94a3b8) {
+    \Text(font: font_section) {
         1. Passing \\Expr Parameters (Linear vs. Quadratic Growth)
     }
 
@@ -173,7 +172,7 @@
         size_fn: quadratic_curve
     )
 
-    \Text(font: font_section, color: #94a3b8) {
+    \Text(font: font_section) {
         2. Creation-Site (outer.base_pad) vs. Evaluation-Site (parent.width)
     }
 

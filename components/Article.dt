@@ -28,9 +28,9 @@
             font: font,
             size: font.size * heading_scale,
             weight: 700,
-            line_height: font.line_height * heading_scale
+            line_height: font.line_height * heading_scale,
+            color: heading_color
         ),
-        color: heading_color,
         text: full_title,
         pagination: \Pagination(breakable: false, keep_with_next: true)
     );
@@ -79,9 +79,9 @@
             font: font,
             size: font.size * 1.9,
             weight: 700,
-            line_height: font.line_height * 1.7
+            line_height: font.line_height * 1.7,
+            color: title_color
         ),
-        color: title_color,
         text: title
     );
 
@@ -90,8 +90,7 @@
         x: x,
         y: meta_y,
         width: width,
-        font: \Font(font: font, size: font.size * 0.92, weight: 400, italic: false),
-        color: meta_color,
+        font: \Font(font: font, size: font.size * 0.92, weight: 400, italic: false, color: meta_color),
         text: meta_line
     );
 
@@ -161,14 +160,13 @@
     )
 
     // Running title header on pages 2+ (suppressed on page 1)
-    \let chrome_font = \Font(font: font, size: font.size * 0.82, weight: 400, italic: false);
+    \let chrome_font = \Font(font: font, size: font.size * 0.82, weight: 400, italic: false, color: chrome_color);
     \let show_header = !page.is_first && article_title != "";
     \Text(
         x: body_x,
         y: y + header_offset,
         width: body_width,
         font: chrome_font,
-        color: chrome_color,
         align: Align.Right,
         text: show_header ? article_title : ""
     )
@@ -220,7 +218,6 @@
         y: y + height - footer_offset,
         width: body_width,
         font: chrome_font,
-        color: chrome_color,
         align: Align.Center,
         text: "Page " + page.number + " of " + page.count
     )

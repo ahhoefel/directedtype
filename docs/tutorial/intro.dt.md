@@ -20,8 +20,7 @@ Here's how you display "Hello world!":
 \Text(
     x: 16px, 
     y: 16px, 
-    color: #000000,
-    font: \Font(family: "Arial", size: 12pt)) { 
+    font: \Font(family: "Arial", size: 12pt, color: #000000)) { 
     Hello world!
 }
 ```
@@ -31,7 +30,7 @@ Here's how you display "Hello world!":
 \use "components/Card.dt"
 \use "components/CardStyle.dt"
 \use "components/Arrow.dt"
-\env font = \Font(family: "Arial", size: 12pt);
+\env font = \Font(family: "Arial", size: 12pt, color: #000000);
 
 \let card_style = \CardStyle(
     bg: #f8fafc,
@@ -44,7 +43,7 @@ Here's how you display "Hello world!":
 
 \let start = \HCenterUp(y: 0px) {
     \CardFit(style: card_style, gap: 10px) {
-        \Text(color: #000000) { 
+        \Text { 
             window
         }
     }
@@ -52,7 +51,7 @@ Here's how you display "Hello world!":
 
 \let end = \HCenterUp(y: 64px) {
     \CardFit(style: card_style, gap: 10px) {
-        \Text(color: #000000) { 
+        \Text { 
             \\Text
         }
     }
@@ -66,7 +65,7 @@ Here's how you display "Hello world!":
 )
 ```
 
-Here `\Text` is a built-in component for displaying text. It takes a list of properties as parameters: `x`, `y`, `color` and `font`.
+Here `\Text` is a built-in component for displaying text. It takes a list of properties as parameters: `x`, `y`, and `font`.
 It also has another input which is its block. In this case, its block contains the text "Hello world!".
 
 Every time you want to make a component, you start with a slash before the component name. Component names typically start with a capital letter.
@@ -87,14 +86,12 @@ Below the definition of `\LeftMargin` we create a component literal of `\LeftMar
 \LeftMargin(margin: 16px) {
     \Text(
         y: 16px,
-        color: #000000,
-        font: \Font(family: "Arial", size: 12pt)) { 
+        font: \Font(family: "Arial", size: 12pt, color: #000000)) { 
         First line.
     }
     \Text(
         y: 36px,
-        color: #000000,
-        font: \Font(family: "Arial", size: 12pt)) { 
+        font: \Font(family: "Arial", size: 12pt, color: #000000)) { 
         Second line.
     }
 }
@@ -108,7 +105,7 @@ This gives us the following DOM:
 \use "components/Card.dt"
 \use "components/CardStyle.dt"
 \use "components/Arrow.dt"
-\env font = \Font(family: "Arial", size: 12pt);
+\env font = \Font(family: "Arial", size: 12pt, color: #000000);
 
 \let card_style = \CardStyle(
     bg: #f8fafc,
@@ -121,7 +118,7 @@ This gives us the following DOM:
 
 \let start = \HCenterUp(y: 0px) {
     \CardFit(style: card_style, gap: 10px) {
-        \Text(color: #000000) { 
+        \Text { 
             window
         }
     }
@@ -129,7 +126,7 @@ This gives us the following DOM:
 
 \HCenterUp(y: 64px) {
     \let lmargin = \CardFit(style: card_style, gap: 10px) {
-        \Text(color: #000000) { 
+        \Text { 
             \\LeftMargin
         }
     }
@@ -138,12 +135,12 @@ This gives us the following DOM:
 \HCenterUp(y: 128px) {
     \HStack(gap: 32px) {
     \let textLeft = \CardFit(style: card_style, gap: 10px) {
-        \Text(color: #000000) { 
+        \Text { 
             \\Text
         }
     }
     \let textRight = \CardFit(style: card_style, gap: 10px) {
-        \Text(color: #000000) { 
+        \Text { 
             \\Text
         }
     }
@@ -328,19 +325,19 @@ For instance, the `font` parameter on the `\Text` component is
 an environmental parameter. So, if we declare an environmental property called `font` it will automatically be passed into any `\Text` in the same scope.
 
 ```dt render
-\env font = \Font(family: "Arial", size: 12pt) 
-\Text(x: 16px, y: 16px, color: #000000) { Hello world! }
+\env font = \Font(family: "Arial", size: 12pt, color: #000000) 
+\Text(x: 16px, y: 16px) { Hello world! }
 ```
 
 Components are designed to be hermetic and modular. Environmental properties do not affect components in the internal lexical scope (i.e. the body) of a component definition by default. The following will fail to compile:
 
 ```dt compile-error
 \Component Foo() {
-    \Text(x: 16px, y: 16px, color: #000000) { 
+    \Text(x: 16px, y: 16px) { 
         Hello world!
     }
 }
-\env font = \Font(family: "Arial", size: 12pt) 
+\env font = \Font(family: "Arial", size: 12pt, color: #000000) 
 \Foo() // The font does not reach the Text.
 ```
 
@@ -350,11 +347,11 @@ an environmental parameter.
 
 ```dt render
 \Component Foo(env font: Font) {
-    \Text(x: 16px, y: 16px, color: #000000) { 
+    \Text(x: 16px, y: 16px) { 
         Hello world!
     }
 }
-\env font = \Font(family: "Arial", size: 12pt) 
+\env font = \Font(family: "Arial", size: 12pt, color: #000000) 
 \Foo()
 ```
 
@@ -367,9 +364,9 @@ of a component literal:
 \Component Foo() {
     \Children
 }
-\env font = \Font(family: "Arial", size: 12pt) 
+\env font = \Font(family: "Arial", size: 12pt, color: #000000) 
 \Foo {
-    \Text(x: 16px, y: 16px, color: #000000) { 
+    \Text(x: 16px, y: 16px) { 
         Hello world!
     }
 }
@@ -382,9 +379,9 @@ This works because `font` and `\Text` are in the same lexical scope. We can prev
     \let font; // font is no longer passed to children.
     \Children
 }
-\env font = \Font(family: "Arial", size: 12pt) 
+\env font = \Font(family: "Arial", size: 12pt, color: #000000) 
 \Foo {
-    \Text(x: 16px, y: 16px, color: #000000) { 
+    \Text(x: 16px, y: 16px) { 
         Hello world!
     }
 }
@@ -394,15 +391,15 @@ Finally, it's very useful for a component to define its environmental properties
 
 ```dt render
 \Component Arial {
-    \env font = \Font(family: "Arial", size: 12pt) 
-    \Text(x: 16px, y: 16px, color: #000000){
+    \env font = \Font(family: "Arial", size: 12pt, color: #000000) 
+    \Text(x: 16px, y: 16px){
         Internal lexical scope
     }
     \Children
 }
 
 \Arial {
-    \Text(x: 16px, y: 36px, color: #000000) { 
+    \Text(x: 16px, y: 36px) { 
         External lexical scope
     }
 }
@@ -510,11 +507,11 @@ component wherever that component is instantiated. In the next example, when we 
     y2: redRect.bottom,
 )
 
-\let t = \Text(x:a1.x1 + 8px, y: (a1.y1 + a1.y2)/2 - t.height/2, color: #000000, font: \Font(family: "Arial", size: 10pt)){parent.parent.width}
+\let t = \Text(x:a1.x1 + 8px, y: (a1.y1 + a1.y2)/2 - t.height/2, font: \Font(family: "Arial", size: 10pt, color: #000000)){parent.parent.width}
 
-\let p = \Text(x:a2.x1 + 8px, y: (a2.y1 + a2.y2)/2 - p.height/2, color: #000000, font: \Font(family: "Arial", size: 10pt)){parent}
+\let p = \Text(x:a2.x1 + 8px, y: (a2.y1 + a2.y2)/2 - p.height/2, font: \Font(family: "Arial", size: 10pt, color: #000000)){parent}
 
-\let pp = \Text(x:a3.x1 + 8px, y: (a3.y1 + a3.y2)/2 - pp.height/2, color: #000000, font: \Font(family: "Arial", size: 10pt)){parent}
+\let pp = \Text(x:a3.x1 + 8px, y: (a3.y1 + a3.y2)/2 - pp.height/2, font: \Font(family: "Arial", size: 10pt, color: #000000)){parent}
 ```
 
 ### Pulling Properties Up
@@ -613,8 +610,7 @@ make expressions using `prev` and `next`.
     \let t = \Text(
         x: x + (16px - t.width)/2,
         y: x + (16px - t.height)/2,
-        font: \Font(family: "Arial", size: 12pt),
-        color: #000,
+        font: \Font(family: "Arial", size: 12pt, color: #000),
         text: n.to_fixed()
     )
 }

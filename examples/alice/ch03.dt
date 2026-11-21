@@ -22,8 +22,7 @@
         x: x + dx,
         y: y + dy,
         width: 120pt,
-        font: f,
-        color: #111111
+        font: f
     ) {
         \Children
     }

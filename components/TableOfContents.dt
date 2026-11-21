@@ -29,8 +29,7 @@
     \let title_link = \Text(
         x: x + indent,
         y: y,
-        font: entry_font,
-        color: #0f172a
+        font: \Font(font: entry_font, color: #0f172a)
     ) {
         \Link(to: target, text: display_title)
     };
@@ -38,8 +37,7 @@
     \let page_label = \Text(
         x: x + width - page_label.width,
         y: y,
-        font: entry_font,
-        color: #334155
+        font: \Font(font: entry_font, color: #334155)
     ) {
         \Link(to: target, text: "" + target.page)
     };
@@ -73,7 +71,8 @@
         font: font,
         size: font.size * 1.5,
         weight: 700,
-        line_height: font.line_height * 1.4
+        line_height: font.line_height * 1.4,
+        color: #0f172a
     );
 
     \let stack = \VStackStretch(
@@ -85,7 +84,6 @@
     ) {
         \Text(
             font: heading_font,
-            color: #0f172a,
             text: title,
             pagination: \Pagination(breakable: false, keep_with_next: true)
         )

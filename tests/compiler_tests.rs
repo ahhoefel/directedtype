@@ -3217,16 +3217,120 @@ fn test_env_font_rejects_name_port_error() {
 
 #[test]
 fn test_font_rejects_unknown_ports() {
-    let input = r#"\let f = \Font(size: 16px, color: #ff0000);"#;
+    let input = r#"\let f = \Font(size: 16px, bogus: #ff0000);"#;
     let doc = parse(input).expect("parse ok");
-    let err = compile_to_graph(&doc).expect_err("Expected compile error for color on Font");
+    let err = compile_to_graph(&doc).expect_err("Expected compile error for bogus port on Font");
     match err {
         directedtype::compiler::CompileError::NoMatchingOverload(details) => {
             assert_eq!(details.name, "Font");
-            assert!(details.provided_ports.contains(&"color".to_string()));
+            assert!(details.provided_ports.contains(&"bogus".to_string()));
         }
         other => panic!("Expected NoMatchingOverload CompileError, got: {:?}", other),
     }
+}
+
+#[test]
+fn test_font_color_default_and_inheritance() {
+    let input = r#"
+    \let f0 = \Font(size: 16px);
+    \let f1 = \Font(size: 16px, color: #dc2626);
+    \let f2 = \Font(font: f1, size: 20px);
+    \env font = f1;
+    \let f3 = \Font(weight: 700);
+    \let f4 = \Font(font: f1, color: #1d4ed8);
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+    let font_nodes: Vec<_> = layout.nodes.iter().filter(|n| n.name == "Font").collect();
+    assert_eq!(font_nodes.len(), 5);
+    assert_eq!(
+        font_nodes[0].properties.get("color"),
+        Some(&Value::Color("#000000".to_string()))
+    );
+    assert_eq!(
+        font_nodes[1].properties.get("color"),
+        Some(&Value::Color("#dc2626".to_string()))
+    );
+    assert_eq!(
+        font_nodes[2].properties.get("color"),
+        Some(&Value::Color("#dc2626".to_string()))
+    );
+    assert_eq!(
+        font_nodes[3].properties.get("color"),
+        Some(&Value::Color("#dc2626".to_string()))
+    );
+    assert_eq!(
+        font_nodes[4].properties.get("color"),
+        Some(&Value::Color("#1d4ed8".to_string()))
+    );
+}
+
+#[test]
+fn test_text_rejects_color_port() {
+    let input = r#"\Text(font: \Font(size: 16px), color: #ff0000) { hi }"#;
+    let doc = parse(input).expect("parse ok");
+    let err = compile_to_graph(&doc).expect_err("Expected Text to reject color port");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Node 'Text' does not accept property 'color'"),
+        "Unexpected error message: {msg}"
+    );
+}
+
+#[test]
+fn test_span_font_color_and_link_with_italic() {
+    let input = r#"
+    \Span Red(env font: Font) {
+        \env font = \Font(font: self.font, color: #dc2626);
+        \Children
+    }
+    \Span Italic(env font: Font) {
+        \env font = \Font(font: self.font, italic: true);
+        \Children
+    }
+    \Span StyledLink(env font: Font, link_color: Color = #1a73e8) {
+        \alias color = link_color;
+        \alias current_color = link_color;
+        \Children
+    }
+    \Text(width: 400px, font: \Font(size: 16px, color: #111111)) {
+        Base \Red { red \Italic { red-italic } } \StyledLink { \Italic { link-italic } }
+    }
+    "#;
+    let doc = parse(input).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+    let text_node = layout.nodes.iter().find(|n| n.name == "Text").expect("Text node");
+    let full = text_node.text_content.as_deref().unwrap();
+
+    let base_span = text_node
+        .text_spans
+        .iter()
+        .find(|s| &full[s.range.clone()] == "Base ")
+        .expect("Base span");
+    assert_eq!(base_span.style.color, None);
+
+    let red_span = text_node
+        .text_spans
+        .iter()
+        .find(|s| &full[s.range.clone()] == "red ")
+        .expect("red span");
+    assert_eq!(red_span.style.color.as_deref(), Some("#dc2626"));
+
+    let red_italic = text_node
+        .text_spans
+        .iter()
+        .find(|s| &full[s.range.clone()] == "red-italic")
+        .expect("red-italic span");
+    assert!(red_italic.style.italic);
+    assert_eq!(red_italic.style.color.as_deref(), Some("#dc2626"));
+
+    let link_italic = text_node
+        .text_spans
+        .iter()
+        .find(|s| &full[s.range.clone()] == "link-italic")
+        .expect("link-italic span");
+    assert!(link_italic.style.italic);
+    assert_eq!(link_italic.style.color.as_deref(), Some("#1a73e8"));
 }
 
 #[test]
@@ -3502,27 +3606,27 @@ fn test_number_to_string_builtins() {
 
     \Text(
         text: to_fixed(pi, 2),
-        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )
     \Text(
         text: pi.to_fixed(4),
-        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )
     \Text(
         text: whole.to_fixed(0),
-        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )
     \Text(
         text: to_precision(n1, 4),
-        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )
     \Text(
         text: small.to_precision(2),
-        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )
     \Text(
         text: n1.to_precision(2),
-        font: \Font(size: 14px), width: 100px, height: 20px, color: #fff
+        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )
     "#;
 

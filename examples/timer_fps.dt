@@ -1,6 +1,6 @@
 \Window(title: "DirectedType — Timer & Live Framerate Demo")
 
-\env font = \Font(family: "sans-serif", size: 16px)
+\env font = \Font(family: "sans-serif", size: 16px, color: #e2e8f0)
 
 // Indefinite timer: runs continuously from creation, tracking elapsed time, frame delta (dt), and frame count
 \let clock = \IndefiniteTimer()
@@ -32,24 +32,21 @@
 \Text(
     x: 40px,
     y: 44px,
-    font: \Font(family: "sans-serif", size: 20px, weight: 700),
-    color: #f8fafc,
+    font: \Font(family: "sans-serif", size: 20px, weight: 700, color: #f8fafc),
     text: "Timer & Frame Loop Telemetry"
 )
 
 \Text(
     x: 40px,
     y: 80px,
-    font: \Font(family: "sans-serif", size: 16px, weight: 600),
-    color: #38bdf8,
+    font: \Font(family: "sans-serif", size: 16px, weight: 600, color: #38bdf8),
     text: "Instantaneous FPS: " + inst_fps.to_fixed(1)
 )
 
 \Text(
     x: 40px,
     y: 108px,
-    font: \Font(family: "sans-serif", size: 16px, weight: 600),
-    color: #34d399,
+    font: \Font(family: "sans-serif", size: 16px, weight: 600, color: #34d399),
     text: "Average FPS: " + avg_fps.to_fixed(1)
 )
 
@@ -57,7 +54,6 @@
     x: 40px,
     y: 136px,
     font: font,
-    color: #e2e8f0,
     text: "Frame Delta (dt): " + dt_ms.to_fixed(2) + " ms   |   Frames: " + clock.frames
 )
 
@@ -65,7 +61,6 @@
     x: 40px,
     y: 164px,
     font: font,
-    color: #e2e8f0,
     text: "Elapsed Time: " + clock.time.to_seconds().to_fixed(2) + " s"
 )
 
@@ -76,7 +71,6 @@
     x: 40px,
     y: 244px,
     font: font,
-    color: #e2e8f0,
     text: "Fixed 5s Timer: " + intro_status
 )
 
@@ -90,7 +84,6 @@
     x: 40px,
     y: 380px,
     font: font,
-    color: #e2e8f0,
     text: "Indefinite Oscillator (IndefiniteTimer()):"
 )
 

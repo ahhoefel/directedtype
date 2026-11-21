@@ -34,7 +34,8 @@
         font: self.font,
         size: font_size,
         weight: 400,
-        line_height: font_size
+        line_height: font_size,
+        color: color
     );
 
     \alias width = size;
@@ -57,7 +58,6 @@
         x: x + max(0px, (size - avatar_text.width) / 2),
         y: y + max(0px, (size - avatar_text.height) / 2),
         font: env.font,
-        color: color,
         text: label
     );
 }
@@ -84,7 +84,8 @@
         font: self.font,
         size: font_size,
         weight: 400,
-        line_height: font_size
+        line_height: font_size,
+        color: color
     );
 
     \alias width = size;
@@ -106,8 +107,7 @@
     \let avatar_text = \Text(
         x: x + max(0px, (size - avatar_text.width) / 2),
         y: y + max(0px, (size - avatar_text.height) / 2),
-        font: env.font,
-        color: color
+        font: env.font
     ) {
         \Children
     };

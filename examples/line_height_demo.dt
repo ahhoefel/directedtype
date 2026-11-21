@@ -11,7 +11,7 @@
     // Centered text
     \Center {
         \let t = \Text(
-            color: #f8fafc,
+            font: \Font(font: font, color: #f8fafc)
         ) {
             Typography
         }
@@ -57,11 +57,11 @@
 }
 
 \Component Measurement(x: Distance, y1: Distance, y2: Distance, arm: Distance = 5px, color: Color = #ffffff) {
-    \env font = \Font(family: "Arial", size: 10px);
+    \env font = \Font(family: "Arial", size: 10px, color: color);
     \Rect(x: x-0.5px, y: y1, width: 1px, height: y2 - y1, color: #ef4444)
     \Rect(x: x-arm, y: y1-0.5px, width: 2*arm, height: 1px, color: #ef4444)
     \Rect(x: x-arm, y: y2-0.5px, width: 2*arm, height: 1px, color: #ef4444)
-    \Text(x: x + 2px, y: (y1 + y2)/2, color: color, text: to_fixed(distance_to_float(y2 - y1, px), 2))
+    \Text(x: x + 2px, y: (y1 + y2)/2, text: to_fixed(distance_to_float(y2 - y1, px), 2))
 }
 
 \Component HLine(x: Distance, y: Distance, length: Distance, thickness: Distance = 1px, color: Color) {

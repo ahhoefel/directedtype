@@ -834,14 +834,14 @@ mod tests {
 # \\env font = \\Font(family: \"Arial\", size: 16px);
 \\VStack(width: 200px, gap: 8px) {
     # \\let secret = 10px;
-    \\Text(color: #1e293b) { \"Visible\" }
+    \\Text(font: \\Font(color: #1e293b)) { \"Visible\" }
 }";
         let (compiler_src, display_src) = split_hidden_lines(raw);
         assert!(compiler_src.contains("\\use \"components/VStack.dt\""));
         assert!(compiler_src.contains("\\let secret = 10px;"));
         assert!(!display_src.contains("\\use"));
         assert!(!display_src.contains("secret"));
-        assert!(display_src.contains("\\Text(color: #1e293b) { \"Visible\" }"));
+        assert!(display_src.contains("\\Text(font: \\Font(color: #1e293b)) { \"Visible\" }"));
     }
 
     #[test]

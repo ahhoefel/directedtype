@@ -110,7 +110,6 @@ impl BuiltinPrimitive for TextPrimitive {
                 | "z"
                 | "baseline"
                 | "text"
-                | "color"
                 | "font"
                 | "align"
                 | "underline"
@@ -230,7 +229,6 @@ impl BuiltinPrimitive for TextPrimitive {
             "start_at".to_string(),
             "end_at".to_string(),
             "text_bounds".to_string(),
-            "color".to_string(),
         ]
     }
 

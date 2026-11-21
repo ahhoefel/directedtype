@@ -311,14 +311,13 @@ Every `.dt` document has an implicit root viewport node named `window`. You can 
 `\Text` shapes, wraps, and renders OpenType text using Parley and Vello. It provides first-class typographic box trimming (`start_at` and `ends_at`) and baseline-grid alignment (`baseline`).
 
 ```dt
-\let body_font = \Font(family: "Georgia", size: 18px, weight: 400, line_height: 27px);
+\let body_font = \Font(family: "Georgia", size: 18px, weight: 400, line_height: 27px, color: #1e293b);
 
 \Text(
     x: 40px,
     y: 60px,
     width: 480px,
     font: body_font,
-    color: #1e293b,
     text_bounds: \TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)
 ) {
     "Typography is the craft of endowing human language with a durable visual form."
@@ -332,11 +331,10 @@ Every `.dt` document has an implicit root viewport node named `window`. You can 
 | `x` | Required Input | `Distance` | `parent.left` (if provided via `\Children`) | Left coordinate of the text box. |
 | `y` | Input / Computed | `Distance` | `baseline - text_baseline_offset(...)` (if `baseline` is set) | Top coordinate of the text box. Either `y` or `baseline` must be provided. |
 | `baseline` | Input / Computed | `Distance` | `y + text_baseline_offset(font.size, font.weight, font.family, ...)` | Y-coordinate of the **first line's typographic baseline**. Supplying `baseline` instead of `y` positions the text by its baseline! |
-| `font` | Required Input (or via `\env font`) | `Font` | Ambient `\env font` (or parent `\Text.font` for inline spans) | Reference to a `\Font` node specifying `size`, `weight`, `family`, `line_height`, and `italic`. |
+| `font` | Required Input (or via `\env font`) | `Font` | Ambient `\env font` (or parent `\Text.font` for inline spans) | Reference to a `\Font` node specifying `size`, `weight`, `family`, `line_height`, `italic`, `letter_spacing`, and `color`. |
 | `width` | Optional Input / Computed | `Distance` | `text_width(text, font.size, font.weight, font.family)` | If omitted, shrink-wraps to single-line advance width. If provided, wraps lines to `width`. |
 | `height` | Optional Input / Computed | `Distance` | `text_height(text, font.size, font.weight, font.family, width, ...)` | Automatically computed from wrapped line count and vertical trim settings (`text_bounds`). |
 | `text` | Optional Input | `String` / `Float` / `Integer` / `Bool` | Body `{ "..." }` text content | Dynamic text expression (overrides static `{ "..." }` body when set). |
-| `color` | Optional Input | `Color` | `#000000` | Fill color of the rendered glyphs. |
 | `underline` | Optional Input | `Boolean` | `false` | Draws an underline across the text run. |
 | `text_bounds` | `env` Input | `TextBounds` | `\TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)` | Controls vertical metric trimming (`start_at` and `end_at`) of the text bounding box; resolved via lexical `\env text_bounds` or explicit port. |
 
@@ -365,7 +363,7 @@ A `\Text` block can mix string literals and inline child `\Text` or `\Link` elem
     "Read the "
     \Link(url: "#/guide/intro") { "Introduction" }
     " or highlight "
-    \Text(color: #dc2626, underline: true) { "important terms" }
+    \Text(font: \Font(color: #dc2626), underline: true) { "important terms" }
     " inline."
 }
 ```
@@ -403,6 +401,7 @@ Inline child nodes inherit `font` from their parent `\Text` node and are shaped 
 | `size` | **Required Input** | `Distance` | — | Font size in logical pixels (`px`, `pt`, or `em`). |
 | `weight` | Optional Input | `Integer` | `400` | Font weight (`100`–`900`). |
 | `family` | Optional Input | `String` | `""` | Font family name. |
+| `color` | Optional Input | `Color` | `#000000` | Fill color of the rendered glyphs. |
 | `line_height` | Optional Input / Output | `Distance` | `font_line_height(size, weight, family)` | Explicit line height if authored, or natural font line height. |
 | `cap_height` | Output | `Distance` | `font_cap_height(size, weight, family)` | Capital letter height above baseline. |
 | `x_height` | Output | `Distance` | `font_x_height(size, weight, family)` | Lowercase `'x'` height above baseline. |

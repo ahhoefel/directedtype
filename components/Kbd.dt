@@ -13,7 +13,7 @@
     radius: Distance = 4px,
     color: Color = #1e293b
 ) {
-    \let kbd_font = \Font(font: font, family: "Courier New", size: 0.85em, weight: 600);
+    \let kbd_font = \Font(font: font, family: "Courier New", size: 0.85em, weight: 600, color: color);
 
     \Rect(
         x: x,
@@ -26,7 +26,7 @@
         radius: radius
     )
 
-    \let label = \Text(x: x + pad_x, y: y + pad_y, font: kbd_font, color: color) {
+    \let label = \Text(x: x + pad_x, y: y + pad_y, font: kbd_font) {
         \Children
     };
 

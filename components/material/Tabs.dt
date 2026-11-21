@@ -482,16 +482,14 @@
     \let icon_node = \Text(
         x: icon_x,
         y: icon_y,
-        font: icon_font,
-        color: has_icon ? resolved_text_color : #00000000,
+        font: \Font(font: icon_font, color: has_icon ? resolved_text_color : #00000000),
         text: icon
     );
 
     \let label_node = \Text(
         x: label_x,
         y: label_y,
-        font: label_font,
-        color: has_label ? resolved_text_color : #00000000,
+        font: \Font(font: label_font, color: has_label ? resolved_text_color : #00000000),
         text_bounds: tab_text_bounds,
         text: label
     );
@@ -681,16 +679,14 @@
     \let icon_node = \Text(
         x: icon_x,
         y: icon_y,
-        font: icon_font,
-        color: has_icon ? resolved_text_color : #00000000,
+        font: \Font(font: icon_font, color: has_icon ? resolved_text_color : #00000000),
         text: icon
     );
 
     \let label_node = \Text(
         x: label_x,
         y: label_y,
-        font: label_font,
-        color: has_label ? resolved_text_color : #00000000,
+        font: \Font(font: label_font, color: has_label ? resolved_text_color : #00000000),
         text_bounds: tab_text_bounds,
         text: label
     );
@@ -874,16 +870,14 @@
     \let icon_node = \Text(
         x: icon_x,
         y: icon_y,
-        font: icon_font,
-        color: has_icon ? resolved_text_color : #00000000,
+        font: \Font(font: icon_font, color: has_icon ? resolved_text_color : #00000000),
         text: icon
     );
 
     \let label_node = \Text(
         x: label_x,
         y: label_y,
-        font: env.font,
-        color: has_label ? resolved_text_color : #00000000,
+        font: \Font(font: env.font, color: has_label ? resolved_text_color : #00000000),
         text_bounds: tab_text_bounds
     ) {
         \Children
@@ -1073,16 +1067,14 @@
     \let icon_node = \Text(
         x: icon_x,
         y: icon_y,
-        font: icon_font,
-        color: has_icon ? resolved_text_color : #00000000,
+        font: \Font(font: icon_font, color: has_icon ? resolved_text_color : #00000000),
         text: icon
     );
 
     \let label_node = \Text(
         x: label_x,
         y: label_y,
-        font: env.font,
-        color: has_label ? resolved_text_color : #00000000,
+        font: \Font(font: env.font, color: has_label ? resolved_text_color : #00000000),
         text_bounds: tab_text_bounds
     ) {
         \Children

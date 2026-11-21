@@ -225,8 +225,7 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? avatar_color : #00000000),
         text: avatar
     );
 
@@ -234,8 +233,7 @@
         x: text_x,
         y: text_y,
         width: text_avail_width,
-        font: title_font,
-        color: title_color,
+        font: \Font(font: title_font, color: title_color),
         text_bounds: card_header_text_bounds,
         text: title
     );
@@ -244,8 +242,7 @@
         x: text_x,
         y: text_y + title_node.height + subheader_gap,
         width: text_avail_width,
-        font: subheader_font,
-        color: has_subheader ? subheader_color : #00000000,
+        font: \Font(font: subheader_font, color: has_subheader ? subheader_color : #00000000),
         text_bounds: card_header_text_bounds,
         text: subheader
     );
@@ -341,16 +338,14 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? avatar_color : #00000000),
         text: avatar
     );
 
     \let title_node = \Text(
         x: text_x,
         y: text_y,
-        font: title_font,
-        color: title_color,
+        font: \Font(font: title_font, color: title_color),
         text_bounds: card_header_text_bounds,
         text: title
     );
@@ -358,8 +353,7 @@
     \let sub_node = \Text(
         x: text_x,
         y: text_y + title_node.height + subheader_gap,
-        font: subheader_font,
-        color: has_subheader ? subheader_color : #00000000,
+        font: \Font(font: subheader_font, color: has_subheader ? subheader_color : #00000000),
         text_bounds: card_header_text_bounds,
         text: subheader
     );
@@ -430,8 +424,7 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? avatar_color : #00000000),
         text: avatar
     );
 
@@ -503,8 +496,7 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? avatar_color : #00000000),
         text: avatar
     );
 

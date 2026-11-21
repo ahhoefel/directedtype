@@ -18,7 +18,7 @@
 ) {
     \let rfont = \Font(font: self.font, size: 9.8pt, line_height: 14pt, italic: false);
     \env font = rfont;
-    \Text(x: x, y: y + 4pt, width: width, font: rfont, color: #111111, align: Align.Center) {
+    \Text(x: x, y: y + 4pt, width: width, font: rfont, align: Align.Center) {
         C\SmallCaps{HORUS.}//
     }
     \Text(
@@ -26,7 +26,6 @@
         y: y + 18pt,
         width: width,
         font: rfont,
-        color: #111111,
         align: Align.Center,
         text: with_note ? "(In which the cook and the baby joined):—" : ""
     )

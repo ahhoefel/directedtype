@@ -463,7 +463,7 @@ fn test_svg_physical_units_and_inline_image_component() {
     \env font = \Font(family: "Arial", size: 20px);
 
     \let phys = \Image(src: "badge.svg", x: 0px, y: 0px)
-    \let para = \Text(x: 0px, y: 80px, color: #000000) {
+    \let para = \Text(x: 0px, y: 80px) {
         Click \InlineImage(src: "badge.svg", height: 1em, baseline_offset: 0.8em) here
     }
     "#;

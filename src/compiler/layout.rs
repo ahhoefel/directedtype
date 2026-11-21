@@ -257,6 +257,12 @@ impl FormulaMap {
         }
     }
 
+    /// Checks whether `color` was explicitly authored on this node.
+    #[inline]
+    pub fn has_custom_color(&self) -> bool {
+        self.contains_key("color")
+    }
+
     fn ensure_formatted(&self) -> &HashMap<String, String> {
         self.formatted.get_or_init(|| {
             let cap = self.authored_ports.base.as_ref().map_or(0, |b| b.len())
@@ -1194,12 +1200,12 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             continue;
         }
 
-        let (text, font_size, font_weight, font_family, max_width, line_height, align, ox, oy, raw_spans, raw_boxes, has_dynamic_splice) = {
+        let (text, font_size, font_weight, font_family, max_width, line_height, align, ox, oy, text_font_id, raw_spans, raw_boxes, has_dynamic_splice) = {
             let n = &layout.nodes[text_node_idx];
-            let fnode = n
+            let text_font_id = n
                 .font
-                .or_else(|| n.properties.get("font").and_then(|v| v.as_node()))
-                .and_then(|fid| layout.nodes.get(fid.0));
+                .or_else(|| n.properties.get("font").and_then(|v| v.as_node()));
+            let fnode = text_font_id.and_then(|fid| layout.nodes.get(fid.0));
             let (resolved_text_opt, resolved_spans, resolved_boxes, splice_shifts) =
                 crate::compiler::text::resolve_active_rich_text(n, layout);
             let text = resolved_text_opt.unwrap_or_default();
@@ -1251,6 +1257,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 align,
                 n.rect.x,
                 n.rect.y + y_offset,
+                text_font_id,
                 resolved_spans,
                 resolved_boxes,
                 !splice_shifts.is_empty(),
@@ -1297,6 +1304,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                     chain.push(id);
                 }
             }
+            let mut prev_font_id = text_font_id;
             for &span_id in chain.iter().rev() {
                 if let Some(snode) = layout.nodes.get(span_id.0) {
                     let font_id = snode
@@ -1319,9 +1327,11 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                                     span.style.font_family = Some(fam.to_string());
                                 }
                             }
-                            if let Some(col) = fnode.properties.get("color").and_then(|v| v.as_str()) {
-                                if !col.is_empty() && col != "#00000000" {
-                                    span.style.color = Some(col.to_string());
+                            if Some(fid) != prev_font_id && fnode.formulas.has_custom_color() {
+                                if let Some(col) = fnode.properties.get("color").and_then(|v| v.as_str()) {
+                                    if !col.is_empty() {
+                                        span.style.color = Some(col.to_string());
+                                    }
                                 }
                             }
                             if let Some(it) = fnode.properties.get("italic").and_then(|v| v.as_bool()) {
@@ -1330,6 +1340,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                                 }
                             }
                         }
+                        prev_font_id = Some(fid);
                     }
                     if let Some(sz) = snode.properties.get("size").and_then(|v| v.as_f64()) {
                         if sz > 0.0 {

@@ -100,7 +100,8 @@
         font: self.font,
         size: v_size,
         weight: v_weight,
-        line_height: v_line_height
+        line_height: v_line_height,
+        color: color
     );
 
     \let t = \Text(
@@ -108,7 +109,6 @@
         y: y,
         width: width,
         font: env.font,
-        color: color,
         align: align,
         text_bounds: material_text_bounds
     ) {
@@ -141,14 +141,14 @@
         font: self.font,
         size: v_size,
         weight: v_weight,
-        line_height: v_line_height
+        line_height: v_line_height,
+        color: color
     );
 
     \let t = \Text(
         x: x,
         y: y,
         font: env.font,
-        color: color,
         align: align,
         text_bounds: material_text_bounds
     ) {

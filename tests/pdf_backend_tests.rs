@@ -53,8 +53,8 @@ fn test_pdf_deterministic_output() {
     \env link_style = link_default;
 
     \VStackStretch(x: 40pt, y: 40pt, width: 300pt, gap: 10pt) {
-        \Text(color: #0f172a) { Deterministic Typography fi fl }
-        \Text(color: #1e293b) { Visit \Link(url: "https://example.com"){Example} }
+        \Text(font: \Font(color: #0f172a)) { Deterministic Typography fi fl }
+        \Text(font: \Font(color: #1e293b)) { Visit \Link(url: "https://example.com"){Example} }
     }
     "#;
     let opts = PdfOptions {
@@ -108,9 +108,9 @@ fn test_pdf_tounicode_glyphs_opacity_and_transparent_rect() {
     \Rect(x: 10pt, y: 10pt, width: 100pt, height: 40pt, color: #00000000, border_width: 1pt, border_color: #112233)
 
     // Visible text + transparent #00000000 text + opacity 0.0 text must ALL emit BT...ET text operators
-    \Text(x: 20pt, y: 70pt, width: 200pt, color: #000000) { Searchable visible line }
-    \Text(x: 20pt, y: 100pt, width: 200pt, color: #00000000) { Hidden alpha zero text }
-    \Text(x: 20pt, y: 130pt, width: 200pt, color: #000000, opacity: 0.0) { Opacity zero text }
+    \Text(x: 20pt, y: 70pt, width: 200pt) { Searchable visible line }
+    \Text(x: 20pt, y: 100pt, width: 200pt, font: \Font(color: #00000000)) { Hidden alpha zero text }
+    \Text(x: 20pt, y: 130pt, width: 200pt, opacity: 0.0) { Opacity zero text }
     "#;
     let opts = PdfOptions {
         compressed: false,

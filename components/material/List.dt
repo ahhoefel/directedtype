@@ -74,8 +74,7 @@
         x: x + padding_x + 16px,
         y: y + resolved_pad_y,
         width: max(0px, inner_width - 32px),
-        font: subheader_font,
-        color: has_subheader ? subheader_color : #00000000,
+        font: \Font(font: subheader_font, color: has_subheader ? subheader_color : #00000000),
         text_bounds: list_text_bounds,
         text: subheader
     )
@@ -140,8 +139,7 @@
     \let sub_node = \Text(
         x: x + padding_x + 16px,
         y: y + resolved_pad_y,
-        font: subheader_font,
-        color: has_subheader ? subheader_color : #00000000,
+        font: \Font(font: subheader_font, color: has_subheader ? subheader_color : #00000000),
         text_bounds: list_text_bounds,
         text: subheader
     );
@@ -262,8 +260,7 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? avatar_color : #00000000),
         text: avatar
     );
 
@@ -271,8 +268,7 @@
         x: text_x,
         y: text_y,
         width: text_avail_width,
-        font: primary_font,
-        color: resolved_primary_color,
+        font: \Font(font: primary_font, color: resolved_primary_color),
         text_bounds: list_text_bounds,
         text: primary
     );
@@ -281,8 +277,7 @@
         x: text_x,
         y: text_y + primary_node.height + gap,
         width: text_avail_width,
-        font: secondary_font,
-        color: has_secondary ? resolved_secondary_color : #00000000,
+        font: \Font(font: secondary_font, color: has_secondary ? resolved_secondary_color : #00000000),
         text_bounds: list_text_bounds,
         text: secondary
     );
@@ -409,16 +404,14 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? avatar_color : #00000000),
         text: avatar
     );
 
     \let primary_node = \Text(
         x: text_x,
         y: text_y,
-        font: primary_font,
-        color: resolved_primary_color,
+        font: \Font(font: primary_font, color: resolved_primary_color),
         text_bounds: list_text_bounds,
         text: primary
     );
@@ -426,8 +419,7 @@
     \let sec_node = \Text(
         x: text_x,
         y: text_y + primary_node.height + gap,
-        font: secondary_font,
-        color: has_secondary ? resolved_secondary_color : #00000000,
+        font: \Font(font: secondary_font, color: has_secondary ? resolved_secondary_color : #00000000),
         text_bounds: list_text_bounds,
         text: secondary
     );
@@ -745,8 +737,7 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? avatar_color : #00000000),
         text: avatar
     );
 
@@ -754,8 +745,7 @@
         x: text_x,
         y: text_y,
         width: text_avail_width,
-        font: primary_font,
-        color: resolved_primary_color,
+        font: \Font(font: primary_font, color: resolved_primary_color),
         text_bounds: list_text_bounds,
         text: primary
     );
@@ -764,8 +754,7 @@
         x: text_x,
         y: text_y + primary_node.height + gap,
         width: text_avail_width,
-        font: secondary_font,
-        color: has_secondary ? resolved_secondary_color : #00000000,
+        font: \Font(font: secondary_font, color: has_secondary ? resolved_secondary_color : #00000000),
         text_bounds: list_text_bounds,
         text: secondary
     );
@@ -956,16 +945,14 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (resolved_avatar_size - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (resolved_avatar_size - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? avatar_color : #00000000),
         text: avatar
     );
 
     \let primary_node = \Text(
         x: text_x,
         y: text_y,
-        font: primary_font,
-        color: resolved_primary_color,
+        font: \Font(font: primary_font, color: resolved_primary_color),
         text_bounds: list_text_bounds,
         text: primary
     );
@@ -973,8 +960,7 @@
     \let sec_node = \Text(
         x: text_x,
         y: text_y + primary_node.height + gap,
-        font: secondary_font,
-        color: has_secondary ? resolved_secondary_color : #00000000,
+        font: \Font(font: secondary_font, color: has_secondary ? resolved_secondary_color : #00000000),
         text_bounds: list_text_bounds,
         text: secondary
     );
@@ -1301,8 +1287,7 @@
         x: x + resolved_inset,
         y: y + resolved_pad_y,
         width: text_avail_width,
-        font: primary_font,
-        color: resolved_primary_color,
+        font: \Font(font: primary_font, color: resolved_primary_color),
         text_bounds: list_text_bounds,
         text: primary
     );
@@ -1311,8 +1296,7 @@
         x: x + resolved_inset,
         y: y + resolved_pad_y + primary_node.height + gap,
         width: text_avail_width,
-        font: secondary_font,
-        color: has_secondary ? resolved_secondary_color : #00000000,
+        font: \Font(font: secondary_font, color: has_secondary ? resolved_secondary_color : #00000000),
         text_bounds: list_text_bounds,
         text: secondary
     );
@@ -1368,8 +1352,7 @@
     \let primary_node = \Text(
         x: x + resolved_inset,
         y: y + resolved_pad_y,
-        font: primary_font,
-        color: resolved_primary_color,
+        font: \Font(font: primary_font, color: resolved_primary_color),
         text_bounds: list_text_bounds,
         text: primary
     );
@@ -1377,8 +1360,7 @@
     \let sec_node = \Text(
         x: x + resolved_inset,
         y: y + resolved_pad_y + primary_node.height + gap,
-        font: secondary_font,
-        color: has_secondary ? resolved_secondary_color : #00000000,
+        font: \Font(font: secondary_font, color: has_secondary ? resolved_secondary_color : #00000000),
         text_bounds: list_text_bounds,
         text: secondary
     );
@@ -1433,8 +1415,7 @@
         x: x + resolved_inset,
         y: y + resolved_pad_y,
         width: text_avail_width,
-        font: env.font,
-        color: resolved_primary_color,
+        font: \Font(font: env.font, color: resolved_primary_color),
         text_bounds: list_text_bounds
     ) {
         \Children
@@ -1444,8 +1425,7 @@
         x: x + resolved_inset,
         y: y + resolved_pad_y + primary_node.height + gap,
         width: text_avail_width,
-        font: secondary_font,
-        color: has_secondary ? resolved_secondary_color : #00000000,
+        font: \Font(font: secondary_font, color: has_secondary ? resolved_secondary_color : #00000000),
         text_bounds: list_text_bounds,
         text: secondary
     );
@@ -1500,8 +1480,7 @@
     \let primary_node = \Text(
         x: x + resolved_inset,
         y: y + resolved_pad_y,
-        font: env.font,
-        color: resolved_primary_color,
+        font: \Font(font: env.font, color: resolved_primary_color),
         text_bounds: list_text_bounds
     ) {
         \Children
@@ -1510,8 +1489,7 @@
     \let sec_node = \Text(
         x: x + resolved_inset,
         y: y + resolved_pad_y + primary_node.height + gap,
-        font: secondary_font,
-        color: has_secondary ? resolved_secondary_color : #00000000,
+        font: \Font(font: secondary_font, color: has_secondary ? resolved_secondary_color : #00000000),
         text_bounds: list_text_bounds,
         text: secondary
     );

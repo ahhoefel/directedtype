@@ -324,8 +324,7 @@
     \let nav_text_node = \Text(
         x: nav_x + max(0px, (nav_slot_w - nav_text_node.width) / 2),
         y: nav_y + max(0px, (nav_slot_w - nav_text_node.height) / 2),
-        font: nav_font,
-        color: has_nav_icon ? resolved_title_color : #00000000,
+        font: \Font(font: nav_font, color: has_nav_icon ? resolved_title_color : #00000000),
         text: nav_icon
     );
 
@@ -341,8 +340,7 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (avatar_slot_w - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (avatar_slot_w - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? avatar_color : #00000000),
         text: avatar
     );
 
@@ -350,8 +348,7 @@
         x: text_x,
         y: text_y,
         width: text_avail_width,
-        font: title_font,
-        color: resolved_title_color,
+        font: \Font(font: title_font, color: resolved_title_color),
         text_bounds: app_bar_text_bounds,
         text: title
     );
@@ -360,8 +357,7 @@
         x: text_x,
         y: text_y + title_node.height,
         width: text_avail_width,
-        font: subtitle_font,
-        color: has_subtitle ? resolved_subtitle_color : #00000000,
+        font: \Font(font: subtitle_font, color: has_subtitle ? resolved_subtitle_color : #00000000),
         text_bounds: app_bar_text_bounds,
         text: subtitle
     );
@@ -493,8 +489,7 @@
     \let nav_text_node = \Text(
         x: nav_x + max(0px, (nav_slot_w - nav_text_node.width) / 2),
         y: nav_y + max(0px, (nav_slot_w - nav_text_node.height) / 2),
-        font: nav_font,
-        color: has_nav_icon ? resolved_title_color : #00000000,
+        font: \Font(font: nav_font, color: has_nav_icon ? resolved_title_color : #00000000),
         text: nav_icon
     );
 
@@ -510,16 +505,14 @@
     \let avatar_text_node = \Text(
         x: avatar_x + max(0px, (avatar_slot_w - avatar_text_node.width) / 2),
         y: avatar_y + max(0px, (avatar_slot_w - avatar_text_node.height) / 2),
-        font: avatar_font,
-        color: has_avatar ? avatar_color : #00000000,
+        font: \Font(font: avatar_font, color: has_avatar ? avatar_color : #00000000),
         text: avatar
     );
 
     \let title_node = \Text(
         x: text_x,
         y: text_y,
-        font: title_font,
-        color: resolved_title_color,
+        font: \Font(font: title_font, color: resolved_title_color),
         text_bounds: app_bar_text_bounds,
         text: title
     );
@@ -527,8 +520,7 @@
     \let sub_node = \Text(
         x: text_x,
         y: text_y + title_node.height,
-        font: subtitle_font,
-        color: has_subtitle ? resolved_subtitle_color : #00000000,
+        font: \Font(font: subtitle_font, color: has_subtitle ? resolved_subtitle_color : #00000000),
         text_bounds: app_bar_text_bounds,
         text: subtitle
     );

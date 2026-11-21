@@ -13,7 +13,7 @@
     radius: Distance = 8px,
     color: Color = #1e40af
 ) {
-    \let badge_font = \Font(font: font, size: 0.82em, weight: 700);
+    \let badge_font = \Font(font: font, size: 0.82em, weight: 700, color: color);
 
     \Rect(
         x: x,
@@ -26,7 +26,7 @@
         radius: radius
     )
 
-    \let label = \Text(x: x + pad_x, y: y + pad_y, font: badge_font, color: color) {
+    \let label = \Text(x: x + pad_x, y: y + pad_y, font: badge_font) {
         \Children
     };
 

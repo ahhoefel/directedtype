@@ -170,8 +170,7 @@
     \let label_node = \Text(
         x: pill_x + max(0px, (pill_w - label_node.width) / 2),
         y: pill_y + max(0px, (pill_h - label_node.height) / 2),
-        font: label_font,
-        color: text_color,
+        font: \Font(font: label_font, color: text_color),
         text_bounds: slider_text_bounds,
         text: text
     );
@@ -252,8 +251,7 @@
     \let mark_label = \Text(
         x: label_x,
         y: label_y,
-        font: mark_font,
-        color: has_label ? label_color : #00000000,
+        font: \Font(font: mark_font, color: has_label ? label_color : #00000000),
         text_bounds: slider_text_bounds,
         text: label
     );
@@ -298,7 +296,8 @@
         font: font,
         size: 14px,
         weight: 400,
-        line_height: 20px
+        line_height: 20px,
+        color: has_label ? label_color : #00000000
     );
 
     \let label_w: Distance = has_label ? mark_label.width : 0px;
@@ -330,7 +329,6 @@
         x: label_x,
         y: label_y,
         font: mark_font,
-        color: has_label ? label_color : #00000000,
         text_bounds: slider_text_bounds
     ) {
         \Children

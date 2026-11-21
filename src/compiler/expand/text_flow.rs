@@ -419,6 +419,14 @@ pub(super) fn finalize_span_component_ports(
             if let Some(Expr::Literal(Literal::Bool(b, _))) = fnode.ports.get("italic") {
                 own_style.italic = *b;
             }
+            if own_style.color.is_none() && fnode.authored_ports.contains_key("color") {
+                if let Some(
+                    Expr::Literal(Literal::Color(c, _)) | Expr::Literal(Literal::String(c, _)),
+                ) = fnode.ports.get("color")
+                {
+                    own_style.color = Some(c.clone());
+                }
+            }
         }
     }
 

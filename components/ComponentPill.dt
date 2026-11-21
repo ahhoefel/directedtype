@@ -70,8 +70,7 @@
     \let label = \Text(
         x: x + padding_x,
         y: y + (height - label.height) / 2,
-        font: font,
-        color: text_color
+        font: \Font(font: font, color: text_color)
     ) {
         \Children
     }

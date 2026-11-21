@@ -43,8 +43,8 @@
     env font: Font
 ) {
     \let col_font = \Font(font: font, size: 5.5pt, letter_spacing: 0.35pt);
-    \Text(x: x, y: y, font: col_font, color: #111111, text: "CHAPTER")
-    \Text(x: x, y: y, width: width, font: col_font, color: #111111, align: Align.Right, text: "PAGE")
+    \Text(x: x, y: y, font: col_font, text: "CHAPTER")
+    \Text(x: x, y: y, width: width, font: col_font, align: Align.Right, text: "PAGE")
 
     \alias height: Distance = 8pt;
 }
@@ -68,7 +68,6 @@
         y: y,
         width: 19pt,
         font: row_font,
-        color: #111111,
         align: Align.Right,
         text: roman + "."
     )
@@ -77,32 +76,30 @@
         x: x + 26pt,
         y: y,
         font: row_font,
-        color: #111111,
         text: title
     );
 
     // Uniform 1866 vertical-column dot leaders (right-aligned grid columns stopping clear of title)
     \let min_dot_x = t_title.right + 6pt;
     \let col0 = x + width - 26pt;
-    \Text(x: col0 - leader_step * 11.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step * 11.0) > min_dot_x ? "." : "")
-    \Text(x: col0 - leader_step * 10.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step * 10.0) > min_dot_x ? "." : "")
-    \Text(x: col0 - leader_step *  9.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  9.0) > min_dot_x ? "." : "")
-    \Text(x: col0 - leader_step *  8.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  8.0) > min_dot_x ? "." : "")
-    \Text(x: col0 - leader_step *  7.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  7.0) > min_dot_x ? "." : "")
-    \Text(x: col0 - leader_step *  6.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  6.0) > min_dot_x ? "." : "")
-    \Text(x: col0 - leader_step *  5.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  5.0) > min_dot_x ? "." : "")
-    \Text(x: col0 - leader_step *  4.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  4.0) > min_dot_x ? "." : "")
-    \Text(x: col0 - leader_step *  3.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  3.0) > min_dot_x ? "." : "")
-    \Text(x: col0 - leader_step *  2.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  2.0) > min_dot_x ? "." : "")
-    \Text(x: col0 - leader_step *  1.0, y: y, font: dot_font, color: #111111, text: (col0 - leader_step *  1.0) > min_dot_x ? "." : "")
-    \Text(x: col0,                      y: y, font: dot_font, color: #111111, text: col0 > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step * 11.0, y: y, font: dot_font, text: (col0 - leader_step * 11.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step * 10.0, y: y, font: dot_font, text: (col0 - leader_step * 10.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  9.0, y: y, font: dot_font, text: (col0 - leader_step *  9.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  8.0, y: y, font: dot_font, text: (col0 - leader_step *  8.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  7.0, y: y, font: dot_font, text: (col0 - leader_step *  7.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  6.0, y: y, font: dot_font, text: (col0 - leader_step *  6.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  5.0, y: y, font: dot_font, text: (col0 - leader_step *  5.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  4.0, y: y, font: dot_font, text: (col0 - leader_step *  4.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  3.0, y: y, font: dot_font, text: (col0 - leader_step *  3.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  2.0, y: y, font: dot_font, text: (col0 - leader_step *  2.0) > min_dot_x ? "." : "")
+    \Text(x: col0 - leader_step *  1.0, y: y, font: dot_font, text: (col0 - leader_step *  1.0) > min_dot_x ? "." : "")
+    \Text(x: col0,                      y: y, font: dot_font, text: col0 > min_dot_x ? "." : "")
 
     \Text(
         x: x,
         y: y,
         width: width,
         font: dot_font,
-        color: #111111,
         align: Align.Right,
         text: page_num
     )
@@ -132,7 +129,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 13.5pt, letter_spacing: 0.85pt),
-                color: #111111,
                 align: Align.Center,
                 text: "ALICE’S ADVENTURES"
             )
@@ -140,7 +136,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 13.5pt, letter_spacing: 0.85pt),
-                color: #111111,
                 align: Align.Center,
                 text: "IN WONDERLAND."
             )
@@ -159,7 +154,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 17.5pt, letter_spacing: 1.1pt),
-                color: #111111,
                 align: Align.Center,
                 text: "ALICE’S ADVENTURES"
             )
@@ -167,7 +161,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 17.5pt, letter_spacing: 1.1pt),
-                color: #111111,
                 align: Align.Center,
                 text: "IN WONDERLAND."
             )
@@ -175,7 +168,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 8.5pt, letter_spacing: 0.5pt),
-                color: #111111,
                 align: Align.Center,
                 text: "BY"
             )
@@ -183,7 +175,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 10.5pt, letter_spacing: 0.8pt),
-                color: #111111,
                 align: Align.Center,
                 text: "LEWIS CARROLL."
             )
@@ -191,7 +182,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 8.8pt, italic: true, letter_spacing: 0.6pt),
-                color: #111111,
                 align: Align.Center,
                 text: "WITH FORTY-TWO ILLUSTRATIONS"
             )
@@ -199,7 +189,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 8.8pt, italic: true, letter_spacing: 0.6pt),
-                color: #111111,
                 align: Align.Center,
                 text: "BY JOHN TENNIEL."
             )
@@ -207,7 +196,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 11pt, weight: 700),
-                color: #111111,
                 align: Align.Center,
                 text: "Mexico City"
             )
@@ -215,7 +203,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 9.5pt),
-                color: #111111,
                 align: Align.Center,
                 text: "Typeset with DirectedType"
             )
@@ -223,7 +210,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 9pt),
-                color: #111111,
                 align: Align.Center,
                 text: "November 2026"
             )
@@ -239,7 +225,6 @@
             \Text(
                 width: parent.width * 0.75,
                 font: \Font(font: font, size: 9pt, line_height: 13.5pt),
-                color: #111111,
                 align: Align.Justify
             ) {
                 This book was digitally typeset using a new typesetting system
@@ -338,7 +323,6 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 12pt, letter_spacing: 0.8pt),
-                color: #111111,
                 align: Align.Center,
                 text: "CONTENTS."
             )

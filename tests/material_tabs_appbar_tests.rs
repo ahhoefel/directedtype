@@ -91,8 +91,12 @@ fn test_material_appbar_and_toolbar_geometry_variants_colors_and_actions() {
         .iter()
         .find(|n| n.parent == Some(btn_login.id) && n.name == "Text")
         .unwrap();
+    let login_font_node = compiled
+        .layout
+        .get_node(login_text_node.font.expect("login text font"))
+        .unwrap();
     assert_eq!(
-        login_text_node.properties.get("color"),
+        login_font_node.properties.get("color"),
         Some(&Value::Color("#ffffff".to_string()))
     );
 
@@ -144,8 +148,12 @@ fn test_material_appbar_and_toolbar_geometry_variants_colors_and_actions() {
         .iter()
         .find(|n| n.parent == Some(btn_action.id) && n.name == "Text")
         .unwrap();
+    let action_font_node = compiled
+        .layout
+        .get_node(action_text_node.font.expect("action text font node"))
+        .unwrap();
     assert_eq!(
-        action_text_node.properties.get("color"),
+        action_font_node.properties.get("color"),
         Some(&Value::Color("#000000de".to_string()))
     );
 
@@ -447,15 +455,30 @@ fn test_material_tabs_interactive_selection_callbacks_controlled_and_disabled() 
         .unwrap();
 
     assert_eq!(
-        tab_0_label.properties.get("color"),
+        compiled
+            .layout
+            .get_node(tab_0_label.font.expect("tab_0 font"))
+            .unwrap()
+            .properties
+            .get("color"),
         Some(&Value::Color("#1976d2".to_string()))
     );
     assert_eq!(
-        tab_1_label.properties.get("color"),
+        compiled
+            .layout
+            .get_node(tab_1_label.font.expect("tab_1 font"))
+            .unwrap()
+            .properties
+            .get("color"),
         Some(&Value::Color("#00000099".to_string()))
     );
     assert_eq!(
-        tab_2_label.properties.get("color"),
+        compiled
+            .layout
+            .get_node(tab_2_label.font.expect("tab_2 font"))
+            .unwrap()
+            .properties
+            .get("color"),
         Some(&Value::Color("#00000061".to_string()))
     );
 
@@ -551,11 +574,21 @@ fn test_material_tabs_interactive_selection_callbacks_controlled_and_disabled() 
         .last()
         .unwrap();
     assert_eq!(
-        tab_0_label_after.properties.get("color"),
+        compiled
+            .layout
+            .get_node(tab_0_label_after.font.expect("tab_0_after font"))
+            .unwrap()
+            .properties
+            .get("color"),
         Some(&Value::Color("#00000099".to_string()))
     );
     assert_eq!(
-        tab_1_label_after.properties.get("color"),
+        compiled
+            .layout
+            .get_node(tab_1_label_after.font.expect("tab_1_after font"))
+            .unwrap()
+            .properties
+            .get("color"),
         Some(&Value::Color("#1976d2".to_string()))
     );
 

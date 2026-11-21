@@ -23,6 +23,7 @@ const FONT_PUBLIC_PORTS: &[&str] = &[
     "line_height",
     "italic",
     "letter_spacing",
+    "color",
 ];
 
 pub(super) struct PreResolvedFont {
@@ -192,6 +193,7 @@ impl BuiltinPrimitive for FontPrimitive {
             "weight" => Some(StaticType::Integer),
             "family" => Some(StaticType::String),
             "italic" => Some(StaticType::Boolean),
+            "color" => Some(StaticType::Color),
             "font" => Some(StaticType::Node("Font".to_string())),
             _ => default_builtin_port_type(port_name),
         }
@@ -204,6 +206,7 @@ impl BuiltinPrimitive for FontPrimitive {
             "weight".to_string(),
             "line_height".to_string(),
             "letter_spacing".to_string(),
+            "color".to_string(),
             "cap_height".to_string(),
             "x_height".to_string(),
             "descent".to_string(),
@@ -232,6 +235,7 @@ impl BuiltinPrimitive for FontPrimitive {
                         "line_height".to_string(),
                         "italic".to_string(),
                         "letter_spacing".to_string(),
+                        "color".to_string(),
                     ],
                     vec![
                         "font".to_string(),
@@ -241,6 +245,7 @@ impl BuiltinPrimitive for FontPrimitive {
                         "line_height".to_string(),
                         "italic".to_string(),
                         "letter_spacing".to_string(),
+                        "color".to_string(),
                     ],
                 ];
                 return Err(CompileError::NoMatchingOverload(Box::new(
@@ -341,6 +346,16 @@ impl BuiltinPrimitive for FontPrimitive {
                     }),
                 );
             }
+            if !state.ports.contains_key("color") {
+                state.ports.insert(
+                    "color".to_string(),
+                    Expr::MemberAccess(MemberAccessExpr {
+                        target: std::sync::Arc::new(base_target.clone()),
+                        member: Ident::new("color", elem.span),
+                        span: elem.span,
+                    }),
+                );
+            }
             let size_overridden = elem.ports.iter().any(|p| p.name.as_str() == "size");
             if !state.ports.contains_key("line_height") && !size_overridden {
                 let base_has_authored_lh = base_font_id
@@ -391,6 +406,13 @@ impl BuiltinPrimitive for FontPrimitive {
                 state.ports.insert(
                     "letter_spacing".to_string(),
                     Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)),
+                );
+            }
+            // Default color to #000000 if not specified
+            if !state.ports.contains_key("color") {
+                state.ports.insert(
+                    "color".to_string(),
+                    Expr::Literal(Literal::Color("#000000".to_string(), elem.span)),
                 );
             }
         }

@@ -449,8 +449,12 @@ fn test_material_list_item_button_interactive_states_selection_and_disabled() {
         .iter()
         .find(|n| n.parent == Some(txt_disabled_id) && n.name == "Text")
         .unwrap();
+    let dis_font_node = compiled
+        .layout
+        .get_node(dis_text_node.font.expect("dis text font"))
+        .unwrap();
     assert_eq!(
-        dis_text_node.properties.get("color"),
+        dis_font_node.properties.get("color"),
         Some(&Value::Color("#00000061".to_string()))
     );
 
