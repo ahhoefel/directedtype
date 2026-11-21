@@ -167,7 +167,7 @@
         y: y + header_offset,
         width: body_width,
         font: chrome_font,
-        align: Align.Right,
+        paragraph_style: \ParagraphStyle(align: Align.Right),
         text: show_header ? article_title : ""
     )
 
@@ -218,7 +218,7 @@
         y: y + height - footer_offset,
         width: body_width,
         font: chrome_font,
-        align: Align.Center,
+        paragraph_style: \ParagraphStyle(align: Align.Center),
         text: "Page " + page.number + " of " + page.count
     )
 }

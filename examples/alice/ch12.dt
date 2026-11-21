@@ -26,7 +26,7 @@
         y: y + 28pt,
         width: width,
         font: \Font(font: font, size: 9.5pt, line_height: 12pt, letter_spacing: 0.6pt),
-        align: Align.Center,
+        paragraph_style: \ParagraphStyle(align: Align.Center),
         text: "THE END."
     )
 

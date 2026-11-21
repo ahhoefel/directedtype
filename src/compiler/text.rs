@@ -434,6 +434,26 @@ fn splice_rich_text(
     }
 }
 
+/// Reserved inline-box ID representing a paragraph's first-line indent.
+pub const INDENT_INLINE_BOX_ID: u64 = u64::MAX;
+
+/// Pushes a zero-height inline box at byte index 0 to implement first-line indentation in Parley.
+pub fn push_first_line_indent_box<B: parley::style::Brush>(
+    builder: &mut parley::RangedBuilder<'_, B>,
+    indent: f64,
+    has_content: bool,
+) {
+    if indent > 0.0 && has_content {
+        builder.push_inline_box(parley::InlineBox {
+            id: INDENT_INLINE_BOX_ID,
+            kind: parley::InlineBoxKind::InFlow,
+            index: 0,
+            width: indent as f32,
+            height: 0.0,
+        });
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_probe_layout(
     font_cx: &mut FontContext,
@@ -445,6 +465,7 @@ fn build_probe_layout(
     font_italic: bool,
     line_height: Option<f64>,
     max_width: f32,
+    indent: f64,
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
 ) -> parley::Layout<()> {
@@ -496,6 +517,11 @@ fn build_probe_layout(
             }
         }
     }
+    push_first_line_indent_box(
+        &mut builder,
+        indent,
+        !text.is_empty() || !inline_boxes.is_empty(),
+    );
     for ib in inline_boxes {
         builder.push_inline_box(parley::InlineBox {
             id: ib.node_id.0 as u64,
@@ -522,6 +548,7 @@ pub fn materialize_soft_hyphens_with_font_cx(
     font_italic: bool,
     line_height: Option<f64>,
     max_width: Option<f64>,
+    indent: f64,
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
 ) -> Option<MaterializedRichText> {
@@ -553,6 +580,7 @@ pub fn materialize_soft_hyphens_with_font_cx(
                 font_italic,
                 line_height,
                 w_f32,
+                indent,
                 &cur_spans,
                 &cur_boxes,
             );
@@ -598,6 +626,7 @@ pub fn materialize_soft_hyphens_with_font_cx(
                 font_italic,
                 line_height,
                 w_f32,
+                indent,
                 &cur_spans,
                 &cur_boxes,
             );
@@ -663,6 +692,7 @@ pub fn measure_rich_text_bounds_with_boxes(
         end_at,
         start_at,
         line_height,
+        0.0,
         spans,
         inline_boxes,
     )
@@ -679,6 +709,7 @@ pub fn measure_rich_text_bounds_with_boxes_and_spacing(
     end_at: Option<&str>,
     start_at: Option<&str>,
     line_height: Option<f64>,
+    indent: f64,
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
 ) -> (f64, f64) {
@@ -704,6 +735,7 @@ pub fn measure_rich_text_bounds_with_boxes_and_spacing(
                 false,
                 line_height,
                 max_width,
+                indent,
                 spans,
                 inline_boxes,
             );
@@ -752,6 +784,11 @@ pub fn measure_rich_text_bounds_with_boxes_and_spacing(
                     }
                 }
             }
+            push_first_line_indent_box(
+                &mut builder,
+                indent,
+                !eff_text.is_empty() || !eff_boxes.is_empty(),
+            );
             for ib in eff_boxes {
                 builder.push_inline_box(parley::InlineBox {
                     id: ib.node_id.0 as u64,
@@ -969,6 +1006,7 @@ pub fn shape_paragraph_lines(
     start_at: Option<&str>,
     line_height: Option<f64>,
     align: Option<&str>,
+    indent: f64,
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
 ) -> ShapedParagraph {
@@ -1002,6 +1040,7 @@ pub fn shape_paragraph_lines(
                 false,
                 line_height,
                 max_width,
+                indent,
                 spans,
                 inline_boxes,
             );
@@ -1054,6 +1093,11 @@ pub fn shape_paragraph_lines(
                     }
                 }
             }
+            push_first_line_indent_box(
+                &mut builder,
+                indent,
+                !eff_text.is_empty() || !eff_boxes.is_empty(),
+            );
             for ib in eff_boxes {
                 builder.push_inline_box(parley::InlineBox {
                     id: ib.node_id.0 as u64,
@@ -1512,6 +1556,7 @@ pub fn compute_span_fragments_with_metrics(
         max_width,
         line_height,
         align,
+        0.0,
         spans,
         &[],
         child_shifts,
@@ -1530,6 +1575,7 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
     max_width: Option<f64>,
     line_height: Option<f64>,
     align: Option<&str>,
+    indent: f64,
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
     child_shifts: &HashMap<NodeId, f64>,
@@ -1578,6 +1624,7 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
             false,
             line_height,
             max_width,
+            indent,
             spans,
             inline_boxes,
         );
@@ -1629,6 +1676,11 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
                 }
             }
         }
+        push_first_line_indent_box(
+            &mut builder,
+            indent,
+            !eff_text.is_empty() || !eff_boxes.is_empty(),
+        );
         for ib in eff_boxes {
             builder.push_inline_box(parley::InlineBox {
                 id: ib.node_id.0 as u64,
@@ -1795,18 +1847,23 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
             {
                 let char_offset = span.range.start;
                 let prefix_text = &text[0..char_offset.min(text.len())];
-                let (px, py) = measure_rich_text_bounds_with_boxes(
+                let (mut px, py) = measure_rich_text_bounds_with_boxes_and_spacing(
                     prefix_text,
                     font_size,
                     font_weight,
                     font_family,
+                    0.0,
                     max_width,
                     None,
                     None,
                     line_height,
+                    indent,
                     spans,
                     inline_boxes,
                 );
+                if prefix_text.is_empty() && inline_boxes.is_empty() && !text.is_empty() && indent > 0.0 {
+                    px = indent;
+                }
                 let frag_rect = Rect::new(origin_x + px, origin_y + py + own_shift, 0.0, font_size);
                 frags_by_node.insert(child_id, vec![frag_rect]);
                 baseline_by_node.insert(child_id, origin_y + default_first_baseline + own_shift);
@@ -1860,6 +1917,7 @@ pub fn compute_span_range_metrics(
         start_at,
         line_height,
         align,
+        0.0,
         spans,
         &[],
         text_x,
@@ -1881,6 +1939,7 @@ pub fn compute_span_range_metrics_with_boxes(
     start_at: Option<&str>,
     line_height: Option<f64>,
     align: Option<&str>,
+    indent: f64,
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
     text_x: f64,
@@ -1921,6 +1980,7 @@ pub fn compute_span_range_metrics_with_boxes(
             false,
             line_height,
             max_width,
+            indent,
             spans,
             inline_boxes,
         );
@@ -1972,6 +2032,11 @@ pub fn compute_span_range_metrics_with_boxes(
                 }
             }
         }
+        push_first_line_indent_box(
+            &mut builder,
+            indent,
+            !eff_text.is_empty() || !eff_boxes.is_empty(),
+        );
         for ib in eff_boxes {
             builder.push_inline_box(parley::InlineBox {
                 id: ib.node_id.0 as u64,
@@ -2177,18 +2242,23 @@ pub fn compute_span_range_metrics_with_boxes(
     if fragments.is_empty() {
         let char_offset = span_range.start.min(text.len());
         let prefix_text = &text[0..char_offset];
-        let (px, py) = measure_rich_text_bounds_with_boxes(
+        let (mut px, py) = measure_rich_text_bounds_with_boxes_and_spacing(
             prefix_text,
             font_size,
             font_weight,
             font_family,
+            0.0,
             max_width,
             None,
             None,
             line_height,
+            indent,
             spans,
             inline_boxes,
         );
+        if prefix_text.is_empty() && inline_boxes.is_empty() && !text.is_empty() && indent > 0.0 {
+            px = indent;
+        }
         let frag_rect = Rect::new(origin_x + px, origin_y + py + own_shift, 0.0, font_size);
         fragments.push(frag_rect);
     }
@@ -2626,6 +2696,7 @@ mod tests {
                 false,
                 None,
                 Some(tight_w),
+                0.0,
                 &spans,
                 &[],
             )
@@ -2664,6 +2735,7 @@ mod tests {
             None,
             None,
             None,
+            0.0,
             &[],
             &[],
         );
@@ -2677,6 +2749,7 @@ mod tests {
             None,
             None,
             None,
+            0.0,
             &[],
             &[],
         );

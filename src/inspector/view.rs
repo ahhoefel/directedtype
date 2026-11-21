@@ -30,6 +30,7 @@ impl DomTreeItem {
             || self.tag == "Line"
             || self.tag == "Text"
             || self.tag == "Font"
+            || self.tag == "ParagraphStyle"
             || self.tag == "Clip"
             || self.tag == "Box"
     }

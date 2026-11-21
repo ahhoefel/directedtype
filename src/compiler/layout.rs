@@ -729,6 +729,16 @@ impl ResolvedLayout {
             return ports.join(", ");
         }
 
+        if node.name == "ParagraphStyle" {
+            if let Some(align) = node.properties.get("align") {
+                ports.push(format!("align: {}", align));
+            }
+            if let Some(indent) = node.properties.get("indent").and_then(|v| v.as_f64()) {
+                ports.push(format!("indent: {}", format_num(indent)));
+            }
+            return ports.join(", ");
+        }
+
         if node.name == "Clip" {
             if let Some(box_val) = node.properties.get("box").and_then(|v| v.as_node()) {
                 let box_str = if box_val.is_window() {
@@ -1070,6 +1080,7 @@ pub fn update_resolved_layout(
             || node.is_inline_box
             || !node.fragments.is_empty()
             || node.name == "Font"
+            || node.name == "ParagraphStyle"
         {
             needs_inline_projection = true;
         }
@@ -1200,7 +1211,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             continue;
         }
 
-        let (text, font_size, font_weight, font_family, max_width, line_height, align, ox, oy, text_font_id, raw_spans, raw_boxes, has_dynamic_splice) = {
+        let (text, font_size, font_weight, font_family, max_width, line_height, align, indent, ox, oy, text_font_id, raw_spans, raw_boxes, has_dynamic_splice) = {
             let n = &layout.nodes[text_node_idx];
             let text_font_id = n
                 .font
@@ -1237,6 +1248,11 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 .properties
                 .get("align")
                 .and_then(|v| v.as_str().map(|s| s.to_string()));
+            let indent = n
+                .properties
+                .get("indent")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             let start_at = n
                 .properties
                 .get("start_at")
@@ -1255,6 +1271,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 max_width,
                 line_height,
                 align,
+                indent,
                 n.rect.x,
                 n.rect.y + y_offset,
                 text_font_id,
@@ -1415,6 +1432,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             max_width,
             line_height,
             align.as_deref(),
+            indent,
             &spans,
             &inline_boxes,
             &child_shifts,

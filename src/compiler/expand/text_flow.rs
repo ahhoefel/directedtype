@@ -54,7 +54,7 @@ pub(super) fn is_allowed_in_single_text(
 
 #[inline]
 pub(super) fn is_non_flow_decl_name(name: &str) -> bool {
-    matches!(name, "PageValue" | "PageList" | "Pagination")
+    matches!(name, "PageValue" | "PageList" | "Pagination" | "ParagraphStyle")
 }
 
 #[inline]

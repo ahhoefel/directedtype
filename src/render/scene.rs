@@ -39,6 +39,7 @@ pub struct TextRenderKey {
     pub font_italic: bool,
     pub color: [u8; 4],
     pub align: Option<String>,
+    pub indent: u64,
     pub spans: Vec<SpanRenderKey>,
     pub inline_boxes: Vec<(usize, usize, u64, u64)>,
     pub start_at: Option<String>,
@@ -778,6 +779,11 @@ pub fn build_scene(
                     .properties
                     .get("align")
                     .and_then(|v| v.as_str());
+                let indent = node
+                    .properties
+                    .get("indent")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
 
                 // Build span render keys to detect hover/style changes
                 let mut span_keys = Vec::with_capacity(node.text_spans.len());
@@ -861,6 +867,7 @@ pub fn build_scene(
                     font_italic,
                     color: color_to_rgba8(&text_color),
                     align: align_str.map(|s| s.to_string()),
+                    indent: indent.to_bits(),
                     spans: span_keys,
                     inline_boxes: inline_box_keys,
                     start_at: start_at_prop.map(|s| s.to_string()),
@@ -889,6 +896,7 @@ pub fn build_scene(
                     font_italic,
                     line_height_prop,
                     (node.rect.width > 0.0).then_some(node.rect.width),
+                    indent,
                     &node.text_spans,
                     &node.inline_boxes,
                 );
@@ -978,6 +986,12 @@ pub fn build_scene(
                         builder.push(StyleProperty::Underline(true), span.range.clone());
                     }
                 }
+
+                crate::compiler::text::push_first_line_indent_box(
+                    &mut builder,
+                    indent,
+                    !text.is_empty() || !boxes_slice.is_empty(),
+                );
 
                 for ib in boxes_slice {
                     builder.push_inline_box(parley::InlineBox {

@@ -503,7 +503,7 @@
         y: y + header_offset,
         width: body_width,
         font: chrome_font,
-        align: header_align,
+        paragraph_style: \ParagraphStyle(align: header_align),
         text: header_text
     );
 
@@ -576,7 +576,7 @@
         y: y + height - footer_offset,
         width: body_width,
         font: num_font,
-        align: footer_align,
+        paragraph_style: \ParagraphStyle(align: footer_align),
         text: footer_text
     )
 }

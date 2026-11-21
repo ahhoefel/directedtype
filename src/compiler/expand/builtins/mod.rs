@@ -5,6 +5,7 @@ pub mod font;
 pub mod image;
 pub mod line;
 pub mod pagination;
+pub mod paragraph_style;
 pub mod rect;
 pub mod text;
 pub mod window;
@@ -253,6 +254,7 @@ pub(in crate::compiler::expand) fn default_builtin_port_type(port_name: &str) ->
         | "shadow_spread"
         | "scroll_x"
         | "scroll_y"
+        | "indent"
         | "__flow_body_width" => Some(StaticType::Distance),
         "z" | "weight" | "page" | "end_page" | "page_count" | "orphans" | "widows"
         | "start_page" => Some(StaticType::Integer),
@@ -267,6 +269,7 @@ pub(in crate::compiler::expand) fn default_builtin_port_type(port_name: &str) ->
         "underline" | "italic" => Some(StaticType::Boolean),
         "clip" | "up" => Some(StaticType::Node("Clip".to_string())),
         "pagination" => Some(StaticType::Node("Pagination".to_string())),
+        "paragraph_style" => Some(StaticType::Node("ParagraphStyle".to_string())),
         "font" => Some(StaticType::Node("Font".to_string())),
         "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
         "shadow" => Some(StaticType::Node("Shadow".to_string())),
@@ -321,6 +324,7 @@ const ALL_BUILTINS: &[&dyn BuiltinPrimitive] = &[
     &text::TextPrimitive,
     &image::ImagePrimitive,
     &font::FontPrimitive,
+    &paragraph_style::ParagraphStylePrimitive,
     &clip::ClipPrimitive,
     &box_prim::BoxPrimitive,
     &anchor::AnchorPrimitive,
@@ -348,6 +352,7 @@ pub(in crate::compiler::expand) fn lookup_builtin(
         "Text" => Some(&text::TextPrimitive),
         "Image" => Some(&image::ImagePrimitive),
         "Font" => Some(&font::FontPrimitive),
+        "ParagraphStyle" => Some(&paragraph_style::ParagraphStylePrimitive),
         "Clip" => Some(&clip::ClipPrimitive),
         "Box" => Some(&box_prim::BoxPrimitive),
         "Anchor" => Some(&anchor::AnchorPrimitive),
@@ -1344,7 +1349,13 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     )?;
                     if !matches!(
                         inline_elem.name.as_str(),
-                        "Font" | "TextBounds" | "Shadow" | "Pagination" | "PageValue" | "PageList"
+                        "Font"
+                            | "TextBounds"
+                            | "Shadow"
+                            | "Pagination"
+                            | "ParagraphStyle"
+                            | "PageValue"
+                            | "PageList"
                     ) {
                         self.child_ids.push(child_id);
                         self.last_child_id = Some(child_id);

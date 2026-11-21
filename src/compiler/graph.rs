@@ -394,6 +394,7 @@ pub fn build_variable_graph_with_window_and_dpi(
                 node.name.as_str(),
                 "Font"
                     | "Pagination"
+                    | "ParagraphStyle"
                     | "PageBreak"
                     | "PageValue"
                     | "PageList"

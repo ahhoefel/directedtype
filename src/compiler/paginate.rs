@@ -253,6 +253,11 @@ fn shape_resolved_text_node(node: &ResolvedNode, layout: &ResolvedLayout) -> Sha
     let end_at = node.properties.get("end_at").and_then(|v| v.as_str());
     let start_at = node.properties.get("start_at").and_then(|v| v.as_str());
     let align = node.properties.get("align").and_then(|v| v.as_str());
+    let indent = node
+        .properties
+        .get("indent")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
     let max_width = (node.rect.width > 0.0).then_some(node.rect.width);
 
     shape_paragraph_lines(
@@ -265,6 +270,7 @@ fn shape_resolved_text_node(node: &ResolvedNode, layout: &ResolvedLayout) -> Sha
         start_at,
         line_height,
         align,
+        indent,
         &resolved_spans,
         &resolved_boxes,
     )
@@ -289,7 +295,7 @@ fn flatten_flow_children(
         };
         if matches!(
             exp_node.name.as_str(),
-            "Font" | "Pagination" | "PageValue" | "PageList" | "Collect"
+            "Font" | "Pagination" | "ParagraphStyle" | "PageValue" | "PageList" | "Collect"
         ) {
             continue;
         }

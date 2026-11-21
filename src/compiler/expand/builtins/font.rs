@@ -86,7 +86,10 @@ pub(super) fn pre_resolve_primitive_font(
                     enclosing_comp_ports: ctx.enclosing_comp_ports,
                 };
                 let child_id = expand_element(inline_elem, &child_ctx, registry, doc, node_fonts)?;
-                if !matches!(inline_elem.name.as_str(), "Font" | "TextBounds" | "Shadow") {
+                if !matches!(
+                    inline_elem.name.as_str(),
+                    "Font" | "TextBounds" | "Shadow" | "ParagraphStyle"
+                ) {
                     child_ids.push(child_id);
                     *last_child_id = Some(child_id);
                 }

@@ -336,6 +336,7 @@ Every `.dt` document has an implicit root viewport node named `window`. You can 
 | `height` | Optional Input / Computed | `Distance` | `text_height(text, font.size, font.weight, font.family, width, ...)` | Automatically computed from wrapped line count and vertical trim settings (`text_bounds`). |
 | `text` | Optional Input | `String` / `Float` / `Integer` / `Bool` | Body `{ "..." }` text content | Dynamic text expression (overrides static `{ "..." }` body when set). |
 | `underline` | Optional Input | `Boolean` | `false` | Draws an underline across the text run. |
+| `paragraph_style` | `env` Input | `ParagraphStyle` | `\ParagraphStyle()` | Controls paragraph alignment (`align`) and first-line indentation (`indent`); resolved via lexical `\env paragraph_style` or explicit port. |
 | `text_bounds` | `env` Input | `TextBounds` | `\TextBounds(start_at: TextStart.Capital, end_at: TextEnd.Baseline)` | Controls vertical metric trimming (`start_at` and `end_at`) of the text bounding box; resolved via lexical `\env text_bounds` or explicit port. |
 
 #### Vertical Metric Trimming (`\TextBounds`, `TextStart`, and `TextEnd`)
@@ -407,6 +408,21 @@ Inline child nodes inherit `font` from their parent `\Text` node and are shaped 
 | `x_height` | Output | `Distance` | `font_x_height(size, weight, family)` | Lowercase `'x'` height above baseline. |
 | `ascent` | Output | `Distance` | `font_ascent(size, weight, family)` | Ascender metric above baseline. |
 | `descent` | Output | `Distance` | `font_descent(size, weight, family)` | Descender metric below baseline. |
+
+#### Paragraph Styling (`\ParagraphStyle`)
+
+`\ParagraphStyle` configures paragraph-level alignment and first-line indentation for `\Text` (both explicit `\Text { ... }` elements and bare-text paragraphs synthesized inside block containers). Pass it directly via `paragraph_style:` on `\Text` or scope it lexically via `\env paragraph_style`:
+
+```dt
+\use "components/Align.dt"
+\env paragraph_style = \ParagraphStyle(indent: 1em, align: Align.Justify);
+```
+
+| Port | Kind | Type | Default Value | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `paragraph_style` | Optional Input | `ParagraphStyle` | — | Optional base `ParagraphStyle` node from which omitted `align` and `indent` ports inherit. |
+| `align` | Optional Input | `Align` | `Align.Left` | Paragraph horizontal alignment (`Left`, `Center`, `Right`, `Justify`, `JustifyAll`). |
+| `indent` | Optional Input | `Distance` | `0px` | First-line indentation applied to line 0 of the paragraph. |
 
 ---
 

@@ -111,7 +111,7 @@ impl BuiltinPrimitive for TextPrimitive {
                 | "baseline"
                 | "text"
                 | "font"
-                | "align"
+                | "paragraph_style"
                 | "underline"
                 | "text_bounds"
                 | "clip"
@@ -126,9 +126,10 @@ impl BuiltinPrimitive for TextPrimitive {
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
-            "baseline" => Some(StaticType::Distance),
+            "baseline" | "indent" => Some(StaticType::Distance),
             "text" => Some(StaticType::String),
             "align" => Some(StaticType::Enum("Align".to_string())),
+            "paragraph_style" => Some(StaticType::Node("ParagraphStyle".to_string())),
             "underline" => Some(StaticType::Boolean),
             "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
             _ => default_builtin_port_type(port_name),
@@ -225,6 +226,8 @@ impl BuiltinPrimitive for TextPrimitive {
             "path".to_string(),
             "font".to_string(),
             "align".to_string(),
+            "indent".to_string(),
+            "paragraph_style".to_string(),
             "baseline".to_string(),
             "start_at".to_string(),
             "end_at".to_string(),
@@ -234,6 +237,7 @@ impl BuiltinPrimitive for TextPrimitive {
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         validate_and_resolve_text_bounds(state)?;
+        validate_and_resolve_paragraph_style(state)?;
         resolve_text_font(state)?;
 
         let elem = state.elem;
@@ -363,6 +367,82 @@ fn synthesize_dynamic_inline_text_expr(
         )));
     }
     Some(acc.unwrap_or_else(|| Expr::Literal(Literal::String(String::new(), span))))
+}
+
+/// Validates explicit `paragraph_style`, resolves ambient `env paragraph_style`, and synthesizes `align`/`indent`.
+fn validate_and_resolve_paragraph_style(
+    state: &mut PrimitiveExpandState<'_, '_>,
+) -> Result<(), CompileError> {
+    let elem = state.elem;
+    let node_id = state.node_id;
+    let ctx = state.ctx;
+
+    if let Some(Expr::Literal(lit)) = state.ports.get("paragraph_style") {
+        return Err(CompileError::TypeMismatch {
+            expected: "ParagraphStyle".to_string(),
+            actual: lit.type_name().to_string(),
+            span: lit.span(),
+        });
+    }
+
+    if !state.ports.contains_key("paragraph_style") {
+        if let Some(EnvEntry::Bound(env_expr)) = ctx.env_scope.get("paragraph_style") {
+            let empty_children: [NodeId; 0] = [];
+            let enclosing_children_borrow =
+                ctx.enclosing_instantiated_children.map(|c| c.borrow());
+            let enclosing_child_ids: &[NodeId] = match &enclosing_children_borrow {
+                Some(b) => b.as_slice(),
+                None => &empty_children,
+            };
+            let lexical_borrow = ctx.lexical_scope.borrow();
+            let scope_ctx = ScopeContext::from_element(
+                node_id,
+                ctx,
+                &state.doc.nodes,
+                &lexical_borrow,
+                state.node_fonts,
+                enclosing_child_ids,
+            );
+            if let Ok(rewritten) = rewrite_expr(env_expr, &scope_ctx) {
+                state
+                    .ports
+                    .insert("paragraph_style".to_string(), rewritten.clone());
+                state
+                    .authored_ports
+                    .insert("paragraph_style".to_string(), rewritten);
+            }
+        }
+    }
+
+    if let Some(ps_target) = state.ports.get("paragraph_style").cloned() {
+        let align_from_ps = Expr::MemberAccess(MemberAccessExpr {
+            target: std::sync::Arc::new(ps_target.clone()),
+            member: Ident::new("align", elem.span),
+            span: elem.span,
+        });
+        let indent_from_ps = Expr::MemberAccess(MemberAccessExpr {
+            target: std::sync::Arc::new(ps_target),
+            member: Ident::new("indent", elem.span),
+            span: elem.span,
+        });
+        state.ports.insert("align".to_string(), align_from_ps);
+        state.ports.insert("indent".to_string(), indent_from_ps);
+    } else {
+        state.ports.insert(
+            "align".to_string(),
+            Expr::Literal(Literal::Enum(
+                "Align".to_string(),
+                "Left".to_string(),
+                elem.span,
+            )),
+        );
+        state.ports.insert(
+            "indent".to_string(),
+            Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)),
+        );
+    }
+
+    Ok(())
 }
 
 /// Resolves `font` port type on `\Text` and resolves `text_bounds` -> `start_at`/`end_at`.
@@ -861,6 +941,15 @@ fn synthesize_span_and_inline_box_metrics(
     } else {
         Expr::Literal(Literal::String(String::new(), elem.span))
     };
+    let indent_arg = if state.ports.contains_key("indent") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: std::sync::Arc::new(self_ident.clone()),
+            member: Ident::new("indent", elem.span),
+            span: elem.span,
+        })
+    } else {
+        Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span))
+    };
 
     let shared_has_unresolved = crate::compiler::expand::rewrite::has_any_pending_fwd_refs()
         && (crate::compiler::expand::rewrite::expr_has_unresolved_ident(size_expr)
@@ -870,6 +959,7 @@ fn synthesize_span_and_inline_box_metrics(
             || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&text_arg_expr)
             || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&line_height_arg)
             || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&align_arg)
+            || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&indent_arg)
             || span_style_args
                 .iter()
                 .any(crate::compiler::expand::rewrite::expr_has_unresolved_ident));
@@ -909,6 +999,7 @@ fn synthesize_span_and_inline_box_metrics(
                 start_at_expr.clone(),
                 line_height_arg.clone(),
                 align_arg.clone(),
+                indent_arg.clone(),
             ];
             m_args.extend(span_style_args.iter().cloned());
             let call = Expr::Call(CallExpr {
@@ -951,6 +1042,7 @@ fn synthesize_span_and_inline_box_metrics(
                 start_at_expr.clone(),
                 line_height_arg.clone(),
                 align_arg.clone(),
+                indent_arg.clone(),
             ];
             m_args.extend(span_style_args.iter().cloned());
             let call = Expr::Call(CallExpr {
@@ -1069,6 +1161,16 @@ fn resolve_text_dimensions(
         Expr::Literal(Literal::String(text_str, elem.span))
     };
 
+    let indent_arg = if state.ports.contains_key("indent") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: std::sync::Arc::new(self_ident.clone()),
+            member: Ident::new("indent", elem.span),
+            span: elem.span,
+        })
+    } else {
+        Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span))
+    };
+
     // Height defaults / resolution
     if !state.ports.contains_key("height") {
         if has_text {
@@ -1100,6 +1202,7 @@ fn resolve_text_dimensions(
                 end_at_expr,
                 start_at_expr,
                 line_height_arg,
+                indent_arg.clone(),
             ];
             height_args.extend(span_style_args.iter().cloned());
             let height_call = Expr::Call(CallExpr {
@@ -1132,6 +1235,7 @@ fn resolve_text_dimensions(
                 weight_expr,
                 font_expr,
                 letter_spacing_arg,
+                indent_arg,
             ];
             width_args.extend(span_style_args.iter().cloned());
             let width_call = Expr::Call(CallExpr {

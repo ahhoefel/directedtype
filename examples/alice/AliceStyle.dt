@@ -37,17 +37,6 @@
     \alias height: Distance = 0pt;
 }
 
-// Inline first-line paragraph indent (16pt in the 1866 Macmillan setting)
-\InlineBox Indent(
-    width: Distance = 16pt,
-    x: Distance = parent.left,
-    y: Distance = parent.top,
-    env font: Font
-) {
-    \alias height: Distance = 0pt;
-    \alias baseline: Distance = y;
-}
-
 // Continuous multi-em dash (default 2em) matching Old Standard TT's U+2014 stroke geometry
 // (stroke thickness 0.036em, top at 0.28em above baseline, 0.06em outer sidebearings, zero internal gap)
 \InlineBox DoubleEmDash(
@@ -156,7 +145,7 @@
         y: y,
         width: width - narrow_x,
         font: font,
-        align: align
+        paragraph_style: \ParagraphStyle(align: align)
     ) {
         \Children
     };
@@ -232,7 +221,7 @@
         y: y,
         width: narrow_width,
         font: font,
-        align: align
+        paragraph_style: \ParagraphStyle(align: align)
     ) {
         \Children
     };
@@ -250,11 +239,12 @@
     env text_bounds: TextBounds
 ) {
     \let half = (n - 1) * 0.5;
-    \Text(x: cx + (0.0 - half) * step - 4pt, y: y, width: 8pt, font: font, align: Align.Center, text: "*")
-    \Text(x: cx + (1.0 - half) * step - 4pt, y: y, width: 8pt, font: font, align: Align.Center, text: "*")
-    \Text(x: cx + (2.0 - half) * step - 4pt, y: y, width: 8pt, font: font, align: Align.Center, text: "*")
-    \Text(x: cx + (3.0 - half) * step - 4pt, y: y, width: 8pt, font: font, align: Align.Center, text: n >= 4 ? "*" : "")
-    \Text(x: cx + (4.0 - half) * step - 4pt, y: y, width: 8pt, font: font, align: Align.Center, text: n >= 5 ? "*" : "")
+    \let star_ps = \ParagraphStyle(align: Align.Center);
+    \Text(x: cx + (0.0 - half) * step - 4pt, y: y, width: 8pt, font: font, paragraph_style: star_ps, text: "*")
+    \Text(x: cx + (1.0 - half) * step - 4pt, y: y, width: 8pt, font: font, paragraph_style: star_ps, text: "*")
+    \Text(x: cx + (2.0 - half) * step - 4pt, y: y, width: 8pt, font: font, paragraph_style: star_ps, text: "*")
+    \Text(x: cx + (3.0 - half) * step - 4pt, y: y, width: 8pt, font: font, paragraph_style: star_ps, text: n >= 4 ? "*" : "")
+    \Text(x: cx + (4.0 - half) * step - 4pt, y: y, width: 8pt, font: font, paragraph_style: star_ps, text: n >= 5 ? "*" : "")
 }
 
 // Staggered asterisk break (default 4-3-4; cols: 5, step: 52pt for 5-4-5 on p. 69) occupying exact 3 grid lines
@@ -294,10 +284,9 @@
         y: y,
         width: width,
         font: font,
-        align: align,
+        paragraph_style: \ParagraphStyle(align: align, indent: indent),
         pagination: \Pagination(breakable: true)
     ) {
-        \Indent(width: indent)//
         \Children
     };
 
@@ -319,7 +308,7 @@
         y: y,
         width: width,
         font: font,
-        align: align,
+        paragraph_style: \ParagraphStyle(align: align),
         pagination: \Pagination(breakable: true)
     ) {
         \Children
@@ -417,7 +406,7 @@
         y: art.bottom + ch_gap,
         width: width,
         font: \Font(font: font, size: 12.5pt, letter_spacing: 0.75pt),
-        align: Align.Center,
+        paragraph_style: \ParagraphStyle(align: Align.Center),
         text: "CHAPTER " + number + "."
     );
 
@@ -426,7 +415,7 @@
         y: ch_label.bottom + sub_gap,
         width: width,
         font: \Font(font: font, size: 8.25pt, letter_spacing: 0.45pt),
-        align: Align.Center,
+        paragraph_style: \ParagraphStyle(align: Align.Center),
         text: title + "."
     )
 
@@ -452,7 +441,7 @@
         y: y + ch_top,
         width: width,
         font: \Font(font: font, size: 12.5pt, letter_spacing: 0.75pt),
-        align: Align.Center,
+        paragraph_style: \ParagraphStyle(align: Align.Center),
         text: "CHAPTER " + number + "."
     );
 
@@ -461,7 +450,7 @@
         y: ch_label.bottom + sub_gap,
         width: width,
         font: \Font(font: font, size: 8.25pt, letter_spacing: 0.45pt),
-        align: Align.Center,
+        paragraph_style: \ParagraphStyle(align: Align.Center),
         text: title + title_punct
     )
 
@@ -496,7 +485,7 @@
         y: y + 31pt,
         width: col_w,
         font: \Font(font: font, size: 12.5pt, letter_spacing: 0.75pt),
-        align: Align.Center,
+        paragraph_style: \ParagraphStyle(align: Align.Center),
         text_bounds: \TextBounds(),
         text: "CHAPTER " + number + "."
     )
@@ -506,7 +495,7 @@
         y: y + 68pt,
         width: col_w,
         font: \Font(font: font, size: 8.25pt, letter_spacing: 0.45pt),
-        align: Align.Center,
+        paragraph_style: \ParagraphStyle(align: Align.Center),
         text_bounds: \TextBounds(),
         text: title + "."
     )
@@ -516,9 +505,8 @@
         y: y + 90.0pt,
         width: col_w,
         font: font,
-        align: Align.JustifyAll
+        paragraph_style: \ParagraphStyle(align: Align.JustifyAll, indent: 16pt)
     ) {
-        \Indent(width: 16pt)//
         \Children
     };
 
@@ -766,7 +754,7 @@
         y: y + header_y,
         width: body_width,
         font: hdr_font,
-        align: Align.Center,
+        paragraph_style: \ParagraphStyle(align: Align.Center),
         text: header_title
     )
 
@@ -775,7 +763,7 @@
         y: y + header_y + 0.3pt,
         width: body_width,
         font: folio_font,
-        align: folio_align,
+        paragraph_style: \ParagraphStyle(align: folio_align),
         text: folio_text
     )
 

@@ -136,7 +136,7 @@ fn test_forced_justified_line_break_escape() {
     \Children
 }
 
-\let t = \Text(x: 0px, y: 0px, width: 300px, font: \Font(size: 16px), align: Align.Justify) {
+\let t = \Text(x: 0px, y: 0px, width: 300px, font: \Font(size: 16px), paragraph_style: \ParagraphStyle(align: Align.Justify)) {
     Alice was \DashBox{}\Mark{point\-\|
     ing} at \Mark{sing}
 }

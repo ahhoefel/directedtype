@@ -171,6 +171,11 @@ pub(super) fn draw_text_node(
         .unwrap_or_else(|| Rgba8::from_rgba8(0, 0, 0, 255));
 
     let align_str = node.properties.get("align").and_then(|v| v.as_str());
+    let indent = node
+        .properties
+        .get("indent")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
     let start_at_prop = node.properties.get("start_at").and_then(|v| v.as_str());
     let line_height_prop = fnode
         .filter(|f| f.formulas.has_custom_line_height())
@@ -187,6 +192,7 @@ pub(super) fn draw_text_node(
         font_italic,
         line_height_prop,
         (node.rect.width > 0.0).then_some(node.rect.width),
+        indent,
         &resolved_spans,
         &resolved_boxes,
     );
@@ -292,6 +298,12 @@ pub(super) fn draw_text_node(
             builder.push(StyleProperty::Underline(true), span.range.clone());
         }
     }
+
+    crate::compiler::text::push_first_line_indent_box(
+        &mut builder,
+        indent,
+        !active_text.is_empty() || !resolved_boxes_slice.is_empty(),
+    );
 
     for ib in resolved_boxes_slice {
         builder.push_inline_box(parley::InlineBox {

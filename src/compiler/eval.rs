@@ -1227,9 +1227,17 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                     let line_height = evaluated_args.get(7).and_then(|v| v.as_f64());
                     validate_font_family(family, c.span)?;
 
+                    let has_indent =
+                        evaluated_args.len() >= 9 && (evaluated_args.len() - 8) % 7 == 1;
+                    let indent = if has_indent {
+                        evaluated_args.get(8).and_then(|v| v.as_f64()).unwrap_or(0.0)
+                    } else {
+                        0.0
+                    };
+
                     let mut spans = Vec::new();
                     let mut inline_boxes = Vec::new();
-                    let mut idx = 8;
+                    let mut idx = if has_indent { 9 } else { 8 };
                     while idx + 6 < evaluated_args.len() {
                         let raw_first = evaluated_args[idx].as_f64().unwrap_or(0.0);
                         if raw_first < 0.0 {
@@ -1272,15 +1280,17 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         idx += 7;
                     }
 
-                    let (_, h) = crate::compiler::text::measure_rich_text_bounds_with_boxes(
+                    let (_, h) = crate::compiler::text::measure_rich_text_bounds_with_boxes_and_spacing(
                         text,
                         size,
                         weight,
                         family,
+                        0.0,
                         Some(max_width),
                         end_at,
                         start_at,
                         line_height,
+                        indent,
                         &spans,
                         &inline_boxes,
                     );
@@ -1383,13 +1393,22 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
 
                     let mut spans = Vec::new();
                     let mut inline_boxes = Vec::new();
-                    let has_ls = evaluated_args.len() >= 5 && (evaluated_args.len() - 4) % 7 == 1;
-                    let letter_spacing = if has_ls {
-                        evaluated_args.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0)
+                    let extra = evaluated_args.len().saturating_sub(4) % 7;
+                    let (letter_spacing, indent, mut idx) = if evaluated_args.len() >= 6 && extra == 2 {
+                        (
+                            evaluated_args.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                            evaluated_args.get(5).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                            6usize,
+                        )
+                    } else if evaluated_args.len() >= 5 && extra == 1 {
+                        (
+                            evaluated_args.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                            0.0,
+                            5usize,
+                        )
                     } else {
-                        0.0
+                        (0.0, 0.0, 4usize)
                     };
-                    let mut idx = if has_ls { 5 } else { 4 };
                     while idx + 6 < evaluated_args.len() {
                         let raw_first = evaluated_args[idx].as_f64().unwrap_or(0.0);
                         if raw_first < 0.0 {
@@ -1442,6 +1461,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         None,
                         None,
                         None,
+                        indent,
                         &spans,
                         &inline_boxes,
                     );
@@ -1470,9 +1490,20 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                     let align = evaluated_args.get(13).and_then(|v| v.as_str());
                     validate_font_family(family, c.span)?;
 
+                    let has_indent =
+                        evaluated_args.len() >= 15 && (evaluated_args.len() - 14) % 7 == 1;
+                    let indent = if has_indent {
+                        evaluated_args
+                            .get(14)
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0)
+                    } else {
+                        0.0
+                    };
+
                     let mut spans = Vec::new();
                     let mut inline_boxes = Vec::new();
-                    let mut idx = 14;
+                    let mut idx = if has_indent { 15 } else { 14 };
                     while idx + 6 < evaluated_args.len() {
                         let raw_first = evaluated_args[idx].as_f64().unwrap_or(0.0);
                         if raw_first < 0.0 {
@@ -1524,6 +1555,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         start_at,
                         line_height,
                         align,
+                        indent,
                         &spans,
                         &inline_boxes,
                         text_x,

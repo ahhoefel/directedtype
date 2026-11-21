@@ -716,6 +716,7 @@ impl ComponentSchema {
                 !matches!(
                     t.name.as_str(),
                     "Font"
+                        | "ParagraphStyle"
                         | "Node"
                         | "ViewPort"
                         | "Rect"

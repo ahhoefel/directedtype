@@ -5354,7 +5354,20 @@ fn test_strict_child_port_acceptance() {
         (
             r#"
             \use "components/Align.dt"
-            \Text(x: 0, y: 0, font: \Font(size: 16px), align: "center") { "hello" }
+            \Text(x: 0, y: 0, font: \Font(size: 16px), align: Align.Center) { "hello" }
+            "#,
+            "Node 'Text' does not accept property 'align'",
+        ),
+        (
+            r#"
+            \Text(x: 0, y: 0, font: \Font(size: 16px), indent: 16pt) { "hello" }
+            "#,
+            "Node 'Text' does not accept property 'indent'",
+        ),
+        (
+            r#"
+            \use "components/Align.dt"
+            \ParagraphStyle(align: "center")
             "#,
             "Type mismatch: expected 'Align', found 'String'",
         ),
@@ -5376,19 +5389,19 @@ fn test_text_align_port_and_span_metrics() {
     \use "components/Bold.dt"
     \env font = \Font(size: 16px);
 
-    \let t_left = \Text(x: 0, y: 0, width: 300px, align: Align.Left) {
+    \let t_left = \Text(x: 0, y: 0, width: 300px, paragraph_style: \ParagraphStyle(align: Align.Left)) {
         \let s_left = \Bold { Hello }
     };
-    \let t_center = \Text(x: 0, y: 40px, width: 300px, align: Align.Center) {
+    \let t_center = \Text(x: 0, y: 40px, width: 300px, paragraph_style: \ParagraphStyle(align: Align.Center)) {
         \let s_center = \Bold { Hello }
     };
-    \let t_right = \Text(x: 0, y: 80px, width: 300px, align: Align.Right) {
+    \let t_right = \Text(x: 0, y: 80px, width: 300px, paragraph_style: \ParagraphStyle(align: Align.Right)) {
         \let s_right = \Bold { Hello }
     };
     "#;
 
     let doc = parse(src).unwrap();
-    let layout = directedtype::evaluate_document(&doc).expect("Text with align: Align.* should compile");
+    let layout = directedtype::evaluate_document(&doc).expect("Text with paragraph_style align: Align.* should compile");
 
     let s_left = layout
         .nodes
@@ -5418,6 +5431,267 @@ fn test_text_align_port_and_span_metrics() {
         s_right.rect.x,
         s_center.rect.x
     );
+}
+
+#[test]
+fn test_paragraph_style_defaults_derivation_and_env_propagation() {
+    let src = r#"
+    \use "components/Align.dt"
+    \use "components/VStackStretch.dt"
+    \env font = \Font(size: 16px);
+
+    \let ps_default = \ParagraphStyle();
+    \let ps_base = \ParagraphStyle(align: Align.Justify, indent: 24px);
+    \let ps_derived = \ParagraphStyle(paragraph_style: ps_base, indent: 0pt);
+
+    \Component H1(env font: Font, x: Distance = parent.left, y: Distance = parent.top, width: Distance = parent.width) {
+        \let h_text = \Text("h1_text"; x: x, y: y, width: width) {
+            \Children
+        };
+        \alias height = h_text.height;
+    }
+
+    \env paragraph_style = \ParagraphStyle(indent: 1em, align: Align.Justify);
+    \VStackStretch(x: 0, y: 0, width: 320px) {
+        \H1 { Hermetic heading }
+        Bare prose paragraph here.
+        \Text("explicit_para";) { Explicit paragraph here. }
+    }
+    "#;
+
+    let doc = parse(src).expect("parse ok");
+    let layout = directedtype::evaluate_document(&doc).expect("layout ok");
+
+    let ps_nodes: Vec<_> = layout.nodes.iter().filter(|n| n.name == "ParagraphStyle").collect();
+    let ps_default = ps_nodes.iter().find(|n| n.var_name.as_deref() == Some("ps_default")).unwrap();
+    assert_eq!(
+        ps_default.properties.get("align"),
+        Some(&Value::Enum {
+            enum_name: "Align".to_string(),
+            variant: "Left".to_string(),
+        })
+    );
+    assert_eq!(ps_default.properties.get("indent"), Some(&Value::Distance(0.0)));
+
+    let ps_derived = ps_nodes.iter().find(|n| n.var_name.as_deref() == Some("ps_derived")).unwrap();
+    assert_eq!(
+        ps_derived.properties.get("align"),
+        Some(&Value::Enum {
+            enum_name: "Align".to_string(),
+            variant: "Justify".to_string(),
+        })
+    );
+    assert_eq!(ps_derived.properties.get("indent"), Some(&Value::Distance(0.0)));
+
+    let bare_text = layout
+        .nodes
+        .iter()
+        .find(|n| n.text_content.as_deref() == Some("Bare prose paragraph here."))
+        .expect("bare prose Text node");
+    let explicit_text = layout
+        .nodes
+        .iter()
+        .find(|n| n.text_content.as_deref() == Some("Explicit paragraph here."))
+        .expect("explicit Text node");
+    let h1_text = layout
+        .nodes
+        .iter()
+        .find(|n| n.text_content.as_deref() == Some("Hermetic heading"))
+        .expect("H1 internal Text node");
+
+    for para_node in [bare_text, explicit_text] {
+        assert_eq!(
+            para_node.properties.get("align"),
+            Some(&Value::Enum {
+                enum_name: "Align".to_string(),
+                variant: "Justify".to_string(),
+            })
+        );
+        assert_eq!(para_node.properties.get("indent"), Some(&Value::Distance(16.0)));
+    }
+    assert_eq!(
+        h1_text.properties.get("align"),
+        Some(&Value::Enum {
+            enum_name: "Align".to_string(),
+            variant: "Left".to_string(),
+        })
+    );
+    assert_eq!(h1_text.properties.get("indent"), Some(&Value::Distance(0.0)));
+}
+
+#[test]
+fn test_paragraph_style_indent_wraps_and_splits_across_pages() {
+    use directedtype::compiler::module::FsResolver;
+    use directedtype::compiler::paginate::paginate_compiled_document;
+    use directedtype::compiler::CompiledDocument;
+    use directedtype::component::ComponentRegistry;
+    use std::path::Path;
+
+    let wrap_src = r#"
+    \Span Mark(id: String = "") { \Children }
+
+    \env font = \Font(family: "Arial", size: 12px, line_height: 16px);
+
+    \Text(
+        id: "plain",
+        x: 0,
+        y: 0,
+        width: 110px,
+        paragraph_style: \ParagraphStyle()
+    ) {
+        \Mark(id: "plain_lead") { "Book" } " Page Line Word Text Note"
+    }
+
+    \Text(
+        id: "indented",
+        x: 0,
+        y: 120px,
+        width: 110px,
+        paragraph_style: \ParagraphStyle(indent: 32px)
+    ) {
+        \Mark(id: "indented_body") {
+            \Mark(id: "indented_lead") { "Book" } " Page Line Word Text Note"
+        }
+    }
+    "#;
+
+    let doc = parse(wrap_src).expect("parse wrap_src");
+    let layout = directedtype::evaluate_document(&doc).expect("evaluate wrap_src");
+
+    let by_id = |target: &str| {
+        layout
+            .nodes
+            .iter()
+            .find(|n| n.properties.get("id").and_then(|v| v.as_str()) == Some(target))
+            .unwrap_or_else(|| panic!("missing node id '{target}'"))
+    };
+
+    let plain_text = by_id("plain");
+    let plain_lead = by_id("plain_lead");
+    let indented_text = by_id("indented");
+    let indented_lead = by_id("indented_lead");
+    let indented_body = by_id("indented_body");
+
+    assert!(
+        plain_lead.rect.x < 2.0,
+        "unindented line 0 span should start near x=0, got {}",
+        plain_lead.rect.x
+    );
+    assert!(
+        (indented_lead.rect.x - 32.0).abs() <= 2.0,
+        "32px indented line 0 span should start near x=32, got {}",
+        indented_lead.rect.x
+    );
+    assert!(
+        indented_text.rect.height > plain_text.rect.height,
+        "indent: 32px should push line 0 overflow onto an extra wrapped line: indented={}, plain={}",
+        indented_text.rect.height,
+        plain_text.rect.height
+    );
+    assert!(
+        indented_body.fragments.len() >= 3,
+        "expected >= 3 wrapped fragments on indented paragraph, got {:?}",
+        indented_body.fragments
+    );
+    assert!(
+        (indented_body.fragments[0].x - 32.0).abs() <= 2.0,
+        "line 0 fragment should be indented near x=32, got {}",
+        indented_body.fragments[0].x
+    );
+    for (idx, frag) in indented_body.fragments.iter().enumerate().skip(1) {
+        assert!(
+            frag.x < 2.0,
+            "wrapped line {idx} fragment should be unindented (x < 2.0), got {}",
+            frag.x
+        );
+    }
+
+    let words = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega alpha beta gamma delta";
+    let flow_src = format!(
+        r#"
+        \env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
+        \env paragraph_style = \ParagraphStyle(indent: 32pt);
+
+        \Component SmallPage(width: Distance = 200pt, height: Distance = 80pt) {{
+            \FlowBody(x: 20pt, y: 10pt, width: 160pt, height: 50pt)
+        }}
+
+        \PagedFlow(page: \SmallPage(), orphans: 2, widows: 2) {{
+            \Text(id: "split_para") {{ {words} }}
+        }}
+        "#
+    );
+
+    let flow_doc = parse(&flow_src).expect("parse flow_src");
+    let registry = ComponentRegistry::standard();
+    let compiled = CompiledDocument::compile_with_registry_and_dpi(
+        &flow_doc,
+        200.0,
+        80.0,
+        72.0,
+        Path::new("."),
+        &FsResolver,
+        &registry,
+    )
+    .expect("compile flow_src");
+    let paginated = paginate_compiled_document(&compiled, 200.0, 80.0, 72.0)
+        .expect("paginate flow_src");
+    assert!(
+        paginated.page_count >= 2,
+        "expected split across >= 2 pages, got {}",
+        paginated.page_count
+    );
+
+    let para_node = paginated
+        .layout
+        .nodes
+        .iter()
+        .find(|n| n.properties.get("id").and_then(|v| v.as_str()) == Some("split_para"))
+        .expect("split_para present");
+    let slice_p1 = paginated.pages[0]
+        .text_line_slices
+        .get(&para_node.id)
+        .expect("page 1 slice");
+    let slice_p2 = paginated.pages[1]
+        .text_line_slices
+        .get(&para_node.id)
+        .expect("page 2 slice");
+
+    assert_eq!(slice_p1.line_range.start, 0);
+    assert!(slice_p1.line_range.end >= 2);
+    assert_eq!(slice_p2.line_range.start, slice_p1.line_range.end);
+    assert!(slice_p2.line_range.start > 0);
+
+    let shaped = directedtype::compiler::text::shape_paragraph_lines(
+        words,
+        12.0,
+        400.0,
+        Some("Arial"),
+        Some(160.0),
+        None,
+        None,
+        None,
+        None,
+        32.0,
+        &[],
+        &[],
+    );
+    assert!(shaped.lines.len() > slice_p2.line_range.start);
+
+    #[cfg(feature = "pdf")]
+    {
+        let pdf_bytes = directedtype::pdf::render_pages_to_pdf(
+            &paginated.pages,
+            None,
+            &directedtype::pdf::PdfOptions {
+                compressed: false,
+                deterministic: true,
+                ..Default::default()
+            },
+        )
+        .expect("render paginated indented paragraph to PDF");
+        assert!(pdf_bytes.starts_with(b"%PDF-"));
+    }
 }
 
 #[test]

@@ -109,6 +109,7 @@ impl StaticType {
             | "Bookmark"
             | "Page"
             | "Pagination"
+            | "ParagraphStyle"
             | "PageBreak"
             | "PageValue"
             | "PageList"
@@ -662,6 +663,7 @@ pub(super) fn validate_and_coerce_primitive_port_literal(
             | "line_height"
             | "letter_spacing"
             | "baseline"
+            | "indent"
             | "radius"
             | "radius_left"
             | "radius_right"
@@ -3772,8 +3774,8 @@ fn infer_deposit_elem_public_ports(
     } else if let Some(prim) = super::builtins::lookup_builtin(tag, true) {
         let candidate_ports = [
             "x", "y", "width", "height", "left", "top", "right", "bottom", "z", "opacity",
-            "color", "text", "align", "size", "weight", "family", "italic", "baseline",
-            "page", "end_page",
+            "color", "text", "align", "indent", "paragraph_style", "size", "weight", "family",
+            "italic", "baseline", "page", "end_page",
         ];
         for pname in candidate_ports {
             if matches!(pname, "left" | "top" | "right" | "bottom") && !prim.is_non_spatial() {

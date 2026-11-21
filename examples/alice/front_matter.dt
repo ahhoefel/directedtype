@@ -44,7 +44,7 @@
 ) {
     \let col_font = \Font(font: font, size: 5.5pt, letter_spacing: 0.35pt);
     \Text(x: x, y: y, font: col_font, text: "CHAPTER")
-    \Text(x: x, y: y, width: width, font: col_font, align: Align.Right, text: "PAGE")
+    \Text(x: x, y: y, width: width, font: col_font, paragraph_style: \ParagraphStyle(align: Align.Right), text: "PAGE")
 
     \alias height: Distance = 8pt;
 }
@@ -68,7 +68,7 @@
         y: y,
         width: 19pt,
         font: row_font,
-        align: Align.Right,
+        paragraph_style: \ParagraphStyle(align: Align.Right),
         text: roman + "."
     )
 
@@ -100,7 +100,7 @@
         y: y,
         width: width,
         font: dot_font,
-        align: Align.Right,
+        paragraph_style: \ParagraphStyle(align: Align.Right),
         text: page_num
     )
 
@@ -129,14 +129,14 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 13.5pt, letter_spacing: 0.85pt),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "ALICE’S ADVENTURES"
             )
             \Spacer(height: 22pt)
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 13.5pt, letter_spacing: 0.85pt),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "IN WONDERLAND."
             )
         }
@@ -154,63 +154,63 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 17.5pt, letter_spacing: 1.1pt),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "ALICE’S ADVENTURES"
             )
             \Spacer(height: 28pt)
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 17.5pt, letter_spacing: 1.1pt),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "IN WONDERLAND."
             )
             \Spacer(height: 56pt)
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 8.5pt, letter_spacing: 0.5pt),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "BY"
             )
             \Spacer(height: 12pt)
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 10.5pt, letter_spacing: 0.8pt),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "LEWIS CARROLL."
             )
             \Spacer(height: 56pt)
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 8.8pt, italic: true, letter_spacing: 0.6pt),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "WITH FORTY-TWO ILLUSTRATIONS"
             )
             \Spacer(height: 11pt)
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 8.8pt, italic: true, letter_spacing: 0.6pt),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "BY JOHN TENNIEL."
             )
             \Spacer(height: 54pt)
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 11pt, weight: 700),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "Mexico City"
             )
             \Spacer(height: 11pt)
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 9.5pt),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "Typeset with DirectedType"
             )
             \Spacer(height: 10pt)
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 9pt),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "November 2026"
             )
         }
@@ -225,7 +225,7 @@
             \Text(
                 width: parent.width * 0.75,
                 font: \Font(font: font, size: 9pt, line_height: 13.5pt),
-                align: Align.Justify
+                paragraph_style: \ParagraphStyle(align: Align.Justify)
             ) {
                 This book was digitally typeset using a new typesetting system
                 called DirectedType and made to resemble the
@@ -323,7 +323,7 @@
             \Text(
                 width: parent.width,
                 font: \Font(font: font, size: 12pt, letter_spacing: 0.8pt),
-                align: Align.Center,
+                paragraph_style: \ParagraphStyle(align: Align.Center),
                 text: "CONTENTS."
             )
             \Spacer(height: 44pt)
