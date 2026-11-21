@@ -126,9 +126,12 @@ impl BuiltinPrimitive for TextPrimitive {
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
-            "baseline" | "baseline_offset" | "indent" => Some(StaticType::Distance),
+            "baseline" | "baseline_offset" | "indent" | "word_spacing" => {
+                Some(StaticType::Distance)
+            }
             "text" => Some(StaticType::String),
             "align" => Some(StaticType::Enum("Align".to_string())),
+            "line_break" => Some(StaticType::Enum("LineBreak".to_string())),
             "paragraph_style" => Some(StaticType::Node("ParagraphStyle".to_string())),
             "underline" => Some(StaticType::Boolean),
             "text_bounds" => Some(StaticType::Node("TextBounds".to_string())),
@@ -227,6 +230,17 @@ impl BuiltinPrimitive for TextPrimitive {
             "font".to_string(),
             "align".to_string(),
             "indent".to_string(),
+            "line_break".to_string(),
+            "word_spacing".to_string(),
+            "space_stretch".to_string(),
+            "space_shrink".to_string(),
+            "tolerance".to_string(),
+            "hyphen_penalty".to_string(),
+            "line_penalty".to_string(),
+            "flagged_demerits".to_string(),
+            "fitness_demerits".to_string(),
+            "sentence_space".to_string(),
+            "looseness".to_string(),
             "paragraph_style".to_string(),
             "baseline".to_string(),
             "start_at".to_string(),
@@ -415,31 +429,24 @@ fn validate_and_resolve_paragraph_style(
     }
 
     if let Some(ps_target) = state.ports.get("paragraph_style").cloned() {
-        let align_from_ps = Expr::MemberAccess(MemberAccessExpr {
-            target: std::sync::Arc::new(ps_target.clone()),
-            member: Ident::new("align", elem.span),
-            span: elem.span,
-        });
-        let indent_from_ps = Expr::MemberAccess(MemberAccessExpr {
-            target: std::sync::Arc::new(ps_target),
-            member: Ident::new("indent", elem.span),
-            span: elem.span,
-        });
-        state.ports.insert("align".to_string(), align_from_ps);
-        state.ports.insert("indent".to_string(), indent_from_ps);
+        for &pname in crate::compiler::expand::builtins::paragraph_style::PARAGRAPH_STYLE_PORTS {
+            let member_expr = Expr::MemberAccess(MemberAccessExpr {
+                target: std::sync::Arc::new(ps_target.clone()),
+                member: Ident::new(pname, elem.span),
+                span: elem.span,
+            });
+            state.ports.insert(pname.to_string(), member_expr);
+        }
     } else {
-        state.ports.insert(
-            "align".to_string(),
-            Expr::Literal(Literal::Enum(
-                "Align".to_string(),
-                "Left".to_string(),
-                elem.span,
-            )),
-        );
-        state.ports.insert(
-            "indent".to_string(),
-            Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)),
-        );
+        for &pname in crate::compiler::expand::builtins::paragraph_style::PARAGRAPH_STYLE_PORTS {
+            state.ports.insert(
+                pname.to_string(),
+                crate::compiler::expand::builtins::paragraph_style::default_paragraph_style_port_expr(
+                    pname,
+                    elem.span,
+                ),
+            );
+        }
     }
 
     Ok(())
@@ -688,6 +695,66 @@ fn build_text_small_caps_arg(state: &PrimitiveExpandState<'_, '_>) -> Expr {
         }
     }
     Expr::Literal(Literal::Bool(false, span))
+}
+
+fn build_text_italic_arg(state: &PrimitiveExpandState<'_, '_>) -> Expr {
+    let span = state.elem.span;
+    if let Some(fid) = state
+        .font_node_id
+        .or_else(|| state.node_fonts.get(&state.node_id).copied())
+    {
+        if state
+            .doc
+            .get_node(fid)
+            .is_some_and(|fn_node| fn_node.ports.contains_key("italic"))
+        {
+            let font_ident = Expr::Ident(Ident::from_node(fid, span));
+            return Expr::MemberAccess(MemberAccessExpr {
+                target: std::sync::Arc::new(font_ident),
+                member: Ident::new("italic", span),
+                span,
+            });
+        }
+    }
+    Expr::Literal(Literal::Bool(false, span))
+}
+
+/// Builds the 11 paragraph layout option arguments (matching `ParagraphLayoutOptions` order)
+/// referencing synthesized ports on `self_ident`.
+fn build_paragraph_layout_option_args(
+    state: &PrimitiveExpandState<'_, '_>,
+    self_ident: &Expr,
+) -> Vec<Expr> {
+    let span = state.elem.span;
+    let opt_ports = [
+        "line_break",
+        "word_spacing",
+        "space_stretch",
+        "space_shrink",
+        "tolerance",
+        "hyphen_penalty",
+        "line_penalty",
+        "flagged_demerits",
+        "fitness_demerits",
+        "sentence_space",
+        "looseness",
+    ];
+    opt_ports
+        .iter()
+        .map(|&pname| {
+            if state.ports.contains_key(pname) {
+                Expr::MemberAccess(MemberAccessExpr {
+                    target: std::sync::Arc::new(self_ident.clone()),
+                    member: Ident::new(pname, span),
+                    span,
+                })
+            } else {
+                crate::compiler::expand::builtins::paragraph_style::default_paragraph_style_port_expr(
+                    pname, span,
+                )
+            }
+        })
+        .collect()
 }
 
 /// Resolves bidirectional `baseline` <-> `y` equations using `text_baseline_offset(...)`,
@@ -986,6 +1053,9 @@ fn synthesize_span_and_inline_box_metrics(
         Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span))
     };
     let font_small_caps_arg = build_text_small_caps_arg(state);
+    let letter_spacing_arg = build_text_letter_spacing_arg(state);
+    let font_italic_arg = build_text_italic_arg(state);
+    let para_opt_args = build_paragraph_layout_option_args(state, self_ident);
 
     let shared_has_unresolved = crate::compiler::expand::rewrite::has_any_pending_fwd_refs()
         && (crate::compiler::expand::rewrite::expr_has_unresolved_ident(size_expr)
@@ -997,6 +1067,11 @@ fn synthesize_span_and_inline_box_metrics(
             || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&align_arg)
             || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&indent_arg)
             || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&font_small_caps_arg)
+            || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&letter_spacing_arg)
+            || crate::compiler::expand::rewrite::expr_has_unresolved_ident(&font_italic_arg)
+            || para_opt_args
+                .iter()
+                .any(crate::compiler::expand::rewrite::expr_has_unresolved_ident)
             || span_style_args
                 .iter()
                 .any(crate::compiler::expand::rewrite::expr_has_unresolved_ident));
@@ -1038,7 +1113,10 @@ fn synthesize_span_and_inline_box_metrics(
                 align_arg.clone(),
                 indent_arg.clone(),
                 font_small_caps_arg.clone(),
+                letter_spacing_arg.clone(),
+                font_italic_arg.clone(),
             ];
+            m_args.extend(para_opt_args.iter().cloned());
             m_args.extend(span_style_args.iter().cloned());
             let call = Expr::Call(CallExpr {
                 callee: Ident::new("span_metric", elem.span),
@@ -1082,7 +1160,10 @@ fn synthesize_span_and_inline_box_metrics(
                 align_arg.clone(),
                 indent_arg.clone(),
                 font_small_caps_arg.clone(),
+                letter_spacing_arg.clone(),
+                font_italic_arg.clone(),
             ];
+            m_args.extend(para_opt_args.iter().cloned());
             m_args.extend(span_style_args.iter().cloned());
             let call = Expr::Call(CallExpr {
                 callee: Ident::new("span_metric", elem.span),
@@ -1210,6 +1291,22 @@ fn resolve_text_dimensions(
         Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span))
     };
     let font_small_caps_arg = build_text_small_caps_arg(state);
+    let letter_spacing_arg = build_text_letter_spacing_arg(state);
+    let font_italic_arg = build_text_italic_arg(state);
+    let align_arg = if state.ports.contains_key("align") {
+        Expr::MemberAccess(MemberAccessExpr {
+            target: std::sync::Arc::new(self_ident.clone()),
+            member: Ident::new("align", elem.span),
+            span: elem.span,
+        })
+    } else {
+        Expr::Literal(Literal::Enum(
+            "Align".to_string(),
+            "Left".to_string(),
+            elem.span,
+        ))
+    };
+    let para_opt_args = build_paragraph_layout_option_args(state, &self_ident);
 
     // Height defaults / resolution
     if !state.ports.contains_key("height") {
@@ -1244,7 +1341,11 @@ fn resolve_text_dimensions(
                 line_height_arg,
                 indent_arg.clone(),
                 font_small_caps_arg.clone(),
+                align_arg,
+                letter_spacing_arg.clone(),
+                font_italic_arg,
             ];
+            height_args.extend(para_opt_args.iter().cloned());
             height_args.extend(span_style_args.iter().cloned());
             let height_call = Expr::Call(CallExpr {
                 callee: Ident::new("text_height", elem.span),
@@ -1269,7 +1370,7 @@ fn resolve_text_dimensions(
     // Width defaults / resolution
     if !state.ports.contains_key("width") {
         if has_text {
-            let letter_spacing_arg = build_text_letter_spacing_arg(state);
+            let word_spacing_arg = para_opt_args[1].clone();
             let mut width_args = vec![
                 text_arg_expr,
                 size_expr,
@@ -1278,6 +1379,7 @@ fn resolve_text_dimensions(
                 letter_spacing_arg,
                 indent_arg,
                 font_small_caps_arg,
+                word_spacing_arg,
             ];
             width_args.extend(span_style_args.iter().cloned());
             let width_call = Expr::Call(CallExpr {

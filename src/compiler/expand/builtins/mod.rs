@@ -255,10 +255,22 @@ pub(in crate::compiler::expand) fn default_builtin_port_type(port_name: &str) ->
         | "scroll_x"
         | "scroll_y"
         | "indent"
+        | "word_spacing"
         | "__flow_body_width" => Some(StaticType::Distance),
         "z" | "weight" | "page" | "end_page" | "page_count" | "orphans" | "widows"
-        | "start_page" => Some(StaticType::Integer),
-        "opacity" | "dpi" | "aspect_ratio" | "file_dpi" => Some(StaticType::Float),
+        | "start_page" | "looseness" => Some(StaticType::Integer),
+        "opacity"
+        | "dpi"
+        | "aspect_ratio"
+        | "file_dpi"
+        | "space_stretch"
+        | "space_shrink"
+        | "tolerance"
+        | "hyphen_penalty"
+        | "line_penalty"
+        | "flagged_demerits"
+        | "fitness_demerits"
+        | "sentence_space" => Some(StaticType::Float),
         "color" | "border_color" | "shadow_color" => {
             Some(StaticType::Color)
         }
@@ -276,6 +288,7 @@ pub(in crate::compiler::expand) fn default_builtin_port_type(port_name: &str) ->
         "start_at" => Some(StaticType::Enum("TextStart".to_string())),
         "end_at" => Some(StaticType::Enum("TextEnd".to_string())),
         "cap" => Some(StaticType::Enum("LineCap".to_string())),
+        "line_break" => Some(StaticType::Enum("LineBreak".to_string())),
         p if p.starts_with("on_") => Some(StaticType::Handler),
         _ => None,
     }

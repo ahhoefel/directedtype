@@ -1,4 +1,6 @@
-use crate::ast::{ComponentDef, DistanceUnit, ElementNode, Expr, Ident, Literal, MemberAccessExpr};
+use crate::ast::{
+    ComponentDef, DistanceUnit, ElementNode, EnumDef, Expr, Ident, Literal, MemberAccessExpr,
+};
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
     default_builtin_port_type, BuiltinPrimitive, PrimitiveExpandState,
@@ -7,9 +9,55 @@ use crate::compiler::expand::context::ElementContext;
 use crate::compiler::expand::typecheck::StaticType;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::scope::ScopeId;
+use crate::span::Span;
 use std::collections::HashMap;
 
 pub struct ParagraphStylePrimitive;
+
+/// All child ports synthesized and forwarded by `\ParagraphStyle`.
+pub const PARAGRAPH_STYLE_PORTS: &[&str] = &[
+    "align",
+    "indent",
+    "line_break",
+    "word_spacing",
+    "space_stretch",
+    "space_shrink",
+    "tolerance",
+    "hyphen_penalty",
+    "line_penalty",
+    "flagged_demerits",
+    "fitness_demerits",
+    "sentence_space",
+    "looseness",
+];
+
+pub fn default_paragraph_style_port_expr(port_name: &str, span: Span) -> Expr {
+    match port_name {
+        "align" => Expr::Literal(Literal::Enum(
+            "Align".to_string(),
+            "Left".to_string(),
+            span,
+        )),
+        "indent" | "word_spacing" => {
+            Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span))
+        }
+        "line_break" => Expr::Literal(Literal::Enum(
+            "LineBreak".to_string(),
+            "Greedy".to_string(),
+            span,
+        )),
+        "space_stretch" => Expr::Literal(Literal::Float(0.5, span)),
+        "space_shrink" => Expr::Literal(Literal::Float(1.0 / 3.0, span)),
+        "tolerance" => Expr::Literal(Literal::Float(2.0, span)),
+        "hyphen_penalty" => Expr::Literal(Literal::Float(50.0, span)),
+        "line_penalty" => Expr::Literal(Literal::Float(10.0, span)),
+        "flagged_demerits" => Expr::Literal(Literal::Float(3000.0, span)),
+        "fitness_demerits" => Expr::Literal(Literal::Float(3000.0, span)),
+        "sentence_space" => Expr::Literal(Literal::Float(0.0, span)),
+        "looseness" => Expr::Literal(Literal::Integer(0, span)),
+        _ => Expr::Literal(Literal::Float(0.0, span)),
+    }
+}
 
 impl BuiltinPrimitive for ParagraphStylePrimitive {
     fn name(&self) -> &'static str {
@@ -20,21 +68,46 @@ impl BuiltinPrimitive for ParagraphStylePrimitive {
         true
     }
 
+    fn register_types(
+        &self,
+        enums: &mut HashMap<String, EnumDef>,
+        _registry: &mut HashMap<String, Vec<ComponentDef>>,
+        span: Span,
+    ) {
+        enums
+            .entry("LineBreak".to_string())
+            .or_insert_with(|| EnumDef {
+                name: Ident::new("LineBreak", span),
+                variants: vec![Ident::new("Greedy", span), Ident::new("Optimal", span)],
+                span,
+            });
+    }
+
     fn accepts_port(&self, port_name: &str) -> bool {
-        matches!(port_name, "paragraph_style" | "align" | "indent")
+        port_name == "paragraph_style" || PARAGRAPH_STYLE_PORTS.contains(&port_name)
     }
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
             "paragraph_style" => Some(StaticType::Node("ParagraphStyle".to_string())),
             "align" => Some(StaticType::Enum("Align".to_string())),
-            "indent" => Some(StaticType::Distance),
+            "indent" | "word_spacing" => Some(StaticType::Distance),
+            "line_break" => Some(StaticType::Enum("LineBreak".to_string())),
+            "space_stretch"
+            | "space_shrink"
+            | "tolerance"
+            | "hyphen_penalty"
+            | "line_penalty"
+            | "flagged_demerits"
+            | "fitness_demerits"
+            | "sentence_space" => Some(StaticType::Float),
+            "looseness" => Some(StaticType::Integer),
             _ => default_builtin_port_type(port_name),
         }
     }
 
     fn scope_ports(&self) -> Vec<String> {
-        vec!["align".to_string(), "indent".to_string()]
+        PARAGRAPH_STYLE_PORTS.iter().map(|s| s.to_string()).collect()
     }
 
     fn pre_expand_children(
@@ -81,37 +154,25 @@ impl BuiltinPrimitive for ParagraphStylePrimitive {
                 }
             }
 
-            if !state.ports.contains_key("align") {
-                state.ports.insert(
-                    "align".to_string(),
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: std::sync::Arc::new(base_expr.clone()),
-                        member: Ident::new("align", span),
-                        span,
-                    }),
-                );
-            }
-            if !state.ports.contains_key("indent") {
-                state.ports.insert(
-                    "indent".to_string(),
-                    Expr::MemberAccess(MemberAccessExpr {
-                        target: std::sync::Arc::new(base_expr),
-                        member: Ident::new("indent", span),
-                        span,
-                    }),
-                );
+            for &pname in PARAGRAPH_STYLE_PORTS {
+                if !state.ports.contains_key(pname) {
+                    state.ports.insert(
+                        pname.to_string(),
+                        Expr::MemberAccess(MemberAccessExpr {
+                            target: std::sync::Arc::new(base_expr.clone()),
+                            member: Ident::new(pname, span),
+                            span,
+                        }),
+                    );
+                }
             }
         } else {
-            state.ports.entry("align".to_string()).or_insert_with(|| {
-                Expr::Literal(Literal::Enum(
-                    "Align".to_string(),
-                    "Left".to_string(),
-                    span,
-                ))
-            });
-            state.ports.entry("indent".to_string()).or_insert_with(|| {
-                Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span))
-            });
+            for &pname in PARAGRAPH_STYLE_PORTS {
+                state
+                    .ports
+                    .entry(pname.to_string())
+                    .or_insert_with(|| default_paragraph_style_port_expr(pname, span));
+            }
         }
 
         Ok(())

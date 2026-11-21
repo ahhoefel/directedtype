@@ -1211,7 +1211,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             continue;
         }
 
-        let (text, font_size, font_weight, font_family, font_italic, font_small_caps, max_width, line_height, align, indent, ox, oy, text_font_id, raw_spans, raw_boxes, has_dynamic_splice) = {
+        let (text, font_size, font_weight, font_family, font_italic, font_small_caps, letter_spacing, max_width, line_height, align, indent, para_opts, ox, oy, text_font_id, raw_spans, raw_boxes, has_dynamic_splice) = {
             let n = &layout.nodes[text_node_idx];
             let text_font_id = n
                 .font
@@ -1242,6 +1242,10 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 .and_then(|f| f.properties.get("small_caps"))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
+            let letter_spacing = fnode
+                .and_then(|f| f.properties.get("letter_spacing"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             let max_width = if n.rect.width > 0.0 {
                 Some(n.rect.width)
             } else {
@@ -1261,6 +1265,8 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 .get("indent")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0);
+            let para_opts =
+                crate::compiler::text::ParagraphLayoutOptions::from_node_properties(&n.properties);
             let start_at = n
                 .properties
                 .get("start_at")
@@ -1278,10 +1284,12 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                 font_family,
                 font_italic,
                 font_small_caps,
+                letter_spacing,
                 max_width,
                 line_height,
                 align,
                 indent,
+                para_opts,
                 n.rect.x,
                 n.rect.y + y_offset,
                 text_font_id,
@@ -1444,11 +1452,12 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
         }
         layout.nodes[text_node_idx].text_spans = spans.clone();
 
-        let child_metrics = crate::compiler::text::compute_span_fragments_with_metrics_and_boxes(
+        let child_metrics = crate::compiler::text::compute_span_fragments_with_options(
             &text,
             font_size,
             font_weight,
             font_family.as_deref(),
+            letter_spacing,
             max_width,
             line_height,
             align.as_deref(),
@@ -1460,6 +1469,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
             &child_shifts,
             ox,
             oy,
+            &para_opts,
         );
 
         for (child_id, metrics) in child_metrics {

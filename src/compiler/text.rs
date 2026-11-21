@@ -1,3 +1,4 @@
+pub use crate::compiler::knuth_plass::{LineBreakMode, ParagraphLayoutOptions};
 use parley::style::{FontFamily, FontFeature, FontFeatures, FontStyle, FontWeight, StyleProperty};
 use parley::{FontContext, LayoutContext};
 use std::cell::{Cell, RefCell};
@@ -286,7 +287,33 @@ const SOFT_HYPHEN_LEN: usize = SOFT_HYPHEN.len_utf8(); // 2 UTF-8 bytes
 /// the line under `Align.Justify` while keeping plain `"\n"` and the final paragraph line ragged.
 pub const FORCED_JUSTIFY_BREAK: &str = "\u{2060}\n";
 
-/// Computes `(space_extra_advance, space_count)` for lines requiring manual space-stretching:
+/// Breaks lines on a Parley `Layout`, respecting pre-computed explicit Knuth–Plass breaks.
+///
+/// When `has_explicit_breaks` is true, lines for `Left`/`Justify`/`JustifyAll` are broken with
+/// `None` (only at explicit `\n` / `\|`) so tight shrunk Knuth–Plass lines are never re-wrapped by
+/// Parley's greedy breaker, while `Center`/`Right` still pass `max_width` so Parley centers/right-aligns
+/// against the container width.
+pub fn break_lines_for_layout<B: parley::style::Brush>(
+    layout: &mut parley::Layout<B>,
+    max_width: Option<f64>,
+    has_explicit_breaks: bool,
+    align: Option<&str>,
+) {
+    let is_center_or_right = matches!(
+        align,
+        Some("center") | Some("Center") | Some("right") | Some("Right") | Some("end") | Some("End")
+    );
+    if has_explicit_breaks && !is_center_or_right {
+        layout.break_all_lines(None);
+    } else if let Some(w) = max_width.filter(|&w| w > 0.0) {
+        layout.break_all_lines(Some(w as f32));
+    } else {
+        layout.break_all_lines(None);
+    }
+}
+
+/// Computes `(space_extra_advance, space_count)` for lines requiring manual space-stretching
+/// or space-shrinking (e.g. Knuth–Plass tight lines):
 /// - Under `Align.JustifyAll`: the final line (`line_idx + 1 == total_lines`) or any `\n`-broken line.
 /// - Under `Align.Justify`: any non-final forced justified break (`\|` -> `FORCED_JUSTIFY_BREAK`),
 ///   leaving soft-wrapped lines (already justified by Parley), plain `"\n"` lines, and the final
@@ -314,12 +341,12 @@ pub fn compute_manual_justify_line_spaces<B: parley::style::Brush>(
 
     let lm = line.metrics();
     let free = (target_width as f32) - lm.offset - (lm.advance - lm.trailing_whitespace);
-    if free <= 0.05 {
+    if free.abs() <= 0.05 {
         return (0.0, 0);
     }
 
     let mut temp_cursor: Option<(usize, usize)> = None;
-    let mut space_flags: Vec<bool> = Vec::new();
+    let mut space_flags: Vec<(bool, f32)> = Vec::new();
     for item in line.items() {
         match item {
             parley::layout::PositionedLayoutItem::GlyphRun(gr) => {
@@ -329,34 +356,48 @@ pub fn compute_manual_justify_line_spaces<B: parley::style::Brush>(
                     Some((ri, idx)) if ri == r.index() => idx,
                     _ => 0,
                 };
-                let gs: Vec<std::ops::Range<usize>> = r
+                let gs: Vec<(std::ops::Range<usize>, f32)> = r
                     .visual_clusters()
                     .flat_map(|c| {
                         let tr = c.text_range();
-                        c.glyphs().map(move |_| tr.clone())
+                        c.glyphs().map(move |g| (tr.clone(), g.advance))
                     })
                     .skip(s_idx)
                     .take(gc)
                     .collect();
                 temp_cursor = Some((r.index(), s_idx + gs.len()));
-                for cr in gs {
+                for (cr, adv) in gs {
                     let is_sp = active_text.get(cr).is_some_and(|s| {
                         !s.is_empty() && s.chars().all(|ch| ch == ' ' || ch == '\u{00A0}')
                     });
-                    space_flags.push(is_sp);
+                    space_flags.push((is_sp, adv));
                 }
             }
             parley::layout::PositionedLayoutItem::InlineBox(_) => {
-                space_flags.push(false);
+                space_flags.push((false, 0.0));
             }
         }
     }
-    while space_flags.last() == Some(&true) {
+    while space_flags.last().is_some_and(|&(is_sp, _)| is_sp) {
         space_flags.pop();
     }
-    let n_spaces = space_flags.iter().filter(|&&b| b).count();
+    let mut n_spaces = 0usize;
+    let mut min_space_adv = f32::MAX;
+    for &(is_sp, adv) in &space_flags {
+        if is_sp {
+            n_spaces += 1;
+            if adv < min_space_adv {
+                min_space_adv = adv;
+            }
+        }
+    }
     if n_spaces > 0 {
-        (free / (n_spaces as f32), n_spaces)
+        let mut extra = free / (n_spaces as f32);
+        if extra < 0.0 && min_space_adv.is_finite() {
+            // Never shrink a space below 10% of its natural width even on an unavoidable overfull line.
+            extra = extra.max(-min_space_adv * 0.9);
+        }
+        (extra, n_spaces)
     } else {
         (0.0, 0)
     }
@@ -495,6 +536,8 @@ pub struct PreparedRichText {
     pub byte_deltas: Vec<(usize, isize)>,
     pub orig_to_sc_entries: Vec<OffsetEntry>,
     pub shaped_to_pdf_entries: Vec<OffsetEntry>,
+    /// True when optimal Knuth–Plass line breaking materialized explicit line breaks into `text`.
+    pub has_explicit_breaks: bool,
 }
 
 impl PreparedRichText {
@@ -619,7 +662,11 @@ fn splice_rich_text(
         span.range = s..e.max(s);
     }
     for ib in boxes.iter_mut() {
-        ib.index = adjust_offset_for_splice(ib.index, pos, old_len, new_len);
+        if old_len == 0 && ib.index == pos {
+            ib.index = pos + new_len;
+        } else {
+            ib.index = adjust_offset_for_splice(ib.index, pos, old_len, new_len);
+        }
     }
 }
 
@@ -690,8 +737,10 @@ fn build_probe_layout(
     font_weight: f32,
     font_family: Option<&str>,
     font_italic: bool,
+    letter_spacing: f64,
+    word_spacing: f64,
     line_height: Option<f64>,
-    max_width: f32,
+    max_width: Option<f32>,
     indent: f64,
     spans: &[TextSpan],
     smcp_ranges: &[(Range<usize>, bool)],
@@ -710,6 +759,12 @@ fn build_probe_layout(
     }
     if font_italic {
         builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+    }
+    if letter_spacing.abs() > 1e-4 {
+        builder.push_default(StyleProperty::LetterSpacing(letter_spacing as f32));
+    }
+    if word_spacing.abs() > 1e-4 {
+        builder.push_default(StyleProperty::WordSpacing(word_spacing as f32));
     }
     if let Some(lh) = line_height {
         if lh > 0.0 {
@@ -762,13 +817,691 @@ fn build_probe_layout(
         });
     }
     let mut layout = builder.build(text);
-    layout.break_all_lines(Some(max_width));
+    layout.break_all_lines(max_width);
     layout
 }
 
-/// Resolves small caps (native OpenType `smcp` or synthesized uppercase+scale) and discretionary soft
-/// hyphens (`U+00AD`) for `max_width`. Returns `None` on the zero-cost fast path when neither
-/// small caps nor `U+00AD` is active.
+fn is_sentence_end_before(text: &str, byte_idx: usize) -> bool {
+    let prefix = &text[..byte_idx];
+    for ch in prefix.chars().rev() {
+        if matches!(ch, '”' | '"' | '\'' | '’' | ')' | ']' | '\u{2060}') {
+            continue;
+        }
+        return matches!(ch, '.' | '?' | '!');
+    }
+    false
+}
+
+#[derive(Debug, Clone, Copy)]
+enum KpBreakAction {
+    ReplaceSpace { cur_start: usize, cur_end: usize },
+    TakeSoftHyphen { cur_pos: usize },
+    InsertBreakAfter { cur_pos: usize },
+    ExistingBreak,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn measure_hyphen_width_cached(
+    font_cx: &mut FontContext,
+    layout_cx: &mut LayoutContext<()>,
+    cache: &mut std::collections::HashMap<(u32, u32, Option<String>, bool, u32), f64>,
+    size: f32,
+    weight: f32,
+    family: Option<&str>,
+    italic: bool,
+    letter_spacing: f64,
+) -> f64 {
+    let key = (
+        size.to_bits(),
+        weight.to_bits(),
+        family.map(|s| s.to_string()),
+        italic,
+        (letter_spacing as f32).to_bits(),
+    );
+    if let Some(&w) = cache.get(&key) {
+        return w;
+    }
+    let mut builder = layout_cx.ranged_builder(font_cx, "-", 1.0, true);
+    builder.push_default(StyleProperty::FontSize(size));
+    if (weight - 400.0).abs() > 1.0 {
+        builder.push_default(StyleProperty::FontWeight(FontWeight::new(weight)));
+    }
+    if let Some(fam) = family {
+        if !fam.is_empty() {
+            builder.push_default(StyleProperty::FontFamily(FontFamily::from(fam)));
+        }
+    }
+    if italic {
+        builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+    }
+    if letter_spacing.abs() > 1e-4 {
+        builder.push_default(StyleProperty::LetterSpacing(letter_spacing as f32));
+    }
+    let mut layout = builder.build("-");
+    layout.break_all_lines(None);
+    let w = layout.full_width() as f64;
+    cache.insert(key, w);
+    w
+}
+
+/// Runs Knuth–Plass optimal paragraph line breaking on `cur_text` (post-small-caps), splicing
+/// the chosen breaks (and materializing/stripping discretionary `U+00AD` soft hyphens) directly
+/// into `cur_text`, `pdf_text`, `cur_spans`, `cur_boxes`, and offset tables.
+#[allow(clippy::too_many_arguments)]
+fn apply_knuth_plass_breaks(
+    font_cx: &mut FontContext,
+    cur_text: &mut String,
+    pdf_text: &mut String,
+    cur_spans: &mut Vec<TextSpan>,
+    cur_boxes: &mut Vec<InlineBoxSpan>,
+    smcp_ranges: &mut Vec<(Range<usize>, bool)>,
+    synthetic_size_ranges: &mut Vec<(Range<usize>, f32)>,
+    shaped_to_pdf_entries: &mut Vec<OffsetEntry>,
+    byte_deltas: &mut Vec<(usize, isize)>,
+    font_size: f32,
+    font_weight: f32,
+    font_family: Option<&str>,
+    font_italic: bool,
+    letter_spacing: f64,
+    line_height: Option<f64>,
+    max_width: f64,
+    align: Option<&str>,
+    indent: f64,
+    options: &ParagraphLayoutOptions,
+) {
+    use crate::compiler::knuth_plass::{self as kp, Item, INF_PENALTY, INF_STRETCH};
+
+    // 1. Build a soft-hyphen-stripped `probe_text` with exact byte mapping back to `cur_text`.
+    let mut probe_text = String::with_capacity(cur_text.len());
+    let mut probe_spans = cur_spans.clone();
+    let mut probe_boxes = cur_boxes.clone();
+    let mut probe_smcp = smcp_ranges.clone();
+    let mut probe_synth = synthetic_size_ranges.clone();
+
+    // Maps each byte offset `p` in `0..=probe_text.len()` to the byte offset in `cur_text`
+    // immediately BEFORE any soft hyphen at `p` (for range ends) and AFTER any soft hyphen at `p` (for range starts).
+    let mut probe_to_cur_start: Vec<usize> = Vec::with_capacity(cur_text.len() + 1);
+    let mut probe_to_cur_end: Vec<usize> = Vec::with_capacity(cur_text.len() + 1);
+    let mut shys_at_probe: Vec<(usize, usize)> = Vec::new(); // (probe_pos, cur_pos)
+
+    let mut cur_to_probe: Vec<usize> = vec![0; cur_text.len() + 1];
+    let mut p_idx = 0usize;
+    let mut i = 0usize;
+    let bytes = cur_text.as_bytes();
+    while i < bytes.len() {
+        let ch = cur_text[i..].chars().next().unwrap();
+        let ch_len = ch.len_utf8();
+        if ch == SOFT_HYPHEN {
+            shys_at_probe.push((p_idx, i));
+            for k in 0..ch_len {
+                cur_to_probe[i + k] = p_idx;
+            }
+            i += ch_len;
+            continue;
+        }
+        // Record `probe_to_cur_end` at boundary before pushing new bytes if first byte
+        if probe_to_cur_end.len() == p_idx {
+            probe_to_cur_end.push(i);
+        }
+        for k in 0..ch_len {
+            probe_to_cur_start.push(i + k);
+            if k > 0 {
+                probe_to_cur_end.push(i + k);
+            }
+            cur_to_probe[i + k] = p_idx + k;
+        }
+        probe_text.push(ch);
+        p_idx += ch_len;
+        probe_to_cur_end.push(i + ch_len);
+        i += ch_len;
+    }
+    probe_to_cur_start.push(cur_text.len());
+    if probe_to_cur_end.len() <= p_idx {
+        probe_to_cur_end.push(cur_text.len());
+    }
+    cur_to_probe[cur_text.len()] = p_idx;
+
+    if !shys_at_probe.is_empty() {
+        for sp in &mut probe_spans {
+            let s = cur_to_probe[sp.range.start.min(cur_text.len())];
+            let e = cur_to_probe[sp.range.end.min(cur_text.len())];
+            sp.range = s..e.max(s);
+        }
+        for ib in &mut probe_boxes {
+            ib.index = cur_to_probe[ib.index.min(cur_text.len())];
+        }
+        for (r, _) in &mut probe_smcp {
+            let s = cur_to_probe[r.start.min(cur_text.len())];
+            let e = cur_to_probe[r.end.min(cur_text.len())];
+            *r = s..e.max(s);
+        }
+        for (r, _) in &mut probe_synth {
+            let s = cur_to_probe[r.start.min(cur_text.len())];
+            let e = cur_to_probe[r.end.min(cur_text.len())];
+            *r = s..e.max(s);
+        }
+    }
+
+    // 2. Shape unconstrained with Parley to extract exact shaped glyph/space/inline-box advances.
+    let mut probe_layout_cx = LayoutContext::<()>::new();
+    let probe_layout = build_probe_layout(
+        font_cx,
+        &mut probe_layout_cx,
+        &probe_text,
+        font_size,
+        font_weight,
+        font_family,
+        font_italic,
+        letter_spacing,
+        options.word_spacing,
+        line_height,
+        None,
+        indent,
+        &probe_spans,
+        &probe_smcp,
+        &probe_synth,
+        &probe_boxes,
+    );
+
+    let is_justify_all = matches!(align, Some("justify_all") | Some("JustifyAll"));
+    let is_justify = is_justify_all || matches!(align, Some("justify") | Some("Justify"));
+    let is_center_or_right = matches!(
+        align,
+        Some("center") | Some("Center") | Some("right") | Some("Right") | Some("end") | Some("End")
+    );
+    let ragged_stretch = (font_size as f64).max(8.0) * 3.0;
+
+    // 3. Convert Parley's unconstrained hard-break lines into Knuth–Plass items + break actions.
+    let mut items: Vec<Item> = Vec::with_capacity(probe_text.len() / 2 + 16);
+    let mut actions: Vec<Option<KpBreakAction>> = Vec::with_capacity(probe_text.len() / 2 + 16);
+    let mut hyphen_cache: std::collections::HashMap<(u32, u32, Option<String>, bool, u32), f64> =
+        std::collections::HashMap::new();
+
+    #[derive(Debug, Clone)]
+    enum TokenUnit {
+        InlineBox { index: usize, width: f64, is_indent: bool },
+        Cluster { range: Range<usize>, advance: f64 },
+    }
+
+    let lines: Vec<_> = probe_layout.lines().collect();
+    let num_probe_lines = lines.len();
+
+    let push_item = |items: &mut Vec<Item>,
+                     actions: &mut Vec<Option<KpBreakAction>>,
+                     item: Item,
+                     action: Option<KpBreakAction>| {
+        items.push(item);
+        actions.push(action);
+    };
+
+    // Index into `shys_at_probe` (sorted ascending by probe_pos).
+    let mut shy_cursor = 0usize;
+
+    for (line_idx, line) in lines.into_iter().enumerate() {
+        let mut units: Vec<TokenUnit> = Vec::new();
+        let mut run_cursor: Option<(usize, usize)> = None;
+
+        for item in line.items() {
+            match item {
+                parley::layout::PositionedLayoutItem::GlyphRun(gr) => {
+                    let run = gr.run();
+                    let glyph_count = gr.glyphs().count();
+                    let start_g = match run_cursor {
+                        Some((ri, idx)) if ri == run.index() => idx,
+                        _ => 0,
+                    };
+                    let mut seen_g = 0usize;
+                    let mut taken_g = 0usize;
+                    for cluster in run.visual_clusters() {
+                        let cg = cluster.glyphs().count();
+                        if seen_g + cg <= start_g {
+                            seen_g += cg;
+                            continue;
+                        }
+                        if taken_g >= glyph_count {
+                            break;
+                        }
+                        let tr = cluster.text_range();
+                        let adv = cluster.advance() as f64;
+                        units.push(TokenUnit::Cluster {
+                            range: tr,
+                            advance: adv,
+                        });
+                        seen_g += cg;
+                        taken_g += cg;
+                    }
+                    run_cursor = Some((run.index(), start_g + taken_g));
+                }
+                parley::layout::PositionedLayoutItem::InlineBox(ib) => {
+                    let is_indent = ib.id == INDENT_INLINE_BOX_ID;
+                    let ib_index = if is_indent {
+                        0
+                    } else {
+                        probe_boxes
+                            .iter()
+                            .find(|b| b.node_id.0 as u64 == ib.id)
+                            .map(|b| b.index.min(probe_text.len()))
+                            .unwrap_or(0)
+                    };
+                    units.push(TokenUnit::InlineBox {
+                        index: ib_index,
+                        width: ib.width as f64,
+                        is_indent,
+                    });
+                }
+            }
+        }
+
+        // Order units in logical text order (indent box first, then inline boxes before clusters at same index).
+        units.sort_by_key(|u| match u {
+            TokenUnit::InlineBox {
+                index, is_indent, ..
+            } => (*index, if *is_indent { 0u8 } else { 1u8 }),
+            TokenUnit::Cluster { range, .. } => (range.start, 2u8),
+        });
+
+        let mut box_w = 0.0f64;
+        let flush_box = |box_w: &mut f64,
+                         items: &mut Vec<Item>,
+                         actions: &mut Vec<Option<KpBreakAction>>| {
+            if *box_w > 0.0 {
+                items.push(Item::Box { width: *box_w });
+                actions.push(None);
+                *box_w = 0.0;
+            }
+        };
+
+        for unit in units {
+            match unit {
+                TokenUnit::InlineBox { width, .. } => {
+                    box_w += width.max(0.0);
+                }
+                TokenUnit::Cluster { range, advance } => {
+                    let c_start = range.start.min(probe_text.len());
+                    let c_end = range.end.min(probe_text.len());
+                    if c_start >= c_end {
+                        continue;
+                    }
+                    let slice = &probe_text[c_start..c_end];
+
+                    // Advance past any soft hyphens strictly before `c_start`
+                    while shy_cursor < shys_at_probe.len() && shys_at_probe[shy_cursor].0 < c_start {
+                        shy_cursor += 1;
+                    }
+
+                    // Emit discretionary hyphen penalty for any soft hyphen sitting right at `c_start`
+                    if shy_cursor < shys_at_probe.len() && shys_at_probe[shy_cursor].0 == c_start {
+                        let (_, shy_cur_pos) = shys_at_probe[shy_cursor];
+                        shy_cursor += 1;
+                        if box_w > 0.0 {
+                            flush_box(&mut box_w, &mut items, &mut actions);
+                            // Resolve effective font style at `shy_cur_pos`
+                            let mut h_size = font_size;
+                            let mut h_weight = font_weight;
+                            let mut h_family = font_family;
+                            let mut h_italic = font_italic;
+                            for sp in cur_spans.iter() {
+                                if sp.range.start <= shy_cur_pos && shy_cur_pos < sp.range.end {
+                                    if let Some(sz) = sp.style.font_size {
+                                        if sz > 0.0 {
+                                            h_size = sz as f32;
+                                        }
+                                    }
+                                    if let Some(wt) = sp.style.font_weight {
+                                        if wt > 0.0 {
+                                            h_weight = wt as f32;
+                                        }
+                                    }
+                                    if let Some(ref fam) = sp.style.font_family {
+                                        if !fam.is_empty() {
+                                            h_family = Some(fam.as_str());
+                                        }
+                                    }
+                                    if sp.style.italic {
+                                        h_italic = true;
+                                    }
+                                }
+                            }
+                            for (sr, sz) in synthetic_size_ranges.iter() {
+                                if sr.start <= shy_cur_pos && shy_cur_pos < sr.end {
+                                    h_size = *sz;
+                                }
+                            }
+                            let hyphen_w = measure_hyphen_width_cached(
+                                font_cx,
+                                &mut probe_layout_cx,
+                                &mut hyphen_cache,
+                                h_size,
+                                h_weight,
+                                h_family,
+                                h_italic,
+                                letter_spacing,
+                            );
+                            push_item(
+                                &mut items,
+                                &mut actions,
+                                Item::Penalty {
+                                    width: hyphen_w,
+                                    penalty: options.hyphen_penalty,
+                                    flagged: true,
+                                },
+                                Some(KpBreakAction::TakeSoftHyphen {
+                                    cur_pos: shy_cur_pos,
+                                }),
+                            );
+                        }
+                    }
+
+                    // Zero-width markers (`\n`, `\u{2060}`) are handled at line end.
+                    if slice == "\n" || slice == "\r\n" || slice == "\u{2060}" {
+                        continue;
+                    }
+
+                    // Normal breakable space (`' '`)
+                    if slice == " " {
+                        flush_box(&mut box_w, &mut items, &mut actions);
+                        let base_w = advance.max(0.0);
+                        let is_sent = options.sentence_space != 0.0
+                            && is_sentence_end_before(&probe_text, c_start);
+                        let (eff_w, eff_y, eff_z) = if is_sent {
+                            let s = options.sentence_space;
+                            (
+                                (base_w * (1.0 + s)).max(0.0),
+                                (base_w * options.space_stretch * (1.0 + 2.0 * s.max(0.0))).max(0.0),
+                                (base_w * options.space_shrink / (1.0 + s.max(0.0))).max(0.0),
+                            )
+                        } else {
+                            (
+                                base_w,
+                                base_w * options.space_stretch,
+                                base_w * options.space_shrink,
+                            )
+                        };
+                        let cur_s = probe_to_cur_start[c_start];
+                        let cur_e = probe_to_cur_end[c_end];
+                        if is_justify {
+                            push_item(
+                                &mut items,
+                                &mut actions,
+                                Item::Glue {
+                                    width: eff_w,
+                                    stretch: eff_y,
+                                    shrink: eff_z,
+                                },
+                                Some(KpBreakAction::ReplaceSpace {
+                                    cur_start: cur_s,
+                                    cur_end: cur_e,
+                                }),
+                            );
+                        } else {
+                            // Knuth–Plass 1981 Section 4 ragged-right triple:
+                            // Penalty(+INF), Glue(0, ragged_stretch, 0), Penalty(0) [BREAK], Glue(w, -ragged_stretch, 0)
+                            push_item(
+                                &mut items,
+                                &mut actions,
+                                Item::Penalty {
+                                    width: 0.0,
+                                    penalty: INF_PENALTY,
+                                    flagged: false,
+                                },
+                                None,
+                            );
+                            push_item(
+                                &mut items,
+                                &mut actions,
+                                Item::Glue {
+                                    width: 0.0,
+                                    stretch: ragged_stretch,
+                                    shrink: 0.0,
+                                },
+                                None,
+                            );
+                            push_item(
+                                &mut items,
+                                &mut actions,
+                                Item::Penalty {
+                                    width: 0.0,
+                                    penalty: 0.0,
+                                    flagged: false,
+                                },
+                                Some(KpBreakAction::ReplaceSpace {
+                                    cur_start: cur_s,
+                                    cur_end: cur_e,
+                                }),
+                            );
+                            push_item(
+                                &mut items,
+                                &mut actions,
+                                Item::Glue {
+                                    width: eff_w,
+                                    stretch: -ragged_stretch,
+                                    shrink: 0.0,
+                                },
+                                None,
+                            );
+                        }
+                        continue;
+                    }
+
+                    // Non-breaking space (`\u{00A0}`)
+                    if slice == "\u{00A0}" {
+                        flush_box(&mut box_w, &mut items, &mut actions);
+                        let w = advance.max(0.0);
+                        if is_justify {
+                            push_item(
+                                &mut items,
+                                &mut actions,
+                                Item::Penalty {
+                                    width: 0.0,
+                                    penalty: INF_PENALTY,
+                                    flagged: false,
+                                },
+                                None,
+                            );
+                            push_item(
+                                &mut items,
+                                &mut actions,
+                                Item::Glue {
+                                    width: w,
+                                    stretch: w * options.space_stretch,
+                                    shrink: w * options.space_shrink,
+                                },
+                                None,
+                            );
+                        } else {
+                            box_w += w;
+                        }
+                        continue;
+                    }
+
+                    // Regular text cluster
+                    box_w += advance.max(0.0);
+
+                    // Check explicit breakable hyphen (`'-'`, NOT `\=` which is `"\u{2060}-\u{2060}"`)
+                    if slice.ends_with('-') {
+                        let prev_ch = probe_text[..c_end - 1].chars().next_back();
+                        let next_ch = probe_text[c_end..].chars().next();
+                        let glued = prev_ch == Some('\u{2060}') || next_ch == Some('\u{2060}');
+                        let prev_ok = prev_ch.is_some_and(|c| !c.is_whitespace() && c != '-');
+                        let next_ok = next_ch.is_some_and(|c| {
+                            !c.is_whitespace()
+                                && c != '\n'
+                                && c != '-'
+                                && !matches!(c, '”' | '’' | '"' | '\'' | ')' | ']' | ',' | '.' | ';' | ':' | '!' | '?')
+                        });
+                        if !glued && prev_ok && next_ok {
+                            flush_box(&mut box_w, &mut items, &mut actions);
+                            let cur_pos = probe_to_cur_end[c_end];
+                            push_item(
+                                &mut items,
+                                &mut actions,
+                                Item::Penalty {
+                                    width: 0.0,
+                                    penalty: options.hyphen_penalty,
+                                    flagged: true,
+                                },
+                                Some(KpBreakAction::InsertBreakAfter { cur_pos }),
+                            );
+                        }
+                    } else if slice.ends_with('\u{2014}') {
+                        // Internal em-dash (`—`): allow break right after `—` only when preceded by
+                        // non-opening content (never break after opening `“—` or `(—`) and followed
+                        // by non-closing content.
+                        let dash_start = c_end - '\u{2014}'.len_utf8();
+                        let prev_ch = probe_text[..dash_start].chars().next_back();
+                        let prev_ok = prev_ch.is_some_and(|c| {
+                            !c.is_whitespace()
+                                && c != '\n'
+                                && !matches!(c, '“' | '‘' | '"' | '\'' | '(' | '[' | '\u{2060}')
+                        });
+                        let next_ch = probe_text[c_end..].chars().next();
+                        let next_ok = next_ch.is_some_and(|c| {
+                            !c.is_whitespace()
+                                && c != '\n'
+                                && c != '\u{2060}'
+                                && c != '\u{2014}'
+                                && !matches!(c, '”' | '’' | '"' | '\'' | ')' | ']' | ',' | '.' | ';' | ':' | '!' | '?')
+                        });
+                        if prev_ok && next_ok {
+                            flush_box(&mut box_w, &mut items, &mut actions);
+                            let cur_pos = probe_to_cur_end[c_end];
+                            push_item(
+                                &mut items,
+                                &mut actions,
+                                Item::Penalty {
+                                    width: 0.0,
+                                    penalty: options.hyphen_penalty,
+                                    flagged: false,
+                                },
+                                Some(KpBreakAction::InsertBreakAfter { cur_pos }),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        flush_box(&mut box_w, &mut items, &mut actions);
+
+        // Terminate this hard-break segment cleanly in the Knuth–Plass stream.
+        let is_last_line = line_idx + 1 == num_probe_lines;
+        let line_slice = probe_text.get(line.text_range()).unwrap_or("");
+        let is_forced_justify = !is_last_line && line_slice.ends_with(FORCED_JUSTIFY_BREAK);
+
+        let needs_inf_stretch = if is_justify_all {
+            false
+        } else if is_justify {
+            !is_forced_justify
+        } else {
+            true
+        };
+
+        if needs_inf_stretch {
+            push_item(
+                &mut items,
+                &mut actions,
+                Item::Glue {
+                    width: 0.0,
+                    stretch: INF_STRETCH,
+                    shrink: 0.0,
+                },
+                None,
+            );
+        }
+        push_item(
+            &mut items,
+            &mut actions,
+            Item::Penalty {
+                width: 0.0,
+                penalty: -INF_PENALTY,
+                flagged: is_last_line,
+            },
+            Some(KpBreakAction::ExistingBreak),
+        );
+    }
+
+    // 4. Solve optimal breakpoints via Knuth–Plass!
+    let kp_measure = if is_center_or_right {
+        (max_width - 0.05).max(1.0)
+    } else {
+        max_width
+    };
+    let result = kp::break_items(&items, |_| kp_measure, options);
+
+    // 5. Collect splices: chosen break points + stripping untaken soft hyphens.
+    let break_str = if is_justify {
+        FORCED_JUSTIFY_BREAK
+    } else {
+        "\n"
+    };
+    let hyphen_break_str = if is_justify {
+        "-\u{2060}\n"
+    } else {
+        "-\n"
+    };
+
+    let mut taken_shys: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    // Each edit: (orig_sc_pos, pdf_pos, old_len, replacement)
+    let mut edits: Vec<(usize, usize, usize, &'static str)> = Vec::new();
+
+    for &b_idx in &result.breaks {
+        let Some(action) = actions.get(b_idx).and_then(|a| *a) else {
+            continue;
+        };
+        match action {
+            KpBreakAction::ReplaceSpace { cur_start, cur_end } => {
+                let pdf_pos = map_pos_floor(cur_start, shaped_to_pdf_entries);
+                edits.push((cur_start, pdf_pos, cur_end - cur_start, break_str));
+            }
+            KpBreakAction::TakeSoftHyphen { cur_pos } => {
+                taken_shys.insert(cur_pos);
+                let pdf_pos = map_pos_floor(cur_pos, shaped_to_pdf_entries);
+                edits.push((cur_pos, pdf_pos, SOFT_HYPHEN_LEN, hyphen_break_str));
+            }
+            KpBreakAction::InsertBreakAfter { cur_pos } => {
+                let pdf_pos = map_pos_floor(cur_pos, shaped_to_pdf_entries);
+                edits.push((cur_pos, pdf_pos, 0, break_str));
+            }
+            KpBreakAction::ExistingBreak => {}
+        }
+    }
+
+    for &(_, shy_cur_pos) in &shys_at_probe {
+        if !taken_shys.contains(&shy_cur_pos) {
+            let pdf_pos = map_pos_floor(shy_cur_pos, shaped_to_pdf_entries);
+            edits.push((shy_cur_pos, pdf_pos, SOFT_HYPHEN_LEN, ""));
+        }
+    }
+
+    // Apply edits from back to front so earlier byte offsets remain invariant!
+    edits.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.2.cmp(&a.2)));
+    let mut dummy_shys: Vec<(usize, usize)> = Vec::new();
+    for (sc_pos, pdf_pos, old_len, repl) in edits {
+        splice_prepared_rich_text(
+            cur_text,
+            pdf_text,
+            cur_spans,
+            cur_boxes,
+            smcp_ranges,
+            synthetic_size_ranges,
+            shaped_to_pdf_entries,
+            &mut dummy_shys,
+            sc_pos,
+            pdf_pos,
+            old_len,
+            repl,
+        );
+        let delta = (repl.len() as isize) - (old_len as isize);
+        if delta != 0 {
+            byte_deltas.push((sc_pos, delta));
+        }
+    }
+    byte_deltas.sort_by_key(|&(pos, _)| pos);
+}
+
+/// Resolves small caps (native OpenType `smcp` or synthesized uppercase+scale), discretionary soft
+/// hyphens (`U+00AD`), and optional Knuth–Plass optimal line breaking for `max_width`.
+/// Returns `None` on the zero-cost fast path when none of these transformations are active.
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_rich_text_for_shaping(
     font_cx: &mut FontContext,
@@ -784,10 +1517,49 @@ pub fn prepare_rich_text_for_shaping(
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
 ) -> Option<PreparedRichText> {
+    prepare_rich_text_for_shaping_with_options(
+        font_cx,
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        font_italic,
+        font_small_caps,
+        0.0,
+        line_height,
+        max_width,
+        None,
+        indent,
+        spans,
+        inline_boxes,
+        &ParagraphLayoutOptions::default(),
+    )
+}
+
+/// Full rich-text preparation supporting small caps, soft hyphens, and Knuth–Plass line breaking.
+#[allow(clippy::too_many_arguments)]
+pub fn prepare_rich_text_for_shaping_with_options(
+    font_cx: &mut FontContext,
+    text: &str,
+    font_size: f32,
+    font_weight: f32,
+    font_family: Option<&str>,
+    font_italic: bool,
+    font_small_caps: bool,
+    letter_spacing: f64,
+    line_height: Option<f64>,
+    max_width: Option<f64>,
+    align: Option<&str>,
+    indent: f64,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+    options: &ParagraphLayoutOptions,
+) -> Option<PreparedRichText> {
     let any_small_caps =
         font_small_caps || spans.iter().any(|s| s.style.small_caps == Some(true));
     let has_shy_raw = text.contains(SOFT_HYPHEN);
-    if !any_small_caps && !has_shy_raw {
+    let run_kp = options.is_optimal() && max_width.is_some_and(|w| w > 0.0);
+    if !any_small_caps && !has_shy_raw && !run_kp {
         return None;
     }
 
@@ -920,8 +1692,34 @@ pub fn prepare_rich_text_for_shaping(
 
     let mut pdf_text = text.to_string();
     let mut byte_deltas: Vec<(usize, isize)> = Vec::new();
+    let mut has_explicit_breaks = false;
 
-    if cur_text.contains(SOFT_HYPHEN) {
+    if run_kp {
+        if let Some(w) = max_width.filter(|&w| w > 0.0) {
+            apply_knuth_plass_breaks(
+                font_cx,
+                &mut cur_text,
+                &mut pdf_text,
+                &mut cur_spans,
+                &mut cur_boxes,
+                &mut smcp_ranges,
+                &mut synthetic_size_ranges,
+                &mut shaped_to_pdf_entries,
+                &mut byte_deltas,
+                font_size,
+                font_weight,
+                font_family,
+                font_italic,
+                letter_spacing,
+                line_height,
+                w,
+                align,
+                indent,
+                options,
+            );
+            has_explicit_breaks = true;
+        }
+    } else if cur_text.contains(SOFT_HYPHEN) {
         let mut shy_sc_and_pdf: Vec<(usize, usize)> = cur_text
             .match_indices(SOFT_HYPHEN)
             .map(|(idx, _)| idx)
@@ -946,8 +1744,10 @@ pub fn prepare_rich_text_for_shaping(
                     font_weight,
                     font_family,
                     font_italic,
+                    letter_spacing,
+                    options.word_spacing,
                     line_height,
-                    w_f32,
+                    Some(w_f32),
                     indent,
                     &cur_spans,
                     &smcp_ranges,
@@ -1001,8 +1801,10 @@ pub fn prepare_rich_text_for_shaping(
                     font_weight,
                     font_family,
                     font_italic,
+                    letter_spacing,
+                    options.word_spacing,
                     line_height,
-                    w_f32,
+                    Some(w_f32),
                     indent,
                     &cur_spans,
                     &smcp_ranges,
@@ -1069,6 +1871,7 @@ pub fn prepare_rich_text_for_shaping(
         byte_deltas,
         orig_to_sc_entries,
         shaped_to_pdf_entries,
+        has_explicit_breaks,
     })
 }
 
@@ -1159,6 +1962,45 @@ pub fn measure_rich_text_bounds_with_boxes_and_spacing(
     inline_boxes: &[InlineBoxSpan],
     font_small_caps: bool,
 ) -> (f64, f64) {
+    measure_rich_text_bounds_full(
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        false,
+        letter_spacing,
+        max_width,
+        end_at,
+        start_at,
+        line_height,
+        None,
+        indent,
+        spans,
+        inline_boxes,
+        font_small_caps,
+        &ParagraphLayoutOptions::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn measure_rich_text_bounds_full(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    font_italic: bool,
+    letter_spacing: f64,
+    max_width: Option<f64>,
+    end_at: Option<&str>,
+    start_at: Option<&str>,
+    line_height: Option<f64>,
+    align: Option<&str>,
+    indent: f64,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+    font_small_caps: bool,
+    options: &ParagraphLayoutOptions,
+) -> (f64, f64) {
     if text.is_empty() && inline_boxes.is_empty() {
         return (0.0, 0.0);
     }
@@ -1172,20 +2014,24 @@ pub fn measure_rich_text_bounds_with_boxes_and_spacing(
             let mut font_cx = font_cx_cell.borrow_mut();
             let mut layout_cx = layout_cx_cell.borrow_mut();
 
-            let prep = prepare_rich_text_for_shaping(
+            let prep = prepare_rich_text_for_shaping_with_options(
                 &mut font_cx,
                 text,
                 size,
                 weight,
                 font_family,
-                false,
+                font_italic,
                 font_small_caps,
+                letter_spacing,
                 line_height,
                 max_width,
+                align,
                 indent,
                 spans,
                 inline_boxes,
+                options,
             );
+            let has_explicit_breaks = prep.as_ref().is_some_and(|p| p.has_explicit_breaks);
             let (eff_text, eff_spans, eff_boxes, smcp_ranges, synth_ranges): (
                 &str,
                 &[TextSpan],
@@ -1213,8 +2059,14 @@ pub fn measure_rich_text_bounds_with_boxes_and_spacing(
                     builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
                 }
             }
+            if font_italic {
+                builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+            }
             if letter_spacing.abs() > 1e-4 {
                 builder.push_default(StyleProperty::LetterSpacing(letter_spacing as f32));
+            }
+            if options.word_spacing.abs() > 1e-4 {
+                builder.push_default(StyleProperty::WordSpacing(options.word_spacing as f32));
             }
             if let Some(lh) = line_height {
                 if lh > 0.0 {
@@ -1260,7 +2112,7 @@ pub fn measure_rich_text_bounds_with_boxes_and_spacing(
             }
 
             let mut layout = builder.build(eff_text);
-            layout.break_all_lines(max_width.and_then(|w| if w > 0.0 { Some(w as f32) } else { None }));
+            break_lines_for_layout(&mut layout, max_width, has_explicit_breaks, align);
 
             let width = if max_width.is_some() {
                 layout.width() as f64
@@ -1476,6 +2328,47 @@ pub fn shape_paragraph_lines(
     spans: &[TextSpan],
     inline_boxes: &[InlineBoxSpan],
 ) -> ShapedParagraph {
+    shape_paragraph_lines_with_options(
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        0.0,
+        max_width,
+        end_at,
+        start_at,
+        line_height,
+        align,
+        indent,
+        font_italic,
+        font_small_caps,
+        spans,
+        inline_boxes,
+        &ParagraphLayoutOptions::default(),
+    )
+}
+
+/// Shapes a paragraph at constant `max_width` once into line slices using exact `Text` landmark geometry
+/// and explicit `ParagraphLayoutOptions` (including Knuth–Plass line breaking and `word_spacing`).
+#[allow(clippy::too_many_arguments)]
+pub fn shape_paragraph_lines_with_options(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    letter_spacing: f64,
+    max_width: Option<f64>,
+    end_at: Option<&str>,
+    start_at: Option<&str>,
+    line_height: Option<f64>,
+    align: Option<&str>,
+    indent: f64,
+    font_italic: bool,
+    font_small_caps: bool,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+    options: &ParagraphLayoutOptions,
+) -> ShapedParagraph {
     if text.is_empty() && inline_boxes.is_empty() {
         return ShapedParagraph {
             lines: Vec::new(),
@@ -1498,7 +2391,7 @@ pub fn shape_paragraph_lines(
             let mut font_cx = font_cx_cell.borrow_mut();
             let mut layout_cx = layout_cx_cell.borrow_mut();
 
-            let prep = prepare_rich_text_for_shaping(
+            let prep = prepare_rich_text_for_shaping_with_options(
                 &mut font_cx,
                 text,
                 size,
@@ -1506,12 +2399,16 @@ pub fn shape_paragraph_lines(
                 font_family,
                 font_italic,
                 font_small_caps,
+                letter_spacing,
                 line_height,
                 max_width,
+                align,
                 indent,
                 spans,
                 inline_boxes,
+                options,
             );
+            let has_explicit_breaks = prep.as_ref().is_some_and(|p| p.has_explicit_breaks);
             let (eff_text, eff_spans, eff_boxes, smcp_ranges, synth_ranges, byte_deltas, sc_entries): (
                 &str,
                 &[TextSpan],
@@ -1545,6 +2442,12 @@ pub fn shape_paragraph_lines(
             }
             if font_italic {
                 builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+            }
+            if letter_spacing.abs() > 1e-4 {
+                builder.push_default(StyleProperty::LetterSpacing(letter_spacing as f32));
+            }
+            if options.word_spacing.abs() > 1e-4 {
+                builder.push_default(StyleProperty::WordSpacing(options.word_spacing as f32));
             }
             if let Some(lh) = line_height {
                 if lh > 0.0 {
@@ -1592,7 +2495,7 @@ pub fn shape_paragraph_lines(
             }
 
             let mut layout = builder.build(eff_text);
-            layout.break_all_lines(max_width.and_then(|w| if w > 0.0 { Some(w as f32) } else { None }));
+            break_lines_for_layout(&mut layout, max_width, has_explicit_breaks, align);
             let alignment = match align {
                 Some("center") | Some("Center") => parley::Alignment::Center,
                 Some("right") | Some("Right") | Some("end") | Some("End") => parley::Alignment::End,
@@ -2071,6 +2974,47 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
     origin_x: f64,
     origin_y: f64,
 ) -> HashMap<NodeId, SpanLayoutMetrics> {
+    compute_span_fragments_with_options(
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        0.0,
+        max_width,
+        line_height,
+        align,
+        indent,
+        font_italic,
+        font_small_caps,
+        spans,
+        inline_boxes,
+        child_shifts,
+        origin_x,
+        origin_y,
+        &ParagraphLayoutOptions::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compute_span_fragments_with_options(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    letter_spacing: f64,
+    max_width: Option<f64>,
+    line_height: Option<f64>,
+    align: Option<&str>,
+    indent: f64,
+    font_italic: bool,
+    font_small_caps: bool,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+    child_shifts: &HashMap<NodeId, f64>,
+    origin_x: f64,
+    origin_y: f64,
+    options: &ParagraphLayoutOptions,
+) -> HashMap<NodeId, SpanLayoutMetrics> {
     let mut result: HashMap<NodeId, SpanLayoutMetrics> = HashMap::new();
     if (text.is_empty() && inline_boxes.is_empty()) || spans.is_empty() {
         return result;
@@ -2104,7 +3048,7 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
         let mut font_cx = font_cx_cell.borrow_mut();
         let mut layout_cx = LayoutContext::<[u8; 4]>::new();
 
-        let prep = prepare_rich_text_for_shaping(
+        let prep = prepare_rich_text_for_shaping_with_options(
             &mut font_cx,
             text,
             size,
@@ -2112,12 +3056,16 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
             font_family,
             font_italic,
             font_small_caps,
+            letter_spacing,
             line_height,
             max_width,
+            align,
             indent,
             spans,
             inline_boxes,
+            options,
         );
+        let has_explicit_breaks = prep.as_ref().is_some_and(|p| p.has_explicit_breaks);
         let (eff_text, eff_spans, eff_boxes, smcp_ranges, synth_ranges): (
             &str,
             &[TextSpan],
@@ -2148,6 +3096,12 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
         }
         if font_italic {
             builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+        }
+        if letter_spacing.abs() > 1e-4 {
+            builder.push_default(StyleProperty::LetterSpacing(letter_spacing as f32));
+        }
+        if options.word_spacing.abs() > 1e-4 {
+            builder.push_default(StyleProperty::WordSpacing(options.word_spacing as f32));
         }
         if let Some(lh) = line_height {
             if lh > 0.0 {
@@ -2198,10 +3152,8 @@ pub fn compute_span_fragments_with_metrics_and_boxes(
         }
 
         let mut layout = builder.build(eff_text);
-        if let Some(w) = max_width {
-            if w > 0.0 {
-                layout.break_all_lines(Some(w as f32));
-            }
+        if max_width.is_some_and(|w| w > 0.0) {
+            break_lines_for_layout(&mut layout, max_width, has_explicit_breaks, align);
         }
 
         let alignment = match align {
@@ -2458,6 +3410,53 @@ pub fn compute_span_range_metrics_with_boxes(
     own_shift: f64,
     target_inline_box: Option<NodeId>,
 ) -> SpanLayoutMetrics {
+    compute_span_range_metrics_with_options(
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        false,
+        0.0,
+        max_width,
+        start_at,
+        line_height,
+        align,
+        indent,
+        font_small_caps,
+        spans,
+        inline_boxes,
+        text_x,
+        text_y,
+        span_range,
+        own_shift,
+        target_inline_box,
+        &ParagraphLayoutOptions::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compute_span_range_metrics_with_options(
+    text: &str,
+    font_size: f64,
+    font_weight: f64,
+    font_family: Option<&str>,
+    font_italic: bool,
+    letter_spacing: f64,
+    max_width: Option<f64>,
+    start_at: Option<&str>,
+    line_height: Option<f64>,
+    align: Option<&str>,
+    indent: f64,
+    font_small_caps: bool,
+    spans: &[TextSpan],
+    inline_boxes: &[InlineBoxSpan],
+    text_x: f64,
+    text_y: f64,
+    span_range: Range<usize>,
+    own_shift: f64,
+    target_inline_box: Option<NodeId>,
+    options: &ParagraphLayoutOptions,
+) -> SpanLayoutMetrics {
     let origin_x = text_x;
 
     if text.is_empty() && inline_boxes.is_empty() {
@@ -2481,20 +3480,24 @@ pub fn compute_span_range_metrics_with_boxes(
         let mut font_cx = font_cx_cell.borrow_mut();
         let mut layout_cx = LayoutContext::<[u8; 4]>::new();
 
-        let prep = prepare_rich_text_for_shaping(
+        let prep = prepare_rich_text_for_shaping_with_options(
             &mut font_cx,
             text,
             size,
             weight,
             font_family,
-            false,
+            font_italic,
             font_small_caps,
+            letter_spacing,
             line_height,
             max_width,
+            align,
             indent,
             spans,
             inline_boxes,
+            options,
         );
+        let has_explicit_breaks = prep.as_ref().is_some_and(|p| p.has_explicit_breaks);
         let (eff_text, eff_spans, eff_boxes, smcp_ranges, synth_ranges): (
             &str,
             &[TextSpan],
@@ -2522,6 +3525,15 @@ pub fn compute_span_range_metrics_with_boxes(
             if !family.is_empty() {
                 builder.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
             }
+        }
+        if font_italic {
+            builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+        }
+        if letter_spacing.abs() > 1e-4 {
+            builder.push_default(StyleProperty::LetterSpacing(letter_spacing as f32));
+        }
+        if options.word_spacing.abs() > 1e-4 {
+            builder.push_default(StyleProperty::WordSpacing(options.word_spacing as f32));
         }
         if let Some(lh) = line_height {
             if lh > 0.0 {
@@ -2572,10 +3584,8 @@ pub fn compute_span_range_metrics_with_boxes(
         }
 
         let mut layout = builder.build(eff_text);
-        if let Some(w) = max_width {
-            if w > 0.0 {
-                layout.break_all_lines(Some(w as f32));
-            }
+        if max_width.is_some_and(|w| w > 0.0) {
+            break_lines_for_layout(&mut layout, max_width, has_explicit_breaks, align);
         }
 
         let alignment = match align {
@@ -2900,7 +3910,7 @@ pub(crate) fn format_text_port_value(v: &crate::compiler::value::Value) -> Optio
 /// Resolves a text node's effective text string, adjusted `TextSpan` ranges, `InlineBoxSpan` byte
 /// indices, and `(orig_pos, inserted_len)` shifts after splicing any inline dynamic `text:` child
 /// placeholders (`range.is_empty()` pointing to a child with `text_content == None` and `properties["text"]`).
-pub(crate) fn resolve_active_rich_text(
+pub fn resolve_active_rich_text(
     node: &crate::compiler::layout::ResolvedNode,
     layout: &crate::compiler::layout::ResolvedLayout,
 ) -> (
@@ -3459,8 +4469,10 @@ mod tests {
                         400.0,
                         Some("STIX Two Text"),
                         false,
+                        0.0,
+                        0.0,
                         None,
-                        f32::MAX,
+                        Some(f32::MAX),
                         0.0,
                         &[],
                         &prep_native.smcp_ranges,
@@ -3475,8 +4487,10 @@ mod tests {
                         400.0,
                         Some("STIX Two Text"),
                         false,
+                        0.0,
+                        0.0,
                         None,
-                        f32::MAX,
+                        Some(f32::MAX),
                         0.0,
                         &[],
                         &[],

@@ -1,0 +1,6 @@
+// DirectedType Standard Component Library: LineBreak
+// Paragraph line-breaking algorithm selection for ParagraphStyle.
+\Enum LineBreak {
+    Greedy,
+    Optimal,
+}

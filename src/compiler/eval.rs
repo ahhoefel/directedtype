@@ -369,6 +369,47 @@ fn validate_font_family(family: Option<&str>, span: crate::span::Span) -> Result
     Ok(())
 }
 
+/// Decodes the 11-element paragraph layout options slice matching `build_paragraph_layout_option_args`.
+fn decode_paragraph_layout_options(
+    slice: &[Value],
+) -> crate::compiler::text::ParagraphLayoutOptions {
+    let mut opts = crate::compiler::text::ParagraphLayoutOptions::default();
+    if let Some(lb) = slice.first().and_then(|v| v.as_str()) {
+        opts.line_break = crate::compiler::text::LineBreakMode::from_str_opt(Some(lb));
+    }
+    if let Some(ws) = slice.get(1).and_then(|v| v.as_f64()) {
+        opts.word_spacing = ws;
+    }
+    if let Some(ss) = slice.get(2).and_then(|v| v.as_f64()) {
+        opts.space_stretch = ss.max(0.0);
+    }
+    if let Some(sk) = slice.get(3).and_then(|v| v.as_f64()) {
+        opts.space_shrink = sk.clamp(0.0, 0.99);
+    }
+    if let Some(tol) = slice.get(4).and_then(|v| v.as_f64()) {
+        opts.tolerance = tol.max(0.1);
+    }
+    if let Some(hp) = slice.get(5).and_then(|v| v.as_f64()) {
+        opts.hyphen_penalty = hp;
+    }
+    if let Some(lp) = slice.get(6).and_then(|v| v.as_f64()) {
+        opts.line_penalty = lp.max(0.0);
+    }
+    if let Some(fd) = slice.get(7).and_then(|v| v.as_f64()) {
+        opts.flagged_demerits = fd.max(0.0);
+    }
+    if let Some(ad) = slice.get(8).and_then(|v| v.as_f64()) {
+        opts.fitness_demerits = ad.max(0.0);
+    }
+    if let Some(sent) = slice.get(9).and_then(|v| v.as_f64()) {
+        opts.sentence_space = sent;
+    }
+    if let Some(l) = slice.get(10).and_then(|v| v.as_f64()) {
+        opts.looseness = l.round() as i32;
+    }
+    opts
+}
+
 /// Decodes flat 8-element span/inline-box style chunks appended to `text_height`, `text_width`, and `span_metric`.
 fn decode_rich_text_style_chunks<E: EvalEnv>(
     chunks: &[Value],
@@ -1280,33 +1321,52 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                     let line_height = evaluated_args.get(7).and_then(|v| v.as_f64());
                     validate_font_family(family, c.span)?;
 
-                    let has_small_caps =
-                        evaluated_args.len() >= 10 && (evaluated_args.len() - 10) % 8 == 0;
-                    let (indent, font_small_caps, spans, inline_boxes) = if has_small_caps {
-                        let indent = evaluated_args[8].as_f64().unwrap_or(0.0);
-                        let font_small_caps = evaluated_args[9].as_bool().unwrap_or(false);
-                        let (spans, inline_boxes) =
-                            decode_rich_text_style_chunks(&evaluated_args[10..], env, c.span)?;
-                        (indent, font_small_caps, spans, inline_boxes)
-                    } else {
-                        let indent = evaluated_args.get(8).and_then(|v| v.as_f64()).unwrap_or(0.0);
-                        (indent, false, Vec::new(), Vec::new())
-                    };
+                    let has_full_opts = evaluated_args.len() >= 24
+                        && (evaluated_args.len() - 24) % 8 == 0
+                        && evaluated_args.get(10).and_then(|v| v.as_str()).is_some();
+                    let has_small_caps = !has_full_opts
+                        && evaluated_args.len() >= 10
+                        && (evaluated_args.len() - 10) % 8 == 0;
 
-                    let (_, h) = crate::compiler::text::measure_rich_text_bounds_with_boxes_and_spacing(
+                    let (indent, font_small_caps, align, letter_spacing, font_italic, para_opts, spans, inline_boxes) =
+                        if has_full_opts {
+                            let indent = evaluated_args[8].as_f64().unwrap_or(0.0);
+                            let font_small_caps = evaluated_args[9].as_bool().unwrap_or(false);
+                            let align = evaluated_args[10].as_str();
+                            let letter_spacing = evaluated_args[11].as_f64().unwrap_or(0.0);
+                            let font_italic = evaluated_args[12].as_bool().unwrap_or(false);
+                            let para_opts = decode_paragraph_layout_options(&evaluated_args[13..24]);
+                            let (spans, inline_boxes) =
+                                decode_rich_text_style_chunks(&evaluated_args[24..], env, c.span)?;
+                            (indent, font_small_caps, align, letter_spacing, font_italic, para_opts, spans, inline_boxes)
+                        } else if has_small_caps {
+                            let indent = evaluated_args[8].as_f64().unwrap_or(0.0);
+                            let font_small_caps = evaluated_args[9].as_bool().unwrap_or(false);
+                            let (spans, inline_boxes) =
+                                decode_rich_text_style_chunks(&evaluated_args[10..], env, c.span)?;
+                            (indent, font_small_caps, None, 0.0, false, crate::compiler::text::ParagraphLayoutOptions::default(), spans, inline_boxes)
+                        } else {
+                            let indent = evaluated_args.get(8).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            (indent, false, None, 0.0, false, crate::compiler::text::ParagraphLayoutOptions::default(), Vec::new(), Vec::new())
+                        };
+
+                    let (_, h) = crate::compiler::text::measure_rich_text_bounds_full(
                         text,
                         size,
                         weight,
                         family,
-                        0.0,
+                        font_italic,
+                        letter_spacing,
                         Some(max_width),
                         end_at,
                         start_at,
                         line_height,
+                        align,
                         indent,
                         &spans,
                         &inline_boxes,
                         font_small_caps,
+                        &para_opts,
                     );
                     Ok(Value::Distance(h))
                 }
@@ -1405,28 +1465,45 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                     let family = get_family_from_val(evaluated_args.get(3), env);
                     validate_font_family(family, c.span)?;
 
-                    let has_small_caps =
-                        evaluated_args.len() >= 7 && (evaluated_args.len() - 7) % 8 == 0;
-                    let (letter_spacing, indent, font_small_caps, spans, inline_boxes) =
-                        if has_small_caps {
+                    let has_word_spacing =
+                        evaluated_args.len() >= 8 && (evaluated_args.len() - 8) % 8 == 0;
+                    let has_small_caps = !has_word_spacing
+                        && evaluated_args.len() >= 7
+                        && (evaluated_args.len() - 7) % 8 == 0;
+                    let (letter_spacing, indent, font_small_caps, word_spacing, spans, inline_boxes) =
+                        if has_word_spacing {
+                            let ls = evaluated_args[4].as_f64().unwrap_or(0.0);
+                            let ind = evaluated_args[5].as_f64().unwrap_or(0.0);
+                            let sc = evaluated_args[6].as_bool().unwrap_or(false);
+                            let ws = evaluated_args[7].as_f64().unwrap_or(0.0);
+                            let (spans, inline_boxes) =
+                                decode_rich_text_style_chunks(&evaluated_args[8..], env, c.span)?;
+                            (ls, ind, sc, ws, spans, inline_boxes)
+                        } else if has_small_caps {
                             let ls = evaluated_args[4].as_f64().unwrap_or(0.0);
                             let ind = evaluated_args[5].as_f64().unwrap_or(0.0);
                             let sc = evaluated_args[6].as_bool().unwrap_or(false);
                             let (spans, inline_boxes) =
                                 decode_rich_text_style_chunks(&evaluated_args[7..], env, c.span)?;
-                            (ls, ind, sc, spans, inline_boxes)
+                            (ls, ind, sc, 0.0, spans, inline_boxes)
                         } else {
                             let ls = evaluated_args.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0);
                             let ind = evaluated_args.get(5).and_then(|v| v.as_f64()).unwrap_or(0.0);
-                            (ls, ind, false, Vec::new(), Vec::new())
+                            (ls, ind, false, 0.0, Vec::new(), Vec::new())
                         };
 
-                    let (w, _) = crate::compiler::text::measure_rich_text_bounds_with_boxes_and_spacing(
+                    let para_opts = crate::compiler::text::ParagraphLayoutOptions {
+                        word_spacing,
+                        ..Default::default()
+                    };
+                    let (w, _) = crate::compiler::text::measure_rich_text_bounds_full(
                         text,
                         size,
                         weight,
                         family,
+                        false,
                         letter_spacing,
+                        None,
                         None,
                         None,
                         None,
@@ -1435,6 +1512,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         &spans,
                         &inline_boxes,
                         font_small_caps,
+                        &para_opts,
                     );
                     Ok(Value::Distance(w))
                 }
@@ -1461,27 +1539,43 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                     let align = evaluated_args.get(13).and_then(|v| v.as_str());
                     validate_font_family(family, c.span)?;
 
-                    let has_small_caps =
-                        evaluated_args.len() >= 16 && (evaluated_args.len() - 16) % 8 == 0;
-                    let (indent, font_small_caps, spans, inline_boxes) = if has_small_caps {
-                        let ind = evaluated_args[14].as_f64().unwrap_or(0.0);
-                        let sc = evaluated_args[15].as_bool().unwrap_or(false);
-                        let (spans, inline_boxes) =
-                            decode_rich_text_style_chunks(&evaluated_args[16..], env, c.span)?;
-                        (ind, sc, spans, inline_boxes)
-                    } else {
-                        let ind = evaluated_args
-                            .get(14)
-                            .and_then(|v| v.as_f64())
-                            .unwrap_or(0.0);
-                        (ind, false, Vec::new(), Vec::new())
-                    };
+                    let has_full_opts = evaluated_args.len() >= 29
+                        && (evaluated_args.len() - 29) % 8 == 0
+                        && evaluated_args.get(18).and_then(|v| v.as_str()).is_some();
+                    let has_small_caps = !has_full_opts
+                        && evaluated_args.len() >= 16
+                        && (evaluated_args.len() - 16) % 8 == 0;
+                    let (indent, font_small_caps, letter_spacing, font_italic, para_opts, spans, inline_boxes) =
+                        if has_full_opts {
+                            let ind = evaluated_args[14].as_f64().unwrap_or(0.0);
+                            let sc = evaluated_args[15].as_bool().unwrap_or(false);
+                            let ls = evaluated_args[16].as_f64().unwrap_or(0.0);
+                            let it = evaluated_args[17].as_bool().unwrap_or(false);
+                            let opts = decode_paragraph_layout_options(&evaluated_args[18..29]);
+                            let (spans, inline_boxes) =
+                                decode_rich_text_style_chunks(&evaluated_args[29..], env, c.span)?;
+                            (ind, sc, ls, it, opts, spans, inline_boxes)
+                        } else if has_small_caps {
+                            let ind = evaluated_args[14].as_f64().unwrap_or(0.0);
+                            let sc = evaluated_args[15].as_bool().unwrap_or(false);
+                            let (spans, inline_boxes) =
+                                decode_rich_text_style_chunks(&evaluated_args[16..], env, c.span)?;
+                            (ind, sc, 0.0, false, crate::compiler::text::ParagraphLayoutOptions::default(), spans, inline_boxes)
+                        } else {
+                            let ind = evaluated_args
+                                .get(14)
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            (ind, false, 0.0, false, crate::compiler::text::ParagraphLayoutOptions::default(), Vec::new(), Vec::new())
+                        };
 
-                    let sm = crate::compiler::text::compute_span_range_metrics_with_boxes(
+                    let sm = crate::compiler::text::compute_span_range_metrics_with_options(
                         text,
                         size,
                         weight,
                         family,
+                        font_italic,
+                        letter_spacing,
                         max_width,
                         start_at,
                         line_height,
@@ -1495,6 +1589,7 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                         span_start..span_end,
                         own_shift,
                         target_inline_box,
+                        &para_opts,
                     );
                     let val = match metric {
                         "x" => sm.rect.x,

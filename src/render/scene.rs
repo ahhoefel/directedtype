@@ -47,6 +47,7 @@ pub struct TextRenderKey {
     pub start_at: Option<String>,
     pub line_height: Option<u64>,
     pub letter_spacing: u64,
+    pub para_opts: (u8, u64, u64, u64, u64, u64, u64, u64, u64, u64, i32),
 }
 
 /// A cached local `vello::Scene` rendered at origin `(0.0, 0.0)` for a single text node.
@@ -866,6 +867,10 @@ pub fn build_scene(
                     })
                     .collect();
 
+                let para_opts =
+                    crate::compiler::text::ParagraphLayoutOptions::from_node_properties(
+                        &node.properties,
+                    );
                 let current_key = TextRenderKey {
                     text: text.to_string(),
                     width: node.rect.width,
@@ -882,6 +887,7 @@ pub fn build_scene(
                     start_at: start_at_prop.map(|s| s.to_string()),
                     line_height: line_height_prop.map(|h| h.to_bits()),
                     letter_spacing: font_letter_spacing.to_bits() as u64,
+                    para_opts: para_opts.cache_key(),
                 };
 
                 // Check 1-element cache:
@@ -896,7 +902,7 @@ pub fn build_scene(
                 // CACHE MISS: Build local scene at origin (0.0, 0.0)
                 let mut local_scene = Scene::new();
 
-                let prep = crate::compiler::text::prepare_rich_text_for_shaping(
+                let prep = crate::compiler::text::prepare_rich_text_for_shaping_with_options(
                     font_cx,
                     text,
                     font_size,
@@ -904,12 +910,16 @@ pub fn build_scene(
                     font_family,
                     font_italic,
                     font_small_caps,
+                    font_letter_spacing as f64,
                     line_height_prop,
                     (node.rect.width > 0.0).then_some(node.rect.width),
+                    align_str,
                     indent,
                     &node.text_spans,
                     &node.inline_boxes,
+                    &para_opts,
                 );
+                let has_explicit_breaks = prep.as_ref().is_some_and(|p| p.has_explicit_breaks);
                 let (text, spans_slice, boxes_slice, smcp_ranges, synth_ranges) = match &prep {
                     Some(p) => (
                         p.text.as_str(),
@@ -943,6 +953,9 @@ pub fn build_scene(
                 }
                 if font_letter_spacing.abs() > 1e-4 {
                     builder.push_default(StyleProperty::LetterSpacing(font_letter_spacing));
+                }
+                if para_opts.word_spacing.abs() > 1e-4 {
+                    builder.push_default(StyleProperty::WordSpacing(para_opts.word_spacing as f32));
                 }
                 if let Some(lh) = line_height_prop {
                     builder.push_default(StyleProperty::LineHeight(parley::style::LineHeight::Absolute(lh as f32)));
@@ -1026,7 +1039,12 @@ pub fn build_scene(
 
                 let mut layout_text = builder.build(text);
                 if node.rect.width > 0.0 {
-                    layout_text.break_all_lines(Some(node.rect.width as f32));
+                    crate::compiler::text::break_lines_for_layout(
+                        &mut layout_text,
+                        Some(node.rect.width),
+                        has_explicit_breaks,
+                        align_str,
+                    );
                 }
 
                 let alignment = match align_str {

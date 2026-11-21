@@ -5,6 +5,7 @@ pub mod expand;
 pub mod expanded;
 pub mod graph;
 pub mod image;
+pub mod knuth_plass;
 pub mod layout;
 pub mod module;
 pub mod paginate;

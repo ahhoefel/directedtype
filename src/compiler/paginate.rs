@@ -17,7 +17,7 @@ use crate::compiler::expanded::{
 use crate::compiler::graph::{build_variable_graph_with_window_and_dpi, VarId};
 use crate::compiler::layout::{resolve_layout_with_graph, Rect, ResolvedLayout, ResolvedNode};
 use crate::compiler::scope::ScopeId;
-use crate::compiler::text::{resolve_active_rich_text, shape_paragraph_lines, InlineBoxSpan, ShapedParagraph};
+use crate::compiler::text::{resolve_active_rich_text, InlineBoxSpan, ShapedParagraph};
 use crate::compiler::topo::sort_graph;
 use crate::compiler::value::Value;
 use crate::span::Span;
@@ -253,6 +253,10 @@ fn shape_resolved_text_node(node: &ResolvedNode, layout: &ResolvedLayout) -> Sha
         .and_then(|f| f.properties.get("small_caps"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    let letter_spacing = fnode
+        .and_then(|f| f.properties.get("letter_spacing"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
     let line_height = fnode
         .filter(|f| f.formulas.has_custom_line_height())
         .and_then(|f| f.properties.get("line_height"))
@@ -267,13 +271,16 @@ fn shape_resolved_text_node(node: &ResolvedNode, layout: &ResolvedLayout) -> Sha
         .get("indent")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
+    let para_opts =
+        crate::compiler::text::ParagraphLayoutOptions::from_node_properties(&node.properties);
     let max_width = (node.rect.width > 0.0).then_some(node.rect.width);
 
-    shape_paragraph_lines(
+    crate::compiler::text::shape_paragraph_lines_with_options(
         &active_text,
         font_size,
         font_weight,
         font_family,
+        letter_spacing,
         max_width,
         end_at,
         start_at,
@@ -284,6 +291,7 @@ fn shape_resolved_text_node(node: &ResolvedNode, layout: &ResolvedLayout) -> Sha
         font_small_caps,
         &resolved_spans,
         &resolved_boxes,
+        &para_opts,
     )
 }
 

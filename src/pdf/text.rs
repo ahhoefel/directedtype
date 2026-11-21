@@ -181,6 +181,8 @@ pub(super) fn draw_text_node(
         .get("indent")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
+    let para_opts =
+        crate::compiler::text::ParagraphLayoutOptions::from_node_properties(&node.properties);
     let start_at_prop = node.properties.get("start_at").and_then(|v| v.as_str());
     let line_height_prop = fnode
         .filter(|f| f.formulas.has_custom_line_height())
@@ -188,7 +190,7 @@ pub(super) fn draw_text_node(
         .and_then(|v| v.as_f64())
         .filter(|&h| h > 0.0);
 
-    let prep = crate::compiler::text::prepare_rich_text_for_shaping(
+    let prep = crate::compiler::text::prepare_rich_text_for_shaping_with_options(
         &mut font_cache.font_cx,
         active_text,
         font_size,
@@ -196,12 +198,16 @@ pub(super) fn draw_text_node(
         font_family,
         font_italic,
         font_small_caps,
+        font_letter_spacing as f64,
         line_height_prop,
         (node.rect.width > 0.0).then_some(node.rect.width),
+        align_str,
         indent,
         &resolved_spans,
         &resolved_boxes,
+        &para_opts,
     );
+    let has_explicit_breaks = prep.as_ref().is_some_and(|p| p.has_explicit_breaks);
     let (active_text, pdf_text, resolved_spans_slice, resolved_boxes_slice, smcp_ranges, synth_ranges) =
         match &prep {
             Some(p) => (
@@ -241,6 +247,9 @@ pub(super) fn draw_text_node(
     }
     if font_letter_spacing.abs() > 1e-4 {
         builder.push_default(StyleProperty::LetterSpacing(font_letter_spacing));
+    }
+    if para_opts.word_spacing.abs() > 1e-4 {
+        builder.push_default(StyleProperty::WordSpacing(para_opts.word_spacing as f32));
     }
     if let Some(lh) = line_height_prop {
         builder.push_default(StyleProperty::LineHeight(
@@ -337,7 +346,12 @@ pub(super) fn draw_text_node(
 
     let mut layout_text = builder.build(active_text);
     if node.rect.width > 0.0 {
-        layout_text.break_all_lines(Some(node.rect.width as f32));
+        crate::compiler::text::break_lines_for_layout(
+            &mut layout_text,
+            Some(node.rect.width),
+            has_explicit_breaks,
+            align_str,
+        );
     }
 
     let alignment = match align_str {
