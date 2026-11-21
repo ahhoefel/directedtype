@@ -98,7 +98,7 @@ impl BuiltinPrimitive for TextPrimitive {
     }
 
     fn is_immutable_alias_port(&self, port_name: &str) -> bool {
-        matches!(port_name, "left" | "top" | "right" | "bottom")
+        matches!(port_name, "left" | "top" | "right" | "bottom" | "baseline_offset")
     }
 
     fn accepts_port(&self, port_name: &str) -> bool {
@@ -126,7 +126,7 @@ impl BuiltinPrimitive for TextPrimitive {
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
-            "baseline" | "indent" => Some(StaticType::Distance),
+            "baseline" | "baseline_offset" | "indent" => Some(StaticType::Distance),
             "text" => Some(StaticType::String),
             "align" => Some(StaticType::Enum("Align".to_string())),
             "paragraph_style" => Some(StaticType::Node("ParagraphStyle".to_string())),
@@ -690,7 +690,8 @@ fn build_text_small_caps_arg(state: &PrimitiveExpandState<'_, '_>) -> Expr {
     Expr::Literal(Literal::Bool(false, span))
 }
 
-/// Resolves bidirectional `baseline` <-> `y` equations using `text_baseline_offset(...)`.
+/// Resolves bidirectional `baseline` <-> `y` equations using `text_baseline_offset(...)`,
+/// and always exposes `baseline_offset` as a y-independent output port on `\Text`.
 fn resolve_baseline_and_y(
     state: &mut PrimitiveExpandState<'_, '_>,
     self_ident: &Expr,
@@ -701,6 +702,26 @@ fn resolve_baseline_and_y(
 ) {
     let span = state.elem.span;
     let line_height_expr = build_text_line_height_arg(state);
+    let offset_call = Expr::Call(CallExpr {
+        callee: Ident::new("text_baseline_offset", span),
+        args: vec![
+            size_expr.clone(),
+            weight_expr.clone(),
+            font_expr.clone(),
+            start_at_expr.clone(),
+            line_height_expr,
+        ],
+        span,
+    });
+    state
+        .ports
+        .insert("baseline_offset".to_string(), offset_call);
+
+    let self_offset = Expr::MemberAccess(MemberAccessExpr {
+        target: std::sync::Arc::new(self_ident.clone()),
+        member: Ident::new("baseline_offset", span),
+        span,
+    });
     if state.ports.contains_key("baseline")
         && !state.ports.contains_key("y")
         && !state.ports.contains_key("top")
@@ -712,17 +733,7 @@ fn resolve_baseline_and_y(
                 member: Ident::new("baseline", span),
                 span,
             })),
-            right: std::sync::Arc::new(Expr::Call(CallExpr {
-                callee: Ident::new("text_baseline_offset", span),
-                args: vec![
-                    size_expr.clone(),
-                    weight_expr.clone(),
-                    font_expr.clone(),
-                    start_at_expr.clone(),
-                    line_height_expr,
-                ],
-                span,
-            })),
+            right: std::sync::Arc::new(self_offset),
             span,
         });
         state
@@ -739,17 +750,7 @@ fn resolve_baseline_and_y(
                 member: Ident::new("y", span),
                 span,
             })),
-            right: std::sync::Arc::new(Expr::Call(CallExpr {
-                callee: Ident::new("text_baseline_offset", span),
-                args: vec![
-                    size_expr.clone(),
-                    weight_expr.clone(),
-                    font_expr.clone(),
-                    start_at_expr.clone(),
-                    line_height_expr,
-                ],
-                span,
-            })),
+            right: std::sync::Arc::new(self_offset),
             span,
         });
         state
@@ -890,11 +891,11 @@ fn collect_span_and_inline_box_style_args(
         });
         let ib_baseline_offset = if state.doc.nodes[ib.node_id.0]
             .ports
-            .contains_key("__baseline_offset")
+            .contains_key("baseline_offset")
         {
             Expr::MemberAccess(MemberAccessExpr {
                 target: std::sync::Arc::new(ib_ident),
-                member: Ident::new("__baseline_offset", elem.span),
+                member: Ident::new("baseline_offset", elem.span),
                 span: elem.span,
             })
         } else {

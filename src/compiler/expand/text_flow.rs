@@ -1,6 +1,6 @@
 use super::context::LexicalBinding;
 use crate::ast::*;
-use crate::compiler::expanded::{ExpandedDocument, ExpandedNode, NodeId};
+use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::text::{CursorKind, InlineBoxSpan, SpanStyle, TextSpan};
 use crate::span::Span;
 use std::collections::{HashMap, HashSet};
@@ -571,252 +571,40 @@ pub(super) fn finalize_span_component_ports(
         });
 }
 
-/// Finalizes `baseline` and `__baseline_offset` ports for an `\InlineBox` component instance.
+/// Finalizes `baseline_offset` (defaulting to `height`) and synthesizes `baseline = y + baseline_offset`
+/// for an `\InlineBox` component instance.
 pub(super) fn finalize_inline_box_component_ports(
     comp_node_id: NodeId,
-    start_node_idx: usize,
     span: Span,
-    nodes: &[ExpandedNode],
-    declared_state_names: &HashSet<String>,
     rewritten_ports: &mut HashMap<String, Expr>,
 ) {
-    if let Some(baseline_expr) = rewritten_ports.get("baseline").cloned() {
-        let offset_expr = extract_inline_box_baseline_offset(
-            &baseline_expr,
-            comp_node_id,
-            start_node_idx,
-            nodes,
-            rewritten_ports,
-            declared_state_names,
-            0,
-        );
-        if super::rewrite::has_any_pending_fwd_refs()
-            && super::rewrite::expr_has_unresolved_ident(&offset_expr)
-        {
-            super::rewrite::record_pending_fwd_node(comp_node_id);
-        }
-        rewritten_ports.insert("__baseline_offset".to_string(), offset_expr);
-    } else {
-        let self_ident = Expr::Ident(Ident::from_node(comp_node_id, span));
-        let self_y = Expr::MemberAccess(MemberAccessExpr {
-            target: std::sync::Arc::new(self_ident.clone()),
-            member: Ident::from_symbol(Symbol::Y, span),
-            span,
-        });
+    let self_ident = Expr::Ident(Ident::from_node(comp_node_id, span));
+    if !rewritten_ports.contains_key("baseline_offset") {
         let self_height = Expr::MemberAccess(MemberAccessExpr {
-            target: std::sync::Arc::new(self_ident),
+            target: std::sync::Arc::new(self_ident.clone()),
             member: Ident::from_symbol(Symbol::HEIGHT, span),
             span,
         });
-        let default_baseline = Expr::Binary(BinaryExpr {
-            op: BinaryOp::Add,
-            left: std::sync::Arc::new(self_y),
-            right: std::sync::Arc::new(self_height.clone()),
-            span,
-        });
-        rewritten_ports.insert("baseline".to_string(), default_baseline);
-        rewritten_ports.insert("__baseline_offset".to_string(), self_height);
+        rewritten_ports.insert("baseline_offset".to_string(), self_height);
     }
-}
 
-/// Computes the vertical offset `baseline - y` for an `\InlineBox` component by evaluating its
-/// `baseline` port equation with `self.y = 0px` and recursively inlining internal children's
-/// vertical port equations (`y`, `top`, `bottom`, `baseline`).
-pub(super) fn extract_inline_box_baseline_offset(
-    expr: &Expr,
-    comp_node_id: NodeId,
-    start_node_idx: usize,
-    nodes: &[ExpandedNode],
-    rewritten_ports: &HashMap<String, Expr>,
-    declared_state_names: &HashSet<String>,
-    depth: usize,
-) -> Expr {
-    if depth > 16 {
-        return expr.clone();
-    }
-    match expr {
-        Expr::MemberAccess(m) => {
-            if let Expr::Ident(id) = m.target.as_ref() {
-                if let Some(raw_nid) = id.node_id() {
-                    let target_nid = if raw_nid.is_template_self() {
-                        comp_node_id
-                    } else {
-                        raw_nid
-                    };
-                    let member = m.member.as_str();
-                    if target_nid == comp_node_id {
-                        if member == "y" || member == "top" {
-                            return Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, m.span));
-                        }
-                        let concrete_target = if raw_nid.is_template_self() {
-                            std::sync::Arc::new(Expr::Ident(Ident::from_node(comp_node_id, id.span)))
-                        } else {
-                            m.target.clone()
-                        };
-                        if member == "bottom" {
-                            return Expr::MemberAccess(MemberAccessExpr {
-                                target: concrete_target,
-                                member: Ident::new("height", m.member.span),
-                                span: m.span,
-                            });
-                        }
-                        if member != "width"
-                            && member != "height"
-                            && !declared_state_names.contains(member)
-                        {
-                            if let Some(port_expr) = rewritten_ports.get(member) {
-                                return extract_inline_box_baseline_offset(
-                                    port_expr,
-                                    comp_node_id,
-                                    start_node_idx,
-                                    nodes,
-                                    rewritten_ports,
-                                    declared_state_names,
-                                    depth + 1,
-                                );
-                            }
-                        }
-                        if raw_nid.is_template_self() {
-                            return Expr::MemberAccess(MemberAccessExpr {
-                                target: concrete_target,
-                                member: m.member,
-                                span: m.span,
-                            });
-                        }
-                    } else if target_nid.0 >= start_node_idx && target_nid.0 < nodes.len() {
-                        if matches!(member, "y" | "top" | "bottom" | "baseline") {
-                            if let Some(port_expr) = nodes[target_nid.0].ports.get(member) {
-                                let child_expr = if super::rewrite::expr_has_template_self_ref(port_expr) {
-                                    super::rewrite::instantiate_template_expr(port_expr, target_nid)
-                                } else {
-                                    port_expr.clone()
-                                };
-                                return extract_inline_box_baseline_offset(
-                                    &child_expr,
-                                    comp_node_id,
-                                    start_node_idx,
-                                    nodes,
-                                    rewritten_ports,
-                                    declared_state_names,
-                                    depth + 1,
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-            Expr::MemberAccess(MemberAccessExpr {
-                target: std::sync::Arc::new(extract_inline_box_baseline_offset(
-                    &m.target,
-                    comp_node_id,
-                    start_node_idx,
-                    nodes,
-                    rewritten_ports,
-                    declared_state_names,
-                    depth + 1,
-                )),
-                member: m.member.clone(),
-                span: m.span,
-            })
-        }
-        Expr::Binary(b) => Expr::Binary(BinaryExpr {
-            op: b.op,
-            left: std::sync::Arc::new(extract_inline_box_baseline_offset(
-                &b.left,
-                comp_node_id,
-                start_node_idx,
-                nodes,
-                rewritten_ports,
-                declared_state_names,
-                depth + 1,
-            )),
-            right: std::sync::Arc::new(extract_inline_box_baseline_offset(
-                &b.right,
-                comp_node_id,
-                start_node_idx,
-                nodes,
-                rewritten_ports,
-                declared_state_names,
-                depth + 1,
-            )),
-            span: b.span,
-        }),
-        Expr::Unary(u) => Expr::Unary(UnaryExpr {
-            op: u.op,
-            operand: std::sync::Arc::new(extract_inline_box_baseline_offset(
-                &u.operand,
-                comp_node_id,
-                start_node_idx,
-                nodes,
-                rewritten_ports,
-                declared_state_names,
-                depth + 1,
-            )),
-            span: u.span,
-        }),
-        Expr::Paren(inner, span) => Expr::Paren(
-            std::sync::Arc::new(extract_inline_box_baseline_offset(
-                inner,
-                comp_node_id,
-                start_node_idx,
-                nodes,
-                rewritten_ports,
-                declared_state_names,
-                depth + 1,
-            )),
-            *span,
-        ),
-        Expr::Call(c) => Expr::Call(CallExpr {
-            callee: c.callee.clone(),
-            args: c
-                .args
-                .iter()
-                .map(|a| {
-                    extract_inline_box_baseline_offset(
-                        a,
-                        comp_node_id,
-                        start_node_idx,
-                        nodes,
-                        rewritten_ports,
-                        declared_state_names,
-                        depth + 1,
-                    )
-                })
-                .collect(),
-            span: c.span,
-        }),
-        Expr::Ternary(cond) => Expr::Ternary(TernaryExpr {
-            condition: std::sync::Arc::new(extract_inline_box_baseline_offset(
-                &cond.condition,
-                comp_node_id,
-                start_node_idx,
-                nodes,
-                rewritten_ports,
-                declared_state_names,
-                depth + 1,
-            )),
-            then_expr: std::sync::Arc::new(extract_inline_box_baseline_offset(
-                &cond.then_expr,
-                comp_node_id,
-                start_node_idx,
-                nodes,
-                rewritten_ports,
-                declared_state_names,
-                depth + 1,
-            )),
-            else_expr: std::sync::Arc::new(extract_inline_box_baseline_offset(
-                &cond.else_expr,
-                comp_node_id,
-                start_node_idx,
-                nodes,
-                rewritten_ports,
-                declared_state_names,
-                depth + 1,
-            )),
-            span: cond.span,
-        }),
-        other => other.clone(),
-    }
+    let self_y = Expr::MemberAccess(MemberAccessExpr {
+        target: std::sync::Arc::new(self_ident.clone()),
+        member: Ident::from_symbol(Symbol::Y, span),
+        span,
+    });
+    let self_offset = Expr::MemberAccess(MemberAccessExpr {
+        target: std::sync::Arc::new(self_ident),
+        member: Ident::from_symbol(Symbol::BASELINE_OFFSET, span),
+        span,
+    });
+    let baseline_expr = Expr::Binary(BinaryExpr {
+        op: BinaryOp::Add,
+        left: std::sync::Arc::new(self_y),
+        right: std::sync::Arc::new(self_offset),
+        span,
+    });
+    rewritten_ports.insert("baseline".to_string(), baseline_expr);
 }
 
 /// Output item produced by normalizing a block container's content slot.

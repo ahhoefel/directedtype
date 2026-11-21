@@ -1983,10 +1983,7 @@ impl<'a> ComponentExpander<'a> {
         if self.schema.is_inline_box_def {
             finalize_inline_box_component_ports(
                 self.ctx.comp_node_id,
-                self.start_node_idx,
                 self.instance.span,
-                &self.doc.nodes,
-                &self.schema.declared_state_names,
                 rewritten_ports,
             );
         }
@@ -2207,7 +2204,8 @@ impl<'a> ComponentExpander<'a> {
         let mut node_port_types = std::sync::Arc::clone(&self.schema.static_port_types);
         if self.schema.is_span_def || self.schema.is_inline_box_def {
             for (sp, ty) in [
-                ("__baseline_offset", "Distance"),
+                ("baseline_offset", "Distance"),
+                ("baseline", "Distance"),
                 ("size", "Distance"),
                 ("weight", "Integer"),
                 ("family", "String"),

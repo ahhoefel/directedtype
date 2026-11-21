@@ -328,7 +328,7 @@
 
     \alias width: Distance = mark.width;
     \alias height: Distance = mark.height;
-    \alias baseline: Distance = marker != "" ? (mark.baseline + shift) : y;
+    \alias baseline_offset: Distance = marker != "" ? (mark.baseline_offset + shift) : 0pt;
 
     \Deposit(into: footnotes) {
         \FootnoteEntry(marker: marker) {
@@ -402,7 +402,7 @@
 
     \alias width: Distance = mark.width;
     \alias height: Distance = mark.height;
-    \alias baseline: Distance = marker != "" ? (mark.baseline + shift) : y;
+    \alias baseline_offset: Distance = marker != "" ? (mark.baseline_offset + shift) : 0pt;
 
     \Deposit(into: sidenotes) {
         \SidenoteEntry(anchor_y: baseline, marker: marker) {

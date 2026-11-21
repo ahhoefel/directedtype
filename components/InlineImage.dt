@@ -31,7 +31,6 @@
     \alias height: Distance = img.height;
     \alias aspect_ratio: Float = img.aspect_ratio;
     \alias file_dpi: Float = img.file_dpi;
-    \alias baseline: Distance = y + baseline_offset;
 }
 
 // 2. Width-constrained inline image
@@ -62,7 +61,6 @@
     \alias height: Distance = img.height;
     \alias aspect_ratio: Float = img.aspect_ratio;
     \alias file_dpi: Float = img.file_dpi;
-    \alias baseline: Distance = y + baseline_offset;
 }
 
 // 3. Height-constrained inline image
@@ -93,5 +91,4 @@
     \alias width: Distance = img.width;
     \alias aspect_ratio: Float = img.aspect_ratio;
     \alias file_dpi: Float = img.file_dpi;
-    \alias baseline: Distance = y + baseline_offset;
 }

@@ -48,7 +48,7 @@ const PREINTERNED: &[&str] = &[
     "text",
     "line_height",
     "baseline_shift",
-    "__baseline_offset",
+    "baseline_offset",
     "radius",
     "radius_left",
     "radius_right",
@@ -431,9 +431,6 @@ impl Symbol {
             if s == "__page" {
                 return Self::PAGE_NODE;
             }
-            if s == "__baseline_offset" {
-                return Self::BASELINE_OFFSET;
-            }
             if let Some(num_str) = s.strip_prefix("__node_") {
                 if let Ok(n) = num_str.parse::<usize>() {
                     return Self::from_node(NodeId(n));
@@ -486,6 +483,7 @@ impl Symbol {
             "text" => Self::TEXT,
             "line_height" => Self::LINE_HEIGHT,
             "baseline_shift" => Self::BASELINE_SHIFT,
+            "baseline_offset" => Self::BASELINE_OFFSET,
             "radius" => Self::RADIUS,
             "radius_left" => Self::RADIUS_LEFT,
             "radius_right" => Self::RADIUS_RIGHT,

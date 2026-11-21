@@ -369,6 +369,9 @@ impl ComponentSchema {
                 comp_scope_ports.push(p.to_string());
             }
         }
+        if is_inline_box_def {
+            comp_scope_ports.push("baseline_offset".to_string());
+        }
 
         let mut declared_aliases: HashMap<String, AliasBinding> = HashMap::new();
         let all_aliases = collect_all_component_aliases(comp_def);
@@ -582,6 +585,9 @@ impl ComponentSchema {
             ] {
                 static_port_types.insert(p.to_string(), "Distance".to_string());
             }
+        }
+        if is_inline_box_def {
+            static_port_types.insert("baseline_offset".to_string(), "Distance".to_string());
         }
         for param in &comp_def.params {
             if let Some(ty) = &param.type_annotation {
@@ -1063,6 +1069,24 @@ pub fn validate_registered_component_def(
                     span: comp_def.span,
                 });
             }
+        }
+        if let Some(p) = comp_def.params.iter().find(|p| p.name.as_str() == "baseline") {
+            return Err(CompileError::Custom {
+                message: format!(
+                    "\\InlineBox '{}' must not define 'baseline' directly; define 'baseline_offset' instead ('baseline' is automatically exposed as 'y + baseline_offset')",
+                    comp_def.name.as_str()
+                ),
+                span: p.span,
+            });
+        }
+        if let Some(a) = all_aliases.iter().find(|a| a.name.as_str() == "baseline") {
+            return Err(CompileError::Custom {
+                message: format!(
+                    "\\InlineBox '{}' must not define 'baseline' directly; define 'baseline_offset' instead ('baseline' is automatically exposed as 'y + baseline_offset')",
+                    comp_def.name.as_str()
+                ),
+                span: a.name.span,
+            });
         }
     }
     Ok(())

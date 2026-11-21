@@ -5037,6 +5037,80 @@ fn test_stage5_inline_box_requires_width_and_height() {
         "Unexpected error: {}",
         err2
     );
+
+    let manual_baseline = r#"
+    \InlineBox BadBox(x: Distance = parent.left, y: Distance = parent.top) {
+        \alias width = 40px;
+        \alias height = 20px;
+        \alias baseline = y + 10px;
+    }
+    \BadBox()
+    "#;
+    let doc3 = parse(manual_baseline).expect("parse ok");
+    let err3 = directedtype::evaluate_document(&doc3).expect_err("Expected manual baseline error");
+    assert!(
+        err3.to_string()
+            .contains("must not define 'baseline' directly; define 'baseline_offset' instead"),
+        "Unexpected error: {}",
+        err3
+    );
+}
+
+#[test]
+fn test_inline_box_baseline_offset_and_auto_baseline() {
+    let source = r#"
+    \InlineBox FloatingDash(
+        width: Distance = 24px,
+        height: Distance = 2px,
+        x: Distance = parent.left,
+        y: Distance = parent.top
+    ) {
+        \Line(x1: x, y1: y + 0.5 * height, x2: x + width, y2: y + 0.5 * height, thickness: height, color: #000000)
+        \alias baseline_offset: Distance = 8px;
+    }
+
+    \InlineBox DefaultBox(
+        width: Distance = 16px,
+        height: Distance = 10px,
+        x: Distance = parent.left,
+        y: Distance = parent.top
+    ) {
+        \Rect(x: x, y: y, width: width, height: height, color: #000000)
+    }
+
+    \env font = \Font(family: "Arial", size: 16px, line_height: 24px);
+    \Text(x: 10px, y: 20px, width: 300px) {
+        A \let dash = \FloatingDash{} B \let def = \DefaultBox{} C
+    }
+    "#;
+    let doc = parse(source).expect("parse ok");
+    let compiled = directedtype::compiler::CompiledDocument::compile(&doc).expect("compile ok");
+    let layout = compiled.layout();
+
+    let dash = layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("dash"))
+        .expect("dash node");
+    let def = layout
+        .nodes
+        .iter()
+        .find(|n| n.var_name.as_deref() == Some("def"))
+        .expect("def node");
+
+    let dash_off = dash.properties.get("baseline_offset").and_then(|v| v.as_f64()).unwrap();
+    let dash_base = dash.properties.get("baseline").and_then(|v| v.as_f64()).unwrap();
+    let def_off = def.properties.get("baseline_offset").and_then(|v| v.as_f64()).unwrap();
+    let def_base = def.properties.get("baseline").and_then(|v| v.as_f64()).unwrap();
+
+    assert!((dash_off - 8.0).abs() < 1e-4, "dash_off={dash_off}");
+    assert!((dash_base - (dash.rect.y + 8.0)).abs() < 1e-4, "dash_base={dash_base}, y={}", dash.rect.y);
+    assert!((def_off - 10.0).abs() < 1e-4, "def_off={def_off}");
+    assert!((def_base - (def.rect.y + 10.0)).abs() < 1e-4, "def_base={def_base}, y={}", def.rect.y);
+    assert!(
+        (dash_base - def_base).abs() < 0.5,
+        "Both inline boxes on the same line should share the same baseline: dash={dash_base}, def={def_base}"
+    );
 }
 
 #[test]

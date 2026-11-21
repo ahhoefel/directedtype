@@ -129,7 +129,6 @@ fn test_forced_justified_line_break_escape() {
 ) {
     \alias width: Distance = 24px;
     \alias height: Distance = 4px;
-    \alias baseline: Distance = y + 4px;
 }
 
 \Span Mark(env font: Font) {

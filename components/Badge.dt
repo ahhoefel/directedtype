@@ -32,5 +32,5 @@
 
     \alias width = label.width + 2 * pad_x;
     \alias height = label.height + 2 * pad_y;
-    \alias baseline = label.baseline;
+    \alias baseline_offset = pad_y + label.baseline_offset;
 }

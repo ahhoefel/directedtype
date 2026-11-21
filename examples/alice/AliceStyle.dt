@@ -41,8 +41,8 @@
 // (stroke thickness 0.036em, centered 0.262em above baseline, 0.06em outer sidebearings)
 \InlineBox LongDash(
     width: Distance = 2em,
+    height: Distance = 0.036em,
     sidebearing: Distance = 0.06em,
-    thickness: Distance = 0.036em,
     center_above_baseline: Distance = 0.262em,
     color: Color = #111111,
     x: Distance = parent.left,
@@ -51,14 +51,14 @@
 ) {
     \Line(
         x1: x + sidebearing,
-        y1: y + thickness * 0.5,
+        y1: y + 0.5 * height,
         x2: x + width - sidebearing,
-        y2: y + thickness * 0.5,
-        thickness: thickness,
+        y2: y + 0.5 * height,
+        thickness: height,
         color: color
     )
 
-    \alias height: Distance = center_above_baseline + thickness * 0.5;
+    \alias baseline_offset: Distance = center_above_baseline + 0.5 * height;
 }
 
 // Inline large initial cap for chapter openings (e.g. "A" in "ALICE")

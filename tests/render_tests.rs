@@ -1120,7 +1120,7 @@ fn test_stage5_inline_box_renders_internal_children_in_paragraph() {
         };
         \alias width = label.width + 12px;
         \alias height = label.height + 4px;
-        \alias baseline = label.baseline;
+        \alias baseline_offset = 2px + label.baseline_offset;
     }
 
     \env font = \Font(family: "Arial", size: 16px, line_height: 24px);

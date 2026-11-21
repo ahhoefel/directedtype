@@ -968,7 +968,7 @@ pub fn resolve_layout_with_graph(
                     .and_then(|v| v.as_f64())
                     .unwrap_or(ib.height);
                 let b_off = values
-                    .get(&VarId::new(ib.node_id, "__baseline_offset"))
+                    .get(&VarId::new(ib.node_id, "baseline_offset"))
                     .and_then(|v| v.as_f64())
                     .unwrap_or(bh);
                 InlineBoxSpan {
@@ -1306,7 +1306,7 @@ pub fn project_inline_fragments(layout: &mut ResolvedLayout) {
                     .unwrap_or(ib.height);
                 let b_off = layout
                     .values
-                    .get(&VarId::new(ib.node_id, "__baseline_offset"))
+                    .get(&VarId::new(ib.node_id, "baseline_offset"))
                     .and_then(|v| v.as_f64())
                     .unwrap_or(bh);
                 InlineBoxSpan {
