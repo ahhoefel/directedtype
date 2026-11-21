@@ -175,7 +175,7 @@ pub fn parse_let_binding(cursor: &mut ParserCursor<'_>) -> Result<LetBinding, Pa
             let expr = parse_expr(cursor)?;
             LetValue::Expr(expr)
         };
-        let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
+        let semi_span = if cursor.peek_is_punct(b';') {
             cursor.consume_token(&Token::Semicolon)?
         } else {
             val.span()
@@ -224,7 +224,7 @@ pub fn parse_env_binding(cursor: &mut ParserCursor<'_>) -> Result<EnvBinding, Pa
     let (value, end_span) = if let Some((Token::Eq, _)) = cursor.peek_token()? {
         cursor.consume_token(&Token::Eq)?;
         let expr = parse_expr(cursor)?;
-        let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
+        let semi_span = if cursor.peek_is_punct(b';') {
             cursor.consume_token(&Token::Semicolon)?
         } else {
             expr.span()
@@ -273,7 +273,7 @@ pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding
     cursor.consume_token(&Token::Eq)?;
 
     let value = parse_expr(cursor)?;
-    let semi_span = if let Some((Token::Semicolon, _)) = cursor.peek_token()? {
+    let semi_span = if cursor.peek_is_punct(b';') {
         cursor.consume_token(&Token::Semicolon)?
     } else {
         value.span()

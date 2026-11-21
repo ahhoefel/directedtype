@@ -268,31 +268,6 @@
     \alias height: Distance = line_step * 3.0;
 }
 
-// Standard justified body paragraph locked to the 18.0pt baseline grid with 16pt first-line indent
-\Component Para(
-    indent: Distance = 16pt,
-    align: Align = Align.Justify,
-    x: Distance = parent.left,
-    y: Distance = parent.top,
-    width: Distance = parent.width,
-    pagination: Pagination = \Pagination(breakable: true),
-    env font: Font,
-    env text_bounds: TextBounds
-) {
-    \let t = \Text(
-        x: x,
-        y: y,
-        width: width,
-        font: font,
-        paragraph_style: \ParagraphStyle(align: align, indent: indent),
-        pagination: \Pagination(breakable: true)
-    ) {
-        \Children
-    };
-
-    \alias height: Distance = t.height;
-}
-
 // Flush-left paragraph (used for chapter openings and continuations after display/wrap blocks)
 \Component FlushPara(
     align: Align = Align.Justify,
@@ -541,6 +516,7 @@
     }
 
     \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
+    \env paragraph_style = \ParagraphStyle(align: Align.Justify, indent: 16pt);
     \let body = \VStackStretch(
         x: x,
         y: y,

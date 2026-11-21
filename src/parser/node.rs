@@ -134,7 +134,7 @@ pub fn parse_children_directive(cursor: &mut ParserCursor<'_>) -> Result<Childre
     let slash_span = cursor.consume_token(&Token::Backslash)?;
     let children_span = cursor.consume_token(&Token::Children)?;
 
-    if let Some((Token::LParen, _)) = cursor.peek_token()? {
+    if cursor.peek_is_punct(b'(') {
         cursor.consume_token(&Token::LParen)?;
 
         let mut ports = Vec::new();
@@ -165,14 +165,14 @@ pub fn parse_element_node(cursor: &mut ParserCursor<'_>) -> Result<ElementNode, 
     let slash_span = cursor.consume_token(&Token::Backslash)?;
     let name = parse_ident(cursor)?;
 
-    let (key, ports, port_span) = if let Some((Token::LParen, _)) = cursor.peek_token()? {
+    let (key, ports, port_span) = if cursor.peek_is_punct(b'(') {
         let (k, p, s) = parse_element_args(cursor)?;
         (k, p, Some(s))
     } else {
         (None, Vec::new(), None)
     };
 
-    let (content, content_span) = if let Some((Token::LBrace, _)) = cursor.peek_token()? {
+    let (content, content_span) = if cursor.peek_is_punct(b'{') {
         let slot = cursor.parse_content_slot_mode(SlotMode::ContentSlot, |c| {
             parse_content_item(c, false)
         })?;

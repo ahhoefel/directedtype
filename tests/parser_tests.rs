@@ -1747,4 +1747,55 @@ fn test_parse_duration_literals() {
     );
 }
 
+#[test]
+fn test_element_without_slot_followed_by_unicode_prose() {
+    let source = r#"
+    \Flow {
+        \Asterism()
+
+        “What a curious feeling!”
+
+        \Divider
+        —dash prose
+
+        \Children
+        “quoted prose”
+    }
+    "#;
+
+    let doc = parse(source).expect("Unicode prose after slotless elements should parse without LexError");
+    assert_eq!(doc.items.len(), 1);
+    let Item::Node(flow) = &doc.items[0] else {
+        panic!("Expected Flow node");
+    };
+    let slot = flow.content.as_ref().expect("Flow content slot");
+
+    assert!(
+        matches!(
+            slot.items.as_slice(),
+            [
+                ContentItem::Node(asterism),
+                ContentItem::ParagraphBreak(_),
+                ContentItem::Text(curious),
+                ContentItem::ParagraphBreak(_),
+                ContentItem::Node(divider),
+                ContentItem::Text(dash),
+                ContentItem::ParagraphBreak(_),
+                ContentItem::Children(children),
+                ContentItem::Text(quoted),
+            ]
+            if asterism.name.as_str() == "Asterism"
+                && curious.text == "“What a curious feeling!”"
+                && divider.name.as_str() == "Divider"
+                && divider.ports.is_empty()
+                && divider.content.is_none()
+                && dash.text.trim() == "—dash prose"
+                && children.ports.is_empty()
+                && quoted.text.trim() == "“quoted prose”"
+        ),
+        "Unexpected parsed content items: {:#?}",
+        slot.items
+    );
+}
+
 

@@ -58,150 +58,114 @@
         // ============================================================
         // Page 76 (Verso): Chapter VI Opener (14 lines)
         // ============================================================
-        \Para {
-            F\SmallCaps{OR} a minute or two she stood looking at\|
-            the house, and wondering what to do next,\|
-            when suddenly a footman in livery came run\-\|
-            ning out of the wood—(she considered him to\|
-            be a footman because he was in livery: other\-\|
-            wise, judging by his face only, she would have\|
-            called him a fish)—and rapped loudly at the door\|
-            with his knuckles. It was opened by another\|
-            footman in livery, with a round face and large\|
-            eyes like a frog; and both footmen, Alice noticed,\|
-            had powdered hair that curled all over their\|
-            heads. She felt very curious to know what it\|
-            was all about, and crept a little way out of the\|
-            wood to listen.
-        }
+        F\SmallCaps{OR} a minute or two she stood looking at\|
+        the house, and wondering what to do next,\|
+        when suddenly a footman in livery came run\-\|
+        ning out of the wood—(she considered him to\|
+        be a footman because he was in livery: other\-\|
+        wise, judging by his face only, she would have\|
+        called him a fish)—and rapped loudly at the door\|
+        with his knuckles. It was opened by another\|
+        footman in livery, with a round face and large\|
+        eyes like a frog; and both footmen, Alice noticed,\|
+        had powdered hair that curled all over their\|
+        heads. She felt very curious to know what it\|
+        was all about, and crept a little way out of the\|
+        wood to listen.
 
         // ============================================================
         // Page 77 (Recto): Top Plate #20 (Fish-Footman & Frog-Footman) + 5 lines
         // ============================================================
         \TopPlate(src: "images/tenniel_20.png", grid_lines: 17.0, img_top: 2pt)
 
-        \Para {
-            The Fish\=Footman began by producing from\|
-            under his arm a great letter, nearly as large\|
-            as himself, and this he handed over to the\|
-            other, saying, in a solemn tone, “For the\|
-            Duchess. An invitation from the Queen to play\|
-            croquet.” The Frog\=Footman repeated, in the\|
-            same solemn tone, only changing the order of\|
-            the words a little, “From the Queen. An invi\-\|
-            tation for the Duchess to play croquet.”
-        }
+        The Fish\=Footman began by producing from\|
+        under his arm a great letter, nearly as large\|
+        as himself, and this he handed over to the\|
+        other, saying, in a solemn tone, “For the\|
+        Duchess. An invitation from the Queen to play\|
+        croquet.” The Frog\=Footman repeated, in the\|
+        same solemn tone, only changing the order of\|
+        the words a little, “From the Queen. An invi\-\|
+        tation for the Duchess to play croquet.”
 
-        \Para {
-            Then they both bowed low, and their curls\|
-            got entangled together.
-        }
+        Then they both bowed low, and their curls\|
+        got entangled together.
 
-        \Para {
-            Alice laughed so much at this, that she had\|
-            to run back into the wood for fear of their\|
-            hearing her; and when she next peeped out the\|
-            Fish\=Footman was gone, and the other was sitting\|
-            on the ground near the door, staring stupidly up\|
-            into the sky.
-        }
+        Alice laughed so much at this, that she had\|
+        to run back into the wood for fear of their\|
+        hearing her; and when she next peeped out the\|
+        Fish\=Footman was gone, and the other was sitting\|
+        on the ground near the door, staring stupidly up\|
+        into the sky.
 
-        \Para {
-            Alice went timidly up to the door, and\|
-            knocked.
-        }
+        Alice went timidly up to the door, and\|
+        knocked.
 
-        \Para {
-            “There’s no sort of use in knocking,” said\|
-            the Footman, “and that for two reasons. First,\|
-            because I’m on the same side of the door as\|
-            you are; secondly, because they’re making such\|
-            a noise inside, no one could possibly hear you.”\|
-            And certainly there \Italic{was} a most extraordinary\|
-            noise going on within—a constant howling and\|
-            sneezing, and every now and then a great\|
-            crash, as if a dish or kettle had been broken to\|
-            pieces.
-        }
+        “There’s no sort of use in knocking,” said\|
+        the Footman, “and that for two reasons. First,\|
+        because I’m on the same side of the door as\|
+        you are; secondly, because they’re making such\|
+        a noise inside, no one could possibly hear you.”\|
+        And certainly there \Italic{was} a most extraordinary\|
+        noise going on within—a constant howling and\|
+        sneezing, and every now and then a great\|
+        crash, as if a dish or kettle had been broken to\|
+        pieces.
 
-        \Para {
-            “Please, then,” said Alice, “how am I to get in?”
-        }
+        “Please, then,” said Alice, “how am I to get in?”
 
-        \Para {
-            “There might be some sense in your knock\-\|
-            ing,” the Footman went on, without attending\|
-            to her, “if we had the door between us. For\|
-            instance, if you were \Italic{inside,} you might knock,\|
-            and I could let you out, you know.” He was\|
-            looking up into the sky all the time he was\|
-            speaking, and this Alice thought decidedly un\-\|
-            civil. “But perhaps he can’t help it,” she said\|
-            to herself; “his eyes are so \Italic{very} nearly at the\|
-            top of his head. But at any rate he might\|
-            answer questions.—How am I to get in?” she\|
-            repeated, aloud.
-        }
+        “There might be some sense in your knock\-\|
+        ing,” the Footman went on, without attending\|
+        to her, “if we had the door between us. For\|
+        instance, if you were \Italic{inside,} you might knock,\|
+        and I could let you out, you know.” He was\|
+        looking up into the sky all the time he was\|
+        speaking, and this Alice thought decidedly un\-\|
+        civil. “But perhaps he can’t help it,” she said\|
+        to herself; “his eyes are so \Italic{very} nearly at the\|
+        top of his head. But at any rate he might\|
+        answer questions.—How am I to get in?” she\|
+        repeated, aloud.
 
-        \Para {
-            “I shall sit here,” the Footman remarked, “till\|
-            to\=morrow\DoubleEmDash{}”
-        }
+        “I shall sit here,” the Footman remarked, “till\|
+        to\=morrow\DoubleEmDash{}”
 
-        \Para {
-            At this moment the door of the house\|
-            opened, and a large plate came skimming out,\|
-            straight at the Footman’s head: it just grazed\|
-            his nose, and broke to pieces against one of the\|
-            trees behind him.
-        }
+        At this moment the door of the house\|
+        opened, and a large plate came skimming out,\|
+        straight at the Footman’s head: it just grazed\|
+        his nose, and broke to pieces against one of the\|
+        trees behind him.
 
-        \Para {
-            “\DoubleEmDash{}or next day, maybe,” the Footman con\-\|
-            tinued in the same tone, exactly as if nothing\|
-            had happened.
-        }
+        “\DoubleEmDash{}or next day, maybe,” the Footman con\-\|
+        tinued in the same tone, exactly as if nothing\|
+        had happened.
 
-        \Para {
-            “How am I to get in?” asked Alice again\|
-            in a louder tone.
-        }
+        “How am I to get in?” asked Alice again\|
+        in a louder tone.
 
-        \Para {
-            “\Italic{Are} you to get in at all?” said the Foot\-\|
-            man. “That’s the first question, you know.”
-        }
+        “\Italic{Are} you to get in at all?” said the Foot\-\|
+        man. “That’s the first question, you know.”
 
-        \Para {
-            It was, no doubt: only Alice did not like to\|
-            be told so. “It’s really dreadful,” she muttered\|
-            to herself, “the way all the creatures argue. It’s\|
-            enough to drive one crazy!”
-        }
+        It was, no doubt: only Alice did not like to\|
+        be told so. “It’s really dreadful,” she muttered\|
+        to herself, “the way all the creatures argue. It’s\|
+        enough to drive one crazy!”
 
-        \Para {
-            The Footman seemed to think this a good\|
-            opportunity of repeating his remark, with varia\-\|
-            tions. “I shall sit here,” he said, “on and off,\|
-            for days and days.”
-        }
+        The Footman seemed to think this a good\|
+        opportunity of repeating his remark, with varia\-\|
+        tions. “I shall sit here,” he said, “on and off,\|
+        for days and days.”
 
-        \Para {
-            “But what am \Italic{I} to do?” said Alice.
-        }
+        “But what am \Italic{I} to do?” said Alice.
 
-        \Para {
-            “Anything you like,” said the Footman, and\|
-            began whistling.
-        }
+        “Anything you like,” said the Footman, and\|
+        began whistling.
 
-        \Para {
-            “Oh, there’s no use in talking to him,” said\|
-            Alice desperately: “he’s perfectly idiotic!” And\|
-            she opened the door and went in.
-        }
+        “Oh, there’s no use in talking to him,” said\|
+        Alice desperately: “he’s perfectly idiotic!” And\|
+        she opened the door and went in.
 
-        \Para(align: Align.JustifyAll) {
+        \Text(paragraph_style: \ParagraphStyle(align: Align.JustifyAll, indent: 16pt)) {
             The door led right into a large kitchen,
         }
 
@@ -218,128 +182,96 @@
             which seemed to be full of soup.
         }
 
-        \Para {
-            “There’s certainly too much pepper in that\|
-            soup!” Alice said to herself, as well as she\|
-            could for sneezing.
-        }
+        “There’s certainly too much pepper in that\|
+        soup!” Alice said to herself, as well as she\|
+        could for sneezing.
 
         // ============================================================
         // Pages 82–84: The Cheshire Cat on the hearth & flying saucepans
         // ============================================================
         \PageBreak()
-        \Para {
-            There was certainly too much of it in the\|
-            air. Even the Duchess sneezed occasionally;\|
-            and as for the baby, it was sneezing and howl\-\|
-            ing alternately without a moment’s pause. The\|
-            only two creatures in the kitchen that did not\|
-            sneeze, were the cook, and a large cat which\|
-            was sitting on the hearth and grinning from ear\|
-            to ear.
-        }
+        There was certainly too much of it in the\|
+        air. Even the Duchess sneezed occasionally;\|
+        and as for the baby, it was sneezing and howl\-\|
+        ing alternately without a moment’s pause. The\|
+        only two creatures in the kitchen that did not\|
+        sneeze, were the cook, and a large cat which\|
+        was sitting on the hearth and grinning from ear\|
+        to ear.
 
-        \Para {
-            “Please, would you tell me,” said Alice, a\|
-            little timidly, for she was not quite sure whether\|
-            it was good manners for her to speak first, “why\|
-            your cat grins like that?”
-        }
+        “Please, would you tell me,” said Alice, a\|
+        little timidly, for she was not quite sure whether\|
+        it was good manners for her to speak first, “why\|
+        your cat grins like that?”
 
-        \Para {
-            “It’s a Cheshire cat,” said the Duchess, “and\|
-            that’s why. Pig!”
-        }
+        “It’s a Cheshire cat,” said the Duchess, “and\|
+        that’s why. Pig!”
 
-        \Para {
-            She said the last word with such sudden\|
-            violence that Alice quite jumped; but she saw\|
-            in another moment that it was addressed to the\|
-            baby, and not to her, so she took courage, and\|
-            went on again:—
-        }
+        She said the last word with such sudden\|
+        violence that Alice quite jumped; but she saw\|
+        in another moment that it was addressed to the\|
+        baby, and not to her, so she took courage, and\|
+        went on again:—
 
-        \Para {
-            “I didn’t know that Cheshire cats always\|
-            grinned; in fact, I didn’t know that cats \Italic{could}\|
-            grin.”
-        }
+        “I didn’t know that Cheshire cats always\|
+        grinned; in fact, I didn’t know that cats \Italic{could}\|
+        grin.”
 
-        \Para {
-            “They all can,” said the Duchess; “and\|
-            most of ’em do.”
-        }
+        “They all can,” said the Duchess; “and\|
+        most of ’em do.”
 
-        \Para {
-            “I don’t know of any that do,” Alice said\|
-            very politely, feeling quite pleased to have got\|
-            into a conversation.
-        }
+        “I don’t know of any that do,” Alice said\|
+        very politely, feeling quite pleased to have got\|
+        into a conversation.
 
-        \Para {
-            “You don’t know much,” said the Duchess;\|
-            “and that’s a fact.”
-        }
+        “You don’t know much,” said the Duchess;\|
+        “and that’s a fact.”
 
-        \Para {
-            Alice did not at all like the tone of this\|
-            remark, and thought it would be as well to\|
-            introduce some other subject of conversation.\|
-            While she was trying to fix on one, the cook\|
-            took the cauldron of soup off the fire, and at\|
-            once set to work throwing everything within her\|
-            reach at the Duchess and the baby—the fire-\|
-            irons came first; then followed a shower of sauce\-\|
-            pans, plates, and dishes. The Duchess took no\|
-            notice of them even when they hit her; and the\|
-            baby was howling so much already, that it was\|
-            quite impossible to say whether the blows hurt\|
-            it or not.
-        }
+        Alice did not at all like the tone of this\|
+        remark, and thought it would be as well to\|
+        introduce some other subject of conversation.\|
+        While she was trying to fix on one, the cook\|
+        took the cauldron of soup off the fire, and at\|
+        once set to work throwing everything within her\|
+        reach at the Duchess and the baby—the fire-\|
+        irons came first; then followed a shower of sauce\-\|
+        pans, plates, and dishes. The Duchess took no\|
+        notice of them even when they hit her; and the\|
+        baby was howling so much already, that it was\|
+        quite impossible to say whether the blows hurt\|
+        it or not.
 
-        \Para {
-            “Oh, \Italic{please} mind what you’re doing!” cried\|
-            Alice, jumping up and down in an agony of\|
-            terror. “Oh, there goes his \Italic{precious} nose!” as\|
-            an unusually large saucepan flew close by it, and\|
-            very nearly carried it off.
-        }
+        “Oh, \Italic{please} mind what you’re doing!” cried\|
+        Alice, jumping up and down in an agony of\|
+        terror. “Oh, there goes his \Italic{precious} nose!” as\|
+        an unusually large saucepan flew close by it, and\|
+        very nearly carried it off.
 
-        \Para {
-            “If everybody minded their own business,”\|
-            said the Duchess in a hoarse growl, “the world\|
-            would go round a deal faster than it does.”
-        }
+        “If everybody minded their own business,”\|
+        said the Duchess in a hoarse growl, “the world\|
+        would go round a deal faster than it does.”
 
-        \Para {
-            “Which would \Italic{not} be an advantage,” said\|
-            Alice, who felt very glad to get an opportunity\|
-            of showing off a little of her knowledge. “Just\|
-            think what work it would make with the day\|
-            and night! You see the earth takes twenty\=four\|
-            hours to turn round on its axis\DoubleEmDash{}”
-        }
+        “Which would \Italic{not} be an advantage,” said\|
+        Alice, who felt very glad to get an opportunity\|
+        of showing off a little of her knowledge. “Just\|
+        think what work it would make with the day\|
+        and night! You see the earth takes twenty\=four\|
+        hours to turn round on its axis\DoubleEmDash{}”
 
-        \Para {
-            “Talking of axes,” said the Duchess, “chop\|
-            off her head!”
-        }
+        “Talking of axes,” said the Duchess, “chop\|
+        off her head!”
 
-        \Para {
-            Alice glanced rather anxiously at the cook, to\|
-            see if she meant to take the hint; but the cook\|
-            was busily stirring the soup, and seemed not to\|
-            be listening, so she went on again: “Twenty\=four\|
-            hours, I \Italic{think}; or is it twelve? I\DoubleEmDash{}”
-        }
+        Alice glanced rather anxiously at the cook, to\|
+        see if she meant to take the hint; but the cook\|
+        was busily stirring the soup, and seemed not to\|
+        be listening, so she went on again: “Twenty\=four\|
+        hours, I \Italic{think}; or is it twelve? I\DoubleEmDash{}”
 
-        \Para {
-            “Oh, don’t bother \Italic{me,}” said the Duchess; “I\|
-            never could abide figures!” And with that she\|
-            began nursing her child again, singing a sort of\|
-            lullaby to it as she did so, and giving it a violent\|
-            shake at the end of every line:—
-        }
+        “Oh, don’t bother \Italic{me,}” said the Duchess; “I\|
+        never could abide figures!” And with that she\|
+        began nursing her child again, singing a sort of\|
+        lullaby to it as she did so, and giving it a violent\|
+        shake at the end of every line:—
 
         \PoemBlock(size: 10pt, leading: 15pt, italic: true) {
             \Spacer(height: 10pt)
@@ -352,12 +284,10 @@
             \Spacer(height: 12pt)
         }
 
-        \Para {
-            While the Duchess sang the second verse of\|
-            the song, she kept tossing the baby violently up\|
-            and down, and the poor little thing howled so,\|
-            that Alice could hardly hear the words:—
-        }
+        While the Duchess sang the second verse of\|
+        the song, she kept tossing the baby violently up\|
+        and down, and the poor little thing howled so,\|
+        that Alice could hardly hear the words:—
 
         \PoemBlock(size: 10pt, leading: 15pt, italic: true) {
             \Spacer(height: 10pt)
@@ -373,70 +303,60 @@
         // Pages 86–87: Nursing the queer-shaped baby
         // ============================================================
         \PageBreak()
-        \Para {
-            “Here! you may nurse it a bit, if you like!”\|
-            said the Duchess to Alice, flinging the baby at\|
-            her as she spoke. “I must go and get ready to\|
-            play croquet with the Queen,” and she hurried\|
-            out of the room. The cook threw a frying\=pan\|
-            after her as she went, but it just missed her.
-        }
+        “Here! you may nurse it a bit, if you like!”\|
+        said the Duchess to Alice, flinging the baby at\|
+        her as she spoke. “I must go and get ready to\|
+        play croquet with the Queen,” and she hurried\|
+        out of the room. The cook threw a frying\=pan\|
+        after her as she went, but it just missed her.
 
-        \Para {
-            Alice caught the baby with some difficulty,\|
-            as it was a queer\=shaped little creature, and held\|
-            out its arms and legs in all directions, “just\|
-            like a star\=fish,” thought Alice. The poor little\|
-            thing was snorting like a steam\=engine when\|
-            she caught it, and kept doubling itself up and\|
-            straightening itself out again, so that altogether,\|
-            for the first minute or two, it was as much as\|
-            she could do to hold it.
-        }
+        Alice caught the baby with some difficulty,\|
+        as it was a queer\=shaped little creature, and held\|
+        out its arms and legs in all directions, “just\|
+        like a star\=fish,” thought Alice. The poor little\|
+        thing was snorting like a steam\=engine when\|
+        she caught it, and kept doubling itself up and\|
+        straightening itself out again, so that altogether,\|
+        for the first minute or two, it was as much as\|
+        she could do to hold it.
 
-        \Para {
-            As soon as she had made out the proper way\|
-            of nursing it, (which was to twist it up into\|
-            a sort of knot, and then keep tight hold of its\|
-            right ear and left foot, so as to prevent its\|
-            undoing itself,) she carried it out into the open\|
-            air. “If I don’t take this child away with me,”\|
-            thought Alice, “they’re sure to kill it in a day\|
-            or two: wouldn’t it be murder to leave it be\-\|
-            hind?” She said the last words out loud, and\|
-            the little thing grunted in reply (it had left off\|
-            sneezing by this time). “Don’t grunt,” said\|
-            Alice; “that’s not at all a proper way of ex\-\|
-            pressing yourself.”
-        }
+        As soon as she had made out the proper way\|
+        of nursing it, (which was to twist it up into\|
+        a sort of knot, and then keep tight hold of its\|
+        right ear and left foot, so as to prevent its\|
+        undoing itself,) she carried it out into the open\|
+        air. “If I don’t take this child away with me,”\|
+        thought Alice, “they’re sure to kill it in a day\|
+        or two: wouldn’t it be murder to leave it be\-\|
+        hind?” She said the last words out loud, and\|
+        the little thing grunted in reply (it had left off\|
+        sneezing by this time). “Don’t grunt,” said\|
+        Alice; “that’s not at all a proper way of ex\-\|
+        pressing yourself.”
 
-        \Para {
-            The baby grunted again, and Alice looked\|
-            very anxiously into its face to see what was the\|
-            matter with it. There could be no doubt that\|
-            it had a \Italic{very} turn\=up nose, much more like a\|
-            snout than a real nose; also its eyes were\|
-            getting extremely small for a baby: altogether\|
-            Alice did not like the look of the thing at all.\|
-            “But perhaps it was only sobbing,” she thought,\|
-            and looked into its eyes again, to see if there\|
-            were any tears.
-        }
+        The baby grunted again, and Alice looked\|
+        very anxiously into its face to see what was the\|
+        matter with it. There could be no doubt that\|
+        it had a \Italic{very} turn\=up nose, much more like a\|
+        snout than a real nose; also its eyes were\|
+        getting extremely small for a baby: altogether\|
+        Alice did not like the look of the thing at all.\|
+        “But perhaps it was only sobbing,” she thought,\|
+        and looked into its eyes again, to see if there\|
+        were any tears.
 
-        \Para {
-            No, there were no tears. “If you’re going to\|
-            turn into a pig, my dear,” said Alice, seriously,\|
-            “I’ll have nothing more to do with you. Mind\|
-            now!” The poor little thing sobbed again (or\|
-            grunted, it was impossible to say which), and\|
-            they went on for some while in silence.
-        }
+        No, there were no tears. “If you’re going to\|
+        turn into a pig, my dear,” said Alice, seriously,\|
+        “I’ll have nothing more to do with you. Mind\|
+        now!” The poor little thing sobbed again (or\|
+        grunted, it was impossible to say which), and\|
+        they went on for some while in silence.
 
         // ============================================================
         // Page 88 (Verso): Left Inset Wrap #22 (Alice holding pig-baby)
         // ============================================================
         \PageBreak()
-        \Para(align: Align.JustifyAll) {
+        \Text(paragraph_style: \ParagraphStyle(align: Align.JustifyAll, indent: 16pt)) {
             Alice was just beginning to think to herself,\|
             “Now, what am I to do with this creature\|
             when I get it home?” when it grunted again,
@@ -462,7 +382,7 @@
                 to carry it any fur\-\|
                 ther.
             }
-            \Para(align: Align.JustifyAll) {
+            \Text(paragraph_style: \ParagraphStyle(align: Align.JustifyAll, indent: 16pt)) {
                 So she set the
             }
         }
@@ -484,92 +404,60 @@
             bough of a tree a few yards off.
         }
 
-        \Para {
-            The Cat only grinned when it saw Alice.\|
-            It looked goodnatured, she thought: still it\|
-            had \Italic{very} long claws and a great many teeth,\|
-            so she felt it ought to be treated with respect.
-        }
+        The Cat only grinned when it saw Alice.\|
+        It looked goodnatured, she thought: still it\|
+        had \Italic{very} long claws and a great many teeth,\|
+        so she felt it ought to be treated with respect.
 
-        \Para {
-            “Cheshire Puss,” she began, rather timidly, as\|
-            she did not at all know whether it would like\|
-            the name: however, it only grinned a little wider.\|
-            “Come, it’s pleased so far,” thought Alice, and\|
-            she went on, “Would you tell me, please, which\|
-            way I ought to walk from here?”
-        }
+        “Cheshire Puss,” she began, rather timidly, as\|
+        she did not at all know whether it would like\|
+        the name: however, it only grinned a little wider.\|
+        “Come, it’s pleased so far,” thought Alice, and\|
+        she went on, “Would you tell me, please, which\|
+        way I ought to walk from here?”
 
-        \Para {
-            “That depends a good deal on where you want\|
-            to get to,” said the Cat.
-        }
+        “That depends a good deal on where you want\|
+        to get to,” said the Cat.
 
-        \Para {
-            “I don’t much care where\DoubleEmDash{}” said Alice.
-        }
+        “I don’t much care where\DoubleEmDash{}” said Alice.
 
-        \Para {
-            “Then it doesn’t matter which way you\|
-            walk,” said the Cat.
-        }
+        “Then it doesn’t matter which way you\|
+        walk,” said the Cat.
 
-        \Para {
-            “\DoubleEmDash{}so long as I get \Italic{somewhere,}” Alice added\|
-            as an explanation.
-        }
+        “\DoubleEmDash{}so long as I get \Italic{somewhere,}” Alice added\|
+        as an explanation.
 
-        \Para {
-            “Oh, you’re sure to do that,” said the Cat,\|
-            “if you only walk long enough.”
-        }
+        “Oh, you’re sure to do that,” said the Cat,\|
+        “if you only walk long enough.”
 
-        \Para {
-            Alice felt that this could not be denied, so she\|
-            tried another question. “What sort of people\|
-            live about here?”
-        }
+        Alice felt that this could not be denied, so she\|
+        tried another question. “What sort of people\|
+        live about here?”
 
-        \Para {
-            “In \Italic{that} direction,” the Cat said, waving its\|
-            right paw round, “lives a Hatter: and in \Italic{that}\|
-            direction,” waving the other paw, “lives a March\|
-            Hare. Visit either you like: they’re both mad.”
-        }
+        “In \Italic{that} direction,” the Cat said, waving its\|
+        right paw round, “lives a Hatter: and in \Italic{that}\|
+        direction,” waving the other paw, “lives a March\|
+        Hare. Visit either you like: they’re both mad.”
 
-        \Para {
-            “But I don’t want to go among mad people,”\|
-            Alice remarked.
-        }
+        “But I don’t want to go among mad people,”\|
+        Alice remarked.
 
-        \Para {
-            “Oh, you can’t help that,” said the Cat:\|
-            “we’re all mad here. I’m mad. You’re mad.”
-        }
+        “Oh, you can’t help that,” said the Cat:\|
+        “we’re all mad here. I’m mad. You’re mad.”
 
-        \Para {
-            “How do you know I’m mad?” said Alice.
-        }
+        “How do you know I’m mad?” said Alice.
 
-        \Para {
-            “You must be,” said the Cat, “or you\|
-            wouldn’t have come here.”
-        }
+        “You must be,” said the Cat, “or you\|
+        wouldn’t have come here.”
 
-        \Para {
-            Alice didn’t think that proved it at all;\|
-            however, she went on: “and how do you know\|
-            that you’re mad?”
-        }
+        Alice didn’t think that proved it at all;\|
+        however, she went on: “and how do you know\|
+        that you’re mad?”
 
-        \Para {
-            “To begin with,” said the Cat, “a dog’s not\|
-            mad. You grant that?”
-        }
+        “To begin with,” said the Cat, “a dog’s not\|
+        mad. You grant that?”
 
-        \Para {
-            “I suppose so,” said Alice.
-        }
+        “I suppose so,” said Alice.
 
         // ============================================================
         // Page 91 (Recto): L-Shaped Tree Wrap #23 (Alice & Cheshire Cat)
@@ -583,21 +471,19 @@
             top_blank_lines: 9.0,
             break_before: Break.Page
         ) {
-            \Para {
-                “Well then,” the Cat\|
-                went on, “you see a dog\|
-                growls when it’s angry,\|
-                and wags its tail when it’s\|
-                pleased. Now \Italic{I} growl when\|
-                I’m pleased, and wag my\|
-                tail when I’m angry. There\-\|
-                fore I’m mad.”
-            }
-            \Para {
-                “\Italic{I} call it purring, not\|
-                growling,” said Alice.
-            }
-            \Para(align: Align.JustifyAll) {
+            “Well then,” the Cat\|
+            went on, “you see a dog\|
+            growls when it’s angry,\|
+            and wags its tail when it’s\|
+            pleased. Now \Italic{I} growl when\|
+            I’m pleased, and wag my\|
+            tail when I’m angry. There\-\|
+            fore I’m mad.”
+
+            “\Italic{I} call it purring, not\|
+            growling,” said Alice.
+
+            \Text(paragraph_style: \ParagraphStyle(align: Align.JustifyAll, indent: 16pt)) {
                 “Call it what you like,”\|
                 said the Cat. “Do you
             }
@@ -611,40 +497,28 @@
         // Page 92 (Verso): 22 lines leading into the vanishing grin
         // ============================================================
         \PageBreak()
-        \Para {
-            “I should like it very much,” said Alice, “but\|
-            I haven’t been invited yet.”
-        }
+        “I should like it very much,” said Alice, “but\|
+        I haven’t been invited yet.”
 
-        \Para {
-            “You’ll see me there,” said the Cat, and\|
-            vanished.
-        }
+        “You’ll see me there,” said the Cat, and\|
+        vanished.
 
-        \Para {
-            Alice was not much surprised at this, she was\|
-            getting so well used to queer things happening.\|
-            While she was still looking at the place where it\|
-            had been, it suddenly appeared again.
-        }
+        Alice was not much surprised at this, she was\|
+        getting so well used to queer things happening.\|
+        While she was still looking at the place where it\|
+        had been, it suddenly appeared again.
 
-        \Para {
-            “By\=the\=bye, what became of the baby?” said\|
-            the Cat. “I’d nearly forgotten to ask.”
-        }
+        “By\=the\=bye, what became of the baby?” said\|
+        the Cat. “I’d nearly forgotten to ask.”
 
-        \Para {
-            “It turned into a pig,” Alice answered very\|
-            quietly, just as if the Cat had come back in a\|
-            natural way.
-        }
+        “It turned into a pig,” Alice answered very\|
+        quietly, just as if the Cat had come back in a\|
+        natural way.
 
-        \Para {
-            “I thought it would,” said the Cat, and\|
-            vanished again.
-        }
+        “I thought it would,” said the Cat, and\|
+        vanished again.
 
-        \Para(align: Align.JustifyAll) {
+        \Text(paragraph_style: \ParagraphStyle(align: Align.JustifyAll, indent: 16pt)) {
             Alice waited a little, half expecting to see it\|
             again, but it did not appear, and after a minute\|
             or two she walked on in the direction in which\|
@@ -665,48 +539,38 @@
             again, sitting on a branch of a tree.
         }
 
-        \Para {
-            “Did you say pig, or fig?” said the Cat.
-        }
+        “Did you say pig, or fig?” said the Cat.
 
-        \Para {
-            “I said pig,” replied Alice; “and I wish you\|
-            wouldn’t keep appearing and vanishing so sud\-\|
-            denly: you make one quite giddy.”
-        }
+        “I said pig,” replied Alice; “and I wish you\|
+        wouldn’t keep appearing and vanishing so sud\-\|
+        denly: you make one quite giddy.”
 
-        \Para {
-            “All right,” said the Cat; and this time it\|
-            vanished quite slowly, beginning with the end of\|
-            the tail, and ending with the grin, which remained\|
-            some time after the rest of it had gone.
-        }
+        “All right,” said the Cat; and this time it\|
+        vanished quite slowly, beginning with the end of\|
+        the tail, and ending with the grin, which remained\|
+        some time after the rest of it had gone.
 
         // ============================================================
         // Page 94 (Verso): 16 closing lines (March Hare's fur-thatched house)
         // ============================================================
         \PageBreak()
-        \Para {
-            “Well! I’ve often seen a cat without a grin,”\|
-            thought Alice; “but a grin without a cat!\|
-            It’s the most curious thing I ever saw in all\|
-            my life!”
-        }
+        “Well! I’ve often seen a cat without a grin,”\|
+        thought Alice; “but a grin without a cat!\|
+        It’s the most curious thing I ever saw in all\|
+        my life!”
 
-        \Para {
-            She had not gone much farther before she\|
-            came in sight of the house of the March Hare:\|
-            she thought it must be the right house, because\|
-            the chimneys were shaped like ears and the roof\|
-            was thatched with fur. It was so large a house,\|
-            that she did not like to go nearer till she had\|
-            nibbled some more of the left\=hand bit of mush\-\|
-            room, and raised herself to about two feet high:\|
-            even then she walked up towards it rather\|
-            timidly, saying to herself, “Suppose it should\|
-            be raving mad after all! I almost wish I’d gone\|
-            to see the Hatter instead!”
-        }
+        She had not gone much farther before she\|
+        came in sight of the house of the March Hare:\|
+        she thought it must be the right house, because\|
+        the chimneys were shaped like ears and the roof\|
+        was thatched with fur. It was so large a house,\|
+        that she did not like to go nearer till she had\|
+        nibbled some more of the left\=hand bit of mush\-\|
+        room, and raised herself to about two feet high:\|
+        even then she walked up towards it rather\|
+        timidly, saying to herself, “Suppose it should\|
+        be raving mad after all! I almost wish I’d gone\|
+        to see the Hatter instead!”
     };
 
     \alias height: Distance = ch.height;

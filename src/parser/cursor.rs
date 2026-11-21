@@ -136,6 +136,50 @@ impl<'a> ParserCursor<'a> {
         Ok(self.peeked.get(n))
     }
 
+    /// Checks whether the next non-whitespace, non-comment byte matches `expected_byte`
+    /// without invoking the code lexer on non-matching characters (e.g. raw prose
+    /// starting with Unicode punctuation like `“` or `—` inside a content slot).
+    pub fn peek_is_punct(&self, expected_byte: u8) -> bool {
+        if let Some((tok, _)) = self.peeked.front() {
+            return match expected_byte {
+                b'(' => matches!(tok, Token::LParen),
+                b'{' => matches!(tok, Token::LBrace),
+                b';' => matches!(tok, Token::Semicolon),
+                _ => false,
+            };
+        }
+        let bytes = self.source.as_bytes();
+        let mut p = self.pos;
+        while p < bytes.len() {
+            if bytes[p].is_ascii_whitespace() {
+                p += 1;
+                continue;
+            }
+            if self.source[p..].starts_with("//") {
+                p += 2;
+                while p < bytes.len() && bytes[p] != b'\n' {
+                    p += 1;
+                }
+                if p < bytes.len() && bytes[p] == b'\n' {
+                    p += 1;
+                }
+                continue;
+            }
+            if self.source[p..].starts_with("/*") {
+                p += 2;
+                while p + 1 < bytes.len() && !self.source[p..].starts_with("*/") {
+                    p += 1;
+                }
+                if self.source[p..].starts_with("*/") {
+                    p += 2;
+                }
+                continue;
+            }
+            break;
+        }
+        p < bytes.len() && bytes[p] == expected_byte
+    }
+
     pub fn next_token(&mut self) -> Result<Option<(Token, Span)>, ParseError> {
         self.fill_peek(1)?;
         Ok(self.peeked.pop_front())
