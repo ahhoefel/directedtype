@@ -238,12 +238,11 @@
         // ============================================================
         // Page [v] (Recto): Prefatory Poem — Stanzas 1 & 2
         // 24-slot 16.5pt grid (24 * 16.5pt = 396.0pt = 22 * 18.0pt):
-        //   10 slots top sinkage + 76pt DoubleRule (146.5 + 3.5 + 15.0 = 165pt) + 6 + 2 + 6 = 24 slots
+        //   8 top + 2 DoubleRule + 6 + 2 + 6 = 24 slots
         // ============================================================
         \PoemBlock(left_margin: 58pt, pagination: \Pagination(breakable: false, break_before: Break.Recto)) {
-            \Spacer(height: 146.5pt)
-            \DoubleRule(rule_width: 76pt)
-            \Spacer(height: 15pt)
+            \Spacer(height: 8 * 16.5pt)
+            \DoubleRule(height: 33pt)
 
             \VerseLine { All in the golden afternoon }
             \VerseLine(indent: 11.2pt) { Full leisurely we glide; }

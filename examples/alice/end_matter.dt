@@ -131,11 +131,10 @@
             width: parent.width,
             font: title_font,
             paragraph_style: \ParagraphStyle(align: Align.Center),
+            text_bounds: \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.Descender),
             text: "TYPESETTING NOTES."
         )
-        \Spacer(height: 12pt)
-        \DoubleRule(rule_width: 56.25pt)
-        \Spacer(height: 14pt)
+        \DoubleRule(height: 30pt)
 
         \FlushPara {
             This edition is set in Old Standard TT 12pt with 18pt leading

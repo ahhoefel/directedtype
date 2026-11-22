@@ -430,16 +430,11 @@
         // ============================================================
         // Pages 190–192: Closing Dream Sequence (Double Rule + Bare Centered Folios)
         // ============================================================
-        // 6 * 18.0pt = 108.0pt (50.0pt + 3.5pt DoubleRule + 54.5pt) locks the 16 lines to the 22-line baseline grid
-        \VStackStretch(
-            width: parent.width,
-            gap: 0pt,
+        // 6 * 18.0pt = 108.0pt locks the 16 lines to the 22-line baseline grid
+        \DoubleRule(
+            height: 6 * 18pt,
             pagination: \Pagination(breakable: false, break_before: Break.Page, keep_with_next: true)
-        ) {
-            \Spacer(height: 50pt)
-            \DoubleRule(rule_width: 66pt, gap: 2.5pt)
-            \Spacer(height: 54.5pt)
-        }
+        )
 
         But her sister sat still just as she left her,
         leaning her head on her hand, watching the

@@ -338,21 +338,22 @@
     \alias height: Distance = t.height;
 }
 
-// Centered double ornamental rule (used above the prefatory poem and on p. 190)
+// Centered double ornamental rule (used above the prefatory poem, on p. 190, and in end matter)
 \Component DoubleRule(
-    rule_width: Distance = 56.25pt,
-    gap: Distance = 2.5pt,
-    thickness: Distance = 0.5pt,
+    rule_width: Distance = 76pt,
+    gap: Distance = 1.8pt,
+    thickness: Distance = 0.4pt,
+    height: Distance = thickness * 2.0 + gap,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false)
 ) {
+    \let rule_h = thickness * 2.0 + gap;
     \let rx = x + (width - rule_width) * 0.5;
-    \Rect(x: rx, y: y, width: rule_width, height: thickness, color: #111111)
-    \Rect(x: rx, y: y + thickness + gap, width: rule_width, height: thickness, color: #111111)
-
-    \alias height: Distance = thickness * 2.0 + gap;
+    \let ry = y + (height - rule_h) * 0.5;
+    \Rect(x: rx, y: ry, width: rule_width, height: thickness, color: #111111)
+    \Rect(x: rx, y: ry + thickness + gap, width: rule_width, height: thickness, color: #111111)
 }
 
 // Unbreakable poem page container that scopes 10pt verse font and leading to its children
