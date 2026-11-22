@@ -28,9 +28,6 @@
         recto_header: "CATERPILLAR.",
         img_src: "images/tenniel_15.png",
         header_height: 324.0pt,
-        img_top: -12pt,
-        ch_gap: 11pt,
-        sub_gap: 13pt,
         break_before: Break.Page
     ) {
         // ============================================================
@@ -131,7 +128,7 @@
         // ============================================================
         // Page 63 (Recto): Father William Plate 1 (Standing on his head)
         // ============================================================
-        \TopPlate(src: "images/tenniel_16.png", grid_lines: 12.5, img_top: 4pt)
+        \TopPlate(src: "images/tenniel_16.png", grid_lines: 12.5)
         \PoemBlock(size: 10pt, leading: 16.0pt, italic: true, left_margin: 0pt) {
             \VerseLine { “You are old, father William,” the young man said, }
             \VerseLine(indent: 12pt) { “And your hair has become very white; }
@@ -147,7 +144,7 @@
         // ============================================================
         // Page 64 (Verso): Father William Plate 2 (Back-somersault)
         // ============================================================
-        \TopPlate(src: "images/tenniel_18.png", grid_lines: 12.5, img_top: 5pt)
+        \TopPlate(src: "images/tenniel_18.png", grid_lines: 12.5)
         \PoemBlock(size: 10pt, leading: 16.0pt, italic: true, left_margin: 0pt) {
             \VerseLine { “You are old,” said the youth, “as I mentioned before, }
             \VerseLine(indent: 12pt) { And have grown most uncommonly fat; }
@@ -163,7 +160,7 @@
         // ============================================================
         // Page 65 (Recto): Father William Plate 3 (The goose)
         // ============================================================
-        \TopPlate(src: "images/tenniel_17.png", grid_lines: 12.5, img_top: 5pt)
+        \TopPlate(src: "images/tenniel_17.png", grid_lines: 12.5)
         \PoemBlock(size: 10pt, leading: 16.0pt, italic: true, left_margin: 0pt) {
             \VerseLine { “You are old,” said the youth, “and your jaws are too weak }
             \VerseLine(indent: 12pt) { For anything tougher than suet; }
@@ -179,7 +176,7 @@
         // ============================================================
         // Page 66 (Verso): Father William Plate 4 (Balancing the eel)
         // ============================================================
-        \TopPlate(src: "images/tenniel_19.png", grid_lines: 12.5, img_top: 4pt)
+        \TopPlate(src: "images/tenniel_19.png", grid_lines: 12.5)
         \PoemBlock(size: 10pt, leading: 16.0pt, italic: true, left_margin: 0pt) {
             \VerseLine { “You are old,” said the youth; “one would hardly suppose }
             \VerseLine(indent: 12pt) { That your eye was as steady as ever; }

@@ -56,7 +56,7 @@
 
         \WrapLeftStack(
             src: "images/tenniel_28.png",
-            img_offset_x: -6.5pt,
+            img_offset_x: -8.5pt,
             img_offset_y: 13pt,
             narrow_x: 160.5pt
         ) {
@@ -166,7 +166,7 @@
         // ============================================================
         // Page 117 (Recto): Top Plate #29 (Queen of Hearts & Alice) + 4 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_29.png", grid_lines: 18.0, img_top: 3.5pt)
+        \TopPlate(src: "images/tenniel_29.png", grid_lines: 18.0)
 
         The Queen turned crimson with fury, and,
         after glaring at her for a moment like a wild
@@ -279,7 +279,7 @@
 
         \WrapLeftStack(
             src: "images/tenniel_30.png",
-            img_offset_x: -2pt,
+            img_offset_x: -4.5pt,
             img_offset_y: 12pt,
             narrow_x: 150pt
         ) {
@@ -468,7 +468,7 @@
         // ============================================================
         // Page 128 (Verso): Top Plate #31 (Floating Cat Head) + 6 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_31.png", grid_lines: 16.0, img_top: 4pt)
+        \TopPlate(src: "images/tenniel_31.png", grid_lines: 16.0)
 
         The King’s argument was, that anything that
         had a head could be beheaded, and that you

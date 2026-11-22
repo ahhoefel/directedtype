@@ -188,7 +188,7 @@
             However, on the second time round, she came
         }
 
-        \WrapLeft(src: "images/tenniel_03.png", img_offset_x: -8.5pt, narrow_x: 173.5pt, img_offset_y: 9pt) {
+        \WrapLeft(src: "images/tenniel_03.png", img_offset_x: -6pt, narrow_x: 173.5pt, img_offset_y: 14pt) {
             upon a low
             curtain she had
             not noticed be\-fore, and be\-\|
@@ -243,7 +243,7 @@
             in a hurry. “No, I’ll look first,” she said, “and
         }
 
-        \WrapRight(src: "images/tenniel_04.png", narrow_width: 118pt, img_right_bleed: 13.5pt, img_offset_y: 7pt) {
+        \WrapRight(src: "images/tenniel_04.png", narrow_width: 118pt, img_right_bleed: 13.5pt, img_offset_y: 10pt) {
             see whether it’s
             marked ‘\Italic{poison}’ or
             not;” for she had

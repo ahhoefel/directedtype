@@ -111,9 +111,6 @@
         recto_header: "AND A LONG TALE.",
         img_src: "images/tenniel_09.png",
         header_height: 270.0pt,
-        img_top: -4pt,
-        ch_gap: 11pt,
-        sub_gap: 16pt,
         break_before: Break.Page
     ) {
         // ============================================================
@@ -264,7 +261,7 @@
         // ============================================================
         // Page 35 (Recto): Top Plate #10 (Dodo & thimble) + 5 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_10.png", grid_lines: 17.0, img_top: 10pt)
+        \TopPlate(src: "images/tenniel_10.png", grid_lines: 17.0)
 
         Then they all crowded round her once more,
         while the Dodo solemnly presented the thimble,

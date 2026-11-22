@@ -78,7 +78,7 @@
         // ============================================================
         // Page 97 (Recto): Top Plate #25 (Mad Tea-Party) + 10 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_25.png", grid_lines: 12.0, img_top: 4pt)
+        \TopPlate(src: "images/tenniel_25.png", grid_lines: 12.0)
 
         The Hatter opened his eyes very wide on
         hearing this; but all he \Italic{said} was, “Why is a
@@ -241,7 +241,7 @@
         // ============================================================
         // Page 103 (Recto): Top Plate #26 (Hatter singing) + Twinkle, twinkle
         // ============================================================
-        \TopPlate(src: "images/tenniel_26.png", grid_lines: 10.5, img_top: 12pt)
+        \TopPlate(src: "images/tenniel_26.png", grid_lines: 11.0)
 
         \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, left_margin: 37pt) {
             \VerseLine { ‘Twinkle, twinkle, little bat! }
@@ -459,7 +459,7 @@
             and neither of the others took the least notice
         }
 
-        \MidPlate(src: "images/tenniel_27.png", grid_lines: 12.0, img_top: 14pt)
+        \MidPlate(src: "images/tenniel_27.png", grid_lines: 12.0)
 
         \FlushPara {
             of her going, though she looked back once or

@@ -140,7 +140,7 @@
         // ============================================================
         // Page 166 (Verso): Top Plate #37 (White Rabbit Herald) + Verse + 2 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_37.png", grid_lines: 15.5, img_top: 20pt)
+        \TopPlate(src: "images/tenniel_37.png", grid_lines: 15.5)
 
         \PoemBlock(size: 10pt, leading: 15.5pt, italic: true, left_margin: 26pt) {
             \VerseLine { “The Queen of Hearts, she made some tarts, }
@@ -251,7 +251,7 @@
         \WrapLeftStack(
             src: "images/tenniel_38.png",
             img_offset_x: -5.5pt,
-            img_offset_y: 8pt,
+            img_offset_y: 5pt,
             narrow_x: 145.5pt
         ) {
             \TightWrapCol(leading: 16.6pt) {
@@ -357,7 +357,7 @@
         Here the other guinea\=pig cheered, and was
         suppressed.
 
-        \MidPlate(src: "images/tenniel_39.png", grid_lines: 11.0, img_top: 18pt)
+        \MidPlate(src: "images/tenniel_39.png", grid_lines: 11.0)
 
         “Come, that finishes the guinea\=pigs!” thought
         Alice. “Now we shall get on better.”

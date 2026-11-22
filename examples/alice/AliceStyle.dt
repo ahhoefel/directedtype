@@ -68,47 +68,51 @@
     \Children
 }
 
-// Top-of-page wood-engraving locked to an integer number of 18.0pt grid lines
+// Top-of-page wood-engraving locked to an integer number of 18.0pt grid lines,
+// optically centered between the running-header ink bottom and the first body-line ink top.
 \Component TopPlate(
     src: Path,
     grid_lines: Float,
-    img_top: Distance = 4pt,
     shift_x: Distance = 0pt,
+    shift_y: Distance = 0pt,
     break_before: Break = Break.Page,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false, break_before: break_before, keep_with_next: true)
 ) {
+    \let box_h = grid_lines * 18.0pt;
     \let img = \Image(
         src: src,
         x: x + (width - img.width) * 0.5 + shift_x,
-        y: y + img_top,
+        y: y + (box_h - img.height - 7.05pt) * 0.5 + shift_y,
         dpi: img.file_dpi
     );
 
-    \alias height: Distance = grid_lines * 18.0pt;
+    \alias height: Distance = box_h;
 }
 
-// Mid-page wood-engraving locked to an integer number of 18.0pt grid lines
+// Mid-page wood-engraving locked to an integer number of 18.0pt grid lines,
+// optically centered between the text lines above and below.
 \Component MidPlate(
     src: Path,
     grid_lines: Float,
-    img_top: Distance = 9pt,
     shift_x: Distance = 0pt,
+    shift_y: Distance = 0pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false)
 ) {
+    \let box_h = grid_lines * 18.0pt;
     \let img = \Image(
         src: src,
         x: x + (width - img.width) * 0.5 + shift_x,
-        y: y + img_top,
+        y: y + (box_h - img.height + 2.2pt) * 0.5 + shift_y,
         dpi: img.file_dpi
     );
 
-    \alias height: Distance = grid_lines * 18.0pt;
+    \alias height: Distance = box_h;
 }
 
 // Left-aligned wood-engraving with single narrow justified text block wrapped along its right side
@@ -396,45 +400,47 @@
     \alias height: Distance = t.height;
 }
 
-// Unbreakable chapter header block (illustration + CHAPTER N. + subtitle) sized to leave exact opening lines
+// Unbreakable chapter header block (illustration + CHAPTER N. + subtitle) sized to leave exact opening lines.
+// Anchored upward from total_height for a uniform descending hierarchy across Chapters I, III, and V:
+//   art -> CHAPTER (24pt) > CHAPTER -> subtitle (20pt) > subtitle -> body (18pt).
 \Component ChapterImageHeader(
     number: String,
     title: String,
     img_src: Path,
     total_height: Distance = 306.0pt,
-    img_top: Distance = 8pt,
-    ch_gap: Distance = 16pt,
-    sub_gap: Distance = 22pt,
+    art_gap: Distance = 24.0pt,
+    sub_gap: Distance = 20.0pt,
+    body_gap: Distance = 18.0pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
     width: Distance = parent.width,
     pagination: Pagination = \Pagination(breakable: false, keep_with_next: true),
     env font: Font
 ) {
-    \let art = \Image(
-        src: img_src,
-        x: x + (width - art.width) * 0.5,
-        y: y + img_top,
-        dpi: art.file_dpi
+    \let sub_label = \Text(
+        x: x,
+        y: y + total_height - body_gap - 2.5pt,
+        width: width,
+        font: \Font(font: font, size: 8.25pt, letter_spacing: 0.45pt),
+        paragraph_style: \ParagraphStyle(align: Align.Center),
+        text: title + "."
     );
 
     \let ch_label = \Text(
         x: x,
-        y: art.bottom + ch_gap,
+        y: sub_label.top - sub_gap - 9.5pt,
         width: width,
         font: \Font(font: font, size: 12.5pt, letter_spacing: 0.75pt),
         paragraph_style: \ParagraphStyle(align: Align.Center),
         text: "CHAPTER " + number + "."
     );
 
-    \Text(
-        x: x,
-        y: ch_label.bottom + sub_gap,
-        width: width,
-        font: \Font(font: font, size: 8.25pt, letter_spacing: 0.45pt),
-        paragraph_style: \ParagraphStyle(align: Align.Center),
-        text: title + "."
-    )
+    \let art = \Image(
+        src: img_src,
+        x: x + (width - art.width) * 0.5,
+        y: ch_label.top - art_gap - art.height,
+        dpi: art.file_dpi
+    );
 
     \alias height: Distance = total_height;
 }
@@ -479,7 +485,7 @@
     number: String,
     title: String,
     img_src: Path,
-    img_offset_x: Distance = -12.5pt,
+    img_offset_x: Distance = -6.0pt,
     narrow_x: Distance = 148.5pt,
     x: Distance = parent.left,
     y: Distance = parent.top,
@@ -494,7 +500,7 @@
     \let img = \Image(
         src: img_src,
         x: x + img_offset_x,
-        y: y + 21pt,
+        y: y + 29pt,
         dpi: img.file_dpi
     );
 
@@ -591,9 +597,9 @@
     recto_header: String,
     img_src: Path,
     header_height: Distance = 306.0pt,
-    img_top: Distance = 8pt,
-    ch_gap: Distance = 16pt,
-    sub_gap: Distance = 22pt,
+    art_gap: Distance = 24.0pt,
+    sub_gap: Distance = 20.0pt,
+    body_gap: Distance = 18.0pt,
     full_header: String = "",
     break_before: Break = Break.Page,
     x: Distance = parent.left,
@@ -620,9 +626,9 @@
             title: title,
             img_src: img_src,
             total_height: header_height,
-            img_top: img_top,
-            ch_gap: ch_gap,
-            sub_gap: sub_gap
+            art_gap: art_gap,
+            sub_gap: sub_gap,
+            body_gap: body_gap
         )
         \Children
     };

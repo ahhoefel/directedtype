@@ -125,7 +125,7 @@
         // ============================================================
         // Page 18 (Verso): Top Plate #6 (Giant Alice & fleeing Rabbit) + 5 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_06.png", grid_lines: 17.0, img_top: 1pt)
+        \TopPlate(src: "images/tenniel_06.png", grid_lines: 17.0)
 
         \FlushPara {
             of any one; so, when the Rabbit came near her,
@@ -245,7 +245,7 @@
         // ============================================================
         // Page 23 (Recto): Top Plate #7 (Alice swimming) + 13 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_07.png", grid_lines: 9.0, img_top: 6pt)
+        \TopPlate(src: "images/tenniel_07.png", grid_lines: 9.0)
 
         \FlushPara {
             that case I can go back by railway,” she said\|
@@ -320,7 +320,7 @@
             Alice went on, half to herself, as she swam lazily
         }
 
-        \MidPlate(src: "images/tenniel_08.png", grid_lines: 11.0, img_top: 9.5pt)
+        \MidPlate(src: "images/tenniel_08.png", grid_lines: 11.0)
 
         \FlushPara {
             about in the pool, “and she sits purring so

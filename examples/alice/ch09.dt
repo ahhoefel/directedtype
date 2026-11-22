@@ -76,7 +76,7 @@
         \WrapLeftStack(
             src: "images/tenniel_32.png",
             img_offset_x: -6.5pt,
-            img_offset_y: 4pt,
+            img_offset_y: 7pt,
             narrow_x: 163.5pt
         ) {
             \FlushPara {
@@ -258,7 +258,7 @@
         // ============================================================
         // Page 138 (Verso): Top Plate #33 (Sleeping Gryphon) + 10 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_33.png", grid_lines: 12.0, img_top: 16pt)
+        \TopPlate(src: "images/tenniel_33.png", grid_lines: 12.0)
 
         They very soon came upon a Gryphon, lying
         fast asleep in the sun. (If you don’t know what
@@ -329,7 +329,7 @@
         // ============================================================
         // Page 141 (Recto): Top Plate #34 (Mock Turtle, Gryphon, & Alice) + 3 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_34.png", grid_lines: 19.0, img_top: 4pt)
+        \TopPlate(src: "images/tenniel_34.png", grid_lines: 19.0)
 
         “When we were little,” the Mock Turtle\|
         went on at last, more calmly, though still sob\-\|

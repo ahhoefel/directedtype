@@ -77,7 +77,7 @@
         // ============================================================
         // Page 177 (Recto): Top Plate #40 (Tipping Jury-Box) + 4 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_40.png", grid_lines: 18.0, img_top: 7pt)
+        \TopPlate(src: "images/tenniel_40.png", grid_lines: 18.0)
 
         \FlushPara {
             dent of the gold\=fish kept running in her head,
@@ -335,9 +335,9 @@
         // ============================================================
         \WrapLeftStack(
             src: "images/tenniel_41.png",
-            img_offset_x: -12pt,
-            img_offset_y: 9pt,
-            narrow_x: 126.5pt,
+            img_offset_x: 0pt,
+            img_offset_y: 14pt,
+            narrow_x: 138.5pt,
             min_grid_lines: 19.0,
             break_before: Break.Page
         ) {
@@ -400,7 +400,7 @@
         // ============================================================
         // Page 188 (Verso): Top Plate #42 (Flying Pack of Cards) + 2 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_42.png", grid_lines: 20.0, img_top: 7pt)
+        \TopPlate(src: "images/tenniel_42.png", grid_lines: 20.0)
 
         At this the whole pack rose up into the air,
         and came flying down upon her; she gave a\|

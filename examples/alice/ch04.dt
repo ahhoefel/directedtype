@@ -117,7 +117,7 @@
         // ============================================================
         // Page 45 (Recto): Top Plate #11 (Giant Alice cramped in room) + 10 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_11.png", grid_lines: 12.0, img_top: 10pt)
+        \TopPlate(src: "images/tenniel_11.png", grid_lines: 12.0)
 
         \FlushPara {
             elbow against the door, and the other arm\|
@@ -192,8 +192,8 @@
 
         \WrapLeft(
             src: "images/tenniel_12.png",
-            img_offset_x: -12pt,
-            img_offset_y: 4pt,
+            img_offset_x: -11pt,
+            img_offset_y: 9pt,
             narrow_x: 142pt,
             align: Align.Justify
         ) {
@@ -278,8 +278,8 @@
         // ============================================================
         \WrapLeftStack(
             src: "images/tenniel_13.png",
-            img_offset_x: -10pt,
-            img_offset_y: 12pt,
+            img_offset_x: -12pt,
+            img_offset_y: 19pt,
             narrow_x: 120.5pt,
             break_before: Break.Page
         ) {
@@ -395,7 +395,7 @@
         // ============================================================
         // Page 55 (Recto): Top Plate #14 (Alice & enormous puppy) + 4 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_14.png", grid_lines: 18.0, img_top: 4pt)
+        \TopPlate(src: "images/tenniel_14.png", grid_lines: 18.0)
 
         Hardly knowing what she did, she picked up
         a little bit of stick, and held it out to the\|

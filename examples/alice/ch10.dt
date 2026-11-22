@@ -111,7 +111,7 @@
         // ============================================================
         // Page 150 (Verso): Top Plate #35 (Lobster-Quadrille Dance) + 7 lines
         // ============================================================
-        \TopPlate(src: "images/tenniel_35.png", grid_lines: 15.0, img_top: 4pt)
+        \TopPlate(src: "images/tenniel_35.png", grid_lines: 15.0)
 
         “Oh, \Italic{you} sing,” said the Gryphon. “I’ve
         forgotten the words.”
@@ -309,7 +309,7 @@
         \WrapLeftStack(
             src: "images/tenniel_36.png",
             img_offset_x: -4.5pt,
-            img_offset_y: 3.4pt,
+            img_offset_y: 5pt,
             narrow_x: 156.5pt,
             min_grid_lines: 15.2,
             break_before: Break.Page
