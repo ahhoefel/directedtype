@@ -2430,27 +2430,33 @@ fn inspect_9_spills_at_255pt_and_test_looseness() {
     }
 
     let mut overrides = HashMap::new();
-    for i in 1..=12 {
-        let fname = format!("ch{:02}.dt", i);
+    for fname in [
+        "alice.dt", "AliceStyle.dt", "front_matter.dt",
+        "ch01.dt", "ch02.dt", "ch03.dt", "ch04.dt", "ch05.dt", "ch06.dt",
+        "ch07.dt", "ch08.dt", "ch09.dt", "ch10.dt", "ch11.dt", "ch12.dt",
+    ] {
         let out = std::process::Command::new("git")
-            .args(["show", &format!("HEAD:examples/alice/{fname}")])
+            .args(["show", &format!("4f92eee:examples/alice/{fname}")])
             .output()
-            .expect("git show HEAD chXX.dt");
-        overrides.insert(fname, String::from_utf8(out.stdout).expect("utf8"));
+            .expect("git show 4f92eee");
+        assert!(out.status.success(), "git show 4f92eee failed for {fname}");
+        overrides.insert(fname.to_string(), String::from_utf8(out.stdout).expect("utf8"));
     }
 
     let alice_dir = Path::new("examples/alice");
     register_local_fonts_for_base_dir(alice_dir);
-    let src = std::fs::read_to_string(alice_dir.join("alice.dt")).expect("read alice.dt");
-    let doc = parse_document(&src).expect("parse alice.dt");
-    let compiled_cur = compile_document_with_resolver(&doc, 800.0, 600.0, alice_dir, &FsResolver).unwrap();
-    let compiled_head = compile_document_with_resolver(&doc, 800.0, 600.0, alice_dir, &HeadChaptersResolver { overrides }).unwrap();
+    let src_cur = std::fs::read_to_string(alice_dir.join("alice.dt")).expect("read alice.dt");
+    let doc_cur = parse_document(&src_cur).expect("parse alice.dt");
+    let src_gt = overrides.get("alice.dt").unwrap().clone();
+    let doc_gt = parse_document(&src_gt).expect("parse 4f92eee alice.dt");
+    let compiled_cur = compile_document_with_resolver(&doc_cur, 800.0, 600.0, alice_dir, &FsResolver).unwrap();
+    let compiled_head = compile_document_with_resolver(&doc_gt, 800.0, 600.0, alice_dir, &HeadChaptersResolver { overrides }).unwrap();
 
     let pt_to_px = 96.0 / 72.0;
     let mut font_cx = directedtype::compiler::text::create_font_context();
     let mut layout_cx = parley::LayoutContext::<()>::new();
 
-    // Collect optimal Text nodes from cur, and matching Text nodes from head (include JustifyAll from HEAD too)
+    // Collect prose Text nodes (Justify/JustifyAll) from both, excluding front/end matter
     let collect_texts = |layout: &directedtype::compiler::ResolvedLayout, only_optimal: bool| {
         let mut v = Vec::new();
         for node in &layout.nodes {
@@ -2458,17 +2464,17 @@ fn inspect_9_spills_at_255pt_and_test_looseness() {
                 continue;
             }
             let opts = ParagraphLayoutOptions::from_node_properties(&node.properties);
-            let align = node.properties.get("align").and_then(|v| v.as_str()).unwrap_or("Justify").to_string();
-            if only_optimal && !opts.is_optimal() {
+            let align = node.properties.get("align").and_then(|v| v.as_str()).unwrap_or("Left").to_string();
+            if align != "Justify" && align != "JustifyAll" {
                 continue;
             }
-            if !only_optimal && !opts.is_optimal() && align != "JustifyAll" {
+            if only_optimal && !opts.is_optimal() {
                 continue;
             }
             let (Some(txt), spans, boxes, _) = resolve_active_rich_text(node, layout) else {
                 continue;
             };
-            if txt.contains("line-break adjustments were made") || txt.contains("removed stray opening") {
+            if txt.contains("Old Standard TT") || txt.contains("generous word and sentence") || txt.contains("Knuth") || txt.contains("minor typographical") || txt.contains("digitally typeset") {
                 continue;
             }
             let fnode = node.font
@@ -2489,9 +2495,9 @@ fn inspect_9_spills_at_255pt_and_test_looseness() {
 
     let cur_nodes = collect_texts(&compiled_cur.layout, true);
     let head_nodes = collect_texts(&compiled_head.layout, false);
-    assert_eq!(cur_nodes.len(), head_nodes.len());
+    assert_eq!(cur_nodes.len(), head_nodes.len(), "prose node count mismatch");
 
-    println!("\n=== Exact Spilled Paragraphs in Current 255pt Alice (ws=+2.75pt, sh=0.63) ===");
+    println!("\n=== Exact Line-by-Line Diff vs 1866 Ground Truth (4f92eee) Across {} Prose Paragraphs ===", cur_nodes.len());
     let mut spill_idx = 0usize;
     for (idx, (cur, head)) in cur_nodes.iter().zip(head_nodes.iter()).enumerate() {
         let head_gt_lines: Vec<String> = head.0.split('\n').map(normalize_line_text).collect();
@@ -2500,7 +2506,7 @@ fn inspect_9_spills_at_255pt_and_test_looseness() {
             Some(cur.3), Some(&cur.5), cur.4, &cur.1, &cur.2, &cur.13,
         );
         let cur_lines: Vec<String> = prep.as_ref().map(|p| p.text.as_str()).unwrap_or(&cur.0).split('\n').map(normalize_line_text).collect();
-        if cur_lines.len() != head_gt_lines.len() {
+        if cur_lines != head_gt_lines {
             spill_idx += 1;
             println!(
                 "\nSPILL #{spill_idx} (node #{idx}, w={:.1}pt, indent={:.1}pt, align={}, gt_lines={} -> got={}):",

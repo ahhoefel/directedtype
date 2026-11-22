@@ -149,7 +149,7 @@
 
         We matched the line breaks in the original using the Knuth\=Plass
         line\=breaking algorithm (word spacing 6.36pt, range 2.99–12.08pt, sentence
-        space 8.04pt). But we still needed to manually break 678/2,625 (25.8%) of the interior
+        space 8.04pt). But we still needed to manually break 658/2,625 (25.1%) of the interior
         line breaks.
 
         Six minor typographical slips in the 1866 \SmallCaps{Macmillan} printing were corrected:
