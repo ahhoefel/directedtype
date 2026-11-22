@@ -237,11 +237,13 @@
 
         // ============================================================
         // Page [v] (Recto): Prefatory Poem — Stanzas 1 & 2
+        // 24-slot 16.5pt grid (24 * 16.5pt = 396.0pt = 22 * 18.0pt):
+        //   10 slots top sinkage + 76pt DoubleRule (146.5 + 3.5 + 15.0 = 165pt) + 6 + 2 + 6 = 24 slots
         // ============================================================
-        \PoemBlock(pagination: \Pagination(breakable: false, break_before: Break.Recto)) {
-            \Spacer(height: 33pt)
-            \DoubleRule(rule_width: 56.25pt)
-            \Spacer(height: 30pt)
+        \PoemBlock(left_margin: 58pt, pagination: \Pagination(breakable: false, break_before: Break.Recto)) {
+            \Spacer(height: 146.5pt)
+            \DoubleRule(rule_width: 76pt)
+            \Spacer(height: 15pt)
 
             \VerseLine { All in the golden afternoon }
             \VerseLine(indent: 11.2pt) { Full leisurely we glide; }
@@ -250,7 +252,7 @@
             \VerseLine { While little hands make vain pretence }
             \VerseLine(indent: 11.2pt) { Our wanderings to guide. }
 
-            \Spacer(height: 42pt)
+            \Spacer(height: 33pt)
 
             \VerseLine { Ah, cruel Three! In such an hour, }
             \VerseLine(indent: 11.2pt) { Beneath such dreamy weather, }
@@ -262,9 +264,10 @@
 
         // ============================================================
         // Page [vi] (Verso): Prefatory Poem — Stanzas 3, 4, & 5
+        // 24-slot 16.5pt grid: 2 top + 6 + 2 + 6 + 2 + 6 = 24 slots (396.0pt)
         // ============================================================
-        \PoemBlock(leading: 16.0pt, pagination: \Pagination(breakable: false, break_before: Break.Verso)) {
-            \Spacer(height: 2pt)
+        \PoemBlock(left_margin: 58pt, pagination: \Pagination(breakable: false, break_before: Break.Verso)) {
+            \Spacer(height: 33pt)
 
             \VerseLine { Imperious Prima flashes forth }
             \VerseLine(indent: 11.2pt) { Her edict “to begin it”— }
@@ -273,7 +276,7 @@
             \VerseLine { While Tertia interrupts the tale }
             \VerseLine(indent: 11.2pt) { Not \Italic{more} than once a minute. }
 
-            \Spacer(height: 42pt)
+            \Spacer(height: 33pt)
 
             \VerseLine { Anon, to sudden silence won, }
             \VerseLine(indent: 11.2pt) { In fancy they pursue }
@@ -282,7 +285,7 @@
             \VerseLine { In friendly chat with bird or beast— }
             \VerseLine(indent: 11.2pt) { And half believe it true. }
 
-            \Spacer(height: 42pt)
+            \Spacer(height: 33pt)
 
             \VerseLine { And ever, as the story drained }
             \VerseLine(indent: 11.2pt) { The wells of fancy dry, }
@@ -294,9 +297,10 @@
 
         // ============================================================
         // Page [vii] (Recto): Prefatory Poem — Stanzas 6 & 7
+        // 24-slot 16.5pt grid: 2 top + 6 + 2 + 6 (aligned across spread with [vi])
         // ============================================================
-        \PoemBlock(pagination: \Pagination(breakable: false, break_before: Break.Recto)) {
-            \Spacer(height: 62pt)
+        \PoemBlock(left_margin: 58pt, pagination: \Pagination(breakable: false, break_before: Break.Recto)) {
+            \Spacer(height: 33pt)
 
             \VerseLine { Thus grew the tale of Wonderland: }
             \VerseLine(indent: 11.2pt) { Thus slowly, one by one, }
@@ -305,7 +309,7 @@
             \VerseLine { And home we steer, a merry crew, }
             \VerseLine(indent: 11.2pt) { Beneath the setting sun. }
 
-            \Spacer(height: 42pt)
+            \Spacer(height: 33pt)
 
             \VerseLine { Alice! a childish story take, }
             \VerseLine(indent: 11.2pt) { And with a gentle hand }
