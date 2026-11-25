@@ -1,0 +1,21 @@
+// DirectedType Built-In: TextBounds
+// Typographic vertical start and end landmarks for \Text bounding-box calculation.
+
+\Enum TextStart {
+    Capital,
+    Ascender,
+    EmTop,
+    LineHeight,
+}
+
+\Enum TextEnd {
+    Baseline,
+    Descender,
+    GapBottom,
+    LineHeight,
+}
+
+\BuiltIn TextBounds(
+    start_at: TextStart = TextStart.Capital,
+    end_at: TextEnd = TextEnd.Baseline
+) {}

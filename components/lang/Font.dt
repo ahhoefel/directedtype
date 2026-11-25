@@ -1,0 +1,41 @@
+// DirectedType Built-In Primitive: Font
+// Non-spatial typographic specification exposing real font metric ports.
+
+\BuiltIn Font(
+    size: Distance,
+    weight: Integer = 400,
+    family: String = "",
+    line_height: Distance = unset,
+    italic: Boolean = false,
+    small_caps: Boolean = false,
+    letter_spacing: Distance = 0px,
+    color: Color = #000000
+) {
+    \alias cap_height: Distance;
+    \alias x_height: Distance;
+    \alias ascent: Distance;
+    \alias descent: Distance;
+    \alias em_top: Distance;
+    \alias line_gap: Distance;
+    \alias gap_bottom: Distance;
+}
+
+\BuiltIn Font(
+    env font: Font,
+    size: Distance = font.size,
+    weight: Integer = font.weight,
+    family: String = font.family,
+    line_height: Distance = font.line_height,
+    italic: Boolean = font.italic,
+    small_caps: Boolean = font.small_caps,
+    letter_spacing: Distance = font.letter_spacing,
+    color: Color = font.color
+) {
+    \alias cap_height: Distance;
+    \alias x_height: Distance;
+    \alias ascent: Distance;
+    \alias descent: Distance;
+    \alias em_top: Distance;
+    \alias line_gap: Distance;
+    \alias gap_bottom: Distance;
+}

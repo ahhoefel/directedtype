@@ -1,0 +1,11 @@
+// DirectedType Built-In Value Node: Timer
+// Fixed-duration animation timer; truthy while running and unset once `time >= duration`.
+
+\BuiltIn Timer(
+    duration: Duration
+) {
+    \alias time: Duration;
+    \alias elapsed: Float;
+    \alias dt: Duration;
+    \alias frames: Integer;
+}

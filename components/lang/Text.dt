@@ -1,0 +1,70 @@
+// DirectedType Built-In Primitive: Text
+// Shaped typographic block or rich inline text run supporting \Span and \InlineBox children.
+
+\BuiltIn Text(
+    x: Distance,
+    y: Distance,
+    env font: Font,
+    width: Distance = unset,
+    height: Distance = unset,
+    text: String = "",
+    env paragraph_style: ParagraphStyle,
+    env text_bounds: TextBounds,
+    underline: Boolean = false,
+    z: Integer = 0,
+    env clip: Clip,
+    pagination: Pagination = \Pagination(),
+    cursor: String = "Default",
+    opacity: Float = 1.0,
+    name: String = "",
+    path: String = "",
+    id: String = "",
+    on_click: Handler = unset,
+    on_pointer_down: Handler = unset,
+    on_pointer_up: Handler = unset,
+    on_pointer_move: Handler = unset,
+    on_pointer_enter: Handler = unset,
+    on_pointer_leave: Handler = unset,
+    on_scroll: Handler = unset,
+    on_focus: Handler = unset,
+    on_blur: Handler = unset
+) {
+    \alias baseline: Distance;
+    \alias baseline_offset: Distance;
+    \env font: Font = font;
+    \Children
+}
+
+\BuiltIn Text(
+    x: Distance,
+    baseline: Distance,
+    env font: Font,
+    width: Distance = unset,
+    height: Distance = unset,
+    text: String = "",
+    env paragraph_style: ParagraphStyle,
+    env text_bounds: TextBounds,
+    underline: Boolean = false,
+    z: Integer = 0,
+    env clip: Clip,
+    pagination: Pagination = \Pagination(),
+    cursor: String = "Default",
+    opacity: Float = 1.0,
+    name: String = "",
+    path: String = "",
+    id: String = "",
+    on_click: Handler = unset,
+    on_pointer_down: Handler = unset,
+    on_pointer_up: Handler = unset,
+    on_pointer_move: Handler = unset,
+    on_pointer_enter: Handler = unset,
+    on_pointer_leave: Handler = unset,
+    on_scroll: Handler = unset,
+    on_focus: Handler = unset,
+    on_blur: Handler = unset
+) {
+    \alias y: Distance;
+    \alias baseline_offset: Distance;
+    \env font: Font = font;
+    \Children
+}

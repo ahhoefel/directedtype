@@ -179,6 +179,16 @@ pub fn register_component_overload(
     registry: &mut HashMap<String, Vec<ComponentDef>>,
     comp: ComponentDef,
 ) -> Result<(), CompileError> {
+    if comp.kind == crate::ast::ComponentKind::BuiltIn {
+        return Err(CompileError::Custom {
+            message: format!(
+                "Cannot compile \\BuiltIn component '{}'; built-in declarations in components/lang/ are signature-only",
+                comp.name.as_str()
+            ),
+            span: comp.span,
+        });
+    }
+
     if comp.name.as_str() == "Window" {
         return Err(CompileError::Custom {
             message: "Cannot define component named 'Window'; 'Window' is reserved for ambient window configuration".to_string(),
@@ -382,6 +392,13 @@ fn resolve_use_decl<R: FileResolver>(
         return Ok(());
     }
     let raw_path = Path::new(&u.path);
+    if crate::span::is_components_lang_path(raw_path) {
+        return Err(CompileError::ImportError {
+            path: u.path.clone(),
+            message: "Built-in declarations in 'components/lang/' are automatically in scope and cannot be explicitly imported".to_string(),
+            span: u.span,
+        });
+    }
     let mut resolved_path = if raw_path.is_absolute() {
         raw_path.to_path_buf()
     } else {
@@ -403,6 +420,16 @@ fn resolve_use_decl<R: FileResolver>(
     let canonical_path = resolver
         .canonicalize(&resolved_path)
         .unwrap_or_else(|_| normalize_path(&resolved_path));
+
+    if crate::span::is_components_lang_path(&resolved_path)
+        || crate::span::is_components_lang_path(&canonical_path)
+    {
+        return Err(CompileError::ImportError {
+            path: u.path.clone(),
+            message: "Built-in declarations in 'components/lang/' are automatically in scope and cannot be explicitly imported".to_string(),
+            span: u.span,
+        });
+    }
 
     // Cycle detection on the active resolution stack
     if !active_stack.insert(canonical_path.clone()) {
@@ -913,7 +940,9 @@ fn collect_from_content_item(item: &ContentItem, out: &mut HashSet<String>) {
             if let Some(ty) = &a.type_annotation {
                 out.insert(ty.name.as_str().to_string());
             }
-            collect_from_expr(&a.value, out);
+            if let Some(val) = &a.value {
+                collect_from_expr(val, out);
+            }
         }
         ContentItem::Assert(a) => collect_from_expr(&a.condition, out),
         ContentItem::State(s) => {
@@ -1059,7 +1088,9 @@ fn rewrite_content_item(item: &mut ContentItem, renames: &HashMap<String, String
                     }
                 }
             }
-            rewrite_expr(&mut a.value, renames);
+            if let Some(val) = &mut a.value {
+                rewrite_expr(val, renames);
+            }
         }
         ContentItem::Assert(a) => rewrite_expr(&mut a.condition, renames),
         ContentItem::State(s) => {
@@ -1205,7 +1236,11 @@ fn resolve_content_item_enum_literals(
                 resolve_expr_enum_literals(&mut port.expr, enums);
             }
         }
-        ContentItem::Alias(a) => resolve_expr_enum_literals(&mut a.value, enums),
+        ContentItem::Alias(a) => {
+            if let Some(val) = &mut a.value {
+                resolve_expr_enum_literals(val, enums);
+            }
+        }
         ContentItem::Assert(a) => resolve_expr_enum_literals(&mut a.condition, enums),
         ContentItem::State(s) => {
             if let Some(e) = &mut s.default {

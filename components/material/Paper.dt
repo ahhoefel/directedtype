@@ -1,7 +1,6 @@
 // DirectedType Material UI Component Library: Paper
 // Foundational Material Design surface container with elevation shadows and outlined variant.
 // Reference: https://github.com/mui/material-ui/blob/master/packages/mui-material/src/Paper/Paper.js
-\use "components/Shadow.dt"
 
 \Enum PaperVariant {
     Elevation,

@@ -1658,7 +1658,10 @@ impl<'a> ComponentExpander<'a> {
                 ComponentBodyItem::Node(body_node) => self.expand_body_node(body_node)?,
                 ComponentBodyItem::Children(dir) => self.expand_body_children(dir)?,
                 ComponentBodyItem::Alias(alias_binding) => {
-                    let is_expr_alias = matches!(alias_binding.value, Expr::ExprDef(_))
+                    let Some(alias_val) = &alias_binding.value else {
+                        continue;
+                    };
+                    let is_expr_alias = matches!(alias_val, Expr::ExprDef(_))
                         || alias_binding
                             .type_annotation
                             .as_ref()
@@ -1683,7 +1686,7 @@ impl<'a> ComponentExpander<'a> {
                                 Some(&self.schema.declared_state_names),
                             );
                             let pre = super::typecheck::pre_coerce_ast_for_type(
-                                &alias_binding.value,
+                                alias_val,
                                 alias_binding.type_annotation.as_ref(),
                             );
                             rewrite_expr(&pre, &scope_ctx)?
@@ -1890,7 +1893,10 @@ impl<'a> ComponentExpander<'a> {
                     {
                         continue;
                     }
-                    let mut rewritten_alias = rewrite_expr(&alias_binding.value, &scope_ctx)?;
+                    let Some(alias_val) = &alias_binding.value else {
+                        continue;
+                    };
+                    let mut rewritten_alias = rewrite_expr(alias_val, &scope_ctx)?;
                     if check_fwd_scope_refs
                         && super::rewrite::has_any_pending_fwd_refs()
                         && expr_has_scope_ref(&rewritten_alias, &final_local_scope)

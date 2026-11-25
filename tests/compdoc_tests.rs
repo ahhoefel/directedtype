@@ -12,9 +12,15 @@ fn test_extract_all_components_catalog_and_scoped_xrefs() {
     let catalog = extract_catalog(&[PathBuf::from("components")], &opts)
         .expect("Failed to extract catalog for components/");
 
-    // Should discover root `components` and all organized subpackages
+    // Should discover `components/lang` first, followed by root `components` and all organized subpackages
     let pkg_names: Vec<&str> = catalog.packages.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(
+        pkg_names.first().copied(),
+        Some("components/lang"),
+        "Expected 'components/lang' to sort first, got {pkg_names:?}"
+    );
     for expected_pkg in [
+        "components/lang",
         "components",
         "components/document",
         "components/graphics",
@@ -56,15 +62,22 @@ fn test_extract_all_components_catalog_and_scoped_xrefs() {
             .unwrap_or_else(|| panic!("Module '{rel}' not found"))
     };
 
-    // 1. TextBounds.dt: colocated TextStart & TextEnd enums linked from TextBounds params
-    let tb_mod = find_mod("components/text/TextBounds.dt");
+    // 1. TextBounds.dt (now in components/lang/): colocated TextStart & TextEnd enums linked from TextBounds params
+    let tb_mod = find_mod("components/lang/TextBounds.dt");
     let ts_enum = tb_mod.enums.iter().find(|e| e.name == "TextStart").unwrap();
     let te_enum = tb_mod.enums.iter().find(|e| e.name == "TextEnd").unwrap();
     let tb_comp = tb_mod.components.iter().find(|c| c.name == "TextBounds").unwrap();
+    assert_eq!(tb_comp.kind, ComponentKind::BuiltIn);
     let start_param = tb_comp.overloads[0].params.iter().find(|p| p.name == "start_at").unwrap();
     let end_param = tb_comp.overloads[0].params.iter().find(|p| p.name == "end_at").unwrap();
     assert_eq!(start_param.type_anchor.as_deref(), Some(ts_enum.anchor.as_str()));
     assert_eq!(end_param.type_anchor.as_deref(), Some(te_enum.anchor.as_str()));
+
+    // Verify cross-references from stdlib into components/lang/ built-ins (e.g. Font)
+    let font_mod = find_mod("components/lang/Font.dt");
+    let font_comp = font_mod.components.iter().find(|c| c.name == "Font").unwrap();
+    assert_eq!(font_comp.kind, ComponentKind::BuiltIn);
+    assert_eq!(font_comp.overloads.len(), 2);
 
     // 2. Link.dt: colocated LinkStyle + \Span Link with 3 overloads, env params, and inferred alias types
     let link_mod = find_mod("components/text/Link.dt");
@@ -113,7 +126,7 @@ fn test_extract_all_components_catalog_and_scoped_xrefs() {
     assert_eq!(inline_img_mod.components[0].kind, ComponentKind::InlineBox);
     assert_eq!(inline_img_mod.components[0].overloads.len(), 3);
 
-    // 4. Bold.dt: provided \env font inferred as Font
+    // 4. Bold.dt: provided \env font inferred as Font and cross-referenced to components/lang/Font.dt
     let bold_mod = find_mod("components/text/Bold.dt");
     let bold_env_font = bold_mod.components[0].overloads[0]
         .provided_envs
@@ -121,6 +134,10 @@ fn test_extract_all_components_catalog_and_scoped_xrefs() {
         .find(|e| e.name == "font")
         .unwrap();
     assert_eq!(bold_env_font.type_name.as_deref(), Some("Font"));
+    assert_eq!(
+        bold_env_font.type_anchor.as_deref(),
+        Some(font_comp.anchor.as_str())
+    );
 
     // 5. Center.dt overload with zero parameters and single child (`{ . }`), plus material Switch (`<= 1`) and VDivider (`== 0`)
     let center_mod = find_mod("components/layout/Center.dt");
@@ -297,9 +314,14 @@ fn test_generate_internally_linked_pdf_with_toc_and_outlines() {
     use directedtype::pdf::PdfOptions;
 
     let inputs = vec![
+        PathBuf::from("components/lang/Font.dt"),
+        PathBuf::from("components/lang/Rect.dt"),
+        PathBuf::from("components/lang/TextBounds.dt"),
+        PathBuf::from("components/lang/Window.dt"),
+        PathBuf::from("components/lang/Page.dt"),
+        PathBuf::from("components/lang/Timer.dt"),
         PathBuf::from("components/Align.dt"),
         PathBuf::from("components/text/Bold.dt"),
-        PathBuf::from("components/text/TextBounds.dt"),
         PathBuf::from("components/layout/VStack.dt"),
         PathBuf::from("examples/components/Badge.dt"),
         PathBuf::from("examples/components/Button.dt"),
@@ -318,7 +340,7 @@ fn test_generate_internally_linked_pdf_with_toc_and_outlines() {
     let (catalog, _dt_source, pdf_bytes) =
         generate_docs_pdf(&inputs, &doc_opts, &pdf_opts).expect("Failed to compile docs PDF");
 
-    assert_eq!(catalog.packages.len(), 5);
+    assert_eq!(catalog.packages.len(), 6);
     assert!(pdf_bytes.starts_with(b"%PDF-"), "Output must be a valid PDF");
 
     let text = String::from_utf8_lossy(&pdf_bytes);

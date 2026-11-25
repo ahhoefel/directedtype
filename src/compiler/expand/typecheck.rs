@@ -289,7 +289,9 @@ pub(super) fn validate_content_items_type_annotations(
                 if let Some(ty) = &a.type_annotation {
                     StaticType::from_type_name(ty.name.as_str(), ty.span, enums, registry)?;
                 }
-                validate_expr_type_annotations(&a.value, enums, registry)?;
+                if let Some(val) = &a.value {
+                    validate_expr_type_annotations(val, enums, registry)?;
+                }
             }
             ContentItem::State(s) => {
                 if let Some(ty) = &s.type_annotation {

@@ -5,7 +5,6 @@
 // hover/focus/pressed states on \ListItemButton.
 // Reference: https://github.com/mui/material-ui/tree/master/packages/mui-material/src/List
 
-\use "components/text/TextBounds.dt"
 \use "components/material/Palette.dt"
 \use "components/material/Avatar.dt"
 

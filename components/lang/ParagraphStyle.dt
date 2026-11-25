@@ -1,0 +1,40 @@
+// DirectedType Built-In Primitive: ParagraphStyle
+// Non-spatial paragraph formatting and Knuth-Plass line-breaking configuration for \Text.
+
+\Enum LineBreak {
+    Greedy,
+    Optimal,
+}
+
+\BuiltIn ParagraphStyle(
+    align: Align = Align.Left,
+    indent: Distance = 0px,
+    line_break: LineBreak = LineBreak.Greedy,
+    word_spacing: Distance = 0px,
+    space_stretch: Float = 0.5,
+    space_shrink: Float = 0.333333,
+    tolerance: Float = 2.0,
+    hyphen_penalty: Float = 50.0,
+    line_penalty: Float = 10.0,
+    flagged_demerits: Float = 3000.0,
+    fitness_demerits: Float = 3000.0,
+    sentence_space: Float = 0.0,
+    looseness: Integer = 0
+) {}
+
+\BuiltIn ParagraphStyle(
+    paragraph_style: ParagraphStyle,
+    align: Align = paragraph_style.align,
+    indent: Distance = paragraph_style.indent,
+    line_break: LineBreak = paragraph_style.line_break,
+    word_spacing: Distance = paragraph_style.word_spacing,
+    space_stretch: Float = paragraph_style.space_stretch,
+    space_shrink: Float = paragraph_style.space_shrink,
+    tolerance: Float = paragraph_style.tolerance,
+    hyphen_penalty: Float = paragraph_style.hyphen_penalty,
+    line_penalty: Float = paragraph_style.line_penalty,
+    flagged_demerits: Float = paragraph_style.flagged_demerits,
+    fitness_demerits: Float = paragraph_style.fitness_demerits,
+    sentence_space: Float = paragraph_style.sentence_space,
+    looseness: Integer = paragraph_style.looseness
+) {}

@@ -848,7 +848,7 @@ fn test_parse_alias_bindings() {
                     assert_eq!(a.name.as_str(), "right");
                     assert!(a.type_annotation.is_none());
                     match &a.value {
-                        Expr::Binary(b) => {
+                        Some(Expr::Binary(b)) => {
                             assert_eq!(b.op, BinaryOp::Add);
                             match (b.left.as_ref(), b.right.as_ref()) {
                                 (Expr::Ident(l), Expr::Ident(r)) => {
@@ -869,7 +869,7 @@ fn test_parse_alias_bindings() {
                     assert_eq!(a.name.as_str(), "bottom");
                     assert!(a.type_annotation.is_none());
                     match &a.value {
-                        Expr::Binary(b) => {
+                        Some(Expr::Binary(b)) => {
                             assert_eq!(b.op, BinaryOp::Add);
                             match (b.left.as_ref(), b.right.as_ref()) {
                                 (Expr::Ident(l), Expr::Ident(r)) => {
@@ -890,7 +890,7 @@ fn test_parse_alias_bindings() {
                     assert_eq!(a.name.as_str(), "center_x");
                     assert_eq!(a.type_annotation.as_ref().unwrap().name.as_str(), "Distance");
                     match &a.value {
-                        Expr::Binary(b) => {
+                        Some(Expr::Binary(b)) => {
                             assert_eq!(b.op, BinaryOp::Div);
                         }
                         _ => panic!("Expected binary div expr"),

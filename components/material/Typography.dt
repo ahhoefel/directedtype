@@ -4,7 +4,6 @@
 // \Subtitle1, \Subtitle2, \Body1, \Body2, \Caption, \Overline).
 
 \use "components/Align.dt"
-\use "components/text/TextBounds.dt"
 \use "components/material/Palette.dt"
 
 \let material_text_bounds = \TextBounds(

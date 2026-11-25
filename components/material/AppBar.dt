@@ -9,8 +9,6 @@
 // - https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Toolbar
 
 \use "components/Align.dt"
-\use "components/Shadow.dt"
-\use "components/text/TextBounds.dt"
 \use "components/material/Palette.dt"
 
 \let app_bar_text_bounds = \TextBounds(

@@ -5,7 +5,6 @@
 // and standalone, `label: String`, or child text overloads.
 // Reference: https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Switch
 
-\use "components/Shadow.dt"
 \use "components/material/Palette.dt"
 
 \Enum SwitchSize {

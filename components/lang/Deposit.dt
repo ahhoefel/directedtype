@@ -1,0 +1,9 @@
+// DirectedType Built-In Primitive: Deposit
+// Lazily deposits a single payload element into a \PageValue or \PageList bucket for its page.
+
+\BuiltIn Deposit(
+    into: Node
+) {
+    \assert children.len == 1;
+    \Children
+}

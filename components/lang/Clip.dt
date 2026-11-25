@@ -1,0 +1,17 @@
+// DirectedType Built-In Primitive: Clip
+// Hierarchical clipping and scrolling viewport region referencing a bounding box node.
+
+\BuiltIn Clip(
+    box: Node,
+    up: Clip = parent.clip,
+    x: Distance = box.x,
+    y: Distance = box.y,
+    width: Distance = box.width,
+    height: Distance = box.height,
+    z: Integer = 0,
+    scroll_x: Distance = 0px,
+    scroll_y: Distance = 0px,
+    id: String = ""
+) {
+    \alias clip: Clip;
+}

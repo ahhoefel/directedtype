@@ -1,6 +1,5 @@
 \use "components/layout/VStack.dt"
 \use "components/layout/Center.dt"
-\use "components/text/TextBounds.dt"
 
 
 \Component Box(x: Distance, y: Distance, width: Distance, height: Distance, env font: Font) {

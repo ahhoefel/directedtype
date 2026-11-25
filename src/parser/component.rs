@@ -83,7 +83,7 @@ pub fn parse_param_list(cursor: &mut ParserCursor<'_>) -> Result<(Vec<ParamDef>,
     Ok((params, span))
 }
 
-/// Parses a component definition: `\Component Name(params) { body }`, `\Span Name(params) { body }`, or `\InlineBox Name(params) { body }`
+/// Parses a component definition: `\Component Name(params) { body }`, `\Span Name(params) { body }`, `\InlineBox Name(params) { body }`, or `\BuiltIn Name(params) { body }` (only inside `components/lang/`).
 pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef, ParseError> {
     let slash_span = cursor.consume_token(&Token::Backslash)?;
     let (kind, comp_span) = match cursor.peek_token()?.cloned() {
@@ -99,16 +99,30 @@ pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef
             crate::ast::ComponentKind::InlineBox,
             cursor.consume_token(&Token::InlineBox)?,
         ),
+        Some((Token::BuiltIn, _)) => {
+            let span = cursor.consume_token(&Token::BuiltIn)?;
+            let allowed = cursor
+                .file_name()
+                .is_some_and(|f| crate::span::is_components_lang_path(std::path::Path::new(&f)));
+            if !allowed {
+                return Err(ParseError::Custom {
+                    message: "\\BuiltIn declarations are only allowed inside components/lang/"
+                        .to_string(),
+                    span: slash_span.merge(span),
+                });
+            }
+            (crate::ast::ComponentKind::BuiltIn, span)
+        }
         Some((other, span)) => {
             return Err(ParseError::UnexpectedToken {
-                expected: "Component, Span, or InlineBox".to_string(),
+                expected: "Component, Span, InlineBox, or BuiltIn".to_string(),
                 found: other.to_string(),
                 span,
             });
         }
         None => {
             return Err(ParseError::UnexpectedEof {
-                expected: "Component, Span, or InlineBox".to_string(),
+                expected: "Component, Span, InlineBox, or BuiltIn".to_string(),
                 span: slash_span,
             });
         }
@@ -121,8 +135,9 @@ pub fn parse_component_def(cursor: &mut ParserCursor<'_>) -> Result<ComponentDef
         (Vec::new(), slash_span)
     };
 
+    let is_builtin = kind == crate::ast::ComponentKind::BuiltIn;
     let slot = cursor.parse_content_slot_mode(SlotMode::ComponentDef, |c| {
-        parse_content_item(c, true)
+        parse_content_item(c, true, is_builtin)
     })?;
 
     let span = slash_span.merge(comp_span).merge(slot.span);
@@ -245,8 +260,12 @@ pub fn parse_env_binding(cursor: &mut ParserCursor<'_>) -> Result<EnvBinding, Pa
     })
 }
 
-/// Parses a public immutable alias binding: `\alias name = expr;` or `\alias name: Type = expr;`
-pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding, ParseError> {
+/// Parses a public immutable alias binding: `\alias name = expr;`, `\alias name: Type = expr;`,
+/// or (when `allow_bodyless` is true, i.e., inside `\BuiltIn`) bodyless `\alias name: Type;`.
+pub fn parse_alias_binding(
+    cursor: &mut ParserCursor<'_>,
+    allow_bodyless: bool,
+) -> Result<AliasBinding, ParseError> {
     let bs_span = cursor.consume_token(&Token::Backslash)?;
     let alias_span = cursor.consume_token(&Token::Alias)?;
     let start_span = bs_span.merge(alias_span);
@@ -270,6 +289,31 @@ pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding
         }
     }
 
+    if allow_bodyless && !matches!(cursor.peek_token()?, Some((Token::Eq, _))) {
+        if type_annotation.is_none() {
+            let err_span = cursor
+                .peek_token()?
+                .map(|(_, s)| *s)
+                .unwrap_or(name.span);
+            return Err(ParseError::Custom {
+                message: "Bodyless \\alias declaration inside \\BuiltIn requires an explicit ': Type' annotation".to_string(),
+                span: err_span,
+            });
+        }
+        let end_span = if cursor.peek_is_punct(b';') {
+            cursor.consume_token(&Token::Semicolon)?
+        } else {
+            type_annotation.as_ref().map(|t| t.span).unwrap_or(name.span)
+        };
+        let span = start_span.merge(end_span);
+        return Ok(AliasBinding {
+            name,
+            type_annotation,
+            value: None,
+            span,
+        });
+    }
+
     cursor.consume_token(&Token::Eq)?;
 
     let value = parse_expr(cursor)?;
@@ -283,7 +327,7 @@ pub fn parse_alias_binding(cursor: &mut ParserCursor<'_>) -> Result<AliasBinding
     Ok(AliasBinding {
         name,
         type_annotation,
-        value,
+        value: Some(value),
         span,
     })
 }

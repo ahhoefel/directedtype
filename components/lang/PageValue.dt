@@ -1,0 +1,4 @@
+// DirectedType Built-In Primitive: PageValue
+// Single-valued per-page bucket populated by \Deposit and read per page (e.g. running headers).
+
+\BuiltIn PageValue() {}

@@ -1,0 +1,8 @@
+// DirectedType Built-In Value Node: IndefiniteTimer
+// Continuous frame-driven animation timer with no end duration.
+
+\BuiltIn IndefiniteTimer() {
+    \alias time: Duration;
+    \alias dt: Duration;
+    \alias frames: Integer;
+}

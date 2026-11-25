@@ -4,8 +4,6 @@
 // Reference: https://github.com/mui/material-ui/tree/master/packages/mui-material/src/Card
 
 \use "components/Align.dt"
-\use "components/Shadow.dt"
-\use "components/text/TextBounds.dt"
 \use "components/material/Palette.dt"
 
 \let card_header_text_bounds = \TextBounds(

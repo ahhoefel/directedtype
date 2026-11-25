@@ -1,0 +1,6 @@
+// DirectedType Built-In Primitive: PageBreak
+// Forces a page break inside a \PagedFlow (next page, recto, or verso).
+
+\BuiltIn PageBreak(
+    to: Break = Break.Page
+) {}

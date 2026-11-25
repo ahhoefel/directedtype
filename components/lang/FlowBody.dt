@@ -1,0 +1,12 @@
+// DirectedType Built-In Primitive: FlowBody
+// Declares the flow content region inside a \PagedFlow page template.
+
+\BuiltIn FlowBody(
+    width: Distance,
+    height: Distance,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    z: Integer = 0,
+    env clip: Clip,
+    id: String = ""
+) {}

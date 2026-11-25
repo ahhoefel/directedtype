@@ -55,7 +55,8 @@ fn parse_with_cursor(mut cursor: ParserCursor<'_>) -> Result<Document, ParseErro
                     }
                     Some((Token::Component, _))
                     | Some((Token::Span, _))
-                    | Some((Token::InlineBox, _)) => {
+                    | Some((Token::InlineBox, _))
+                    | Some((Token::BuiltIn, _)) => {
                         let comp = parse_component_def(&mut cursor)?;
                         items.push(Item::Component(comp));
                     }

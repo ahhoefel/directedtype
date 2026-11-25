@@ -1,0 +1,31 @@
+// DirectedType Built-In Primitive: PagedFlow
+// Multi-page document flow container that paginates children across instances of a page template.
+
+\BuiltIn PagedFlow(
+    page: Node,
+    orphans: Integer = 2,
+    widows: Integer = 2,
+    gap: Distance = 0px,
+    start_page: Integer = 1,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = 612px,
+    height: Distance = 792px,
+    z: Integer = 0,
+    env clip: Clip,
+    pagination: Pagination = \Pagination(),
+    id: String = "",
+    on_click: Handler = unset,
+    on_pointer_down: Handler = unset,
+    on_pointer_up: Handler = unset,
+    on_pointer_move: Handler = unset,
+    on_pointer_enter: Handler = unset,
+    on_pointer_leave: Handler = unset,
+    on_scroll: Handler = unset,
+    on_focus: Handler = unset,
+    on_blur: Handler = unset
+) {
+    \alias end_page: Integer;
+    \alias page_count: Integer;
+    \Children
+}

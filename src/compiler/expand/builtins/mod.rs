@@ -396,6 +396,38 @@ pub fn register_builtin_enums_and_components(
     }
 }
 
+/// Returns the canonical names of all compiler built-in primitives (excluding the internal
+/// inline-only `Link` fallback, which is publicly provided by `components/text/Link.dt`).
+pub fn public_builtin_primitive_names() -> Vec<&'static str> {
+    ALL_BUILTINS
+        .iter()
+        .map(|p| p.name())
+        .filter(|&name| name != "Link")
+        .collect()
+}
+
+/// Returns whether the named built-in primitive accepts `port_name` as an input port.
+/// Returns `None` if `name` is not a registered `BuiltinPrimitive`.
+pub fn builtin_primitive_accepts_port(name: &str, port_name: &str) -> Option<bool> {
+    let prim = lookup_builtin(name, false)?;
+    if name == "Font" {
+        return Some(font::FONT_PUBLIC_PORTS.contains(&port_name));
+    }
+    Some(prim.accepts_port(port_name))
+}
+
+/// Returns the canonical static type name for `port_name` on the named built-in primitive, if known.
+pub fn builtin_primitive_port_type_name(name: &str, port_name: &str) -> Option<String> {
+    let prim = lookup_builtin(name, false)?;
+    prim.port_type(port_name).map(|st| st.canonical_name())
+}
+
+/// Returns whether `port_name` is a read-only immutable alias port on the named built-in primitive.
+pub fn builtin_primitive_is_immutable_alias(name: &str, port_name: &str) -> Option<bool> {
+    let prim = lookup_builtin(name, false)?;
+    Some(prim.is_immutable_alias_port(port_name))
+}
+
 /// Inserts default spatial alias ports (`left`, `top`, `right`, `bottom`) onto `ports` and `authored_ports`
 /// when their corresponding `x`/`y`/`width`/`height` inputs exist and no explicit alias was declared.
 /// Shared by both primitive elements and user-defined components.

@@ -780,7 +780,7 @@ impl ComponentSchema {
                 || a.type_annotation
                     .as_ref()
                     .is_some_and(|t| matches!(t.name.as_str(), "Handler" | "Expr" | "Expression"))
-                || matches!(&a.value, Expr::ExprDef(_));
+                || matches!(&a.value, Some(Expr::ExprDef(_)));
             if !is_handler_or_expr && !comp_shadowed_ports.contains(alias_name) {
                 template_self_ports.insert(a.name.name);
             }
@@ -843,7 +843,9 @@ impl ComponentSchema {
             }
         }
         for (alias_name, alias_binding) in &declared_aliases {
-            base_authored_ports.insert(alias_name.clone(), alias_binding.value.clone());
+            if let Some(val) = &alias_binding.value {
+                base_authored_ports.insert(alias_name.clone(), val.clone());
+            }
         }
         let def_span = comp_def.span;
         if static_left {
@@ -1212,7 +1214,11 @@ pub(super) fn collect_nested_lets<'a>(items: &'a [ContentItem], out: &mut Vec<&'
                     collect_expr_lets(expr, out);
                 }
             }
-            ContentItem::Alias(a) => collect_expr_lets(&a.value, out),
+            ContentItem::Alias(a) => {
+                if let Some(val) = &a.value {
+                    collect_expr_lets(val, out);
+                }
+            }
             ContentItem::State(s) => {
                 if let Some(expr) = &s.default {
                     collect_expr_lets(expr, out);
@@ -2387,18 +2393,21 @@ impl CompiledComponentTemplates {
 
         let mut alias_templates = Vec::with_capacity(schema.declared_aliases.len() + 4);
         for (alias_name, a) in &schema.declared_aliases {
+            let Some(alias_val) = &a.value else {
+                continue;
+            };
             let is_handler_or_expr = alias_name.starts_with("on_")
                 || schema.handler_param_names.contains(alias_name)
                 || schema.expr_param_names.contains(alias_name)
                 || a.type_annotation
                     .as_ref()
                     .is_some_and(|t| matches!(t.name.as_str(), "Handler" | "Expr" | "Expression"))
-                || matches!(&a.value, Expr::ExprDef(_));
+                || matches!(alias_val, Expr::ExprDef(_));
             if is_handler_or_expr {
                 continue;
             }
             let pre_alias = super::typecheck::pre_coerce_ast_for_type(
-                &a.value,
+                alias_val,
                 a.type_annotation.as_ref(),
             );
             if let Some(compiled) = try_compile_self_template(

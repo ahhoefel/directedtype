@@ -177,13 +177,14 @@ impl UseDeclaration {
     }
 }
 
-/// Kind of a component definition: `\Component`, `\Span`, or `\InlineBox`.
+/// Kind of a component definition: `\Component`, `\Span`, `\InlineBox`, or `\BuiltIn`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ComponentKind {
     #[default]
     Component,
     Span,
     InlineBox,
+    BuiltIn,
 }
 
 /// Component definition: `\Component Name(params) { body }` or `\Span Name(params) { body }`
@@ -462,12 +463,13 @@ pub fn expr_eq_ignore_span(a: &Expr, b: &Expr) -> bool {
     }
 }
 
-/// Public immutable alias port binding: `\alias name = expr;` or `\alias name: Type = expr;`
+/// Public immutable alias port binding: `\alias name = expr;`, `\alias name: Type = expr;`,
+/// or (only inside `\BuiltIn` declarations) bodyless `\alias name: Type;`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AliasBinding {
     pub name: Ident,
     pub type_annotation: Option<TypeRef>,
-    pub value: Expr,
+    pub value: Option<Expr>,
     pub span: Span,
 }
 

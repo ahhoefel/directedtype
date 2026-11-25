@@ -1,0 +1,43 @@
+// DirectedType Built-In Primitive: Rect
+// Axis-aligned rectangle with fill, border, corner radii, drop shadow, and interactive hit testing.
+
+\BuiltIn Rect(
+    x: Distance,
+    y: Distance,
+    width: Distance,
+    height: Distance,
+    color: Color,
+    z: Integer = 0,
+    border_color: Color = #00000000,
+    border_width: Distance = 0px,
+    radius: Distance = 0px,
+    radius_left: Distance = 0px,
+    radius_right: Distance = 0px,
+    radius_top: Distance = 0px,
+    radius_bottom: Distance = 0px,
+    radius_top_left: Distance = 0px,
+    radius_top_right: Distance = 0px,
+    radius_bottom_right: Distance = 0px,
+    radius_bottom_left: Distance = 0px,
+    shadow: Shadow = \Shadow(),
+    scroll_x: Distance = 0px,
+    scroll_y: Distance = 0px,
+    env clip: Clip,
+    pagination: Pagination = \Pagination(),
+    cursor: String = "Default",
+    opacity: Float = 1.0,
+    name: String = "",
+    path: String = "",
+    id: String = "",
+    on_click: Handler = unset,
+    on_pointer_down: Handler = unset,
+    on_pointer_up: Handler = unset,
+    on_pointer_move: Handler = unset,
+    on_pointer_enter: Handler = unset,
+    on_pointer_leave: Handler = unset,
+    on_scroll: Handler = unset,
+    on_focus: Handler = unset,
+    on_blur: Handler = unset
+) {
+    \Children
+}

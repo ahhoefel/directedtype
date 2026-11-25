@@ -1,0 +1,15 @@
+// DirectedType Built-In Primitive: Pagination
+// Pagination behavior configuration bundle controlling breakability and page-break rules.
+
+\Enum Break {
+    Auto,
+    Page,
+    Recto,
+    Verso,
+}
+
+\BuiltIn Pagination(
+    breakable: Boolean = false,
+    keep_with_next: Boolean = false,
+    break_before: Break = Break.Auto
+) {}

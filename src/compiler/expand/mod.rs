@@ -712,7 +712,7 @@ fn elem_has_dom_node_ref(elem: &ElementNode) -> bool {
                     Some(LetValue::Node(e)) => elem_has_dom_node_ref(e),
                     None => false,
                 },
-                ContentItem::Alias(a) => expr_has_dom_node_ref(&a.value),
+                ContentItem::Alias(a) => a.value.as_ref().is_some_and(expr_has_dom_node_ref),
                 ContentItem::State(s) => s.default.as_ref().is_some_and(expr_has_dom_node_ref),
                 ContentItem::Env(e) => e.value.as_ref().is_some_and(expr_has_dom_node_ref),
                 ContentItem::Assert(a) => expr_has_dom_node_ref(&a.condition),
@@ -792,7 +792,11 @@ fn lower_dom_node_refs_in_content_items(
                 Some(LetValue::Node(e)) => lower_dom_node_refs_in_element(e, handles)?,
                 None => {}
             },
-            ContentItem::Alias(a) => lower_dom_node_refs_in_expr(&mut a.value, handles)?,
+            ContentItem::Alias(a) => {
+                if let Some(val) = &mut a.value {
+                    lower_dom_node_refs_in_expr(val, handles)?;
+                }
+            }
             ContentItem::State(s) => {
                 if let Some(d) = &mut s.default {
                     lower_dom_node_refs_in_expr(d, handles)?;

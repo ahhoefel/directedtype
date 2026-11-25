@@ -1,0 +1,6 @@
+// DirectedType Built-In Primitive: Collect
+// Expands all elements deposited into a \PageList bucket slice (e.g. notes[page]) inside a page template.
+
+\BuiltIn Collect(
+    from: PageListSlice
+) {}

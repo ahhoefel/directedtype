@@ -47,6 +47,10 @@ impl<'a> ParserCursor<'a> {
         self.source
     }
 
+    pub fn file_name(&self) -> Option<String> {
+        crate::span::lookup_file_name(self.file_id)
+    }
+
     pub fn pos(&self) -> usize {
         self.pos
     }

@@ -1,0 +1,27 @@
+// DirectedType Built-In Primitive: Anchor
+// Named navigation target and optional PDF outline bookmark wrapper.
+
+\BuiltIn Anchor(
+    name: String,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = unset,
+    height: Distance = unset,
+    z: Integer = 0,
+    outline_title: String = "",
+    outline_level: Integer = 0,
+    env clip: Clip,
+    pagination: Pagination = \Pagination(),
+    id: String = "",
+    on_click: Handler = unset,
+    on_pointer_down: Handler = unset,
+    on_pointer_up: Handler = unset,
+    on_pointer_move: Handler = unset,
+    on_pointer_enter: Handler = unset,
+    on_pointer_leave: Handler = unset,
+    on_scroll: Handler = unset,
+    on_focus: Handler = unset,
+    on_blur: Handler = unset
+) {
+    \Children(x: left, y: top)
+}

@@ -32,6 +32,18 @@ pub fn lookup_file_name(file_id: u32) -> Option<String> {
     files.get((file_id - 1) as usize).cloned()
 }
 
+/// Returns true if `path` refers to a file or directory inside `components/lang/`.
+pub fn is_components_lang_path(path: &std::path::Path) -> bool {
+    let raw = path.to_string_lossy().replace('\\', "/");
+    let segments: Vec<&str> = raw
+        .split('/')
+        .filter(|s| !s.is_empty() && *s != ".")
+        .collect();
+    segments
+        .windows(2)
+        .any(|w| w[0] == "components" && w[1] == "lang")
+}
+
 /// Represents a half-open byte range `[start, end)` in the source text,
 /// along with optional 1-indexed line and column numbers (`0` when unset)
 /// and an optional interned source file ID (`0` when unset).

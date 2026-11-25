@@ -1,0 +1,4 @@
+// DirectedType Built-In Primitive: PageList
+// Multi-valued per-page bucket populated by \Deposit and materialized with \Collect (e.g. footnotes).
+
+\BuiltIn PageList() {}

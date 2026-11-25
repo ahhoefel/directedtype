@@ -1,0 +1,126 @@
+// DirectedType Built-In Primitive: Image
+// Aspect-preserving raster or vector image element sized by intrinsic DPI, explicit width, or explicit height.
+
+\BuiltIn Image(
+    src: Path,
+    x: Distance,
+    y: Distance,
+    dpi: Float = window.dpi,
+    z: Integer = 0,
+    border_color: Color = #00000000,
+    border_width: Distance = 0px,
+    radius: Distance = 0px,
+    radius_left: Distance = 0px,
+    radius_right: Distance = 0px,
+    radius_top: Distance = 0px,
+    radius_bottom: Distance = 0px,
+    radius_top_left: Distance = 0px,
+    radius_top_right: Distance = 0px,
+    radius_bottom_right: Distance = 0px,
+    radius_bottom_left: Distance = 0px,
+    shadow: Shadow = \Shadow(),
+    env clip: Clip,
+    pagination: Pagination = \Pagination(),
+    cursor: String = "Default",
+    opacity: Float = 1.0,
+    alt: String = "",
+    name: String = "",
+    path: String = "",
+    id: String = "",
+    on_click: Handler = unset,
+    on_pointer_down: Handler = unset,
+    on_pointer_up: Handler = unset,
+    on_pointer_move: Handler = unset,
+    on_pointer_enter: Handler = unset,
+    on_pointer_leave: Handler = unset,
+    on_scroll: Handler = unset,
+    on_focus: Handler = unset,
+    on_blur: Handler = unset
+) {
+    \alias width: Distance;
+    \alias height: Distance;
+    \alias aspect_ratio: Float;
+    \alias file_dpi: Float;
+}
+
+\BuiltIn Image(
+    src: Path,
+    x: Distance,
+    y: Distance,
+    width: Distance,
+    z: Integer = 0,
+    border_color: Color = #00000000,
+    border_width: Distance = 0px,
+    radius: Distance = 0px,
+    radius_left: Distance = 0px,
+    radius_right: Distance = 0px,
+    radius_top: Distance = 0px,
+    radius_bottom: Distance = 0px,
+    radius_top_left: Distance = 0px,
+    radius_top_right: Distance = 0px,
+    radius_bottom_right: Distance = 0px,
+    radius_bottom_left: Distance = 0px,
+    shadow: Shadow = \Shadow(),
+    env clip: Clip,
+    pagination: Pagination = \Pagination(),
+    cursor: String = "Default",
+    opacity: Float = 1.0,
+    alt: String = "",
+    name: String = "",
+    path: String = "",
+    id: String = "",
+    on_click: Handler = unset,
+    on_pointer_down: Handler = unset,
+    on_pointer_up: Handler = unset,
+    on_pointer_move: Handler = unset,
+    on_pointer_enter: Handler = unset,
+    on_pointer_leave: Handler = unset,
+    on_scroll: Handler = unset,
+    on_focus: Handler = unset,
+    on_blur: Handler = unset
+) {
+    \alias height: Distance;
+    \alias aspect_ratio: Float;
+    \alias file_dpi: Float;
+}
+
+\BuiltIn Image(
+    src: Path,
+    x: Distance,
+    y: Distance,
+    height: Distance,
+    z: Integer = 0,
+    border_color: Color = #00000000,
+    border_width: Distance = 0px,
+    radius: Distance = 0px,
+    radius_left: Distance = 0px,
+    radius_right: Distance = 0px,
+    radius_top: Distance = 0px,
+    radius_bottom: Distance = 0px,
+    radius_top_left: Distance = 0px,
+    radius_top_right: Distance = 0px,
+    radius_bottom_right: Distance = 0px,
+    radius_bottom_left: Distance = 0px,
+    shadow: Shadow = \Shadow(),
+    env clip: Clip,
+    pagination: Pagination = \Pagination(),
+    cursor: String = "Default",
+    opacity: Float = 1.0,
+    alt: String = "",
+    name: String = "",
+    path: String = "",
+    id: String = "",
+    on_click: Handler = unset,
+    on_pointer_down: Handler = unset,
+    on_pointer_up: Handler = unset,
+    on_pointer_move: Handler = unset,
+    on_pointer_enter: Handler = unset,
+    on_pointer_leave: Handler = unset,
+    on_scroll: Handler = unset,
+    on_focus: Handler = unset,
+    on_blur: Handler = unset
+) {
+    \alias width: Distance;
+    \alias aspect_ratio: Float;
+    \alias file_dpi: Float;
+}

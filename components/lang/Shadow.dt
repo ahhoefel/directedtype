@@ -1,0 +1,10 @@
+// DirectedType Built-In: Shadow
+// Styling bundle defining a blurred drop shadow for \Rect and \Image primitives.
+
+\BuiltIn Shadow(
+    offset_x: Distance = 0px,
+    offset_y: Distance = 0px,
+    blur: Distance = 0px,
+    spread: Distance = 0px,
+    color: Color = #00000000
+) {}

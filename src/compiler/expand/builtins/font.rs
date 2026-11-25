@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 pub struct FontPrimitive;
 
-const FONT_PUBLIC_PORTS: &[&str] = &[
+pub(super) const FONT_PUBLIC_PORTS: &[&str] = &[
     "font",
     "family",
     "size",

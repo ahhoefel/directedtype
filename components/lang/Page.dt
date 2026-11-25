@@ -1,0 +1,17 @@
+// DirectedType Built-In: Page
+// Ambient `page.*` scope properties available inside a \PagedFlow page template.
+
+\BuiltIn Page() {
+    \alias number: Integer;
+    \alias count: Integer;
+    \alias is_first: Boolean;
+    \alias is_last: Boolean;
+    \alias is_odd: Boolean;
+    \alias is_even: Boolean;
+    \alias is_recto: Boolean;
+    \alias is_verso: Boolean;
+    \alias prev: Node;
+    \alias width: Distance;
+    \alias height: Distance;
+    \alias dpi: Float;
+}

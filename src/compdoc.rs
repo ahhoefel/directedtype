@@ -239,7 +239,7 @@ pub struct AliasDoc {
     pub name: String,
     pub type_name: Option<String>,
     pub type_anchor: Option<String>,
-    pub expr: String,
+    pub expr: Option<String>,
 }
 
 /// An `\env` binding provided by a component to its descendant subtree.
@@ -361,11 +361,17 @@ pub fn extract_catalog(
     }
 
     let mut package_entries: Vec<(String, Vec<ModuleDoc>)> = packages_map.into_iter().collect();
-    // Sort shallower packages first (e.g. `components` before `components/material`), then alphabetically.
+    // Sort `components/lang` (built-in language primitives) first, then shallower packages first
+    // (e.g. `components` before `components/material`), then alphabetically.
     package_entries.sort_by(|(a, _), (b, _)| {
+        let is_lang_a = a == "components/lang" || a.ends_with("/components/lang");
+        let is_lang_b = b == "components/lang" || b.ends_with("/components/lang");
         let depth_a = a.split('/').count();
         let depth_b = b.split('/').count();
-        depth_a.cmp(&depth_b).then_with(|| a.cmp(b))
+        is_lang_b
+            .cmp(&is_lang_a)
+            .then_with(|| depth_a.cmp(&depth_b))
+            .then_with(|| a.cmp(b))
     });
 
     let mut packages = Vec::with_capacity(package_entries.len());
@@ -694,7 +700,7 @@ fn expr_uses_only_children(expr: &Expr) -> bool {
 fn content_uses_only_children(items: &[ContentItem]) -> bool {
     for item in items {
         let hit = match item {
-            ContentItem::Alias(a) => expr_uses_only_children(&a.value),
+            ContentItem::Alias(a) => a.value.as_ref().is_some_and(expr_uses_only_children),
             ContentItem::Let(l) => match &l.value {
                 Some(LetValue::Expr(e)) => expr_uses_only_children(e),
                 Some(LetValue::Node(n)) => {
@@ -808,7 +814,7 @@ fn extract_alias(a: &AliasBinding) -> AliasDoc {
         name: a.name.as_str().to_string(),
         type_name: a.type_annotation.as_ref().map(|t| t.name.as_str().to_string()),
         type_anchor: None,
-        expr: format_expr(&a.value),
+        expr: a.value.as_ref().map(format_expr),
     }
 }
 
@@ -1212,16 +1218,18 @@ fn infer_overload_types(
                 ComponentBodyItem::Alias(a) => {
                     let name = a.name.as_str();
                     if !local_scope.contains_key(name) {
-                        if let Some(ty) = infer_expr_in_scope(
-                            &a.value,
-                            &local_scope,
-                            &expr_return_types,
-                            comp_members,
-                            enum_names,
-                            Some(comp_name),
-                        ) {
-                            local_scope.insert(name.to_string(), ty);
-                            changed = true;
+                        if let Some(val) = &a.value {
+                            if let Some(ty) = infer_expr_in_scope(
+                                val,
+                                &local_scope,
+                                &expr_return_types,
+                                comp_members,
+                                enum_names,
+                                Some(comp_name),
+                            ) {
+                                local_scope.insert(name.to_string(), ty);
+                                changed = true;
+                            }
                         }
                     }
                 }
@@ -1256,7 +1264,7 @@ fn infer_overload_types(
         .body
         .iter()
         .filter_map(|it| match it {
-            ComponentBodyItem::Alias(a) => Some((a.name.as_str(), &a.value)),
+            ComponentBodyItem::Alias(a) => a.value.as_ref().map(|v| (a.name.as_str(), v)),
             _ => None,
         })
         .collect();
@@ -2041,6 +2049,7 @@ fn kind_keyword(kind: ComponentKind) -> &'static str {
         ComponentKind::Component => "\\Component",
         ComponentKind::Span => "\\Span",
         ComponentKind::InlineBox => "\\InlineBox",
+        ComponentKind::BuiltIn => "\\BuiltIn",
     }
 }
 
@@ -2049,6 +2058,7 @@ fn kind_label(kind: ComponentKind) -> &'static str {
         ComponentKind::Component => "Component",
         ComponentKind::Span => "Span",
         ComponentKind::InlineBox => "InlineBox",
+        ComponentKind::BuiltIn => "BuiltIn",
     }
 }
 
@@ -2057,6 +2067,7 @@ fn kind_colors(kind: ComponentKind) -> (&'static str, &'static str) {
         ComponentKind::Component => ("#dbeafe", "#1e40af"),
         ComponentKind::Span => ("#f3e8ff", "#6b21a8"),
         ComponentKind::InlineBox => ("#ccfbf1", "#115e59"),
+        ComponentKind::BuiltIn => ("#ffedd5", "#9a3412"),
     }
 }
 
@@ -2142,7 +2153,6 @@ pub fn render_catalog_to_dt(catalog: &DocCatalog) -> String {
     // 1. Imports & Document Stylesheet Components
     dt.push_str("// Auto-generated DirectedType Component Reference\n");
     dt.push_str("\\use \"components/Align.dt\"\n");
-    dt.push_str("\\use \"components/text/TextBounds.dt\"\n");
     dt.push_str("\\use \"components/layout/VStackStretch.dt\"\n");
     dt.push_str("\\use \"components/layout/HDivider.dt\"\n");
     dt.push_str("\\use \"components/text/Link.dt\"\n");
@@ -2621,6 +2631,10 @@ fn emit_component_body(dt: &mut String, comp: &ComponentDoc) {
 
         if !ov.aliases.is_empty() {
             for (i, a) in ov.aliases.iter().enumerate() {
+                let (val_display, val_color) = match &a.expr {
+                    Some(expr) => (expr.clone(), "#334155"),
+                    None => ("computed".to_string(), "#64748b"),
+                };
                 rows.push(UnifiedPropRow {
                     section_label: if i == 0 { "Aliases" } else { "" },
                     section_color: "#0f766e",
@@ -2629,8 +2643,8 @@ fn emit_component_body(dt: &mut String, comp: &ComponentDoc) {
                     name_color: "#0f766e",
                     type_display: a.type_name.clone().unwrap_or_else(|| "Any".to_string()),
                     type_anchor: a.type_anchor.as_deref(),
-                    value_display: a.expr.clone(),
-                    value_color: "#334155",
+                    value_display: val_display,
+                    value_color: val_color,
                 });
             }
             has_prev_section = true;

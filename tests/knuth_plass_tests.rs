@@ -93,7 +93,6 @@ fn test_knuth_plass_shrinkability_reduces_height_consistently_across_eval_and_pa
     let src = format!(
         r#"
         \use "components/Align.dt"
-        \use "components/text/TextBounds.dt"
 
         \env font = \Font(family: "Arial", size: 12px, line_height: 18px);
         \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
@@ -230,7 +229,6 @@ fn test_knuth_plass_word_spacing_and_looseness_and_ragged() {
     let src = format!(
         r#"
         \use "components/Align.dt"
-        \use "components/text/TextBounds.dt"
 
         \env font = \Font(family: "Arial", size: 12px, line_height: 16px);
         \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);

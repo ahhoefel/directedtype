@@ -1,7 +1,6 @@
 \use "components/layout/HStack.dt"
 \use "components/layout/Center.dt"
 \use "components/layout/PadOut.dt"
-\use "components/text/TextBounds.dt"
 
 \env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
 

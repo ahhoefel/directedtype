@@ -174,7 +174,7 @@ pub fn parse_element_node(cursor: &mut ParserCursor<'_>) -> Result<ElementNode, 
 
     let (content, content_span) = if cursor.peek_is_punct(b'{') {
         let slot = cursor.parse_content_slot_mode(SlotMode::ContentSlot, |c| {
-            parse_content_item(c, false)
+            parse_content_item(c, false, false)
         })?;
         let s = slot.span;
         (Some(slot), Some(s))
@@ -201,6 +201,7 @@ pub fn parse_element_node(cursor: &mut ParserCursor<'_>) -> Result<ElementNode, 
 pub fn parse_content_item(
     cursor: &mut ParserCursor<'_>,
     is_component_def: bool,
+    is_builtin_def: bool,
 ) -> Result<ContentItem, ParseError> {
     let is_backslash = cursor.peek_token()?.is_some_and(|(t, _)| t == &Token::Backslash);
     if is_backslash {
@@ -215,7 +216,7 @@ pub fn parse_content_item(
                 return Ok(ContentItem::Let(let_binding));
             }
             Some((Token::Alias, _)) => {
-                let alias_binding = parse_alias_binding(cursor)?;
+                let alias_binding = parse_alias_binding(cursor, is_builtin_def)?;
                 return Ok(ContentItem::Alias(alias_binding));
             }
             Some((Token::Assert, _)) => {

@@ -1,0 +1,39 @@
+// DirectedType Built-In Primitive: Line
+// Vector line segment between (x1, y1) and (x2, y2) with configurable stroke thickness and cap style.
+
+\Enum LineCap {
+    Butt,
+    Round,
+    Square,
+}
+
+\BuiltIn Line(
+    x1: Distance,
+    y1: Distance,
+    x2: Distance,
+    y2: Distance,
+    thickness: Distance = 1px,
+    color: Color = #000000,
+    cap: LineCap = LineCap.Butt,
+    z: Integer = 0,
+    env clip: Clip,
+    pagination: Pagination = \Pagination(),
+    cursor: String = "Default",
+    opacity: Float = 1.0,
+    id: String = "",
+    on_click: Handler = unset,
+    on_pointer_down: Handler = unset,
+    on_pointer_up: Handler = unset,
+    on_pointer_move: Handler = unset,
+    on_pointer_enter: Handler = unset,
+    on_pointer_leave: Handler = unset,
+    on_scroll: Handler = unset,
+    on_focus: Handler = unset,
+    on_blur: Handler = unset
+) {
+    \alias x: Distance = min(x1, x2);
+    \alias y: Distance = min(y1, y2);
+    \alias width: Distance = abs(x2 - x1);
+    \alias height: Distance = abs(y2 - y1);
+    \alias length: Distance;
+}

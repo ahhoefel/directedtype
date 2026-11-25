@@ -1,0 +1,18 @@
+// DirectedType Built-In: Window
+// Top-level ambient window configuration declaration and global `window.*` viewport properties.
+
+\BuiltIn Window(
+    title: String = "",
+    vscroll: Boolean = false,
+    hscroll: Boolean = false,
+    dpi: Float = 96.0
+) {
+    \alias x: Distance;
+    \alias y: Distance;
+    \alias width: Distance;
+    \alias height: Distance;
+    \alias z: Integer;
+    \alias clip: Clip;
+    \alias scroll_x: Distance;
+    \alias scroll_y: Distance;
+}

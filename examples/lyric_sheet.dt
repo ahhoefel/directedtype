@@ -1,0 +1,586 @@
+// DirectedType Lyric Sheet Template
+// Replace the placeholder lines below with your lyrics, then compile with:
+//   ./target/release/dt2pdf examples/lyric_sheet.dt
+
+\use "components/Align.dt"
+\use "components/layout/VStackStretch.dt"
+\use "components/layout/Spacer.dt"
+
+// =============================================================================
+// Reusable Lyric Sheet Components
+// =============================================================================
+
+// Single lyric line inside a stanza.
+// Set `backing: true` for parenthetical echoes / backing vocals, or `indent` for stepped lines.
+\Component LyricLine(
+    backing: Boolean = false,
+    indent: Distance = 0pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font,
+    env text_bounds: TextBounds
+) {
+    \let line_font = \Font(
+        font: font,
+        size: backing ? font.size * 0.92 : font.size,
+        italic: backing ? true : font.italic,
+        color: backing ? #64748b : font.color
+    );
+
+    \let t = \Text(
+        x: x + indent,
+        y: y,
+        width: width - indent,
+        font: line_font,
+        paragraph_style: \ParagraphStyle(align: Align.Left)
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = t.height;
+    \alias bottom: Distance = y + height;
+}
+
+// Inline span for parenthetical backing vocals / ad-libs inside a lyric line
+\Span Backing(env font: Font) {
+    \env font = \Font(font: self.font, size: self.font.size * 0.9, italic: true, color: #64748b);
+    \Children
+}
+
+// Generic unbreakable lyric section (used by Verse, PreChorus, Chorus, PostChorus, Interlude, Bridge, Outro).
+\Component LyricSection(
+    label: String,
+    accent: Color = #2563eb,
+    bg: Color = #ffffff00,
+    border_color: Color = #ffffff00,
+    show_bar: Boolean = false,
+    bar_width: Distance = 2.5pt,
+    pad_x: Distance = 0pt,
+    pad_y: Distance = 0pt,
+    line_gap: Distance = 0.5pt,
+    italic_body: Boolean = false,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font,
+    env label_font: Font
+) {
+    \let inner_x = x + pad_x + (show_bar ? (bar_width + 10pt) : 0pt);
+    \let inner_w = width - pad_x * 2.0 - (show_bar ? (bar_width + 10pt) : 0pt);
+    \let total_h = (lines.bottom - y) + pad_y;
+
+    // Optional tinted background card (declared before text so it paints behind)
+    \Rect(
+        x: x,
+        y: y,
+        width: width,
+        height: total_h,
+        color: bg,
+        border_color: border_color,
+        border_width: 0.75pt,
+        radius: 5pt
+    )
+
+    // Optional left accent bar
+    \Rect(
+        x: x + pad_x,
+        y: y + pad_y,
+        width: show_bar ? bar_width : 0pt,
+        height: show_bar ? (total_h - pad_y * 2.0) : 0pt,
+        color: accent,
+        radius: 1.25pt
+    )
+
+    \let heading = \Text(
+        x: inner_x,
+        y: y + pad_y,
+        width: inner_w,
+        font: \Font(font: label_font, color: accent),
+        text: label
+    );
+
+    \env font = \Font(font: self.font, italic: italic_body);
+    \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
+
+    \let lines = \VStackStretch(
+        x: inner_x,
+        y: heading.bottom + 5pt,
+        width: inner_w,
+        gap: line_gap,
+        pagination: \Pagination(breakable: false)
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = total_h;
+    \alias bottom: Distance = y + height;
+}
+
+\Component Verse(
+    label: String = "VERSE",
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font,
+    env label_font: Font
+) {
+    \let s = \LyricSection(
+        label: label,
+        accent: #64748b,
+        x: x,
+        y: y,
+        width: width
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = s.height;
+    \alias bottom: Distance = y + height;
+}
+
+\Component PreChorus(
+    label: String = "PRE-CHORUS",
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font,
+    env label_font: Font
+) {
+    \let s = \LyricSection(
+        label: label,
+        accent: #0284c7,
+        show_bar: true,
+        bar_width: 2pt,
+        pad_x: 0pt,
+        pad_y: 2pt,
+        x: x,
+        y: y,
+        width: width
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = s.height;
+    \alias bottom: Distance = y + height;
+}
+
+\Component Chorus(
+    label: String = "CHORUS",
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font,
+    env label_font: Font
+) {
+    \let s = \LyricSection(
+        label: label,
+        accent: #e11d48,
+        bg: #fff1f2,
+        border_color: #fecdd3,
+        show_bar: true,
+        bar_width: 3pt,
+        pad_x: 12pt,
+        pad_y: 8pt,
+        x: x,
+        y: y,
+        width: width
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = s.height;
+    \alias bottom: Distance = y + height;
+}
+
+\Component PostChorus(
+    label: String = "POST-CHORUS",
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font,
+    env label_font: Font
+) {
+    \let s = \LyricSection(
+        label: label,
+        accent: #e11d48,
+        show_bar: true,
+        bar_width: 2pt,
+        pad_x: 0pt,
+        pad_y: 2pt,
+        x: x,
+        y: y,
+        width: width
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = s.height;
+    \alias bottom: Distance = y + height;
+}
+
+\Component Interlude(
+    label: String = "INTERLUDE",
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font,
+    env label_font: Font
+) {
+    \let s = \LyricSection(
+        label: label,
+        accent: #7c3aed,
+        show_bar: true,
+        bar_width: 2pt,
+        pad_x: 0pt,
+        pad_y: 2pt,
+        italic_body: true,
+        x: x,
+        y: y,
+        width: width
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = s.height;
+    \alias bottom: Distance = y + height;
+}
+
+\Component Bridge(
+    label: String = "BRIDGE",
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font,
+    env label_font: Font
+) {
+    \let s = \LyricSection(
+        label: label,
+        accent: #7c3aed,
+        bg: #f5f3ff,
+        border_color: #ddd6fe,
+        show_bar: true,
+        bar_width: 2.5pt,
+        pad_x: 12pt,
+        pad_y: 8pt,
+        italic_body: true,
+        x: x,
+        y: y,
+        width: width
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = s.height;
+    \alias bottom: Distance = y + height;
+}
+
+\Component Outro(
+    label: String = "OUTRO",
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false),
+    env font: Font,
+    env label_font: Font
+) {
+    \let s = \LyricSection(
+        label: label,
+        accent: #475569,
+        x: x,
+        y: y,
+        width: width
+    ) {
+        \Children
+    };
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = s.height;
+    \alias bottom: Distance = y + height;
+}
+
+// Song title, artist, album/year metadata header block
+\Component SongHeader(
+    title: String,
+    artist: String,
+    album: String = "",
+    year: String = "",
+    accent: Color = #e11d48,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    width: Distance = parent.width,
+    pagination: Pagination = \Pagination(breakable: false, keep_with_next: true),
+    env font: Font,
+    env label_font: Font
+) {
+    \let eyebrow = \Text(
+        x: x,
+        y: y,
+        width: width,
+        font: \Font(font: label_font, size: 8pt, letter_spacing: 1.4pt, color: accent),
+        text: "LYRIC SHEET"
+    );
+
+    \let title_node = \Text(
+        x: x,
+        y: eyebrow.bottom + 4pt,
+        width: width,
+        font: \Font(font: font, size: 26pt, weight: 700, line_height: 30pt, color: #0f172a),
+        text: title
+    );
+
+    \let meta_str = album != "" && year != ""
+        ? (artist + "  •  " + album + " (" + year + ")")
+        : (album != "" ? (artist + "  •  " + album) : artist);
+
+    \let meta_node = \Text(
+        x: x,
+        y: title_node.bottom + 5pt,
+        width: width,
+        font: \Font(font: label_font, size: 10pt, weight: 400, letter_spacing: 0.2pt, color: #475569),
+        text: meta_str
+    );
+
+    \let rule_y = meta_node.bottom + 14pt;
+    \Rect(x: x, y: rule_y, width: 42pt, height: 2pt, color: accent, radius: 1pt)
+    \Rect(x: x + 48pt, y: rule_y + 0.6pt, width: width - 48pt, height: 0.75pt, color: #e2e8f0)
+
+    \alias right: Distance = x + width;
+    \alias height: Distance = (rule_y + 20pt) - y;
+    \alias bottom: Distance = y + height;
+}
+
+// Single-sided page frame with subtle running header (pages 2+) and centered page count footer
+\Component LyricPage(
+    width: Distance = 8.5in,
+    height: Distance = 11in,
+    x: Distance = page.left,
+    y: Distance = page.top,
+    margin_x: Distance = 1.35in,
+    margin_top: Distance = 0.85in,
+    margin_bottom: Distance = 0.85in,
+    song_title: String = "",
+    artist: String = "",
+    env font: Font,
+    env label_font: Font
+) {
+    \let body_x = x + margin_x;
+    \let body_width = width - margin_x * 2.0;
+    \let body_top = y + margin_top;
+    \let body_height = height - margin_top - margin_bottom;
+
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+
+    // White page background
+    \Rect(x: x, y: y, width: width, height: height, color: #ffffff)
+
+    // Top decorative hairline
+    \Rect(x: x, y: y, width: width, height: 4pt, color: #e11d48)
+
+    // Running header on pages 2+
+    \let chrome_font = \Font(font: label_font, size: 8pt, weight: 400, letter_spacing: 0.4pt, color: #94a3b8);
+    \let running_text = !page.is_first ? (song_title + "  —  " + artist) : "";
+    \Text(
+        x: body_x,
+        y: y + 0.42in,
+        width: body_width,
+        font: chrome_font,
+        paragraph_style: \ParagraphStyle(align: Align.Right),
+        text: running_text
+    )
+
+    \FlowBody(
+        x: body_x,
+        y: body_top,
+        width: body_width,
+        height: body_height
+    )
+
+    // Footer with page number
+    \Text(
+        x: body_x,
+        y: y + height - 0.48in,
+        width: body_width,
+        font: chrome_font,
+        paragraph_style: \ParagraphStyle(align: Align.Center),
+        text: "Page " + page.number + " of " + page.count
+    )
+}
+
+// Top-level LyricSheet document container
+\Component LyricSheet(
+    title: String,
+    artist: String,
+    album: String = "",
+    year: String = "",
+    page_width: Distance = 8.5in,
+    page_height: Distance = 11in,
+    margin_x: Distance = 1.3in,
+    margin_top: Distance = 0.72in,
+    margin_bottom: Distance = 0.72in,
+    section_gap: Distance = 12pt,
+    x: Distance = parent.left,
+    y: Distance = parent.top,
+    env font: Font = \Font(family: "Georgia", size: 10.2pt, line_height: 14.2pt, color: #1e293b),
+    env label_font: Font = \Font(family: "Arial", size: 7.5pt, weight: 700, letter_spacing: 1.1pt, color: #64748b)
+) {
+    \env font = self.font;
+    \env label_font = self.label_font;
+
+    \let body_width = page_width - margin_x * 2.0;
+
+    \let flow = \PagedFlow(
+        x: x,
+        y: y,
+        gap: 0pt,
+        page: \LyricPage(
+            width: page_width,
+            height: page_height,
+            margin_x: margin_x,
+            margin_top: margin_top,
+            margin_bottom: margin_bottom,
+            song_title: title,
+            artist: artist
+        )
+    ) {
+        \SongHeader(
+            title: title,
+            artist: artist,
+            album: album,
+            year: year,
+            width: body_width
+        )
+        \VStackStretch(
+            width: body_width,
+            gap: section_gap,
+            pagination: \Pagination(breakable: true)
+        ) {
+            \Children
+        }
+    };
+
+    \alias width: Distance = flow.width;
+    \alias height: Distance = flow.height;
+    \alias right: Distance = x + width;
+    \alias bottom: Distance = y + height;
+}
+
+// =============================================================================
+// Song Content — Replace placeholder lines with your lyrics
+// =============================================================================
+
+\LyricSheet(
+    title: "Shake It Off",
+    artist: "Taylor Swift",
+    album: "1989",
+    year: "2014"
+) {
+    \Verse(label: "VERSE 1") {
+        \LyricLine { I stay out too late }
+        \LyricLine { Got nothin' in my brain }
+        \LyricLine { That's what people say, mm-mm }
+        \LyricLine { That's what people say, mm-mm }
+        \LyricLine { I go on too many dates \Backing{(Haha)} }
+        \LyricLine { But I can't make them stay }
+        \LyricLine { At least, that's what people say, mm-mm }
+        \LyricLine { That's what people say, mm-mm }
+    }
+
+    \PreChorus(label: "PRE-CHORUS") {
+        \LyricLine { But I keep cruisin' }
+        \LyricLine { Can't stop, won't stop movin' }
+        \LyricLine { It's like I got this music in my mind }
+        \LyricLine { Sayin', "It's gonna be alright" }
+    }
+
+    \Chorus(label: "CHORUS") {
+        \LyricLine { 'Cause the players gonna play, play, play, play, play }
+        \LyricLine { And the haters gonna hate, hate, hate, hate, hate }
+        \LyricLine { Baby, I'm just gonna shake, shake, shake, shake, shake }
+        \LyricLine { I shake it off, I shake it off }
+        \LyricLine { Heartbreakers gonna break, break, break, break, break }
+        \LyricLine { And the fakers gonna fake, fake, fake, fake, fake }
+        \LyricLine { Baby, I'm just gonna shake, shake, shake, shake, shake }
+        \LyricLine { I shake it off, I shake it off }
+    }
+
+    \Verse(label: "VERSE 2") {
+        \LyricLine { I never miss a beat }
+        \LyricLine { I'm lightnin' on my feet }
+        \LyricLine { And that's what they don't see, mm-mm }
+        \LyricLine { That's what they don't see, mm-mm }
+        \LyricLine { I'm dancin' on my own \Backing{(Dancin' on my own)} }
+        \LyricLine { I make the moves up as I go \Backing{(Moves up as I go)} }
+        \LyricLine { And that's what they don't know, mm-mm }
+        \LyricLine { That's what they don't know, mm-mm }
+    }
+
+    \PreChorus(label: "PRE-CHORUS") {
+        \LyricLine { But I keep cruisin' }
+        \LyricLine { Can't stop, won't stop groovin' }
+        \LyricLine { It's like I got this music in my mind }
+        \LyricLine { Sayin', "It's gonna be alright" }
+    }
+
+ 
+    \Chorus(label: "CHORUS") {
+        \LyricLine { 'Cause the players gonna play, play, play, play, play }
+        \LyricLine { ... }
+    }
+
+    \PostChorus(label: "POST-CHORUS") {
+        \LyricLine { I shake it off, I shake it off }
+        \LyricLine { I, I, I shake it off, I shake it off }
+        \LyricLine { I, I, I shake it off, I shake it off }
+        \LyricLine { I, I, I shake it off, I shake it off }
+    }
+
+    \Interlude(label: "INTERLUDE") {
+        \LyricLine { Hey, hey, hey }
+        \LyricLine { Just think, while you've been gettin' down and out about the liars }
+        \LyricLine { And the dirty, dirty cheats of the world }
+        \LyricLine { You could've been gettin' down }
+        \LyricLine { To this sick beat }
+    }
+
+    \Bridge(label: "BRIDGE") {
+        \LyricLine { My ex-man brought his new girlfriend }
+        \LyricLine { She's like, "Oh my God," but I'm just gonna shake }
+        \LyricLine { And to the fella over there with the hella good hair }
+        \LyricLine { Won't you come on over, baby? We can shake, shake, shake }
+        \LyricLine { Yeah, oh-oh, oh }
+    }
+
+    \Chorus(label: "CHORUS") {
+        \LyricLine { 'Cause the players gonna play, play, play, play, play }
+        \LyricLine { ... }
+    }
+
+    \PostChorus(label: "POST-CHORUS") {
+        \LyricLine { I shake it off, I shake it off }
+        \LyricLine { I, I, I shake it off, I shake it off }
+        \LyricLine { I, I, I shake it off, I shake it off }
+        \LyricLine { I, I, I shake it off \Backing{(Yeah)}, I shake it off }
+        \LyricLine { I shake it off, I shake it off }
+        \LyricLine { I, I, I shake it off, I shake it off \Backing{(You got to)} }
+        \LyricLine { I, I, I shake it off, I shake it off }
+        \LyricLine { I, I, I shake it off, I shake it off }
+    }
+}
