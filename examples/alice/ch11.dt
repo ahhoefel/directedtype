@@ -3,10 +3,10 @@
 // Trembling Hatter wrap (#38 p. 170), and Fleeing Hatter mid-plate (#39 p. 173).
 
 \use "components/Align.dt"
-\use "components/VStackStretch.dt"
-\use "components/Spacer.dt"
-\use "components/Italic.dt"
-\use "components/SmallCaps.dt"
+\use "components/layout/VStackStretch.dt"
+\use "components/layout/Spacer.dt"
+\use "components/text/Italic.dt"
+\use "components/text/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 // Tight-leaded narrow wrap column on p. 170 (13 narrow lines in exact 12 body-line height = 216pt)

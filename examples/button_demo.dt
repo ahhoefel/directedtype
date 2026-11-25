@@ -1,14 +1,13 @@
 // DirectedType Standard Component Library Demo: Button & Card
 // Showcases interactive variants, intrinsic text-metric sizing, and ambient Card surfaces.
 
-\use "../components/VStack.dt"
-\use "../components/VStackStretch.dt"
-\use "../components/HStack.dt"
-\use "../components/Card.dt"
-\use "../components/Button.dt"
-\use "../components/ButtonVariant.dt"
-\use "../components/HDivider.dt"
-\use "../components/Spacer.dt"
+\use "../components/layout/VStack.dt"
+\use "../components/layout/VStackStretch.dt"
+\use "../components/layout/HStack.dt"
+\use "examples/components/Card.dt"
+\use "examples/components/Button.dt"
+\use "../components/layout/HDivider.dt"
+\use "../components/layout/Spacer.dt"
 \use "../theme/default.dt"
 
 // Background Canvas

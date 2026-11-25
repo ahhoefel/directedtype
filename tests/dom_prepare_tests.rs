@@ -79,8 +79,8 @@ fn prepare_compile_and_paginate_with<R: FileResolver>(
 #[test]
 fn test_lossless_mixed_content_inline_replace_and_directives() {
     let src = r#"
-    \use "components/Bold.dt"
-    \use "components/VStack.dt"
+    \use "components/text/Bold.dt"
+    \use "components/layout/VStack.dt"
 
     \env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
 
@@ -171,8 +171,8 @@ fn test_book_toc_autonumbering_multipage_convergence_and_pdf_links() {
 
     let src = format!(
         r#"
-    \use "components/Book.dt"
-    \use "components/TableOfContents.dt"
+    \use "components/document/Book.dt"
+    \use "components/document/TableOfContents.dt"
 
     \Book(
         title: "Automated Book Typography",
@@ -353,9 +353,9 @@ fn test_bibliography_and_cite_citation_and_alpha_sort_virtual_resolver() {
 
     // 1. Citation order (`sort: "citation"`): knuth84 cited first -> [1], turing50 cited second -> [2]
     let src_cite_order = r#"
-    \use "components/Article.dt"
-    \use "components/Bibliography.dt"
-    \use "components/Link.dt"
+    \use "components/document/Article.dt"
+    \use "components/document/Bibliography.dt"
+    \use "components/text/Link.dt"
 
     \Article(
         title: "Citation Order Paper",

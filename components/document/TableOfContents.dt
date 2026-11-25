@@ -2,9 +2,9 @@
 // Automatic table of contents populated prior to layout by `TableOfContents::on_prepare`,
 // binding clickable internal `\Link(to: target)` entries with converging forward `.page` numbers.
 
-\use "components/VStackStretch.dt"
-\use "components/HDivider.dt"
-\use "components/Link.dt"
+\use "components/layout/VStackStretch.dt"
+\use "components/layout/HDivider.dt"
+\use "components/text/Link.dt"
 
 \Component TocEntry(
     number: String = "",

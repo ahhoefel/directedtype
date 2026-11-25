@@ -2,14 +2,11 @@
 // Documents line-break departures from the 1866 Macmillan edition (plus the 5 editorial punctuation fixes).
 
 \use "components/Align.dt"
-\use "components/LineBreak.dt"
-\use "components/TextBounds.dt"
-\use "components/TextStart.dt"
-\use "components/TextEnd.dt"
-\use "components/VStackStretch.dt"
-\use "components/SmallCaps.dt"
-\use "components/Spacer.dt"
-\use "components/Italic.dt"
+\use "components/text/TextBounds.dt"
+\use "components/layout/VStackStretch.dt"
+\use "components/text/SmallCaps.dt"
+\use "components/layout/Spacer.dt"
+\use "components/text/Italic.dt"
 \use "AliceStyle.dt"
 
 \Component CorrectionList(

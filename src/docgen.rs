@@ -830,14 +830,14 @@ mod tests {
     #[test]
     fn test_split_hidden_lines() {
         let raw = "\
-# \\use \"components/VStack.dt\"
+# \\use \"components/layout/VStack.dt\"
 # \\env font = \\Font(family: \"Arial\", size: 16px);
 \\VStack(width: 200px, gap: 8px) {
     # \\let secret = 10px;
     \\Text(font: \\Font(color: #1e293b)) { \"Visible\" }
 }";
         let (compiler_src, display_src) = split_hidden_lines(raw);
-        assert!(compiler_src.contains("\\use \"components/VStack.dt\""));
+        assert!(compiler_src.contains("\\use \"components/layout/VStack.dt\""));
         assert!(compiler_src.contains("\\let secret = 10px;"));
         assert!(!display_src.contains("\\use"));
         assert!(!display_src.contains("secret"));

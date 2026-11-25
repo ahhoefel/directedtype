@@ -6,7 +6,7 @@ use std::path::Path;
 #[test]
 fn test_vstack_default_left_alignment_and_gap() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
 
     \VStack(x: 10px, y: 20px, width: 300px, gap: 16px) {
         \Rect(width: 100px, height: 40px, color: #3b82f6)
@@ -56,7 +56,7 @@ fn test_vstack_default_left_alignment_and_gap() {
 #[test]
 fn test_vstack_center_and_centered_alignment() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
     \use "components/Align.dt"
 
     \VStack(x: 0, y: 0, width: 400px, align: Align.Center, gap: 10px) {
@@ -88,7 +88,7 @@ fn test_vstack_center_and_centered_alignment() {
 #[test]
 fn test_vstack_right_alignment() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
     \use "components/Align.dt"
 
     \VStack(x: 50px, y: 0, width: 400px, align: Align.Right) {
@@ -119,7 +119,7 @@ fn test_vstack_right_alignment() {
 #[test]
 fn test_vstack_stretch_alignment() {
     let input = r#"
-    \use "components/VStackStretch.dt"
+    \use "components/layout/VStackStretch.dt"
 
     \VStackStretch(x: 0, y: 0, width: 500px) {
         \Rect(height: 50px, color: #8b5cf6)
@@ -154,8 +154,8 @@ fn test_vstack_stretch_alignment() {
 #[test]
 fn test_vstack_with_button_and_text_composition() {
     let input = r#"
-    \use "components/VStackStretch.dt"
-    \use "components/Button.dt"
+    \use "components/layout/VStackStretch.dt"
+    \use "examples/components/Button.dt"
     \use "theme/default.dt"
 
     \VStackStretch(x: 20px, y: 20px, width: 350px, gap: 14px) {
@@ -189,7 +189,7 @@ fn test_vstack_with_button_and_text_composition() {
 #[test]
 fn test_vstack_default_zero_gap() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
 
     \VStack(x: 10px, y: 20px, width: 300px) {
         \Rect(width: 100px, height: 40px, color: #3b82f6)
@@ -220,7 +220,7 @@ fn test_vstack_default_zero_gap() {
 #[test]
 fn test_vstack_standalone_without_width_shrink_wraps_and_supports_min_width() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
 
     \VStack("natural"; gap: 12px) {
         \Rect(width: 80px, height: 30px, color: #3b82f6)
@@ -259,7 +259,7 @@ fn test_vstack_standalone_without_width_shrink_wraps_and_supports_min_width() {
 #[test]
 fn test_vstack_shrink_wrap_width() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
     \use "components/Align.dt"
 
     \VStack(x: 20px, y: 30px, gap: 10px, align: Align.Center) {
@@ -302,7 +302,7 @@ fn test_vstack_shrink_wrap_width() {
 #[test]
 fn test_vstack_fixed_height() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
 
     \VStack(height: 250px, width: 180px, x: 10px, y: 15px) {
         \Rect(width: 100px, height: 40px, color: #3b82f6)
@@ -329,8 +329,8 @@ fn test_vstack_fixed_height() {
 #[test]
 fn test_vstack_inside_center_shrink_wrap_no_cycle() {
     let input = r#"
-    \use "components/Center.dt"
-    \use "components/VStack.dt"
+    \use "components/layout/Center.dt"
+    \use "components/layout/VStack.dt"
 
     \Center {
         \VStack(gap: 10px) {
@@ -374,8 +374,8 @@ fn test_vstack_inside_center_shrink_wrap_no_cycle() {
 #[test]
 fn test_vstack_inside_center_explicit_width_no_cycle() {
     let input = r#"
-    \use "components/Center.dt"
-    \use "components/VStack.dt"
+    \use "components/layout/Center.dt"
+    \use "components/layout/VStack.dt"
 
     \Center {
         \VStack(width: 400px, gap: 20px) {
@@ -411,7 +411,7 @@ fn test_vstack_inside_center_explicit_width_no_cycle() {
 #[test]
 fn test_vstack_min_height_and_explicit_height_with_intrinsic_width() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
 
     \VStack("clamped_height"; min_height: 150px, gap: 10px) {
         \Rect(width: 120px, height: 40px, color: #3b82f6)

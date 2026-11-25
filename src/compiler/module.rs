@@ -465,19 +465,14 @@ fn resolve_use_decl<R: FileResolver>(
         }
     }
 
-    // Collect all enums in scope inside this module (including its own imports)
+    // Collect all enums in scope inside this module (including built-ins and its own imports)
     let mut module_scope_enums = available_enums.clone();
-    module_scope_enums
-        .entry("LineCap".to_string())
-        .or_insert_with(|| crate::ast::EnumDef {
-            name: Ident::new("LineCap", imported_doc.span),
-            variants: vec![
-                Ident::new("Butt", imported_doc.span),
-                Ident::new("Round", imported_doc.span),
-                Ident::new("Square", imported_doc.span),
-            ],
-            span: imported_doc.span,
-        });
+    let mut builtin_dummy_registry = HashMap::new();
+    crate::compiler::expand::builtins::register_builtin_enums_and_components(
+        &mut module_scope_enums,
+        &mut builtin_dummy_registry,
+        imported_doc.span,
+    );
     for item in &nested_imported_items {
         if let Item::Enum(e) = item {
             module_scope_enums.insert(e.name.as_str().to_string(), e.clone());
@@ -593,12 +588,14 @@ fn resolve_use_decl<R: FileResolver>(
             }
         }
     } else if let Some(alias) = &u.alias {
-        for item in &imported_doc.items {
-            if let Item::Enum(e) = item {
-                let mut aliased_enum = e.clone();
-                aliased_enum.name = alias.clone();
-                all_module_enums.insert(alias.as_str().to_string(), aliased_enum.clone());
-                exported_top_items.push(Item::Enum(aliased_enum));
+        if imported_components.is_empty() {
+            for item in &imported_doc.items {
+                if let Item::Enum(e) = item {
+                    let mut aliased_enum = e.clone();
+                    aliased_enum.name = alias.clone();
+                    all_module_enums.insert(alias.as_str().to_string(), aliased_enum.clone());
+                    exported_top_items.push(Item::Enum(aliased_enum));
+                }
             }
         }
 

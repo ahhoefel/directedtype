@@ -11,11 +11,10 @@
 // [x]   Verso: Blank (followed by Page 1 on Recto)
 
 \use "components/Align.dt"
-\use "components/LineBreak.dt"
-\use "components/Center.dt"
-\use "components/VStackStretch.dt"
-\use "components/Spacer.dt"
-\use "components/Italic.dt"
+\use "components/layout/Center.dt"
+\use "components/layout/VStackStretch.dt"
+\use "components/layout/Spacer.dt"
+\use "components/text/Italic.dt"
 \use "AliceStyle.dt"
 
 \Component FrontispiecePlate(

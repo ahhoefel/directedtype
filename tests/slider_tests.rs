@@ -43,7 +43,7 @@ impl EqualizerCompanion {
 #[test]
 fn test_slider_component_drag_and_callback() {
     let input = r#"
-    \use "components/Slider.dt"
+    \use "examples/components/Slider.dt"
 
     \Component Equalizer() {
         \state bass: Float = 20;

@@ -35,10 +35,9 @@ Some don't have a block, like the `\Font` component.
 The expression for creating a component is called a "component literal". It places the component into the DOM -- the component tree of the document. This first example only has one component literal and it lives in the DOM below the window which is the root of the DOM. Here's our first DOM tree:
 
 ```dt render hide-code padding=16px
-\use "components/HCenterUp.dt"
-\use "components/Card.dt"
-\use "components/CardStyle.dt"
-\use "components/Arrow.dt"
+\use "components/layout/HCenterUp.dt"
+\use "examples/components/Card.dt"
+\use "components/graphics/Arrow.dt"
 \env font = \Font(family: "Arial", size: 12pt, color: #000000);
 
 \let card_style = \CardStyle(
@@ -100,11 +99,10 @@ Below the definition of `\LeftMargin` we create a component literal of `\LeftMar
 This gives us the following DOM:
 
 ```dt render hide-code padding=16px
-\use "components/HCenterUp.dt"
-\use "components/HStack.dt"
-\use "components/Card.dt"
-\use "components/CardStyle.dt"
-\use "components/Arrow.dt"
+\use "components/layout/HCenterUp.dt"
+\use "components/layout/HStack.dt"
+\use "examples/components/Card.dt"
+\use "components/graphics/Arrow.dt"
 \env font = \Font(family: "Arial", size: 12pt, color: #000000);
 
 \let card_style = \CardStyle(
@@ -174,10 +172,10 @@ Notice how we've removed the `x` parameter from the `\Text` components in the ex
 This example also shows us a DAG with two edges:
 
 ```dt render hide-code padding=16px
-\use "components/HCenterUp.dt"
-\use "components/HStack.dt"
-\use "components/ComponentPill.dt"
-\use "components/Arrow.dt"
+\use "components/layout/HCenterUp.dt"
+\use "components/layout/HStack.dt"
+\use "docs/tutorial/ComponentPill.dt"
+\use "components/graphics/Arrow.dt"
 \env font = \Font(family: "Arial", size: 12pt);
 
 \HCenterUp(y: 0px) {
@@ -466,10 +464,10 @@ component wherever that component is instantiated. In the next example, when we 
 
 
 ```dt render hide-code padding=16px
-\use "components/HCenterUp.dt"
-\use "components/HStack.dt"
-\use "components/ComponentPill.dt"
-\use "components/Arrow.dt"
+\use "components/layout/HCenterUp.dt"
+\use "components/layout/HStack.dt"
+\use "docs/tutorial/ComponentPill.dt"
+\use "components/graphics/Arrow.dt"
 \env font = \Font(family: "Arial", size: 12pt);
 
 \ComponentPill(x: 0px, y: 0px) {

@@ -6,7 +6,7 @@ use std::path::Path;
 #[test]
 fn test_padout_uniform_wrapping_rect() {
     let input = r#"
-    \use "components/PadOut.dt"
+    \use "components/layout/PadOut.dt"
 
     \PadOut(padding: 20px, x: 10px, y: 15px) {
         \Rect(width: 100px, height: 60px, color: #3b82f6)
@@ -39,7 +39,7 @@ fn test_padout_uniform_wrapping_rect() {
 #[test]
 fn test_padin_uniform_insetting_child() {
     let input = r#"
-    \use "components/PadIn.dt"
+    \use "components/layout/PadIn.dt"
 
     \PadIn(padding: 20px, x: 10px, y: 15px) {
         \Rect(color: #3b82f6)
@@ -74,8 +74,8 @@ fn test_padin_uniform_insetting_child() {
 #[test]
 fn test_padout_asymmetric_wrapping_hstack() {
     let input = r#"
-    \use "components/PadOut.dt"
-    \use "components/HStack.dt"
+    \use "components/layout/PadOut.dt"
+    \use "components/layout/HStack.dt"
 
     \PadOut(padding_x: 20px, padding_y: 24px, x: 10px, y: 20px) {
         \HStack(gap: 16px) {
@@ -122,8 +122,8 @@ fn test_padout_asymmetric_wrapping_hstack() {
 #[test]
 fn test_padin_asymmetric_insetting_vstack() {
     let input = r#"
-    \use "components/PadIn.dt"
-    \use "components/VStackStretch.dt"
+    \use "components/layout/PadIn.dt"
+    \use "components/layout/VStackStretch.dt"
 
     \PadIn(padding_x: 20px, padding_y: 24px, x: 10px, y: 20px) {
         \VStackStretch(gap: 16px) {
@@ -169,7 +169,7 @@ fn test_padin_asymmetric_insetting_vstack() {
 #[test]
 fn test_padout_assertion_rejects_multiple_children() {
     let input = r#"
-    \use "components/PadOut.dt"
+    \use "components/layout/PadOut.dt"
 
     \PadOut(padding: 20px) {
         \Rect(width: 100px, height: 50px, color: #ff0000)
@@ -202,7 +202,7 @@ fn test_padout_assertion_rejects_multiple_children() {
 #[test]
 fn test_padin_assertion_rejects_multiple_children() {
     let input = r#"
-    \use "components/PadIn.dt"
+    \use "components/layout/PadIn.dt"
 
     \PadIn(padding: 20px) {
         \Rect(width: 100px, height: 50px, color: #ff0000)

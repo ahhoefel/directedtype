@@ -9,7 +9,7 @@ use std::path::Path;
 #[test]
 fn test_button_intrinsic_width_calculation() {
     let input = r#"
-    \use "components/Button.dt"
+    \use "examples/components/Button.dt"
     \use "theme/default.dt"
 
     \Button("auto"; style: button_primary, label: "OK", x: 10px, y: 10px)
@@ -53,7 +53,7 @@ fn test_button_intrinsic_width_calculation() {
 #[test]
 fn test_button_variants_visual_ports() {
     let input = r#"
-    \use "components/Button.dt"
+    \use "examples/components/Button.dt"
     \use "theme/default.dt"
 
     \Button("primary"; style: button_primary, x: 10px, y: 10px, label: "Primary")
@@ -114,7 +114,7 @@ fn test_disabled_button_suppresses_event_bubbling() {
     }
 
     let input = r#"
-    \use "components/Button.dt"
+    \use "examples/components/Button.dt"
     \use "theme/default.dt"
 
     \Component Card {
@@ -185,7 +185,7 @@ fn test_disabled_button_suppresses_event_bubbling() {
 #[test]
 fn test_button_spatial_alias_flow() {
     let input = r#"
-    \use "components/Button.dt"
+    \use "examples/components/Button.dt"
     \use "theme/default.dt"
 
     \Button("first"; style: button_primary, x: 20px, y: 20px, label: "First Button")

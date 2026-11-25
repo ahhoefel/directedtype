@@ -3,8 +3,8 @@
 // Dodo thimble plate (#10 p. 35), and S-curve typographic calligram "The Mouse's Tale" (p. 37).
 
 \use "components/Align.dt"
-\use "components/Italic.dt"
-\use "components/SmallCaps.dt"
+\use "components/text/Italic.dt"
+\use "components/text/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 // Exact 50-line S-curve typographic calligram from Book Page 37

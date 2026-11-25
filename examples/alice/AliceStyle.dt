@@ -3,13 +3,10 @@
 // Type block: 265.0pt measure x 22 lines at 18.0pt leading (12pt Old Standard TT, 190 DPI engravings)
 
 \use "components/Align.dt"
-\use "components/LineBreak.dt"
-\use "components/TextBounds.dt"
-\use "components/TextStart.dt"
-\use "components/TextEnd.dt"
-\use "components/VStackStretch.dt"
-\use "components/Spacer.dt"
-\use "components/Italic.dt"
+\use "components/text/TextBounds.dt"
+\use "components/layout/VStackStretch.dt"
+\use "components/layout/Spacer.dt"
+\use "components/text/Italic.dt"
 
 // Metadata deposited at each chapter start for running headers
 \Component AliceChapterMeta(

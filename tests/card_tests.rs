@@ -6,7 +6,7 @@ use std::path::Path;
 #[test]
 fn test_card_with_direct_raw_text() {
     let input = r#"
-    \use "components/Card.dt"
+    \use "examples/components/Card.dt"
     \use "theme/default.dt"
 
     \Card(style: card_dark, x: 20px, y: 30px, width: 250px) {
@@ -45,7 +45,7 @@ fn test_card_with_direct_raw_text() {
 #[test]
 fn test_card_multi_child_vertical_flow_gap() {
     let input = r#"
-    \use "components/Card.dt"
+    \use "examples/components/Card.dt"
     \use "theme/default.dt"
 
     \Card(style: card_dark, x: 0, y: 0, width: 300px, gap: 10px) {
@@ -83,8 +83,7 @@ fn test_card_multi_child_vertical_flow_gap() {
 #[test]
 fn test_card_auto_height_wraps_children() {
     let input = r#"
-    \use "components/Card.dt"
-    \use "components/CardStyle.dt"
+    \use "examples/components/Card.dt"
 
     \let custom_style = \CardStyle(
         bg: #1e293b,
@@ -130,7 +129,7 @@ fn test_card_auto_height_wraps_children() {
 #[test]
 fn test_card_rejects_external_height_specification() {
     let input = r#"
-    \use "components/Card.dt"
+    \use "examples/components/Card.dt"
     \use "theme/default.dt"
 
     \Card(style: card_dark, x: 0, y: 0, width: 200px, height: 80px) {
@@ -161,8 +160,8 @@ fn test_card_rejects_external_height_specification() {
 #[test]
 fn test_card_pushes_width_down_to_nested_vstack() {
     let input = r#"
-    \use "components/Card.dt"
-    \use "components/VStack.dt"
+    \use "examples/components/Card.dt"
+    \use "components/layout/VStack.dt"
     \use "theme/default.dt"
 
     \Card(style: card_dark, x: 20px, y: 30px, width: 300px) {

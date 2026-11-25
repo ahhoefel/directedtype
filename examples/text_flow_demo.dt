@@ -8,20 +8,18 @@
 // 5. Post-shaping \Span output ports (\let n1 = \Sup { [1] } -> n1.baseline)
 //    powering baseline-aligned margin sidenotes across the layout DAG!
 
-\use "components/VStackStretch.dt"
-\use "components/HStack.dt"
+\use "components/layout/VStackStretch.dt"
+\use "components/layout/HStack.dt"
 \use "components/Align.dt"
-\use "components/Card.dt"
-\use "components/CardStyle.dt"
-\use "components/HDivider.dt"
-\use "components/LinkStyle.dt"
-\use "components/Link.dt"
-\use "components/Bold.dt"
-\use "components/Italic.dt"
-\use "components/Code.dt"
-\use "components/Sup.dt"
-\use "components/Kbd.dt"
-\use "components/Badge.dt"
+\use "examples/components/Card.dt"
+\use "components/layout/HDivider.dt"
+\use "components/text/Link.dt"
+\use "components/text/Bold.dt"
+\use "components/text/Italic.dt"
+\use "components/text/Code.dt"
+\use "components/text/Sup.dt"
+\use "examples/components/Kbd.dt"
+\use "examples/components/Badge.dt"
 \use "theme/default.dt"
 
 \env font = \Font(family: "Arial", size: 15px, line_height: 23px);

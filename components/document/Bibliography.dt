@@ -2,10 +2,10 @@
 // Inline citations (`\Cite`) and deterministic BibTeX reference list (`\Bibliography`)
 // rewritten in place before layout by `Bibliography::on_prepare`.
 
-\use "components/VStackStretch.dt"
-\use "components/HStack.dt"
-\use "components/HDivider.dt"
-\use "components/Link.dt"
+\use "components/layout/VStackStretch.dt"
+\use "components/layout/HStack.dt"
+\use "components/layout/HDivider.dt"
+\use "components/text/Link.dt"
 
 \Span Cite(
     key: String,

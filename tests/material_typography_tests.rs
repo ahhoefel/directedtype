@@ -40,7 +40,7 @@ fn find_descendant_text<'a>(
 #[test]
 fn test_material_typography_all_13_variants() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
     \use "components/material/Typography.dt"
 
     \VStack(x: 0px, y: 0px, gap: 8px) {
@@ -127,7 +127,7 @@ fn test_material_typography_all_13_variants() {
 #[test]
 fn test_material_typography_all_12_shorthands_and_tokens() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
     \use "components/material/Palette.dt"
     \use "components/material/Typography.dt"
 
@@ -229,10 +229,10 @@ fn test_material_typography_all_12_shorthands_and_tokens() {
 fn test_material_typography_wrapping_alignment_and_inline_spans() {
     let input = r#"
     \use "components/Align.dt"
-    \use "components/Bold.dt"
-    \use "components/Italic.dt"
-    \use "components/Code.dt"
-    \use "components/VStackStretch.dt"
+    \use "components/text/Bold.dt"
+    \use "components/text/Italic.dt"
+    \use "components/text/Code.dt"
+    \use "components/layout/VStackStretch.dt"
     \use "components/material/Typography.dt"
 
     \env font = \Font(family: "Georgia", size: 16px);
@@ -326,7 +326,7 @@ fn test_material_typography_wrapping_alignment_and_inline_spans() {
 #[test]
 fn test_material_button_inherits_env_font_and_button_metrics() {
     let input = r#"
-    \use "components/HStack.dt"
+    \use "components/layout/HStack.dt"
     \use "components/material/Button.dt"
 
     \env font = \Font(family: "Georgia", size: 16px);
@@ -374,7 +374,7 @@ fn test_material_button_inherits_env_font_and_button_metrics() {
 #[test]
 fn test_material_typography_gutter_bottom() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
     \use "components/material/Typography.dt"
 
     \VStack(x: 0px, y: 0px, gap: 0px) {

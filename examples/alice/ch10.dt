@@ -3,9 +3,9 @@
 // "Will you walk a little faster?" (pp. 151–152), Lobster wrap + verse (#36 p. 157), and "Beautiful Soup" (pp. 160–161).
 
 \use "components/Align.dt"
-\use "components/Spacer.dt"
-\use "components/Italic.dt"
-\use "components/SmallCaps.dt"
+\use "components/layout/Spacer.dt"
+\use "components/text/Italic.dt"
+\use "components/text/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterTen(

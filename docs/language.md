@@ -528,13 +528,13 @@ Files can import components, enums, and top-level bindings from other `.dt` file
 
 ```dt
 // 1. Wildcard import (brings all public symbols into scope)
-\use "components/VStack.dt"
+\use "components/layout/VStack.dt"
 
 // 2. Namespaced wildcard import (access as Layout.VStack)
-\use "components/VStack.dt" as Layout
+\use "components/layout/VStack.dt" as Layout
 
 // 3. Selective named import with optional aliasing
-\use { VStack, VStackStretch as StretchStack } from "components/VStack.dt";
+\use { VStack, VStackStretch as StretchStack } from "components/layout/VStack.dt";
 ```
 
 ---
@@ -724,7 +724,7 @@ To preserve state across dynamic re-compilations or list reordering, an element 
 > Identity key expressions must be pure identity values (literals, non-spatial parameters, or `\state` variables) and **cannot** depend on spatial layout ports (`x`, `y`, `width`, `height`, `left`, `top`, `right`, `bottom`, `z`, `clip`) or `\let` layout formulas.
 
 #### Event Handler Ports & Companion Rust Structs (`#[component]`)
-Interactive behavior is implemented in a companion Rust struct annotated with `#[component]` (e.g., `components/Button.rs` alongside `components/Button.dt`). In `.dt`, event ports (`on_click`, `on_scroll`, `on_pointer_down`, `on_pointer_move`, `on_pointer_up`, `on_pointer_enter`, `on_pointer_leave`, `on_focus`, `on_blur`) have type `Handler` and bind DOM events to companion methods:
+Interactive behavior is implemented in a companion Rust struct annotated with `#[component]` (e.g., `examples/components/Button.rs` alongside `examples/components/Button.dt`). In `.dt`, event ports (`on_click`, `on_scroll`, `on_pointer_down`, `on_pointer_move`, `on_pointer_up`, `on_pointer_enter`, `on_pointer_leave`, `on_focus`, `on_blur`) have type `Handler` and bind DOM events to companion methods:
 * **Unqualified method name (`on_click: act`)**: Binds to the `act` method on the **enclosing `\Component`** being defined.
 * **Qualified `self.<method>` (`on_click: self.act`)**: Binds to the `act` method on the **target component instance** itself (for example, when `\Component Foo() { \Bar(on_click: self.act) }` invokes `Bar.act` instead of `Foo.act`, or in a component's own signature default).
 

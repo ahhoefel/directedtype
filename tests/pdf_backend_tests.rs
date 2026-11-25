@@ -45,8 +45,8 @@ fn test_pdf_header_trailer_and_versions() {
 #[test]
 fn test_pdf_deterministic_output() {
     let src = r#"
-    \use "components/VStackStretch.dt"
-    \use "components/Link.dt"
+    \use "components/layout/VStackStretch.dt"
+    \use "components/text/Link.dt"
     \use "theme/default.dt"
 
     \env font = \Font(size: 12pt, line_height: 16pt);
@@ -184,8 +184,8 @@ fn test_pdf_shadow_smask_and_hard_shadow() {
 #[test]
 fn test_pdf_links_internal_anchors_and_outlines() {
     let src = r##"
-    \use "components/VStackStretch.dt"
-    \use "components/Link.dt"
+    \use "components/layout/VStackStretch.dt"
+    \use "components/text/Link.dt"
     \use "theme/default.dt"
 
     \env font = \Font(size: 12pt, line_height: 16pt);
@@ -304,7 +304,7 @@ fn test_pdf_book_demo_body_text_painted_over_page_background() {
 #[test]
 fn test_pdf_small_caps_export_preserves_lowercase_tounicode() {
     let src = r#"
-    \use "components/SmallCaps.dt"
+    \use "components/text/SmallCaps.dt"
     \env font = \Font(family: "Arial", size: 16px);
 
     \Text(x: 40pt, y: 40pt, width: 300pt) {

@@ -1,0 +1,24 @@
+// DirectedType Standard Component Library: TextBounds
+// Typographic vertical start and end landmarks for Text components.
+
+// Typographic vertical start landmarks for Text components.
+\Enum TextStart {
+    Capital,
+    Ascender,
+    EmTop,
+    LineHeight,
+}
+
+// Typographic vertical termination landmarks for Text components.
+\Enum TextEnd {
+    Baseline,
+    Descender,
+    GapBottom,
+    LineHeight,
+}
+
+\Component TextBounds(
+    start_at: TextStart = TextStart.Capital,
+    end_at: TextEnd = TextEnd.Baseline
+) {}
+

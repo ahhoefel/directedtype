@@ -433,7 +433,7 @@ fn test_material_gallery_cards_contain_contents_when_narrow() {
 #[test]
 fn test_material_paper_variants_and_shadows() {
     let input = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
     \use "components/material/Paper.dt"
 
     // 1. Width pulled up from single child
@@ -536,8 +536,8 @@ fn test_material_paper_variants_and_shadows() {
 #[test]
 fn test_material_divider_in_bottom_up_vstack_and_hstack() {
     let input = r#"
-    \use "components/VStack.dt"
-    \use "components/HStack.dt"
+    \use "components/layout/VStack.dt"
+    \use "components/layout/HStack.dt"
     \use "components/Align.dt"
     \use "components/material/Paper.dt"
     \use "components/material/Button.dt"
@@ -687,7 +687,7 @@ fn test_material_divider_in_bottom_up_vstack_and_hstack() {
 fn test_all_children_depending_on_parent_width_or_multi_level_cycle_rejected() {
     // 1. All children in a bottom-up VStack depend on parent.width -> must fail with CyclicDependency
     let all_top_down = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
     \use "components/material/Divider.dt"
 
     \VStack {
@@ -713,7 +713,7 @@ fn test_all_children_depending_on_parent_width_or_multi_level_cycle_rejected() {
 
     // 2. Ambiguous 2-level cycle across nested bottom-up VStacks -> must fail with CyclicDependency
     let multi_level_cycle = r#"
-    \use "components/VStack.dt"
+    \use "components/layout/VStack.dt"
 
     \VStack("outer";) {
         \Rect(width: 100px, height: 20px, color: #000000)

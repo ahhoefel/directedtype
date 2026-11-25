@@ -8,7 +8,7 @@ use vello::peniko::Color;
 #[test]
 fn test_block_anchor_geometry_passthrough_in_vstack() {
     let source = r##"
-        \use "components/VStack.dt";
+        \use "components/layout/VStack.dt";
 
         \VStack(width: 800px, gap: 16px) {
             \Anchor("first") {
@@ -86,7 +86,7 @@ fn test_inline_anchor_bookmark_in_text() {
 #[test]
 fn test_hierarchical_scopes_and_path_resolution() {
     let source = r##"
-        \use "components/HStack.dt";
+        \use "components/layout/HStack.dt";
 
         \HStack(gap: 20px) {
             \AnchorScope("pane-left") {
@@ -165,7 +165,7 @@ fn test_duplicate_anchor_in_same_scope_rejected() {
 #[test]
 fn test_anchor_scope_first_class_port_and_append_method() {
     let source = r##"
-        \use "components/Link.dt";
+        \use "components/text/Link.dt";
         \use "theme/default.dt";
 
         \Component TableOfContents(target_scope: Node, env font: Font, x: Distance = 0, y: Distance = 0) {
@@ -231,7 +231,7 @@ fn test_anchor_scope_first_class_port_and_append_method() {
 #[test]
 fn test_viewer_window_scrolling_to_anchors() {
     let source = r##"
-        \use "components/VStack.dt";
+        \use "components/layout/VStack.dt";
 
         \VStack(width: 800px, gap: 50px) {
             \Anchor("top") {
@@ -295,7 +295,7 @@ fn test_viewer_window_scrolling_to_anchors() {
 #[test]
 fn test_headless_render_with_scroll_offset() {
     let source = r##"
-        \use "components/VStack.dt";
+        \use "components/layout/VStack.dt";
 
         \VStack(width: 200px) {
             \Rect(width: 200px, height: 100px, color: #ff0000)
@@ -350,7 +350,7 @@ fn test_headless_render_with_scroll_offset() {
 #[test]
 fn test_scrolled_coordinate_hit_testing() {
     let source = r##"
-        \use "components/VStack.dt";
+        \use "components/layout/VStack.dt";
 
         \VStack(width: 800px) {
             \Rect(width: 300px, height: 500px, color: #111111)
@@ -491,9 +491,9 @@ fn test_focus_and_blur_event_dispatch_and_bubbling() {
 #[test]
 fn test_keyboard_focus_traversal_reading_order() {
     let source = r##"
-        \use "components/VStack.dt";
-        \use "components/HStack.dt";
-        \use "components/Link.dt";
+        \use "components/layout/VStack.dt";
+        \use "components/layout/HStack.dt";
+        \use "components/text/Link.dt";
         \use "theme/default.dt";
 
         \env link_style = link_default;
@@ -559,8 +559,8 @@ fn test_keyboard_focus_traversal_reading_order() {
 #[test]
 fn test_keyboard_focus_scrolls_into_view() {
     let source = r##"
-        \use "components/VStack.dt";
-        \use "components/Link.dt";
+        \use "components/layout/VStack.dt";
+        \use "components/text/Link.dt";
         \use "theme/default.dt";
 
         \env link_style = link_default;
@@ -605,8 +605,8 @@ fn test_keyboard_focus_scrolls_into_view() {
 #[test]
 fn test_keyboard_activation_triggers_anchor_navigation() {
     let source = r##"
-        \use "components/VStack.dt";
-        \use "components/Link.dt";
+        \use "components/layout/VStack.dt";
+        \use "components/text/Link.dt";
         \use "theme/default.dt";
 
         \env link_style = link_default;
@@ -771,8 +771,8 @@ fn test_designer_driven_focus_and_blur_target_styling() {
 #[test]
 fn test_link_component_click_handler_and_action_queue() {
     let source = r##"
-        \use "components/VStack.dt";
-        \use "components/Link.dt";
+        \use "components/layout/VStack.dt";
+        \use "components/text/Link.dt";
         \use "theme/default.dt";
 
         \env link_style = link_default;
@@ -873,7 +873,7 @@ fn test_link_component_click_handler_and_action_queue() {
 #[test]
 fn test_link_component_custom_on_click_override() {
     let source = r##"
-        \use "components/Link.dt";
+        \use "components/text/Link.dt";
         \use "theme/default.dt";
 
         \Component CustomPage(env font: Font, x: Distance = 0, y: Distance = 0) {
@@ -958,7 +958,7 @@ fn test_link_component_custom_on_click_override() {
 #[test]
 fn test_custom_on_click_calling_default_via_context() {
     let source = r##"
-        \use "components/Link.dt";
+        \use "components/text/Link.dt";
         \use "theme/default.dt";
 
         \Component CustomPage(env font: Font, x: Distance = 0, y: Distance = 0) {
@@ -1180,9 +1180,8 @@ fn test_link_demo_focus_and_blur_target_highlight_transitions() {
 #[test]
 fn test_link_component_focus_and_blur_transitions() {
     let source = r##"
-        \use "components/LinkStyle.dt";
-        \use "components/Link.dt";
-        \use "components/VStack.dt";
+        \use "components/text/Link.dt";
+        \use "components/layout/VStack.dt";
         \env font = \Font(size: 14px);
 
         \let custom_style = \LinkStyle(
@@ -1339,7 +1338,7 @@ fn test_link_component_focus_and_blur_transitions() {
 fn test_link_styling_required_no_default() {
     // Omitting style when no ambient theme is in scope must fail compilation with MissingPort
     let source = r##"
-        \use "components/Link.dt";
+        \use "components/text/Link.dt";
 
         \Link(url: "https://example.com") {
             Unstyled Link
@@ -1372,7 +1371,7 @@ fn test_link_styling_required_no_default() {
 fn test_link_styling_environmental_from_theme() {
     // Environmental link_style provides ambient styling to Link components
     let source = r##"
-        \use "components/Link.dt";
+        \use "components/text/Link.dt";
         \use "theme/default.dt";
 
         \env link_style = link_default;

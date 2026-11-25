@@ -12,29 +12,34 @@ fn test_extract_all_components_catalog_and_scoped_xrefs() {
     let catalog = extract_catalog(&[PathBuf::from("components")], &opts)
         .expect("Failed to extract catalog for components/");
 
-    // Should discover both root `components` and `components/material` packages
+    // Should discover root `components` and all organized subpackages
     let pkg_names: Vec<&str> = catalog.packages.iter().map(|p| p.name.as_str()).collect();
-    assert!(
-        pkg_names.contains(&"components"),
-        "Missing 'components' package in {pkg_names:?}"
-    );
-    assert!(
-        pkg_names.contains(&"components/material"),
-        "Missing 'components/material' package in {pkg_names:?}"
-    );
+    for expected_pkg in [
+        "components",
+        "components/document",
+        "components/graphics",
+        "components/layout",
+        "components/material",
+        "components/text",
+    ] {
+        assert!(
+            pkg_names.contains(&expected_pkg),
+            "Missing '{expected_pkg}' package in {pkg_names:?}"
+        );
+    }
 
-    assert!(catalog.module_count() >= 55, "Expected >=55 modules, got {}", catalog.module_count());
+    assert!(catalog.module_count() >= 45, "Expected >=45 modules, got {}", catalog.module_count());
     assert!(
-        catalog.component_count() >= 95,
-        "Expected >=95 components, got {}",
+        catalog.component_count() >= 85,
+        "Expected >=85 components, got {}",
         catalog.component_count()
     );
     assert!(
-        catalog.overload_count() >= 180,
-        "Expected >=180 overloads, got {}",
+        catalog.overload_count() >= 165,
+        "Expected >=165 overloads, got {}",
         catalog.overload_count()
     );
-    assert!(catalog.enum_count() >= 25, "Expected >=25 enums, got {}", catalog.enum_count());
+    assert!(catalog.enum_count() >= 22, "Expected >=22 enums, got {}", catalog.enum_count());
     assert!(
         catalog.binding_count() >= 30,
         "Expected >=30 top-level bindings, got {}",
@@ -51,60 +56,20 @@ fn test_extract_all_components_catalog_and_scoped_xrefs() {
             .unwrap_or_else(|| panic!("Module '{rel}' not found"))
     };
 
-    // 1. Card.dt: 4 Card overloads + CardFit with \assert, aliases, \Children wiring, CardStyle link
-    let card_mod = find_mod("components/Card.dt");
-    let card_style_mod = find_mod("components/CardStyle.dt");
-    assert_eq!(
-        card_mod.imports[0].target_anchor.as_deref(),
-        Some(card_style_mod.anchor.as_str())
-    );
-    let card = card_mod.components.iter().find(|c| c.name == "Card").unwrap();
-    assert_eq!(card.kind, ComponentKind::Component);
-    assert_eq!(card.overloads.len(), 4);
-    assert!(card.overloads[0].accepts_children);
-    assert!(!card.overloads[0].children_pushed_ports.is_empty());
-    let style_param = card.overloads[0]
-        .params
-        .iter()
-        .find(|p| p.name == "style")
-        .unwrap();
-    assert_eq!(style_param.type_name.as_deref(), Some("CardStyle"));
-    assert_eq!(
-        style_param.type_anchor.as_deref(),
-        Some(card_style_mod.components[0].anchor.as_str())
-    );
-    let card_height_alias = card.overloads[0]
-        .aliases
-        .iter()
-        .find(|a| a.name == "height")
-        .expect("Card should expose height alias");
-    assert_eq!(card_height_alias.type_name.as_deref(), Some("Distance"));
-    assert_eq!(card.overloads[0].children_cardinality, ChildrenCardinality::Multiple);
-    assert_eq!(
-        format_overload_signature("Card", &card.overloads[0]),
-        "\\Component Card(style, width, x, y, ...) { ... }"
-    );
+    // 1. TextBounds.dt: colocated TextStart & TextEnd enums linked from TextBounds params
+    let tb_mod = find_mod("components/text/TextBounds.dt");
+    let ts_enum = tb_mod.enums.iter().find(|e| e.name == "TextStart").unwrap();
+    let te_enum = tb_mod.enums.iter().find(|e| e.name == "TextEnd").unwrap();
+    let tb_comp = tb_mod.components.iter().find(|c| c.name == "TextBounds").unwrap();
+    let start_param = tb_comp.overloads[0].params.iter().find(|p| p.name == "start_at").unwrap();
+    let end_param = tb_comp.overloads[0].params.iter().find(|p| p.name == "end_at").unwrap();
+    assert_eq!(start_param.type_anchor.as_deref(), Some(ts_enum.anchor.as_str()));
+    assert_eq!(end_param.type_anchor.as_deref(), Some(te_enum.anchor.as_str()));
 
-    let card_fit = card_mod
-        .components
-        .iter()
-        .find(|c| c.name == "CardFit")
-        .unwrap();
-    assert_eq!(card_fit.overloads[0].asserts.len(), 1);
-    assert_eq!(
-        card_fit.overloads[0].asserts[0].message.as_deref(),
-        Some("Should have only one child.")
-    );
-    assert_eq!(card_fit.overloads[0].children_cardinality, ChildrenCardinality::Single);
-    assert_eq!(
-        format_overload_signature("CardFit", &card_fit.overloads[0]),
-        "\\Component CardFit(style, x, y, gap) { . }"
-    );
-
-    // 2. Link.dt: \Span with 3 overloads, compact signatures (2 accept children, 1 takes text), env params, and inferred alias types
-    let link_mod = find_mod("components/Link.dt");
-    let link_comp = &link_mod.components[0];
-    assert_eq!(link_comp.name, "Link");
+    // 2. Link.dt: colocated LinkStyle + \Span Link with 3 overloads, env params, and inferred alias types
+    let link_mod = find_mod("components/text/Link.dt");
+    let link_style_comp = link_mod.components.iter().find(|c| c.name == "LinkStyle").unwrap();
+    let link_comp = link_mod.components.iter().find(|c| c.name == "Link").unwrap();
     assert_eq!(link_comp.kind, ComponentKind::Span);
     assert_eq!(link_comp.overloads.len(), 3);
     assert_eq!(
@@ -125,7 +90,7 @@ fn test_extract_all_components_catalog_and_scoped_xrefs() {
         .find(|p| p.name == "link_style")
         .unwrap();
     assert!(env_ls.is_env);
-    assert!(env_ls.type_anchor.is_some());
+    assert_eq!(env_ls.type_anchor.as_deref(), Some(link_style_comp.anchor.as_str()));
     assert_eq!(
         link_comp.overloads[0]
             .aliases
@@ -143,25 +108,13 @@ fn test_extract_all_components_catalog_and_scoped_xrefs() {
         Some("Boolean")
     );
 
-    // 3. Badge.dt: \InlineBox
-    let badge_mod = find_mod("components/Badge.dt");
-    assert_eq!(badge_mod.components[0].kind, ComponentKind::InlineBox);
-    assert!(badge_mod.components[0].overloads[0].accepts_children);
-    assert_eq!(
-        format_overload_signature("Badge", &badge_mod.components[0].overloads[0]),
-        "\\InlineBox Badge(...) { ... }"
-    );
-    assert_eq!(
-        badge_mod.components[0].overloads[0]
-            .aliases
-            .iter()
-            .find(|a| a.name == "baseline_offset")
-            .and_then(|a| a.type_name.as_deref()),
-        Some("Distance")
-    );
+    // 3. InlineImage.dt: \InlineBox
+    let inline_img_mod = find_mod("components/text/InlineImage.dt");
+    assert_eq!(inline_img_mod.components[0].kind, ComponentKind::InlineBox);
+    assert_eq!(inline_img_mod.components[0].overloads.len(), 3);
 
     // 4. Bold.dt: provided \env font inferred as Font
-    let bold_mod = find_mod("components/Bold.dt");
+    let bold_mod = find_mod("components/text/Bold.dt");
     let bold_env_font = bold_mod.components[0].overloads[0]
         .provided_envs
         .iter()
@@ -170,7 +123,7 @@ fn test_extract_all_components_catalog_and_scoped_xrefs() {
     assert_eq!(bold_env_font.type_name.as_deref(), Some("Font"));
 
     // 5. Center.dt overload with zero parameters and single child (`{ . }`), plus material Switch (`<= 1`) and VDivider (`== 0`)
-    let center_mod = find_mod("components/Center.dt");
+    let center_mod = find_mod("components/layout/Center.dt");
     assert_eq!(
         format_overload_signature("Center", center_mod.components[0].overloads.last().unwrap()),
         "\\Component Center() { . }"
@@ -253,21 +206,66 @@ fn test_extract_all_components_catalog_and_scoped_xrefs() {
         Some(color_channel.anchor.as_str())
     );
 
-    // 6. Scoped disambiguation: std ButtonVariant vs material ButtonVariant
-    let std_bv_mod = find_mod("components/ButtonVariant.dt");
-    let std_btn_mod = find_mod("components/Button.dt");
-    let mat_btn_mod = find_mod("components/material/Button.dt");
+    // 6. Scoped disambiguation: example kit ButtonVariant vs material ButtonVariant, plus Card/CardFit/Badge
+    let combined_catalog = extract_catalog(
+        &[
+            PathBuf::from("components"),
+            PathBuf::from("examples/components"),
+        ],
+        &opts,
+    )
+    .expect("Failed to extract combined catalog");
+    let find_combined = |rel: &str| {
+        combined_catalog
+            .packages
+            .iter()
+            .flat_map(|p| &p.modules)
+            .find(|m| m.rel_path == rel)
+            .unwrap_or_else(|| panic!("Module '{rel}' not found"))
+    };
 
-    let std_btn_variant_param = std_btn_mod.components[0]
+    let card_mod = find_combined("examples/components/Card.dt");
+    let card_style = card_mod.components.iter().find(|c| c.name == "CardStyle").unwrap();
+    let card = card_mod.components.iter().find(|c| c.name == "Card").unwrap();
+    assert_eq!(card.overloads.len(), 4);
+    assert_eq!(
+        card.overloads[0].params.iter().find(|p| p.name == "style").unwrap().type_anchor.as_deref(),
+        Some(card_style.anchor.as_str())
+    );
+    let card_fit = card_mod.components.iter().find(|c| c.name == "CardFit").unwrap();
+    assert_eq!(card_fit.overloads[0].asserts.len(), 1);
+    assert_eq!(card_fit.overloads[0].children_cardinality, ChildrenCardinality::Single);
+    assert_eq!(
+        format_overload_signature("CardFit", &card_fit.overloads[0]),
+        "\\Component CardFit(style, x, y, gap) { . }"
+    );
+
+    let badge_mod = find_combined("examples/components/Badge.dt");
+    assert_eq!(badge_mod.components[0].kind, ComponentKind::InlineBox);
+    assert_eq!(
+        format_overload_signature("Badge", &badge_mod.components[0].overloads[0]),
+        "\\InlineBox Badge(...) { ... }"
+    );
+
+    let ex_btn_mod = find_combined("examples/components/Button.dt");
+    let mat_btn_mod = find_combined("components/material/Button.dt");
+
+    let ex_bv_enum = ex_btn_mod
+        .enums
+        .iter()
+        .find(|e| e.name == "ButtonVariant")
+        .unwrap();
+    let ex_btn_comp = ex_btn_mod.components.iter().find(|c| c.name == "Button").unwrap();
+    let ex_btn_variant_param = ex_btn_comp
         .overloads
         .iter()
         .flat_map(|o| &o.params)
         .find(|p| p.type_name.as_deref() == Some("ButtonVariant"))
-        .expect("std Button should have a ButtonVariant parameter");
+        .expect("example Button should have a ButtonVariant parameter");
     assert_eq!(
-        std_btn_variant_param.type_anchor.as_deref(),
-        Some(std_bv_mod.enums[0].anchor.as_str()),
-        "components/Button.dt must link ButtonVariant to components/ButtonVariant.dt"
+        ex_btn_variant_param.type_anchor.as_deref(),
+        Some(ex_bv_enum.anchor.as_str()),
+        "examples/components/Button.dt must link ButtonVariant to its own local ButtonVariant enum"
     );
 
     let mat_bv_enum = mat_btn_mod
@@ -286,7 +284,7 @@ fn test_extract_all_components_catalog_and_scoped_xrefs() {
         Some(mat_bv_enum.anchor.as_str()),
         "components/material/Button.dt must link ButtonVariant to its own local ButtonVariant enum"
     );
-    assert_ne!(std_bv_mod.enums[0].anchor, mat_bv_enum.anchor);
+    assert_ne!(ex_bv_enum.anchor, mat_bv_enum.anchor);
 
     // 7. Generated .dt parses cleanly back through DirectedType's parser
     let dt_source = render_catalog_to_dt(&catalog);
@@ -300,13 +298,12 @@ fn test_generate_internally_linked_pdf_with_toc_and_outlines() {
 
     let inputs = vec![
         PathBuf::from("components/Align.dt"),
-        PathBuf::from("components/Badge.dt"),
-        PathBuf::from("components/Bold.dt"),
-        PathBuf::from("components/ButtonVariant.dt"),
-        PathBuf::from("components/ButtonStyle.dt"),
-        PathBuf::from("components/Button.dt"),
-        PathBuf::from("components/CardStyle.dt"),
-        PathBuf::from("components/Card.dt"),
+        PathBuf::from("components/text/Bold.dt"),
+        PathBuf::from("components/text/TextBounds.dt"),
+        PathBuf::from("components/layout/VStack.dt"),
+        PathBuf::from("examples/components/Badge.dt"),
+        PathBuf::from("examples/components/Button.dt"),
+        PathBuf::from("examples/components/Card.dt"),
         PathBuf::from("components/material/Palette.dt"),
         PathBuf::from("components/material/Button.dt"),
     ];
@@ -321,7 +318,7 @@ fn test_generate_internally_linked_pdf_with_toc_and_outlines() {
     let (catalog, _dt_source, pdf_bytes) =
         generate_docs_pdf(&inputs, &doc_opts, &pdf_opts).expect("Failed to compile docs PDF");
 
-    assert_eq!(catalog.packages.len(), 2);
+    assert_eq!(catalog.packages.len(), 5);
     assert!(pdf_bytes.starts_with(b"%PDF-"), "Output must be a valid PDF");
 
     let text = String::from_utf8_lossy(&pdf_bytes);

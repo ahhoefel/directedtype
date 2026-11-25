@@ -2142,12 +2142,11 @@ pub fn render_catalog_to_dt(catalog: &DocCatalog) -> String {
     // 1. Imports & Document Stylesheet Components
     dt.push_str("// Auto-generated DirectedType Component Reference\n");
     dt.push_str("\\use \"components/Align.dt\"\n");
-    dt.push_str("\\use \"components/TextBounds.dt\"\n");
-    dt.push_str("\\use \"components/VStackStretch.dt\"\n");
-    dt.push_str("\\use \"components/HDivider.dt\"\n");
-    dt.push_str("\\use \"components/LinkStyle.dt\"\n");
-    dt.push_str("\\use \"components/Link.dt\"\n");
-    dt.push_str("\\use \"components/TableOfContents.dt\"\n\n");
+    dt.push_str("\\use \"components/text/TextBounds.dt\"\n");
+    dt.push_str("\\use \"components/layout/VStackStretch.dt\"\n");
+    dt.push_str("\\use \"components/layout/HDivider.dt\"\n");
+    dt.push_str("\\use \"components/text/Link.dt\"\n");
+    dt.push_str("\\use \"components/document/TableOfContents.dt\"\n\n");
 
     dt.push_str(DOC_STYLESHEET_DT);
     dt.push('\n');

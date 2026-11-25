@@ -3651,7 +3651,7 @@ fn test_number_to_string_builtins() {
 #[test]
 fn test_list_component_custom_bullet_port() {
     let input = r#"
-    \use { List, Item, BulletType } from "components/List.dt";
+    \use { List, Item, BulletType } from "components/text/List.dt";
     \use { Align } from "components/Align.dt";
 
     \env font = \Font(family: "Arial", size: 16px);
@@ -4745,10 +4745,10 @@ fn test_stage3_span_post_shaping_output_ports_in_dag() {
 #[test]
 fn test_stage3_standard_library_spans_bold_italic_code_sup() {
     let input = r#"
-    \use "components/Bold.dt";
-    \use "components/Italic.dt";
-    \use "components/Code.dt";
-    \use "components/Sup.dt";
+    \use "components/text/Bold.dt";
+    \use "components/text/Italic.dt";
+    \use "components/text/Code.dt";
+    \use "components/text/Sup.dt";
 
     \env font = \Font(family: "Arial", size: 20px, weight: 400);
 
@@ -4792,7 +4792,7 @@ fn test_stage3_standard_library_spans_bold_italic_code_sup() {
 #[test]
 fn test_stage4_block_components_not_wrapped_in_paragraphs() {
     let input = r#"
-    \use "components/VStack.dt";
+    \use "components/layout/VStack.dt";
 
     \Component BoxA(x: Distance = parent.left, y: Distance = parent.top, width: Distance = 100px, height: Distance = 30px) {
         \Rect(x: x, y: y, width: width, height: height, color: #ff0000)
@@ -4828,9 +4828,9 @@ fn test_stage4_block_components_not_wrapped_in_paragraphs() {
 #[test]
 fn test_stage4_contiguous_inline_runs_coalesce_and_paragraph_breaks_split() {
     let input = r#"
-    \use "components/VStack.dt";
-    \use "components/Bold.dt";
-    \use "components/Sup.dt";
+    \use "components/layout/VStack.dt";
+    \use "components/text/Bold.dt";
+    \use "components/text/Sup.dt";
 
     \env font = \Font(family: "Arial", size: 20px, weight: 400);
 
@@ -4885,8 +4885,8 @@ fn test_stage4_contiguous_inline_runs_coalesce_and_paragraph_breaks_split() {
 #[test]
 fn test_stage4_mixed_headings_paragraphs_and_cards_in_container() {
     let input = r#"
-    \use "components/VStack.dt";
-    \use "components/Bold.dt";
+    \use "components/layout/VStack.dt";
+    \use "components/text/Bold.dt";
 
     \Component H1(env font: Font, x: Distance = parent.left, y: Distance = parent.top, width: Distance = parent.width) {
         \let t = \Text(x: x, y: y, width: width, font: \Font(size: 32px, weight: 700)) { \Children };
@@ -5116,8 +5116,8 @@ fn test_inline_box_baseline_offset_and_auto_baseline() {
 #[test]
 fn test_stage5_inline_box_in_text_positions_and_advances_glyphs() {
     let source = r#"
-    \use "components/Kbd.dt"
-    \use "components/Bold.dt"
+    \use "examples/components/Kbd.dt"
+    \use "components/text/Bold.dt"
 
     \env font = \Font(family: "Arial", size: 16px, line_height: 24px);
 
@@ -5214,8 +5214,8 @@ fn test_stage5_inline_box_in_text_positions_and_advances_glyphs() {
 #[test]
 fn test_stage5_inline_box_standalone_in_hstack() {
     let source = r#"
-    \use "components/HStack.dt"
-    \use "components/Kbd.dt"
+    \use "components/layout/HStack.dt"
+    \use "examples/components/Kbd.dt"
 
     \env font = \Font(family: "Arial", size: 15px);
 
@@ -5460,7 +5460,7 @@ fn test_strict_child_port_acceptance() {
 fn test_text_align_port_and_span_metrics() {
     let src = r#"
     \use "components/Align.dt"
-    \use "components/Bold.dt"
+    \use "components/text/Bold.dt"
     \env font = \Font(size: 16px);
 
     \let t_left = \Text(x: 0, y: 0, width: 300px, paragraph_style: \ParagraphStyle(align: Align.Left)) {
@@ -5511,7 +5511,7 @@ fn test_text_align_port_and_span_metrics() {
 fn test_paragraph_style_defaults_derivation_and_env_propagation() {
     let src = r#"
     \use "components/Align.dt"
-    \use "components/VStackStretch.dt"
+    \use "components/layout/VStackStretch.dt"
     \env font = \Font(size: 16px);
 
     \let ps_default = \ParagraphStyle();
@@ -6917,8 +6917,8 @@ fn test_physical_print_units_and_72_dpi() {
 #[test]
 fn test_font_small_caps_inheritance_override_and_stdlib_span() {
     let src = r#"
-    \use "components/SmallCaps.dt"
-    \use "components/Italic.dt"
+    \use "components/text/SmallCaps.dt"
+    \use "components/text/Italic.dt"
 
     \Span NormalCaps(env font: Font) {
         \env font = \Font(font: self.font, small_caps: false);

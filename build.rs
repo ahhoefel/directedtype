@@ -58,20 +58,39 @@ fn extract_component_structs(source: &str, fallback_stem: &str) -> Vec<String> {
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     let components_dir = manifest_dir.join("components");
+    let example_components_dir = manifest_dir.join("examples").join("components");
 
     let mut rs_files = Vec::new();
     if components_dir.exists() {
         collect_rs_files(&components_dir, &mut rs_files);
     }
+    if example_components_dir.exists() {
+        collect_rs_files(&example_components_dir, &mut rs_files);
+    }
 
-    // Sort shallower paths first (e.g. `components/Button.rs` before `components/material/Button.rs`)
-    // so top-level components take default unqualified precedence in ComponentRegistry.
+    // Sort priority for default unqualified precedence in ComponentRegistry:
+    // 1. Standard library components (`components/` excluding `components/material/`), shallowest first
+    // 2. Example kit components (`examples/components/`)
+    // 3. Material design system (`components/material/`)
     rs_files.sort_by(|a, b| {
         let rel_a = a.strip_prefix(&manifest_dir).unwrap_or(a);
         let rel_b = b.strip_prefix(&manifest_dir).unwrap_or(b);
+        let tier = |p: &Path| -> u8 {
+            let s = p.to_string_lossy().replace('\\', "/");
+            if s.starts_with("components/material/") {
+                2
+            } else if s.starts_with("examples/") {
+                1
+            } else {
+                0
+            }
+        };
         let depth_a = rel_a.components().count();
         let depth_b = rel_b.components().count();
-        depth_a.cmp(&depth_b).then_with(|| rel_a.cmp(rel_b))
+        tier(rel_a)
+            .cmp(&tier(rel_b))
+            .then_with(|| depth_a.cmp(&depth_b))
+            .then_with(|| rel_a.cmp(rel_b))
     });
 
     let mut generated = String::new();

@@ -1,8 +1,8 @@
 // Multi-page editorial showcase using `\Book`, `\Chapter`, `\Footnote`, `\Sidenote`, and `\Bookmark`.
 \use "components/Align.dt"
-\use "components/Book.dt"
-\use "components/Bold.dt"
-\use "components/Italic.dt"
+\use "components/document/Book.dt"
+\use "components/text/Bold.dt"
+\use "components/text/Italic.dt"
 
 \env paragraph_style = \ParagraphStyle(align: Align.Justify);
 
@@ -82,7 +82,7 @@
         }
 
         \Text(width: parent.width) {
-            Every footnote rule, sidenote stack, running header, and page counter in this document is implemented purely in \Bold{components/Book.dt} using PageValue, PageList, Deposit, and Collect.
+            Every footnote rule, sidenote stack, running header, and page counter in this document is implemented purely in \Bold{components/document/Book.dt} using PageValue, PageList, Deposit, and Collect.
         }
     }
 }

@@ -69,8 +69,8 @@ fn test_ctx_window_scroll_to() {
 #[test]
 fn test_link_default_view_is_window() {
     let source = r##"
-        \use "components/VStack.dt";
-        \use "components/Link.dt";
+        \use "components/layout/VStack.dt";
+        \use "components/text/Link.dt";
         \use "theme/default.dt";
 
         \VStack(width: 800px, gap: 20px) {
@@ -126,8 +126,8 @@ fn test_link_default_view_is_window() {
 #[test]
 fn test_link_custom_view_is_scroll_view() {
     let source = r##"
-        \use "components/ScrollView.dt";
-        \use "components/Link.dt";
+        \use "components/layout/ScrollView.dt";
+        \use "components/text/Link.dt";
         \use "theme/default.dt";
 
         \let pane = \ScrollView(width: 400px, height: 250px) {
@@ -185,7 +185,7 @@ fn test_link_custom_view_is_scroll_view() {
 #[test]
 fn test_scroll_view_hardware_clip_boundary() {
     let source = r##"
-        \use "components/ScrollView.dt";
+        \use "components/layout/ScrollView.dt";
 
         \ScrollView(width: 300px, height: 200px, radius: 12px) {
             \Rect(width: 400px, height: 500px, color: #3b82f6)
@@ -215,7 +215,7 @@ fn test_scroll_view_hardware_clip_boundary() {
 #[test]
 fn test_scroll_view_on_scroll_event() {
     let source = r##"
-        \use "components/ScrollView.dt";
+        \use "components/layout/ScrollView.dt";
 
         \ScrollView(width: 300px, height: 200px) {
             \Rect(width: 200px, height: 600px, color: #3b82f6)
@@ -275,7 +275,7 @@ fn test_scroll_view_on_scroll_event() {
 #[test]
 fn test_scroll_view_scroll_container_to_node() {
     let source = r##"
-        \use "components/ScrollView.dt";
+        \use "components/layout/ScrollView.dt";
 
         \ScrollView(width: 300px, height: 200px) {
             \Rect(width: 200px, height: 100px, color: #ef4444)
@@ -327,8 +327,8 @@ fn test_scroll_view_scroll_container_to_node() {
 #[test]
 fn test_end_to_end_link_scrolls_scroll_view() {
     let source = r##"
-        \use "components/ScrollView.dt";
-        \use "components/Link.dt";
+        \use "components/layout/ScrollView.dt";
+        \use "components/text/Link.dt";
         \use "theme/default.dt";
 
         \let my_scroll = \ScrollView(width: 300px, height: 150px) {
@@ -401,7 +401,7 @@ fn test_scroll_event_coalescing_queue_and_flush() {
     use directedtype::render::{PendingScroll, ViewerApp, ViewerConfig};
 
     let source = r#"
-        \use "components/ScrollView.dt";
+        \use "components/layout/ScrollView.dt";
 
         \ScrollView(width: 400px, height: 200px, padding: 0) {
             \Rect(width: 400px, height: 100px, color: #ff0000)
@@ -457,7 +457,7 @@ fn test_scroll_event_coalescing_2d() {
     use directedtype::render::{PendingScroll, ViewerApp, ViewerConfig};
 
     let source = r#"
-        \use "components/ScrollView.dt";
+        \use "components/layout/ScrollView.dt";
 
         \ScrollView(width: 200px, height: 200px, padding: 0) {
             \Rect(width: 500px, height: 500px, color: #ff0000)

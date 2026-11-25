@@ -6,8 +6,8 @@ use std::path::Path;
 #[test]
 fn test_vertical_spacer_in_vstack() {
     let input = r#"
-    \use "components/VStack.dt"
-    \use "components/Spacer.dt"
+    \use "components/layout/VStack.dt"
+    \use "components/layout/Spacer.dt"
 
     \VStack(x: 20px, y: 20px, width: 200px, gap: 10px) {
         \Rect(width: 100px, height: 40px, color: #3b82f6)
@@ -44,8 +44,8 @@ fn test_vertical_spacer_in_vstack() {
 #[test]
 fn test_horizontal_spacer_in_hstack() {
     let input = r#"
-    \use "components/HStack.dt"
-    \use "components/Spacer.dt"
+    \use "components/layout/HStack.dt"
+    \use "components/layout/Spacer.dt"
 
     \HStack(x: 10px, y: 10px, gap: 12px) {
         \Rect(width: 50px, height: 30px, color: #3b82f6)
@@ -82,8 +82,8 @@ fn test_horizontal_spacer_in_hstack() {
 #[test]
 fn test_divider_in_vstack() {
     let input = r#"
-    \use "components/VStack.dt"
-    \use "components/HDivider.dt"
+    \use "components/layout/VStack.dt"
+    \use "components/layout/HDivider.dt"
 
     \VStack(x: 0, y: 0, width: 300px, gap: 8px) {
         \Rect(width: 100px, height: 20px, color: #3b82f6)
@@ -130,8 +130,8 @@ fn test_divider_in_vstack() {
 #[test]
 fn test_vdivider_in_hstack() {
     let input = r#"
-    \use "components/HStack.dt"
-    \use "components/VDivider.dt"
+    \use "components/layout/HStack.dt"
+    \use "components/layout/VDivider.dt"
 
     \HStack(x: 0, y: 0, height: 100px, gap: 8px) {
         \Rect(width: 20px, height: 60px, color: #3b82f6)
@@ -203,7 +203,7 @@ fn test_line_primitive_and_caps() {
 #[test]
 fn test_arrow_component() {
     let input = r#"
-    \use "components/Arrow.dt"
+    \use "components/graphics/Arrow.dt"
 
     \let a1 = \Arrow(
         x1: 100px,

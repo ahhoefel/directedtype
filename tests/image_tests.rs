@@ -445,12 +445,12 @@ fn test_jpeg_exif_orientation_and_dpi_metadata() {
 #[test]
 fn test_svg_physical_units_and_inline_image_component() {
     let inline_dt = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("components/InlineImage.dt"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("components/text/InlineImage.dt"),
     )
     .expect("read InlineImage.dt");
 
     let mut resolver = VirtualResolver::new();
-    resolver.insert("/app/components/InlineImage.dt", inline_dt);
+    resolver.insert("/app/components/text/InlineImage.dt", inline_dt);
     // Physical 1in x 0.5in SVG
     resolver.insert_bytes(
         "/app/badge.svg",
@@ -459,7 +459,7 @@ fn test_svg_physical_units_and_inline_image_component() {
     );
 
     let src = r#"
-    \use "components/InlineImage.dt"
+    \use "components/text/InlineImage.dt"
     \env font = \Font(family: "Arial", size: 20px);
 
     \let phys = \Image(src: "badge.svg", x: 0px, y: 0px)
@@ -500,7 +500,7 @@ fn test_svg_physical_units_and_inline_image_component() {
     // Standalone \InlineImage outside \Text without x and y must fail to compile!
     let bad_inline = parse_document_with_file(
         r#"
-        \use "components/InlineImage.dt"
+        \use "components/text/InlineImage.dt"
         \InlineImage(src: "badge.svg", height: 16px)
         "#,
         Path::new("/app/index.dt"),

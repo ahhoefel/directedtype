@@ -6,7 +6,7 @@ use std::path::Path;
 #[test]
 fn test_center_fluid_in_rect() {
     let input = r#"
-    \use "components/Center.dt"
+    \use "components/layout/Center.dt"
 
     \Rect(x: 100px, y: 100px, width: 200px, height: 100px, color: #1e293b) {
         \Center {
@@ -41,7 +41,7 @@ fn test_center_fluid_in_rect() {
 #[test]
 fn test_center_with_intrinsic_text() {
     let input = r#"
-    \use "components/Center.dt"
+    \use "components/layout/Center.dt"
 
     \Rect(x: 50px, y: 50px, width: 200px, height: 80px, color: #1e293b) {
         \Center {
@@ -83,7 +83,7 @@ fn test_center_with_intrinsic_text() {
 #[test]
 fn test_center_explicit_spatial_bounds() {
     let input = r#"
-    \use "components/Center.dt"
+    \use "components/layout/Center.dt"
 
     \Center(x: 50px, y: 50px, width: 300px, height: 200px) {
         \Rect(width: 100px, height: 60px, color: #3b82f6)
@@ -116,7 +116,7 @@ fn test_center_explicit_spatial_bounds() {
 #[test]
 fn test_center_explicit_dimensions_in_parent() {
     let input = r#"
-    \use "components/Center.dt"
+    \use "components/layout/Center.dt"
 
     \Rect(x: 20px, y: 40px, width: 500px, height: 400px, color: #0f172a) {
         \Center(width: 200px, height: 100px) {
@@ -151,8 +151,8 @@ fn test_center_explicit_dimensions_in_parent() {
 #[test]
 fn test_center_with_card() {
     let input = r#"
-    \use "components/Center.dt"
-    \use "components/Card.dt"
+    \use "components/layout/Center.dt"
+    \use "examples/components/Card.dt"
     \use "theme/default.dt"
 
     \Center {
@@ -185,7 +185,7 @@ fn test_center_with_card() {
 #[test]
 fn test_center_clamps_when_child_exceeds_parent() {
     let input = r#"
-    \use "components/Center.dt"
+    \use "components/layout/Center.dt"
 
     \Center {
         \Rect(width: 500px, height: 800px, color: #3b82f6)
@@ -216,7 +216,7 @@ fn test_center_clamps_when_child_exceeds_parent() {
 #[test]
 fn test_center_no_clamp_allows_negative_offset() {
     let input = r#"
-    \use "components/CenterNoClamp.dt"
+    \use "components/layout/CenterNoClamp.dt"
 
     \CenterNoClamp {
         \Rect(width: 500px, height: 800px, color: #3b82f6)

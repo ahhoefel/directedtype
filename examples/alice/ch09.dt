@@ -3,8 +3,8 @@
 // Includes Duchess's Chin wrap (#32 p. 132), Sleeping Gryphon (#33 p. 138), and Mock Turtle's School (#34 p. 141).
 
 \use "components/Align.dt"
-\use "components/Italic.dt"
-\use "components/SmallCaps.dt"
+\use "components/text/Italic.dt"
+\use "components/text/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterNine(

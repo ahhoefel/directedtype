@@ -6,7 +6,7 @@ use std::path::Path;
 #[test]
 fn test_hstack_default_top_alignment_and_gap() {
     let input = r#"
-    \use "components/HStack.dt"
+    \use "components/layout/HStack.dt"
 
     \HStack(x: 10px, y: 20px, gap: 16px) {
         \Rect(width: 100px, height: 40px, color: #3b82f6)
@@ -59,7 +59,7 @@ fn test_hstack_default_top_alignment_and_gap() {
 #[test]
 fn test_hstack_center_and_centered_alignment() {
     let input = r#"
-    \use "components/HStack.dt"
+    \use "components/layout/HStack.dt"
     \use "components/Align.dt"
 
     \HStack(x: 0, y: 10px, align: Align.Center, gap: 10px) {
@@ -94,7 +94,7 @@ fn test_hstack_center_and_centered_alignment() {
 #[test]
 fn test_hstack_bottom_alignment() {
     let input = r#"
-    \use "components/HStack.dt"
+    \use "components/layout/HStack.dt"
     \use "components/Align.dt"
 
     \HStack(x: 0, y: 10px, align: Align.Bottom, gap: 10px) {
@@ -130,9 +130,9 @@ fn test_hstack_bottom_alignment() {
 #[test]
 fn test_hstack_with_button_and_card_composition() {
     let input = r#"
-    \use "components/Card.dt"
-    \use "components/HStack.dt"
-    \use "components/Button.dt"
+    \use "examples/components/Card.dt"
+    \use "components/layout/HStack.dt"
+    \use "examples/components/Button.dt"
     \use "theme/default.dt"
 
     \Card(style: card_dark, x: 0, y: 0) {
@@ -173,8 +173,8 @@ fn test_hstack_with_button_and_card_composition() {
 #[test]
 fn test_hstack_nested_in_vstack() {
     let input = r#"
-    \use "components/VStack.dt"
-    \use "components/HStack.dt"
+    \use "components/layout/VStack.dt"
+    \use "components/layout/HStack.dt"
 
     \VStack(x: 10px, y: 10px, width: 300px, gap: 20px) {
         \HStack(gap: 15px) {
@@ -223,7 +223,7 @@ fn test_hstack_nested_in_vstack() {
 #[test]
 fn test_hstack_default_zero_gap() {
     let input = r#"
-    \use "components/HStack.dt"
+    \use "components/layout/HStack.dt"
 
     \HStack(x: 10px, y: 20px) {
         \Rect(width: 40px, height: 30px, color: #3b82f6)
@@ -254,7 +254,7 @@ fn test_hstack_default_zero_gap() {
 #[test]
 fn test_hstack_stretch_alignment() {
     let input = r#"
-    \use "components/HStackStretch.dt"
+    \use "components/layout/HStackStretch.dt"
 
     \HStackStretch(height: 120px, x: 10px, y: 20px, gap: 16px) {
         \Rect(width: 100px, color: #3b82f6)
@@ -285,8 +285,8 @@ fn test_hstack_stretch_alignment() {
 #[test]
 fn test_hstack_inside_center_no_cycle() {
     let input = r#"
-    \use "components/Center.dt"
-    \use "components/HStack.dt"
+    \use "components/layout/Center.dt"
+    \use "components/layout/HStack.dt"
 
     \Center {
         \HStack(gap: 15px) {
@@ -323,7 +323,7 @@ fn test_hstack_inside_center_no_cycle() {
 #[test]
 fn test_hstack_min_dimensions_and_explicit_overrides() {
     let input = r#"
-    \use "components/HStack.dt"
+    \use "components/layout/HStack.dt"
     \use "components/Align.dt"
 
     \HStack("clamped"; min_width: 300px, min_height: 80px, gap: 10px, align: Align.Center) {

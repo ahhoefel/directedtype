@@ -5,7 +5,7 @@
 
 \use "components/Align.dt"
 \use "components/Shadow.dt"
-\use "components/TextBounds.dt"
+\use "components/text/TextBounds.dt"
 \use "components/material/Palette.dt"
 
 \let card_header_text_bounds = \TextBounds(

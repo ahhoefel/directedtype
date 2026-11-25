@@ -2,8 +2,8 @@
 // Verbatim 1866 Macmillan text, line breaks, page breaks, wrapped Tenniel illustrations (#2, #3, #4), and asterisms.
 
 \use "components/Align.dt"
-\use "components/Italic.dt"
-\use "components/SmallCaps.dt"
+\use "components/text/Italic.dt"
+\use "components/text/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterOne(

@@ -17,7 +17,6 @@ fn eval_src(src: &str) -> directedtype::compiler::ResolvedLayout {
 fn test_paragraph_style_line_break_optimal_and_inheritance() {
     let src = r#"
     \use "components/Align.dt"
-    \use "components/LineBreak.dt"
 
     \let base_ps = \ParagraphStyle(
         align: Align.Justify,
@@ -94,10 +93,7 @@ fn test_knuth_plass_shrinkability_reduces_height_consistently_across_eval_and_pa
     let src = format!(
         r#"
         \use "components/Align.dt"
-        \use "components/LineBreak.dt"
-        \use "components/TextBounds.dt"
-        \use "components/TextStart.dt"
-        \use "components/TextEnd.dt"
+        \use "components/text/TextBounds.dt"
 
         \env font = \Font(family: "Arial", size: 12px, line_height: 18px);
         \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
@@ -167,7 +163,6 @@ fn test_knuth_plass_shrinkability_reduces_height_consistently_across_eval_and_pa
 fn test_knuth_plass_soft_hyphens_nonbreaking_hyphens_and_forced_breaks() {
     let src = r#"
     \use "components/Align.dt"
-    \use "components/LineBreak.dt"
 
     \env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
     \env paragraph_style = \ParagraphStyle(align: Align.Justify, line_break: LineBreak.Optimal);
@@ -235,10 +230,7 @@ fn test_knuth_plass_word_spacing_and_looseness_and_ragged() {
     let src = format!(
         r#"
         \use "components/Align.dt"
-        \use "components/LineBreak.dt"
-        \use "components/TextBounds.dt"
-        \use "components/TextStart.dt"
-        \use "components/TextEnd.dt"
+        \use "components/text/TextBounds.dt"
 
         \env font = \Font(family: "Arial", size: 12px, line_height: 16px);
         \env text_bounds = \TextBounds(start_at: TextStart.LineHeight, end_at: TextEnd.LineHeight);
@@ -283,7 +275,6 @@ fn test_knuth_plass_pdf_export_with_shrunk_and_stretched_lines() {
 
     let src = r#"
     \use "components/Align.dt"
-    \use "components/LineBreak.dt"
 
     \env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
     \env paragraph_style = \ParagraphStyle(

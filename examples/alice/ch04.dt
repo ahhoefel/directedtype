@@ -3,8 +3,8 @@
 // Giant hand wrap (#12 p. 48), Bill the Lizard chimney wrap (#13 p. 51), and Enormous Puppy (#14 p. 55).
 
 \use "components/Align.dt"
-\use "components/Italic.dt"
-\use "components/SmallCaps.dt"
+\use "components/text/Italic.dt"
+\use "components/text/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterFour(

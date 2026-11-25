@@ -4,8 +4,8 @@
 // Flamingo Mallet wrap (#30 p. 121), and Floating Cheshire Cat Head (#31 p. 128).
 
 \use "components/Align.dt"
-\use "components/Italic.dt"
-\use "components/SmallCaps.dt"
+\use "components/text/Italic.dt"
+\use "components/text/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterEight(

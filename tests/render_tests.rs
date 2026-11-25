@@ -666,10 +666,9 @@ fn test_render_link_demo_with_target_highlight() {
 #[test]
 fn test_render_link_focus_highlight() {
     let source = r#"
-\use "components/PadIn.dt"
-\use "components/VStack.dt"
-\use "components/LinkStyle.dt"
-\use "components/Link.dt"
+\use "components/layout/PadIn.dt"
+\use "components/layout/VStack.dt"
+\use "components/text/Link.dt"
 
 \env font = \Font(size: 16px);
 
@@ -742,10 +741,9 @@ fn test_render_link_focus_highlight() {
 #[test]
 fn test_render_link_hover_highlight() {
     let source = r#"
-\use "components/PadIn.dt"
-\use "components/VStack.dt"
-\use "components/LinkStyle.dt"
-\use "components/Link.dt"
+\use "components/layout/PadIn.dt"
+\use "components/layout/VStack.dt"
+\use "components/text/Link.dt"
 \use "theme/default.dt"
 
 \let blue_hover_link_style = \LinkStyle(

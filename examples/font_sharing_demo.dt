@@ -2,10 +2,9 @@
 // Demonstrates reference-based font sharing, DAG port minimization,
 // and typographic vertical centering using font.cap_height.
 
-\use "components/VStack.dt"
-\use "components/VStackStretch.dt"
-\use "components/Card.dt"
-\use "components/CardStyle.dt"
+\use "components/layout/VStack.dt"
+\use "components/layout/VStackStretch.dt"
+\use "examples/components/Card.dt"
 
 \let font_card_style_1 = \CardStyle(
     bg: #f8fafc,

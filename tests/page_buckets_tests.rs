@@ -174,7 +174,7 @@ fn test_page_value_overwrite_and_prev_rollforward_and_recto_blank() {
 #[test]
 fn test_page_list_collect_footnotes_shrinks_flow_body() {
     let src = r#"
-    \use "components/VStackStretch.dt"
+    \use "components/layout/VStackStretch.dt"
     \env font = \Font(family: "Arial", size: 11pt, line_height: 15pt);
     \let footnotes = \PageList();
 
@@ -258,7 +258,7 @@ fn test_footnote_rollback_on_overflow_and_widows_pullback() {
     // A footnote on the next paragraph needs 50pt footnote reserve -> FlowBody contracts to -6pt,
     // so both the paragraph AND the footnote must roll back off Page 1 and land on Page 2!
     let src_overflow = r#"
-    \use "components/VStackStretch.dt"
+    \use "components/layout/VStackStretch.dt"
     \env font = \Font(family: "Arial", size: 11pt, line_height: 15pt);
     \let footnotes = \PageList();
 
@@ -323,7 +323,7 @@ fn test_footnote_rollback_on_overflow_and_widows_pullback() {
     // With widows = 2, line 3 (0-indexed: 0,1,2,3 initially fit -> remaining 1 < 2 -> pulls back to 3 lines)
     // MUST pull line 3 and its footnote off Page 1 onto Page 2!
     let src_widow = r#"
-    \use "components/VStackStretch.dt"
+    \use "components/layout/VStackStretch.dt"
     \env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
     \let footnotes = \PageList();
 
@@ -408,7 +408,7 @@ fn test_footnote_rollback_on_overflow_and_widows_pullback() {
 #[test]
 fn test_oversized_footnote_overflow_error() {
     let src = r#"
-    \use "components/VStackStretch.dt"
+    \use "components/layout/VStackStretch.dt"
     \env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
     \let footnotes = \PageList();
 
@@ -460,7 +460,7 @@ fn test_oversized_footnote_overflow_error() {
 #[test]
 fn test_sidenote_column_baseline_and_collision_avoidance() {
     let src = r#"
-    \use "components/Book.dt"
+    \use "components/document/Book.dt"
 
     \Book(
         title: "Sidenote Test",
@@ -575,7 +575,7 @@ fn test_bucket_and_collect_static_safety_diagnostics() {
 
     // 3. InvalidCollectTarget: PageValue bucket in \Collect
     let collect_pv = r#"
-    \use "components/VStackStretch.dt"
+    \use "components/layout/VStackStretch.dt"
     \env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
     \let b = \PageValue();
     \Component P(width: Distance = 300pt, height: Distance = 200pt) {
@@ -591,7 +591,7 @@ fn test_bucket_and_collect_static_safety_diagnostics() {
 
     // 4. InvalidCollectTarget: page.prev in \Collect
     let collect_prev = r#"
-    \use "components/VStackStretch.dt"
+    \use "components/layout/VStackStretch.dt"
     \env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
     \let b = \PageList();
     \Component P(width: Distance = 300pt, height: Distance = 200pt) {
@@ -739,8 +739,8 @@ fn test_book_and_article_stdlib_end_to_end() {
     let para = vec!["typography"; 140].join(" ");
     let article_src = format!(
         r#"
-        \use "components/Article.dt"
-        \use {{ Footnote, Sidenote }} from "components/Book.dt";
+        \use "components/document/Article.dt"
+        \use {{ Footnote, Sidenote }} from "components/document/Book.dt";
 
         \Article(
             title: "Reactive Multi-Page Typesetting",

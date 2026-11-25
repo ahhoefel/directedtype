@@ -284,7 +284,7 @@ fn test_text_end_at_via_component_use() {
     use directedtype::compiler::compiled::CompiledDocument;
 
     let input = r#"
-    \use "components/TextBounds.dt"
+    \use "components/text/TextBounds.dt"
 
     \env text_bounds = \TextBounds(end_at: TextEnd.Descender);
 
@@ -381,7 +381,7 @@ fn test_text_start_at_via_component_use() {
     use directedtype::compiler::compiled::CompiledDocument;
 
     let input = r#"
-    \use "components/TextBounds.dt"
+    \use "components/text/TextBounds.dt"
 
     \env text_bounds = \TextBounds(start_at: TextStart.Capital);
 
@@ -412,7 +412,7 @@ fn test_text_start_at_via_component_use() {
 #[test]
 fn test_text_start_at_misspelled_acender_rejected() {
     let input = r#"
-    \use "components/TextBounds.dt"
+    \use "components/text/TextBounds.dt"
 
     \Text(font: \Font(size: 24px), text_bounds: \TextBounds(start_at: TextStart.Acender)) {
         Misspelled enum

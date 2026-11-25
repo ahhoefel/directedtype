@@ -1,12 +1,10 @@
 // DirectedType (DTML) Reactive Counter Component
 // Accompanied by native Rust companion file: Counter.rs
-\use "components/VStack.dt"
-\use "components/HStack.dt"
+\use "components/layout/VStack.dt"
+\use "components/layout/HStack.dt"
 \use "components/Align.dt"
-\use "components/Card.dt"
-\use "components/CardStyle.dt"
-\use "components/Button.dt"
-\use "components/ButtonStyle.dt"
+\use "examples/components/Card.dt"
+\use "examples/components/Button.dt"
 \use "theme/default.dt"
 
 \Component Counter(x: Distance, y: Distance, initial: Integer = 0) {

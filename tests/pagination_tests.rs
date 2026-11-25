@@ -539,7 +539,7 @@ fn test_multipage_pdf_export_and_sliced_links() {
     let words = vec!["typographic"; 85].join(" ");
     let src = format!(
         r##"
-        \use "components/Link.dt"
+        \use "components/text/Link.dt"
         \use "theme/default.dt"
 
         \env font = \Font(family: "Arial", size: 12pt, line_height: 16pt);
@@ -595,7 +595,7 @@ fn test_multipage_pdf_export_and_sliced_links() {
 #[test]
 fn test_page_break_inside_vstack_and_forwarded_wrapper() {
     let src = r#"
-    \use "components/VStackStretch.dt"
+    \use "components/layout/VStackStretch.dt"
 
     \Component Wrapper(
         x: Distance = parent.left,

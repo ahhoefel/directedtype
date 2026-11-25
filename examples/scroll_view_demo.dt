@@ -2,17 +2,15 @@
 // Demonstrates hardware-clipped scroll viewports, interactive mousewheel scrolling,
 // dynamic scrollbar tracking, and targeted navigation via \Link(url: "...", view: pane).
 
-\use "components/VStack.dt"
-\use "components/VStackStretch.dt"
-\use "components/HStack.dt"
-\use "components/Card.dt"
-\use "components/CardStyle.dt"
-\use "components/Button.dt"
-\use "components/HDivider.dt"
-\use "components/Spacer.dt"
-\use "components/LinkStyle.dt"
-\use "components/Link.dt"
-\use "components/ScrollView.dt"
+\use "components/layout/VStack.dt"
+\use "components/layout/VStackStretch.dt"
+\use "components/layout/HStack.dt"
+\use "examples/components/Card.dt"
+\use "examples/components/Button.dt"
+\use "components/layout/HDivider.dt"
+\use "components/layout/Spacer.dt"
+\use "components/text/Link.dt"
+\use "components/layout/ScrollView.dt"
 \use "theme/default.dt"
 
 \env link_style = link_default;

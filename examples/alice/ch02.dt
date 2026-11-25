@@ -3,8 +3,8 @@
 // stepped foot-address (p. 16), top plates (#6 p. 18, #7 p. 23), crocodile poem (p. 20), and mid plate (#8 p. 26).
 
 \use "components/Align.dt"
-\use "components/Spacer.dt"
-\use "components/Italic.dt"
+\use "components/layout/Spacer.dt"
+\use "components/text/Italic.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterTwo(

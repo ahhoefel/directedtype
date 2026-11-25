@@ -6,7 +6,7 @@ use std::path::Path;
 #[test]
 fn test_center_horizontal_fluid_in_window() {
     let input = r#"
-    \use "components/HCenter.dt"
+    \use "components/layout/HCenter.dt"
 
     \HCenter {
         \Rect(width: 400px, height: 100px, color: #3b82f6)
@@ -43,9 +43,9 @@ fn test_center_horizontal_fluid_in_window() {
 #[test]
 fn test_center_horizontal_inside_padding() {
     let input = r#"
-    \use "components/PadIn.dt"
-    \use "components/PadOut.dt"
-    \use "components/HCenterUp.dt"
+    \use "components/layout/PadIn.dt"
+    \use "components/layout/PadOut.dt"
+    \use "components/layout/HCenterUp.dt"
 
     \PadIn(padding_x: 40px) {
         \HCenterUp {
@@ -98,8 +98,8 @@ fn test_center_horizontal_inside_padding() {
 #[test]
 fn test_center_horizontal_clamps_when_narrower_than_child() {
     let input = r#"
-    \use "components/PadOut.dt"
-    \use "components/HCenter.dt"
+    \use "components/layout/PadOut.dt"
+    \use "components/layout/HCenter.dt"
 
     \HCenter {
         \PadOut(padding_x: 40px, padding_y: 40px) {
@@ -136,7 +136,7 @@ fn test_center_horizontal_clamps_when_narrower_than_child() {
 #[test]
 fn test_center_horizontal_multiple_children_fails_assertion() {
     let input = r#"
-    \use "components/HCenter.dt"
+    \use "components/layout/HCenter.dt"
 
     \HCenter {
         \Rect(width: 100px, height: 50px, color: #ff0000)
@@ -166,7 +166,7 @@ fn test_center_horizontal_multiple_children_fails_assertion() {
 #[test]
 fn test_center_horizontal_zero_children_fails_assertion() {
     let input = r#"
-    \use "components/HCenter.dt"
+    \use "components/layout/HCenter.dt"
 
     \HCenter {}
     "#;

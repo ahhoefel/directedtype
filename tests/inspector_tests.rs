@@ -1676,7 +1676,7 @@ fn test_inspector_panel_resize_updates_main_panel_layout_and_scroll() {
 #[test]
 fn test_component_overload_signature_in_resolved_node() {
     let source = r#"
-\use "components/VStack.dt"
+\use "components/layout/VStack.dt"
 \use "components/material/Paper.dt"
 
 \Paper("top_down"; width: 300px) {
@@ -1798,7 +1798,7 @@ fn test_inspect_component_env_properties() {
 fn test_inspector_skipped_upstream_and_strikethrough_spans() {
     let source = r#"
 \use "components/Align.dt"
-\use "components/VStack.dt"
+\use "components/layout/VStack.dt"
 \use "components/material/Divider.dt"
 
 \env font = \Font(size: 14px)

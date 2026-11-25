@@ -3,9 +3,9 @@
 // 4 consecutive Father William plates + verse (#16 p. 63, #18 p. 64, #17 p. 65, #19 p. 66), and 5-4-5 asterism (p. 69).
 
 \use "components/Align.dt"
-\use "components/Spacer.dt"
-\use "components/Italic.dt"
-\use "components/SmallCaps.dt"
+\use "components/layout/Spacer.dt"
+\use "components/text/Italic.dt"
+\use "components/text/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterFive(

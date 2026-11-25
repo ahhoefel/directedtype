@@ -7,7 +7,7 @@ use std::path::Path;
 #[test]
 fn test_hcenter_fluid_in_window() {
     let input = r#"
-    \use "components/HCenter.dt"
+    \use "components/layout/HCenter.dt"
 
     \HCenter {
         \Rect(width: 400px, height: 100px, color: #3b82f6)
@@ -44,7 +44,7 @@ fn test_hcenter_fluid_in_window() {
 #[test]
 fn test_hcenter_explicit_parameters() {
     let input = r#"
-    \use "components/HCenter.dt"
+    \use "components/layout/HCenter.dt"
 
     \HCenter(width: 500px, x: 50px, y: 30px) {
         \Rect(width: 300px, height: 80px, color: #3b82f6)
@@ -78,7 +78,7 @@ fn test_hcenter_explicit_parameters() {
 #[test]
 fn test_hcenter_assertion_rejects_multiple_children() {
     let input = r#"
-    \use "components/HCenter.dt"
+    \use "components/layout/HCenter.dt"
 
     \HCenter {
         \Rect(width: 100px, height: 50px, color: #ff0000)
@@ -108,7 +108,7 @@ fn test_hcenter_assertion_rejects_multiple_children() {
 #[test]
 fn test_vcenter_fluid_in_window() {
     let input = r#"
-    \use "components/VCenter.dt"
+    \use "components/layout/VCenter.dt"
 
     \VCenter {
         \Rect(width: 200px, height: 100px, color: #10b981)
@@ -145,7 +145,7 @@ fn test_vcenter_fluid_in_window() {
 #[test]
 fn test_vcenter_explicit_parameters() {
     let input = r#"
-    \use "components/VCenter.dt"
+    \use "components/layout/VCenter.dt"
 
     \VCenter(height: 400px, x: 40px, y: 50px) {
         \Rect(width: 150px, height: 100px, color: #10b981)
@@ -179,7 +179,7 @@ fn test_vcenter_explicit_parameters() {
 #[test]
 fn test_vcenter_assertion_rejects_multiple_children() {
     let input = r#"
-    \use "components/VCenter.dt"
+    \use "components/layout/VCenter.dt"
 
     \VCenter {
         \Rect(width: 100px, height: 50px, color: #ff0000)
@@ -209,7 +209,7 @@ fn test_vcenter_assertion_rejects_multiple_children() {
 #[test]
 fn test_vcenter_assertion_rejects_zero_children() {
     let input = r#"
-    \use "components/VCenter.dt"
+    \use "components/layout/VCenter.dt"
 
     \VCenter {}
     "#;
@@ -236,8 +236,8 @@ fn test_vcenter_assertion_rejects_zero_children() {
 #[test]
 fn test_nesting_vcenter_and_hcenter() {
     let input_v_then_h = r#"
-    \use "components/VCenter.dt"
-    \use "components/HCenterUp.dt"
+    \use "components/layout/VCenter.dt"
+    \use "components/layout/HCenterUp.dt"
 
     \VCenter {
         \HCenterUp {
@@ -274,8 +274,8 @@ fn test_nesting_vcenter_and_hcenter() {
     assert_eq!(rect.rect.height, 200.0);
 
     let input_h_then_v = r#"
-    \use "components/HCenter.dt"
-    \use "components/VCenterUp.dt"
+    \use "components/layout/HCenter.dt"
+    \use "components/layout/VCenterUp.dt"
 
     \HCenter {
         \VCenterUp {
@@ -311,7 +311,7 @@ fn test_nesting_vcenter_and_hcenter() {
 #[test]
 fn test_hcenter_width_capped_by_child_width() {
     let input = r#"
-    \use "components/HCenter.dt"
+    \use "components/layout/HCenter.dt"
 
     \let center = \HCenter {
         \Rect(width: 480px, height: 100px, color: #3b82f6)
@@ -357,7 +357,7 @@ fn test_hcenter_width_capped_by_child_width() {
 #[test]
 fn test_vcenter_height_capped_by_child_height() {
     let input = r#"
-    \use "components/VCenter.dt"
+    \use "components/layout/VCenter.dt"
 
     \let center = \VCenter {
         \Rect(width: 200px, height: 500px, color: #10b981)
@@ -403,8 +403,8 @@ fn test_vcenter_height_capped_by_child_height() {
 #[test]
 fn test_hcenter_wrapping_padout_capped_by_child_width() {
     let input = r#"
-    \use "components/PadOut.dt"
-    \use "components/HCenter.dt"
+    \use "components/layout/PadOut.dt"
+    \use "components/layout/HCenter.dt"
 
     \let content = \HCenter {
         \PadOut(padding_x: 40px, padding_y: 40px) {

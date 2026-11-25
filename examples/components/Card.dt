@@ -1,7 +1,30 @@
-// DirectedType Standard Component Library: Card
-// Universal surface container styled by a CardStyle bundle with reactive focus/blur styling.
+// DirectedType Example Component Kit: Card
+// Surface container styled by a CardStyle bundle with reactive focus/blur styling.
 // Always automatically sized to wrap its interior components; exposes read-only height and bottom aliases.
-\use "components/CardStyle.dt"
+
+// 1. Uniform Padding CardStyle
+\Component CardStyle(
+    bg: Color,
+    border_color: Color,
+    border_width: Distance,
+    radius: Distance,
+    padding: Distance
+) {
+    \alias padding_x = padding;
+    \alias padding_y = padding;
+}
+
+// 2. Asymmetric Padding CardStyle
+\Component CardStyle(
+    bg: Color,
+    border_color: Color,
+    border_width: Distance,
+    radius: Distance,
+    padding_x: Distance,
+    padding_y: Distance
+) {
+    \alias padding = padding_y;
+}
 
 // 1. Explicit / Fixed Width Card: zero references to parent.width, preventing layout DAG cycles
 \Component Card(

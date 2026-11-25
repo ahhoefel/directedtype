@@ -4,10 +4,10 @@
 // Flying Pack of Cards (#42 p. 188), and the Closing Dream Sequence + "THE END." (pp. 190–192).
 
 \use "components/Align.dt"
-\use "components/VStackStretch.dt"
-\use "components/Spacer.dt"
-\use "components/Italic.dt"
-\use "components/SmallCaps.dt"
+\use "components/layout/VStackStretch.dt"
+\use "components/layout/Spacer.dt"
+\use "components/text/Italic.dt"
+\use "components/text/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Span RomanParen(env font: Font) {

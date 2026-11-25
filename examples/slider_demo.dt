@@ -1,14 +1,14 @@
 // DirectedType Standard Component Library Demo: Slider & Callbacks
 // Showcases hardware pointer capture, smooth dragging, and strongly-typed callbacks.
 
-\use "../components/PadOut.dt"
-\use "../components/HCenterUp.dt"
-\use "../components/VStack.dt"
-\use "../components/HStack.dt"
-\use "../components/Card.dt"
-\use "../components/Slider.dt"
-\use "../components/HDivider.dt"
-\use "../components/Spacer.dt"
+\use "../components/layout/PadOut.dt"
+\use "../components/layout/HCenterUp.dt"
+\use "../components/layout/VStack.dt"
+\use "../components/layout/HStack.dt"
+\use "examples/components/Card.dt"
+\use "examples/components/Slider.dt"
+\use "../components/layout/HDivider.dt"
+\use "../components/layout/Spacer.dt"
 \use "../theme/default.dt"
 
 \Window(title: "Studio Audio Mixer")

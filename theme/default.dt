@@ -1,9 +1,9 @@
 // DirectedType Standard Theme: Default
 // Central library of standard, battle-tested style literals for Cards and Buttons.
 
-\use "components/CardStyle.dt"
-\use "components/ButtonStyle.dt"
-\use "components/LinkStyle.dt"
+\use { CardStyle } from "examples/components/Card.dt";
+\use { ButtonStyle } from "examples/components/Button.dt";
+\use { LinkStyle } from "components/text/Link.dt";
 
 // Standard Ambient Typography
 \env font = \Font(size: 12pt);

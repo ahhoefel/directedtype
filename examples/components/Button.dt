@@ -1,8 +1,31 @@
-// DirectedType Standard Component Library: Button
+// DirectedType Example Component Kit: Button
 // High-performance declarative button styled by a ButtonStyle bundle or a ButtonVariant enum.
-\use "components/Center.dt"
-\use "components/ButtonStyle.dt"
-\use "components/ButtonVariant.dt"
+\use "components/layout/Center.dt"
+
+// Standard visual variant enum for Button components.
+\Enum ButtonVariant {
+    Primary,
+    Secondary,
+    Outline,
+    Danger,
+    Success,
+    Ghost,
+}
+
+// Styling bundle defining geometry, colors, typography, and states for Button components.
+\Component ButtonStyle(
+    bg: Color,
+    text_color: Color,
+    border_color: Color,
+    border_width: Distance,
+    radius: Distance,
+    height: Distance,
+    size: Distance,
+    weight: Integer,
+    disabled_bg: Color,
+    disabled_text: Color,
+    disabled_border_color: Color
+) {}
 
 // 1. Explicit / Fixed Width Button by Style
 \Component Button(

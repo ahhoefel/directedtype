@@ -2,10 +2,10 @@
 // Interactive showcase of @mui/material components reimplemented for DirectedType.
 
 \use "../components/Align.dt"
-\use "../components/VStack.dt"
-\use "../components/HStack.dt"
-\use "../components/Center.dt"
-\use "../components/Spacer.dt"
+\use "../components/layout/VStack.dt"
+\use "../components/layout/HStack.dt"
+\use "../components/layout/Center.dt"
+\use "../components/layout/Spacer.dt"
 \use "../components/material/Palette.dt"
 \use "../components/material/Button.dt"
 \use "../components/material/Paper.dt"

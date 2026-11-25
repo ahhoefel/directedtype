@@ -2,16 +2,15 @@
 // Showcases vertically stacked flow with left, center, right, and stretch alignments,
 // dynamic child spacing (gap), and container padding.
 
-\use "../components/PadIn.dt"
-\use "../components/PadOut.dt"
-\use "../components/VStack.dt"
-\use "../components/VStackStretch.dt"
-\use "../components/HStack.dt"
+\use "../components/layout/PadIn.dt"
+\use "../components/layout/PadOut.dt"
+\use "../components/layout/VStack.dt"
+\use "../components/layout/VStackStretch.dt"
+\use "../components/layout/HStack.dt"
 \use "../components/Align.dt"
-\use "../components/Card.dt"
-\use "../components/CardStyle.dt"
-\use "../components/Button.dt"
-\use "../components/Spacer.dt"
+\use "examples/components/Card.dt"
+\use "examples/components/Button.dt"
+\use "../components/layout/Spacer.dt"
 \use "../theme/default.dt"
 
 \let col_card_style = \CardStyle(

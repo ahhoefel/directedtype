@@ -3,9 +3,9 @@
 // Hatter singing "Twinkle, twinkle, little bat!" (#26 p. 103), and Dormouse in teapot (#27 p. 110).
 
 \use "components/Align.dt"
-\use "components/Spacer.dt"
-\use "components/Italic.dt"
-\use "components/SmallCaps.dt"
+\use "components/layout/Spacer.dt"
+\use "components/text/Italic.dt"
+\use "components/text/SmallCaps.dt"
 \use "AliceStyle.dt"
 
 \Component ChapterSeven(

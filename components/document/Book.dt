@@ -7,7 +7,7 @@
 //   - Collision-avoiding outer-margin Tufte sidenotes
 
 \use "components/Align.dt"
-\use "components/VStackStretch.dt"
+\use "components/layout/VStackStretch.dt"
 
 // Pure metadata payload deposited into `chapter_meta` (\PageValue) at each chapter start.
 \Component ChapterMeta(

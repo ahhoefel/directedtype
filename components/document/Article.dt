@@ -2,8 +2,8 @@
 // Single-sided article and academic paper layout sharing note primitives from `Book.dt`.
 
 \use "components/Align.dt"
-\use "components/VStackStretch.dt"
-\use { Footnote, FootnoteEntry, Sidenote, SidenoteEntry, SidenoteColumn } from "components/Book.dt";
+\use "components/layout/VStackStretch.dt"
+\use { Footnote, FootnoteEntry, Sidenote, SidenoteEntry, SidenoteColumn } from "components/document/Book.dt";
 
 // Breakable section heading + body container (`keep_with_next: true` prevents orphaned headings).
 \Component Section(

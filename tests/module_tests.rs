@@ -1003,6 +1003,86 @@ fn test_transitive_component_not_exposed_to_caller() {
     assert_eq!(rects[1].rect.width, 60.0);
 }
 
+#[test]
+fn test_builtin_linebreak_enum_available_inside_imported_modules() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "styles/prose.dt",
+        r#"
+        \Component Prose(x: Distance = 0px, y: Distance = 0px, width: Distance = 200px, env font: Font) {
+            \Text(
+                x: x,
+                y: y,
+                width: width,
+                font: font,
+                paragraph_style: \ParagraphStyle(line_break: LineBreak.Optimal)
+            ) {
+                \Children
+            }
+        }
+        "#,
+    );
+
+    let main_src = r#"
+    \use "./styles/prose.dt";
+    \env font = \Font(family: "Arial", size: 12pt);
+
+    \Prose(x: 0px, y: 0px, width: 220px) {
+        Optimal line breaking inside an imported module without importing LineBreak.dt.
+    }
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let layout = evaluate_document_with_resolver(&doc, 800.0, 600.0, Path::new("."), &resolver)
+        .expect("Built-in LineBreak enum should be available in imported modules");
+    let text_node = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Text")
+        .expect("Text node found");
+    assert_eq!(
+        text_node.properties.get("line_break").and_then(|v| v.as_str()),
+        Some("Optimal")
+    );
+}
+
+#[test]
+fn test_aliased_component_import_does_not_clobber_colocated_enum() {
+    let mut resolver = VirtualResolver::new();
+    resolver.insert(
+        "widgets/Badge.dt",
+        r#"
+        \Enum BadgeKind { Info, Warning }
+
+        \Component Badge(kind: BadgeKind = BadgeKind.Info) {
+            \Rect(
+                x: 0px,
+                y: 0px,
+                width: kind == BadgeKind.Info ? 80px : 120px,
+                height: 24px,
+                color: #3b82f6
+            )
+        }
+        "#,
+    );
+
+    let main_src = r#"
+    \use "./widgets/Badge.dt" as StatusBadge;
+
+    \StatusBadge()
+    "#;
+
+    let doc = parse(main_src).expect("Failed to parse main");
+    let layout = evaluate_document_with_resolver(&doc, 800.0, 600.0, Path::new("."), &resolver)
+        .expect("Aliasing a component file with a colocated enum should succeed");
+    let rect = layout
+        .nodes
+        .iter()
+        .find(|n| n.name == "Rect")
+        .expect("Rect node found");
+    assert_eq!(rect.rect.width, 80.0);
+}
+
 
 
 
