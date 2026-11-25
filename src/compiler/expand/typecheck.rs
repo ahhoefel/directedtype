@@ -1575,16 +1575,7 @@ pub(super) fn known_builtin_port_type(node_name: &str, port_name: &str) -> Optio
         return super::builtins::window::window_port_type(port_name);
     }
     if node_name == "Page" {
-        return match port_name {
-            "number" | "count" => Some(StaticType::Integer),
-            "is_first" | "is_last" | "is_odd" | "is_recto" | "is_even" | "is_verso" => {
-                Some(StaticType::Boolean)
-            }
-            "width" | "height" | "left" | "top" | "right" | "bottom" => Some(StaticType::Distance),
-            "dpi" => Some(StaticType::Float),
-            "prev" => Some(StaticType::Node("PageTemplate".to_string())),
-            _ => None,
-        };
+        return super::builtins::pagination::page_port_type(port_name);
     }
     if let Some(prim) = super::builtins::lookup_builtin(node_name, true) {
         return prim.port_type(port_name);
@@ -2564,20 +2555,12 @@ fn infer_member_access_type(
             }),
         },
         StaticType::Timer => {
-            let prop_ty = match m.member.as_str() {
-                "time" | "duration" | "dt" => StaticType::Duration,
-                "elapsed" => StaticType::Float,
-                "frames" => StaticType::Integer,
-                _ => {
-                    return Err(CompileError::Custom {
-                        message: format!(
-                            "Node 'Timer' has no public property '{}'",
-                            m.member
-                        ),
-                        span: m.span,
-                    });
-                }
-            };
+            let prop_ty = super::builtins::timer::timer_port_type(m.member.as_str()).ok_or_else(
+                || CompileError::Custom {
+                    message: format!("Node 'Timer' has no public property '{}'", m.member),
+                    span: m.span,
+                },
+            )?;
             if is_nullable_timer_target(
                 &m.target,
                 &target_ty,
@@ -2600,19 +2583,14 @@ fn infer_member_access_type(
             Ok(prop_ty)
         }
         StaticType::IndefiniteTimer => {
-            let prop_ty = match m.member.as_str() {
-                "time" | "dt" => StaticType::Duration,
-                "frames" => StaticType::Integer,
-                _ => {
-                    return Err(CompileError::Custom {
-                        message: format!(
-                            "Node 'IndefiniteTimer' has no public property '{}'",
-                            m.member
-                        ),
-                        span: m.span,
-                    });
-                }
-            };
+            let prop_ty = super::builtins::timer::indefinite_timer_port_type(m.member.as_str())
+                .ok_or_else(|| CompileError::Custom {
+                    message: format!(
+                        "Node 'IndefiniteTimer' has no public property '{}'",
+                        m.member
+                    ),
+                    span: m.span,
+                })?;
             if is_nullable_timer_target(
                 &m.target,
                 &target_ty,
@@ -3243,7 +3221,9 @@ fn infer_node_expr_type(
                 });
             }
             for port in &elem.ports {
-                if port.name.as_str() != "duration" {
+                let Some(expected_ty_name) =
+                    super::builtins::timer::TIMER_SPEC.accepted_port_type(port.name.as_str())
+                else {
                     return Err(CompileError::Custom {
                         message: format!(
                             "Node 'Timer' does not accept property '{}'",
@@ -3251,12 +3231,14 @@ fn infer_node_expr_type(
                         ),
                         span: port.name.span,
                     });
-                }
+                };
+                let expected_ty =
+                    super::builtins::static_type_from_canonical_name(expected_ty_name);
                 let port_ty =
                     infer_expr_type(&port.expr, doc, enums, registry, cache)?;
-                if !port_ty.matches(&StaticType::Duration) {
+                if !port_ty.matches(&expected_ty) {
                     return Err(CompileError::TypeMismatch {
-                        expected: "Duration".to_string(),
+                        expected: expected_ty_name.to_string(),
                         actual: port_ty.type_name(),
                         span: port.expr.span(),
                     });
@@ -3278,14 +3260,17 @@ fn infer_node_expr_type(
                     span: elem.span,
                 });
             }
-            if let Some(port) = elem.ports.first() {
-                return Err(CompileError::Custom {
-                    message: format!(
-                        "Node 'IndefiniteTimer' does not accept property '{}'",
-                        port.name.as_str()
-                    ),
-                    span: port.name.span,
-                });
+            for port in &elem.ports {
+                if !super::builtins::timer::INDEFINITE_TIMER_SPEC.accepts_port(port.name.as_str())
+                {
+                    return Err(CompileError::Custom {
+                        message: format!(
+                            "Node 'IndefiniteTimer' does not accept property '{}'",
+                            port.name.as_str()
+                        ),
+                        span: port.name.span,
+                    });
+                }
             }
             Ok(StaticType::IndefiniteTimer)
         }

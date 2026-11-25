@@ -2,16 +2,24 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use directedtype::ast::{ComponentDef, ComponentKind, ContentItem, EnumDef, Item};
+use directedtype::ast::{
+    ComponentDef, ComponentKind, ContentItem, EnumDef, Expr, Ident, Item, MemberAccessExpr,
+};
 use directedtype::compiler::error::CompileError;
+use directedtype::compiler::eval::eval_expr;
 use directedtype::compiler::expand::builtins::{
     builtin_primitive_accepted_ports, builtin_primitive_accepts_event_handlers,
     builtin_primitive_accepts_port, builtin_primitive_is_immutable_alias,
-    builtin_primitive_port_type_name, public_builtin_primitive_names,
-    register_builtin_enums_and_components,
+    builtin_primitive_port_type_name, pagination::populated_page_port_names,
+    public_builtin_primitive_names, register_builtin_enums_and_components,
+    timer::{INDEFINITE_TIMER_SPEC, TIMER_SPEC},
+    ALL_SPECIAL_BUILTINS,
 };
 use directedtype::compiler::expand::expand_document;
+use directedtype::compiler::expanded::NodeId;
+use directedtype::compiler::graph::VarId;
 use directedtype::compiler::module::{resolve_imports, FsResolver, VirtualResolver};
+use directedtype::compiler::value::Value;
 use directedtype::parser::{parse_document, parse_document_with_file};
 use directedtype::span::Span;
 
@@ -223,13 +231,94 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
         );
     }
 
-    // 2. Special non-primitive built-ins (Window, Page, Timer, IndefiniteTimer) must be documented.
-    for special in ["Window", "Page", "Timer", "IndefiniteTimer"] {
-        assert!(
-            lang_comps.contains_key(special),
-            "Special built-in '{special}' is missing from components/lang/"
+    // 2. Special non-primitive built-ins (Window, Page, Timer, IndefiniteTimer):
+    //    Check exact bidirectional parity between each SpecialBuiltinSpec and components/lang/<Name>.dt.
+    const IMPLICIT_SPATIAL_ALIASES: &[&str] = &["left", "top", "right", "bottom"];
+    for spec in ALL_SPECIAL_BUILTINS {
+        let overloads = lang_comps.get(spec.name).unwrap_or_else(|| {
+            panic!(
+                "Special built-in '{}' is missing from components/lang/",
+                spec.name
+            )
+        });
+        assert_eq!(
+            overloads.len(),
+            1,
+            "Expected single overload for special built-in '{}'",
+            spec.name
+        );
+        let ov = &overloads[0];
+
+        // Accepted input ports: exact 1-to-1 match (name + type)
+        let compiler_params: HashMap<&str, &str> = spec.accepted_ports.iter().copied().collect();
+        let mut doc_params: HashMap<&str, &str> = HashMap::new();
+        for p in &ov.params {
+            let ty = p
+                .type_annotation
+                .as_ref()
+                .map(|t| t.name.as_str())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "components/lang/{}.dt param '{}' missing type annotation",
+                        spec.name,
+                        p.name.as_str()
+                    )
+                });
+            doc_params.insert(p.name.as_str(), ty);
+        }
+        assert_eq!(
+            doc_params, compiler_params,
+            "Accepted parameters drifted for special built-in '{}'",
+            spec.name
+        );
+
+        // Read-only output ports: exact 1-to-1 match against \alias declarations
+        // (excluding implicit spatial aliases left/top/right/bottom and ports already in accepted_ports).
+        let compiler_outputs: HashMap<&str, &str> = spec
+            .output_ports
+            .iter()
+            .copied()
+            .filter(|(p, _)| !IMPLICIT_SPATIAL_ALIASES.contains(p) && !compiler_params.contains_key(p))
+            .collect();
+        let mut doc_aliases: HashMap<&str, &str> = HashMap::new();
+        for item in &ov.body {
+            if let ContentItem::Alias(a) = item {
+                let ty = a
+                    .type_annotation
+                    .as_ref()
+                    .map(|t| t.name.as_str())
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "components/lang/{}.dt alias '{}' missing type annotation",
+                            spec.name,
+                            a.name.as_str()
+                        )
+                    });
+                doc_aliases.insert(a.name.as_str(), ty);
+            }
+        }
+        assert_eq!(
+            doc_aliases, compiler_outputs,
+            "Output aliases drifted for special built-in '{}'",
+            spec.name
         );
     }
+
+    // Verify `populate_page_ports` populates the exact 1-to-1 key set declared in `PAGE_SPEC.output_ports`.
+    let mut spec_page_ports: Vec<String> = ALL_SPECIAL_BUILTINS
+        .iter()
+        .find(|s| s.name == "Page")
+        .unwrap()
+        .output_ports
+        .iter()
+        .map(|(p, _)| (*p).to_string())
+        .collect();
+    spec_page_ports.sort();
+    assert_eq!(
+        populated_page_port_names(),
+        spec_page_ports,
+        "populate_page_ports() keys drifted from PAGE_SPEC.output_ports"
+    );
 
     // 3. Every compiler-registered enum and struct-like component (LineCap, LineBreak, Break,
     //    TextStart, TextEnd, Shadow, TextBounds) must match components/lang/ exactly.
@@ -399,6 +488,106 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             );
         }
     }
+
+    // 5. No orphaned / undocumented built-ins or enums in components/lang/.
+    let mut expected_comps: HashSet<&str> = HashSet::new();
+    expected_comps.extend(public_builtin_primitive_names());
+    expected_comps.extend(ALL_SPECIAL_BUILTINS.iter().map(|s| s.name));
+    expected_comps.extend(compiler_registry.keys().map(|s| s.as_str()));
+    let actual_comps: HashSet<&str> = lang_comps.keys().map(|s| s.as_str()).collect();
+    assert_eq!(
+        actual_comps, expected_comps,
+        "Set of \\BuiltIn components in components/lang/ drifted from compiler"
+    );
+
+    let expected_enums: HashSet<&str> = compiler_enums.keys().map(|s| s.as_str()).collect();
+    let actual_enums: HashSet<&str> = lang_enums.keys().map(|s| s.as_str()).collect();
+    assert_eq!(
+        actual_enums, expected_enums,
+        "Set of \\Enum definitions in components/lang/ drifted from compiler"
+    );
+}
+
+#[test]
+fn test_special_builtins_runtime_and_typecheck_strictness() {
+    // 1. Timer runtime evaluation matches TIMER_SPEC.output_ports 1-to-1.
+    let mut timer_env = HashMap::new();
+    timer_env.insert(
+        VarId::new(NodeId::WINDOW, "t"),
+        Value::Timer {
+            time: 500_000,
+            duration: 1_000_000,
+            dt: 16_666,
+            frames: 30,
+        },
+    );
+    let target_t = std::sync::Arc::new(Expr::MemberAccess(MemberAccessExpr {
+        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, Span::default()))),
+        member: Ident::new("t", Span::default()),
+        span: Span::default(),
+    }));
+    for &(prop, expected_ty) in TIMER_SPEC.output_ports {
+        let expr = Expr::MemberAccess(MemberAccessExpr {
+            target: target_t.clone(),
+            member: Ident::new(prop, Span::default()),
+            span: Span::default(),
+        });
+        let val = eval_expr(&expr, &timer_env)
+            .unwrap_or_else(|e| panic!("eval_expr failed for Timer.{prop}: {e}"));
+        assert_eq!(
+            val.type_name(),
+            expected_ty,
+            "Runtime type mismatch for Timer.{prop}"
+        );
+    }
+    let bad_timer_expr = Expr::MemberAccess(MemberAccessExpr {
+        target: target_t,
+        member: Ident::new("nonexistent", Span::default()),
+        span: Span::default(),
+    });
+    assert!(eval_expr(&bad_timer_expr, &timer_env).is_err());
+
+    // 2. IndefiniteTimer runtime evaluation matches INDEFINITE_TIMER_SPEC.output_ports 1-to-1.
+    let mut indef_env = HashMap::new();
+    indef_env.insert(
+        VarId::new(NodeId::WINDOW, "it"),
+        Value::IndefiniteTimer {
+            time: 250_000,
+            dt: 16_666,
+            frames: 15,
+        },
+    );
+    let target_it = std::sync::Arc::new(Expr::MemberAccess(MemberAccessExpr {
+        target: std::sync::Arc::new(Expr::Ident(Ident::from_node(NodeId::WINDOW, Span::default()))),
+        member: Ident::new("it", Span::default()),
+        span: Span::default(),
+    }));
+    for &(prop, expected_ty) in INDEFINITE_TIMER_SPEC.output_ports {
+        let expr = Expr::MemberAccess(MemberAccessExpr {
+            target: target_it.clone(),
+            member: Ident::new(prop, Span::default()),
+            span: Span::default(),
+        });
+        let val = eval_expr(&expr, &indef_env)
+            .unwrap_or_else(|e| panic!("eval_expr failed for IndefiniteTimer.{prop}: {e}"));
+        assert_eq!(
+            val.type_name(),
+            expected_ty,
+            "Runtime type mismatch for IndefiniteTimer.{prop}"
+        );
+    }
+    let bad_indef_expr = Expr::MemberAccess(MemberAccessExpr {
+        target: target_it,
+        member: Ident::new("duration", Span::default()),
+        span: Span::default(),
+    });
+    assert!(eval_expr(&bad_indef_expr, &indef_env).is_err());
+
+    // 3. Window strictly rejects unrelated built-in ports (no fallback to default_builtin_port_type).
+    let bad_window_access = r#"\Rect(x: 0, y: 0, width: window.cap_height, height: 10px, color: #000)"#;
+    let doc = parse_document(bad_window_access).expect("Parse ok");
+    expand_document(&doc)
+        .expect_err("window.cap_height must be rejected now that Window uses WINDOW_SPEC strictly");
 }
 
 #[test]

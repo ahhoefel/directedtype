@@ -5,7 +5,8 @@ use crate::ast::{
 use crate::compiler::error::CompileError;
 use crate::compiler::eval::eval_expr_for_node;
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, lookup_builtin, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, lookup_builtin, static_type_from_canonical_name, BuiltinPrimitive,
+    PrimitiveExpandState, SpecialBuiltinSpec,
 };
 use crate::compiler::expand::context::{ElementContext, LexicalBinding, ScopeContext};
 use crate::compiler::expand::expand_element;
@@ -337,6 +338,49 @@ fn collect_transitive_upstream_vars(graph: &VariableGraph, target: VarId) -> Vec
         }
     }
     out
+}
+
+/// Authoritative ambient property schema for `page.*` inside a `\PagedFlow` page template.
+pub const PAGE_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
+    name: "Page",
+    accepted_ports: &[],
+    output_ports: &[
+        ("number", "Integer"),
+        ("count", "Integer"),
+        ("is_first", "Boolean"),
+        ("is_last", "Boolean"),
+        ("is_odd", "Boolean"),
+        ("is_even", "Boolean"),
+        ("is_recto", "Boolean"),
+        ("is_verso", "Boolean"),
+        ("prev", "Node"),
+        ("width", "Distance"),
+        ("height", "Distance"),
+        ("dpi", "Float"),
+        ("left", "Distance"),
+        ("top", "Distance"),
+        ("right", "Distance"),
+        ("bottom", "Distance"),
+    ],
+};
+
+/// Returns the static type of an ambient `page.*` property, backed strictly by `PAGE_SPEC`.
+pub(in crate::compiler::expand) fn page_port_type(port_name: &str) -> Option<StaticType> {
+    if port_name == "prev" {
+        return Some(StaticType::Node("PageTemplate".to_string()));
+    }
+    PAGE_SPEC
+        .output_port_type(port_name)
+        .map(static_type_from_canonical_name)
+}
+
+/// Runs `populate_page_ports` on a fresh document and returns the exact set of populated `page.*` keys.
+pub fn populated_page_port_names() -> Vec<String> {
+    let mut doc = ExpandedDocument::new();
+    populate_page_ports(&mut doc, 1, 1, true, true, None, None, Span::default());
+    let mut names: Vec<String> = doc.page_ports.keys().cloned().collect();
+    names.sort();
+    names
 }
 
 /// Populates standard `page.*` aliases on `doc.page_ports` for single-page probe/page instantiation.

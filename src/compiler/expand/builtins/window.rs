@@ -1,12 +1,36 @@
 use crate::ast::{ElementNode, EnumDef, Expr, Ident, Item, MemberAccessExpr, Symbol};
 use crate::compiler::error::CompileError;
+use crate::compiler::expand::builtins::{static_type_from_canonical_name, SpecialBuiltinSpec};
 use crate::compiler::expand::context::{EnvEntry, LexicalBinding};
 use crate::compiler::expand::rewrite::default_expr_for_state_with_enums;
 use crate::compiler::expand::schema::collect_all_document_lets;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use std::collections::{HashMap, HashSet};
 
-pub const ALLOWED_WINDOW_PORTS: &[&str] = &["title", "vscroll", "hscroll", "dpi"];
+/// Authoritative port & ambient-property schema for `\Window(...)` and global `window.*`.
+pub const WINDOW_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
+    name: "Window",
+    accepted_ports: &[
+        ("title", "String"),
+        ("vscroll", "Boolean"),
+        ("hscroll", "Boolean"),
+        ("dpi", "Float"),
+    ],
+    output_ports: &[
+        ("x", "Distance"),
+        ("y", "Distance"),
+        ("width", "Distance"),
+        ("height", "Distance"),
+        ("left", "Distance"),
+        ("top", "Distance"),
+        ("right", "Distance"),
+        ("bottom", "Distance"),
+        ("z", "Integer"),
+        ("clip", "Clip"),
+        ("scroll_x", "Distance"),
+        ("scroll_y", "Distance"),
+    ],
+};
 
 /// Initializes default window port types, scope ports, and `env clip` binding, then processes
 /// any top-level `\Window(...)` declaration and top-level `\state` / `\let` / `\env` pre-registrations.
@@ -30,29 +54,15 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
         })),
     );
 
-    for p in ["x", "y", "width", "height", "left", "top", "right", "bottom"] {
+    for &(port_name, ty_name) in WINDOW_SPEC
+        .output_ports
+        .iter()
+        .chain(WINDOW_SPEC.accepted_ports.iter())
+    {
         expanded_doc
             .window_port_types
-            .insert(p.to_string(), "Distance".to_string());
+            .insert(port_name.to_string(), ty_name.to_string());
     }
-    expanded_doc
-        .window_port_types
-        .insert("z".to_string(), "Integer".to_string());
-    expanded_doc
-        .window_port_types
-        .insert("clip".to_string(), "Clip".to_string());
-    expanded_doc
-        .window_port_types
-        .insert("dpi".to_string(), "Float".to_string());
-    expanded_doc
-        .window_port_types
-        .insert("title".to_string(), "String".to_string());
-    expanded_doc
-        .window_port_types
-        .insert("vscroll".to_string(), "Boolean".to_string());
-    expanded_doc
-        .window_port_types
-        .insert("hscroll".to_string(), "Boolean".to_string());
 
     let mut window_scope_ports = vec![
         "x".to_string(),
@@ -99,7 +109,7 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
         let mut seen_window_ports = HashSet::new();
         for port in &window_elem.ports {
             let name = port.name.as_str().to_string();
-            if !ALLOWED_WINDOW_PORTS.contains(&name.as_str()) {
+            if !WINDOW_SPEC.accepts_port(&name) {
                 return Err(CompileError::DisallowedWindowPort {
                     port: name,
                     span: port.name.span,
@@ -241,16 +251,11 @@ pub(in crate::compiler::expand) fn init_window_and_top_level_declarations(
     Ok(window_scope_ports)
 }
 
-/// Returns the static type of a built-in port on the `\Window` root node.
+/// Returns the static type of a built-in port on the `\Window` root node, backed strictly by `WINDOW_SPEC`.
 pub(in crate::compiler::expand) fn window_port_type(
     port_name: &str,
 ) -> Option<crate::compiler::expand::StaticType> {
-    use crate::compiler::expand::StaticType;
-    match port_name {
-        "x" | "y" | "width" | "height" | "left" | "top" | "right" | "bottom" | "scroll_x"
-        | "scroll_y" => Some(StaticType::Distance),
-        "dpi" => Some(StaticType::Float),
-        "clip" => Some(StaticType::Node("Clip".to_string())),
-        _ => super::default_builtin_port_type(port_name),
-    }
+    WINDOW_SPEC
+        .port_type(port_name)
+        .map(static_type_from_canonical_name)
 }

@@ -8,6 +8,7 @@ pub mod pagination;
 pub mod paragraph_style;
 pub mod rect;
 pub mod text;
+pub mod timer;
 pub mod window;
 
 use crate::ast::{
@@ -353,6 +354,70 @@ pub(in crate::compiler::expand) fn eval_assert_directive(
             message: format!("Could not evaluate assertion condition: {}", e),
             span: assert_dir.span,
         }),
+    }
+}
+
+/// Authoritative port and read-only output schema for non-primitive built-ins
+/// (`Window`, `Page`, `Timer`, `IndefiniteTimer`).
+///
+/// Both the compiler (`window.rs`, `pagination.rs`, `typecheck.rs`, `eval.rs`) and the
+/// `components/lang/` drift tests read from these tables directly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpecialBuiltinSpec {
+    pub name: &'static str,
+    pub accepted_ports: &'static [(&'static str, &'static str)],
+    pub output_ports: &'static [(&'static str, &'static str)],
+}
+
+impl SpecialBuiltinSpec {
+    pub fn accepts_port(&self, port_name: &str) -> bool {
+        self.accepted_ports.iter().any(|(p, _)| *p == port_name)
+    }
+
+    pub fn accepted_port_type(&self, port_name: &str) -> Option<&'static str> {
+        self.accepted_ports
+            .iter()
+            .find(|(p, _)| *p == port_name)
+            .map(|(_, ty)| *ty)
+    }
+
+    pub fn output_port_type(&self, port_name: &str) -> Option<&'static str> {
+        self.output_ports
+            .iter()
+            .find(|(p, _)| *p == port_name)
+            .map(|(_, ty)| *ty)
+    }
+
+    pub fn port_type(&self, port_name: &str) -> Option<&'static str> {
+        self.accepted_port_type(port_name)
+            .or_else(|| self.output_port_type(port_name))
+    }
+}
+
+/// All non-primitive special built-in specifications checked against `components/lang/`.
+pub const ALL_SPECIAL_BUILTINS: &[&SpecialBuiltinSpec] = &[
+    &window::WINDOW_SPEC,
+    &pagination::PAGE_SPEC,
+    &timer::TIMER_SPEC,
+    &timer::INDEFINITE_TIMER_SPEC,
+];
+
+/// Maps a canonical type name used in `SpecialBuiltinSpec` tables to its `StaticType`.
+pub(in crate::compiler::expand) fn static_type_from_canonical_name(ty: &str) -> StaticType {
+    match ty {
+        "Integer" => StaticType::Integer,
+        "Float" => StaticType::Float,
+        "Distance" => StaticType::Distance,
+        "Area" => StaticType::Area,
+        "Duration" => StaticType::Duration,
+        "String" => StaticType::String,
+        "Path" => StaticType::Path,
+        "Boolean" => StaticType::Boolean,
+        "Color" => StaticType::Color,
+        "Handler" => StaticType::Handler,
+        "Timer" => StaticType::Timer,
+        "IndefiniteTimer" => StaticType::IndefiniteTimer,
+        other => StaticType::Node(other.to_string()),
     }
 }
 

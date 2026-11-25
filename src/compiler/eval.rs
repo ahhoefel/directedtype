@@ -1801,6 +1801,17 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                 }
                 let mut duration_us: Option<i64> = None;
                 for port in &n.ports {
+                    if !crate::compiler::expand::builtins::timer::TIMER_SPEC
+                        .accepts_port(port.name.as_str())
+                    {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Node 'Timer' does not accept property '{}'",
+                                port.name.as_str()
+                            ),
+                            span: port.name.span,
+                        });
+                    }
                     if port.name.as_str() == "duration" {
                         let val = eval_expr_with_env(&port.expr, env)?;
                         let us = val.as_duration().ok_or_else(|| CompileError::TypeMismatch {
@@ -1809,14 +1820,6 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                             span: port.expr.span(),
                         })?;
                         duration_us = Some(us);
-                    } else {
-                        return Err(CompileError::Custom {
-                            message: format!(
-                                "Node 'Timer' does not accept property '{}'",
-                                port.name.as_str()
-                            ),
-                            span: port.name.span,
-                        });
                     }
                 }
                 match duration_us {
@@ -1835,14 +1838,18 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                 }
             }
             "IndefiniteTimer" => {
-                if let Some(port) = n.ports.first() {
-                    return Err(CompileError::Custom {
-                        message: format!(
-                            "Node 'IndefiniteTimer' does not accept property '{}'",
-                            port.name.as_str()
-                        ),
-                        span: port.name.span,
-                    });
+                for port in &n.ports {
+                    if !crate::compiler::expand::builtins::timer::INDEFINITE_TIMER_SPEC
+                        .accepts_port(port.name.as_str())
+                    {
+                        return Err(CompileError::Custom {
+                            message: format!(
+                                "Node 'IndefiniteTimer' does not accept property '{}'",
+                                port.name.as_str()
+                            ),
+                            span: port.name.span,
+                        });
+                    }
                 }
                 Ok(Value::IndefiniteTimer {
                     time: 0,
