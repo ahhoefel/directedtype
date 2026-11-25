@@ -183,7 +183,7 @@
     )
 }
 
-\Component CardFit(x: Distance, y: Distance, gap: Distance) {
+\Component CardFit(style: CardStyle, x: Distance, y: Distance, gap: Distance) {
     \assert children.len == 1 as "Should have only one child.";
     \alias width = only(children.width) + 2 * gap;
     \alias height = only(children.height) + 2 * gap;

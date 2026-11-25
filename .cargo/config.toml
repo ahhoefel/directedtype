@@ -4,4 +4,5 @@ build-wasm = "run --package xtask -- build-wasm"
 viewer = "run --bin viewer --"
 docgen = "run --bin docgen --"
 dt2pdf = "run --bin dt2pdf --"
+dtdoc = "run --bin dtdoc --"
 

@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod compdoc;
 pub mod compiler;
 pub mod component;
 #[cfg(feature = "vello-renderer")]

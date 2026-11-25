@@ -45,6 +45,11 @@ name = "dt2pdf"
 path = "src/bin/dt2pdf.rs"
 required-features = ["pdf"]
 
+[[bin]]
+name = "dtdoc"
+path = "src/bin/dtdoc.rs"
+required-features = ["pdf"]
+
 [dependencies]
 directedtype-guest = { path = "directedtype-guest" }
 directedtype-macros = { path = "directedtype-macros" }

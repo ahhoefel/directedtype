@@ -1,6 +1,6 @@
 # DirectedType Tutorial
 
-DirectedType is a markup language for displaying documents and applications.
+DirectedType is a markup language for building documents and applications.
 
 Its main goals are:
 * To provide high quality typographic layout and complete control for designers,
@@ -24,6 +24,15 @@ Here's how you display "Hello world!":
     Hello world!
 }
 ```
+
+Here `\Text` is a built-in component for displaying text. It takes a list of properties as parameters: `x`, `y`, and `font`.
+It also has another input which is its block. In this case, its block contains the text "Hello world!".
+
+Every time you want to make a component, you start with a slash before the component name. Component names typically start with a capital letter.
+In the example above `\Font` is another component. Some components won't have parameters and the parentheses can be omitted.
+Some don't have a block, like the `\Font` component.
+
+The expression for creating a component is called a "component literal". It places the component into the DOM -- the component tree of the document. This first example only has one component literal and it lives in the DOM below the window which is the root of the DOM. Here's our first DOM tree:
 
 ```dt render hide-code padding=16px
 \use "components/HCenterUp.dt"
@@ -65,16 +74,7 @@ Here's how you display "Hello world!":
 )
 ```
 
-Here `\Text` is a built-in component for displaying text. It takes a list of properties as parameters: `x`, `y`, and `font`.
-It also has another input which is its block. In this case, its block contains the text "Hello world!".
-
-Every time you want to make a component, you start with a slash before the component name. Component names typically start with a capital letter.
-In the example above `\Font` is another component. Some components won't have parameters and the parentheses can be omitted.
-Some don't have a block, like the `\Font` component.
-
-The expression for creating a component is called a "component literal". It places the component into the DOM -- the component tree of the document.
-
-Let's build a custom component to help us position our `\Text` components. Components are defined with the `\Component <name>(<parameters) { <body> }` command. Below we define the `\LeftMargin` component which takes a `margin` parameter of type `Distance`. What it does is places its children into the DOM and passes `margin` to their `x` value.
+Let's build a custom component to help us position our `\Text` components. Components are defined with the `\Component <name>(<parameters>) { <body> }` command. Below we define the `\LeftMargin` component which takes a `margin` parameter of type `Distance`. What it does is places its children into the DOM and passes `margin` to their `x` value.
 
 Below the definition of `\LeftMargin` we create a component literal of `\LeftMargin` and place two `\Text` components in its block.
 
@@ -525,9 +525,9 @@ In the following example, the `\PaddedRect` derives public properties for `x`, `
 ```dt render
 \Component PaddedRect() {
     \alias x = r.x - 16px;
-    \alias y = r.x - 16px;
-    \alias width = r.width * 2;
-    \alias height = r.height * 2;
+    \alias y = r.y - 16px;
+    \alias width = r.width + 32px;
+    \alias height = r.height + 32px;
 
     \let r = \Rect(
         x: 32px, 
@@ -545,7 +545,7 @@ Let's now make an outline component that pulls properties up from a child placed
 ```dt render
 # \Component PaddedRect() {
 #     \alias x = r.x - 16px;
-#     \alias y = r.x - 16px;
+#     \alias y = r.y - 16px;
 #     \alias width = r.width + 32px;
 #     \alias height = r.height + 32px;
 # 
@@ -634,4 +634,74 @@ make expressions using `prev` and `next`.
 In the previous example, both `x` and `n` are set recursively on each
 of the subsequent children of `\Diagonal`. The color is also set to green
 on the last child.
+
+
+## Thinking in DAGs: Self-Reference, Cycles & Sizing Directions
+
+Now that we've seen how properties are defined in terms of other properties, let's show how this leads to great flexibility in how we define a layout.
+
+In CSS, there is a grab-bag of layout modes (block, flex, grid, table, absolute) each which comes with a built in algorithm to layout its children. Each of these layouts creates hidden dependencies between the positions and sizes. These hidden dependencies can hide conflicts which are silently resolved with fallback rules. Ultimately this obscures how components are positioned andd limits what can be acheieved.
+
+In DirectedType, dependencies between positions and sizes are explicitly controlled by each component. Components are hermetic while accepting a list of children that allows for composition.
+
+With this extra control, it's important for developers to understand what forms a cycle the dependencies between properties and what doesn't. The edges of our DAG are only between properties and do not interact with the parent/child relationship between components.
+
+For example, a property on a component can rely on another property from the same component without creating a cycle. In the following example, we center the `\Text` component `t` by making it's `x` position depend on its own width (`t.width`). Since DirectedType is entirely declarative, we can label the text component `t` and use its properties in expresions for its own properties.
+
+```dt render padding=16px
+\Component Container(x: Distance, y: Distance, width: Distance, height: Distance) {
+    \Rect(x, y, width, height, color: #AFA)
+    \Children
+}
+
+\Component CenteredText() {
+    \let t = \Text(
+        x: parent.parent.x + (parent.parent.width - t.width) / 2,
+        y: parent.parent.y + (parent.parent.height - t.height) / 2,
+        font: \Font(family: "Arial", size: 12pt, color: #000),
+    ) {
+        Hello world!
+    }
+}
+
+\Container(x: 16px, y: 16px, width: 300px, height: 48px) {
+  \CenteredText()
+}
+```
+
+So what does a cycle look like? Imagine we have a container which wraps its children in a margin of 20px. 
+
+```
+\Component MarginAroundChildren(margin: Distance = 20px) {
+    \alias width = max(children.width) + margin;
+    \alias height = max(children.height) + margin;
+    \Children
+}
+```
+
+Now let's make another component which makes itself 20px smaller than its parent.
+```
+\Component MarginWithinParent(margin: Distance = 20px) {
+    \alias width = parent.width - margin;
+    \alias height = parent.height - margin;
+}
+```
+
+Wrapping one inside the other leads to a cycle:
+```
+\MarginAroundChildren() { \MarginWithinParent() }
+```
+
+This leads to the following compiler error because the height (and width) depends on itself (for both components).
+```
+Error: "
+Layout evaluation error in 'examples/cycle_example.dt': 
+Cyclic dependency detected in layout graph:
+       MarginAroundChildren#0.height (cycle_example.dt:12:1)
+    -> MarginWithinParent#1.height (cycle_example.dt:12:27)
+    -> MarginAroundChildren#0.height(cycle_example.dt:12:1)"
+```
+
+As a designer/developer using DirectedType, you have to actively avoid cyclic dependencies. You can do this by being intentional about which property determines with other properties. You'll also need to carefully select the built-in component that matches your intentions.
+
 
