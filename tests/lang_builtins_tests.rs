@@ -3,7 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use directedtype::ast::{
-    ComponentDef, ComponentKind, ContentItem, EnumDef, Expr, Ident, Item, MemberAccessExpr,
+    ComponentDef, ComponentKind, ContentItem, DistanceUnit, EnumDef, Expr, Ident, Item, Literal,
+    MemberAccessExpr,
 };
 use directedtype::compdoc::{extract_catalog, ChildrenCardinality, DocGenOptions};
 use directedtype::compiler::error::CompileError;
@@ -11,19 +12,21 @@ use directedtype::compiler::eval::eval_expr;
 use directedtype::compiler::expand::builtins::{
     builtin_primitive_accepted_ports, builtin_primitive_accepts_event_handlers,
     builtin_primitive_accepts_port, builtin_primitive_children_cardinality,
-    builtin_primitive_is_immutable_alias, builtin_primitive_output_aliases,
-    builtin_primitive_port_type_name, builtin_primitive_required_port_sets,
-    pagination::populated_page_port_names, public_builtin_primitive_names,
-    register_builtin_enums_and_components,
+    builtin_primitive_default_port_sets, builtin_primitive_is_immutable_alias,
+    builtin_primitive_output_aliases, builtin_primitive_port_type_name,
+    builtin_primitive_required_port_sets, pagination::populated_page_port_names,
+    public_builtin_primitive_names, register_builtin_enums_and_components,
     timer::{INDEFINITE_TIMER_SPEC, TIMER_SPEC},
-    BuiltinChildren, ALL_SPECIAL_BUILTINS,
+    BuiltinChildren, BuiltinDefault, ALL_SPECIAL_BUILTINS,
 };
 use directedtype::compiler::expand::expand_document;
 use directedtype::compiler::expanded::NodeId;
 use directedtype::compiler::graph::VarId;
 use directedtype::compiler::module::{resolve_imports, FsResolver, VirtualResolver};
 use directedtype::compiler::value::Value;
+use directedtype::compiler::evaluate_document_with_window;
 use directedtype::parser::{parse_document, parse_document_with_file};
+use directedtype::render::{ViewerApp, ViewerConfig};
 use directedtype::span::Span;
 
 const STANDARD_EVENT_PORTS: &[&str] = &[
@@ -37,6 +40,73 @@ const STANDARD_EVENT_PORTS: &[&str] = &[
     "on_focus",
     "on_blur",
 ];
+
+fn assert_default_expr_matches(
+    owner: &str,
+    param_name: &str,
+    actual_expr: &Expr,
+    expected: BuiltinDefault,
+) {
+    let matches = match expected {
+        BuiltinDefault::Px(exp) => matches!(
+            actual_expr,
+            Expr::Literal(Literal::Distance(v, DistanceUnit::Px, _)) if (v - exp).abs() < 1e-9
+        ),
+        BuiltinDefault::Integer(exp) => matches!(
+            actual_expr,
+            Expr::Literal(Literal::Integer(v, _)) if *v == exp
+        ),
+        BuiltinDefault::Float(exp) => match actual_expr {
+            Expr::Literal(Literal::Float(v, _)) => (v - exp).abs() < 1e-9,
+            other => eval_expr(other, &HashMap::new())
+                .ok()
+                .and_then(|val| match val {
+                    Value::Float(v) => Some((v - exp).abs() < 1e-9),
+                    _ => None,
+                })
+                .unwrap_or(false),
+        },
+        BuiltinDefault::Bool(exp) => matches!(
+            actual_expr,
+            Expr::Literal(Literal::Bool(v, _)) if *v == exp
+        ),
+        BuiltinDefault::String(exp) => matches!(
+            actual_expr,
+            Expr::Literal(Literal::String(s, _)) if s == exp
+        ),
+        BuiltinDefault::Color(exp) => matches!(
+            actual_expr,
+            Expr::Literal(Literal::Color(c, _)) if c.eq_ignore_ascii_case(exp)
+        ),
+        BuiltinDefault::Enum(exp_enum, exp_var) => match actual_expr {
+            Expr::Literal(Literal::Enum(e, v, _)) => e == exp_enum && v == exp_var,
+            Expr::MemberAccess(m) => {
+                matches!(m.target.as_ref(), Expr::Ident(id) if id.as_str() == exp_enum)
+                    && m.member.as_str() == exp_var
+            }
+            _ => false,
+        },
+        BuiltinDefault::Unset => matches!(actual_expr, Expr::Ident(id) if id.as_str() == "unset"),
+        BuiltinDefault::Expr(exp_src) => {
+            let probe = format!("\\let __d = {exp_src};");
+            let parsed = parse_document(&probe).unwrap_or_else(|e| {
+                panic!("Invalid BuiltinDefault::Expr('{exp_src}') for {owner}.{param_name}: {e}")
+            });
+            let expected_expr = match &parsed.items[0] {
+                Item::Let(l) => match l.value.as_ref().unwrap() {
+                    directedtype::ast::LetValue::Expr(e) => e.clone(),
+                    directedtype::ast::LetValue::Node(n) => Expr::Node(Box::new(n.clone())),
+                },
+                other => panic!("Unexpected parsed item for BuiltinDefault::Expr: {other:?}"),
+            };
+            format!("{actual_expr}") == format!("{expected_expr}")
+        }
+    };
+    assert!(
+        matches,
+        "Default value drifted for {owner}.{param_name}: components/lang has '{actual_expr}', compiler expects {expected:?}"
+    );
+}
 
 fn load_lang_declarations() -> (HashMap<String, Vec<ComponentDef>>, HashMap<String, EnumDef>) {
     let lang_dir = Path::new("components/lang");
@@ -319,6 +389,32 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             spec.name
         );
 
+        // Default values parity for special built-ins
+        let compiler_defaults: HashMap<&str, BuiltinDefault> =
+            spec.default_ports.iter().copied().collect();
+        let mut doc_default_names: HashSet<&str> = HashSet::new();
+        for p in &ov.params {
+            if !p.is_env {
+                if let Some(ref def_expr) = p.default_edge {
+                    let pname = p.name.as_str();
+                    doc_default_names.insert(pname);
+                    let expected = compiler_defaults.get(pname).unwrap_or_else(|| {
+                        panic!(
+                            "components/lang/{}.dt gives default '{}' for '{pname}', but {}::default_ports has no entry",
+                            spec.name, def_expr, spec.name
+                        )
+                    });
+                    assert_default_expr_matches(spec.name, pname, def_expr, *expected);
+                }
+            }
+        }
+        let expected_default_names: HashSet<&str> = compiler_defaults.keys().copied().collect();
+        assert_eq!(
+            doc_default_names, expected_default_names,
+            "Optional default parameter set drifted for special built-in '{}'",
+            spec.name
+        );
+
         // Read-only output ports: exact 1-to-1 match against \alias declarations
         // (excluding implicit spatial aliases left/top/right/bottom and ports already in accepted_ports).
         let compiler_outputs: HashMap<&str, &str> = spec
@@ -399,19 +495,31 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             "Overload count drifted for built-in struct '{comp_name}'"
         );
         for (c_ov, l_ov) in overloads.iter().zip(lang_overloads.iter()) {
-            let c_params: Vec<(&str, Option<&str>)> = c_ov
+            let c_params: Vec<(&str, Option<&str>, Option<String>)> = c_ov
                 .params
                 .iter()
-                .map(|p| (p.name.as_str(), p.type_annotation.as_ref().map(|t| t.name.as_str())))
+                .map(|p| {
+                    (
+                        p.name.as_str(),
+                        p.type_annotation.as_ref().map(|t| t.name.as_str()),
+                        p.default_edge.as_ref().map(|e| format!("{e}")),
+                    )
+                })
                 .collect();
-            let l_params: Vec<(&str, Option<&str>)> = l_ov
+            let l_params: Vec<(&str, Option<&str>, Option<String>)> = l_ov
                 .params
                 .iter()
-                .map(|p| (p.name.as_str(), p.type_annotation.as_ref().map(|t| t.name.as_str())))
+                .map(|p| {
+                    (
+                        p.name.as_str(),
+                        p.type_annotation.as_ref().map(|t| t.name.as_str()),
+                        p.default_edge.as_ref().map(|e| format!("{e}")),
+                    )
+                })
                 .collect();
             assert_eq!(
                 l_params, c_params,
-                "Parameters drifted for built-in struct '{comp_name}'"
+                "Parameters or defaults drifted for built-in struct '{comp_name}'"
             );
         }
     }
@@ -471,10 +579,13 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             );
         }
 
-        // Overload count & required-port-set parity: every overload's required non-env parameters
-        // in components/lang/<Prim>.dt must match `required_port_sets()` 1-to-1.
+        // Overload count, required-port-set, and default-value parity:
+        // every overload's required non-env params must match `required_port_sets()` 1-to-1,
+        // and every optional non-env param's default must match `default_port_sets()` 1-to-1.
         let compiler_req_sets = builtin_primitive_required_port_sets(prim_name)
             .unwrap_or_else(|| panic!("Missing required_port_sets for '{prim_name}'"));
+        let compiler_default_sets = builtin_primitive_default_port_sets(prim_name)
+            .unwrap_or_else(|| panic!("Missing default_port_sets for '{prim_name}'"));
         let overloads = &lang_comps[prim_name];
         assert_eq!(
             overloads.len(),
@@ -483,7 +594,17 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             overloads.len(),
             compiler_req_sets.len()
         );
-        for (oi, (ov, &req_slice)) in overloads.iter().zip(compiler_req_sets.iter()).enumerate() {
+        assert_eq!(
+            compiler_default_sets.len(),
+            compiler_req_sets.len(),
+            "default_port_sets() length must match required_port_sets() for '{prim_name}'"
+        );
+        for (oi, ((ov, &req_slice), &def_slice)) in overloads
+            .iter()
+            .zip(compiler_req_sets.iter())
+            .zip(compiler_default_sets.iter())
+            .enumerate()
+        {
             let compiler_req: HashSet<&str> = req_slice.iter().copied().collect();
             for &r in req_slice {
                 assert!(
@@ -500,6 +621,54 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             assert_eq!(
                 doc_req, compiler_req,
                 "Required parameters drifted for '{prim_name}' overload {oi}"
+            );
+
+            let mut compiler_defaults: HashMap<&str, BuiltinDefault> = HashMap::new();
+            for &(dname, dval) in def_slice {
+                assert!(
+                    compiler_defaults.insert(dname, dval).is_none(),
+                    "Duplicate default port '{dname}' in {prim_name}::default_port_sets()[{oi}]"
+                );
+                assert!(
+                    seen_compiler_ports.contains(dname),
+                    "Defaulted port '{dname}' in {prim_name}::default_port_sets()[{oi}] is not in accepted_ports()"
+                );
+                assert!(
+                    !compiler_req.contains(dname),
+                    "Port '{dname}' cannot be both required and defaulted in {prim_name}[{oi}]"
+                );
+            }
+
+            let mut doc_default_names: HashSet<&str> = HashSet::new();
+            for p in &ov.params {
+                if p.is_env {
+                    continue;
+                }
+                let Some(ref def_expr) = p.default_edge else {
+                    continue;
+                };
+                let pname = p.name.as_str();
+                if pname.starts_with("on_") {
+                    assert_default_expr_matches(
+                        &format!("{prim_name}[{oi}]"),
+                        pname,
+                        def_expr,
+                        BuiltinDefault::Unset,
+                    );
+                    continue;
+                }
+                doc_default_names.insert(pname);
+                let expected = compiler_defaults.get(pname).unwrap_or_else(|| {
+                    panic!(
+                        "components/lang/{prim_name}.dt overload {oi} gives default '{def_expr}' for '{pname}', but {prim_name}::default_port_sets()[{oi}] has no entry"
+                    )
+                });
+                assert_default_expr_matches(&format!("{prim_name}[{oi}]"), pname, def_expr, *expected);
+            }
+            let expected_default_names: HashSet<&str> = compiler_defaults.keys().copied().collect();
+            assert_eq!(
+                doc_default_names, expected_default_names,
+                "Optional default parameter set drifted for '{prim_name}' overload {oi}"
             );
         }
 
@@ -904,4 +1073,208 @@ fn test_box_anchor_anchor_scope_and_bookmark_reject_disallowed_ports() {
             "Expected error mentioning '{bad_port}' for '{src}', got: {err}"
         );
     }
+}
+
+/// Behavioral runtime default-value parity test:
+/// Compiles and evaluates minimal required-only invocations of built-ins through the real
+/// expansion, evaluation, and viewer pipeline and verifies the actual runtime defaults match
+/// the defaults declared in `components/lang/*.dt`.
+#[test]
+fn test_components_lang_defaults_match_evaluated_runtime_values() {
+    let src = r#"
+        \env font = \Font(size: 16px);
+        \let derived_font = \Font();
+        \let base_ps = \ParagraphStyle();
+        \let custom_ps = \ParagraphStyle(line_break: LineBreak.Optimal, indent: 12px, looseness: 1);
+        \let derived_ps = \ParagraphStyle(paragraph_style: custom_ps);
+        \let sh = \Shadow();
+        \let tb = \TextBounds();
+        \let pag = \Pagination();
+        \let pb = \PageBreak();
+        \let clip_box = \Box(x: 15px, y: 25px, width: 80px, height: 40px);
+        \let cl = \Clip(box: clip_box);
+
+        \Rect(x: 40px, y: 60px, width: 300px, height: 200px, color: #ffffff) {
+            \Box(width: 50px, height: 30px)
+            \Anchor(name: "a1")
+            \AnchorScope(name: "s1")
+            \Bookmark(title: "Ch 1")
+            \Line(x1: 10px, y1: 20px, x2: 50px, y2: 60px)
+            \Image(src: "tests/goldens/demo.png", x: 0, y: 0)
+            \Text() { Hello }
+        }
+    "#;
+
+    let doc = parse_document(src).expect("Parse ok");
+    let expanded = expand_document(&doc).expect("Expand ok");
+    let layout = evaluate_document_with_window(&doc, 800.0, 600.0).expect("Eval ok");
+
+    let find_node = |name: &str, idx: usize| {
+        layout
+            .nodes
+            .iter()
+            .filter(|n| n.name == name)
+            .nth(idx)
+            .unwrap_or_else(|| panic!("Missing evaluated node {name}[{idx}]"))
+    };
+
+    // Font base defaults
+    let base_font = find_node("Font", 0);
+    assert_eq!(base_font.properties.get("weight"), Some(&Value::Integer(400)));
+    assert_eq!(base_font.properties.get("family"), Some(&Value::String(String::new())));
+    assert_eq!(base_font.properties.get("italic"), Some(&Value::Bool(false)));
+    assert_eq!(base_font.properties.get("small_caps"), Some(&Value::Bool(false)));
+    assert_eq!(base_font.properties.get("letter_spacing"), Some(&Value::Distance(0.0)));
+    assert_eq!(base_font.properties.get("color"), Some(&Value::Color("#000000".to_string())));
+
+    // Font derived defaults inherit from ambient env font
+    let derived_font = find_node("Font", 1);
+    assert_eq!(derived_font.properties.get("size"), Some(&Value::Distance(16.0)));
+    assert_eq!(derived_font.properties.get("weight"), Some(&Value::Integer(400)));
+
+    // ParagraphStyle base defaults (all 13 ports, including exact 1.0 / 3.0 space_shrink)
+    let base_ps = find_node("ParagraphStyle", 0);
+    assert_eq!(
+        base_ps.properties.get("align"),
+        Some(&Value::Enum { enum_name: "Align".to_string(), variant: "Left".to_string() })
+    );
+    assert_eq!(base_ps.properties.get("indent"), Some(&Value::Distance(0.0)));
+    assert_eq!(
+        base_ps.properties.get("line_break"),
+        Some(&Value::Enum { enum_name: "LineBreak".to_string(), variant: "Greedy".to_string() })
+    );
+    assert_eq!(base_ps.properties.get("word_spacing"), Some(&Value::Distance(0.0)));
+    assert_eq!(base_ps.properties.get("space_stretch"), Some(&Value::Float(0.5)));
+    let shrink = base_ps.properties.get("space_shrink").and_then(|v| v.as_f64()).unwrap();
+    assert!((shrink - 1.0 / 3.0).abs() < 1e-12, "space_shrink={shrink}");
+    assert_eq!(base_ps.properties.get("tolerance"), Some(&Value::Float(2.0)));
+    assert_eq!(base_ps.properties.get("hyphen_penalty"), Some(&Value::Float(50.0)));
+    assert_eq!(base_ps.properties.get("line_penalty"), Some(&Value::Float(10.0)));
+    assert_eq!(base_ps.properties.get("flagged_demerits"), Some(&Value::Float(3000.0)));
+    assert_eq!(base_ps.properties.get("fitness_demerits"), Some(&Value::Float(3000.0)));
+    assert_eq!(base_ps.properties.get("sentence_space"), Some(&Value::Float(0.0)));
+    assert_eq!(base_ps.properties.get("looseness"), Some(&Value::Integer(0)));
+
+    // ParagraphStyle derived defaults inherit from base
+    let derived_ps = find_node("ParagraphStyle", 2);
+    assert_eq!(
+        derived_ps.properties.get("line_break"),
+        Some(&Value::Enum { enum_name: "LineBreak".to_string(), variant: "Optimal".to_string() })
+    );
+    assert_eq!(derived_ps.properties.get("indent"), Some(&Value::Distance(12.0)));
+    assert_eq!(derived_ps.properties.get("looseness"), Some(&Value::Integer(1)));
+
+    // Shadow defaults
+    let sh = find_node("Shadow", 0);
+    assert_eq!(sh.properties.get("offset_x"), Some(&Value::Distance(0.0)));
+    assert_eq!(sh.properties.get("offset_y"), Some(&Value::Distance(0.0)));
+    assert_eq!(sh.properties.get("blur"), Some(&Value::Distance(0.0)));
+    assert_eq!(sh.properties.get("spread"), Some(&Value::Distance(0.0)));
+    assert_eq!(sh.properties.get("color"), Some(&Value::Color("#00000000".to_string())));
+
+    // TextBounds defaults
+    let tb = find_node("TextBounds", 0);
+    assert_eq!(
+        tb.properties.get("start_at"),
+        Some(&Value::Enum { enum_name: "TextStart".to_string(), variant: "Capital".to_string() })
+    );
+    assert_eq!(
+        tb.properties.get("end_at"),
+        Some(&Value::Enum { enum_name: "TextEnd".to_string(), variant: "Baseline".to_string() })
+    );
+
+    // Pagination & PageBreak defaults
+    let pag = find_node("Pagination", 0);
+    assert_eq!(pag.properties.get("breakable"), Some(&Value::Bool(false)));
+    assert_eq!(pag.properties.get("keep_with_next"), Some(&Value::Bool(false)));
+    assert_eq!(
+        pag.properties.get("break_before"),
+        Some(&Value::Enum { enum_name: "Break".to_string(), variant: "Auto".to_string() })
+    );
+    let pb = find_node("PageBreak", 0);
+    assert_eq!(
+        pb.properties.get("to"),
+        Some(&Value::Enum { enum_name: "Break".to_string(), variant: "Page".to_string() })
+    );
+
+    // Clip defaults (inherits box geometry)
+    let cl = find_node("Clip", 0);
+    assert_eq!(cl.rect.x, 15.0);
+    assert_eq!(cl.rect.y, 25.0);
+    assert_eq!(cl.rect.width, 80.0);
+    assert_eq!(cl.rect.height, 40.0);
+
+    // Box, Anchor, AnchorScope, Bookmark defaults inside a shifted (40, 60) parent -> x=0, y=0
+    let inner_box = find_node("Box", 1);
+    assert_eq!(inner_box.rect.x, 0.0);
+    assert_eq!(inner_box.rect.y, 0.0);
+    assert_eq!(inner_box.z, 0.0);
+
+    let anchor = find_node("Anchor", 0);
+    assert_eq!(anchor.rect.x, 0.0);
+    assert_eq!(anchor.rect.y, 0.0);
+    assert_eq!(anchor.z, 0.0);
+
+    let scope = find_node("AnchorScope", 0);
+    assert_eq!(scope.rect.x, 0.0);
+    assert_eq!(scope.rect.y, 0.0);
+    assert_eq!(scope.z, 0.0);
+
+    let bookmark = find_node("Bookmark", 0);
+    assert_eq!(bookmark.properties.get("level"), Some(&Value::Integer(1)));
+    assert_eq!(bookmark.rect.x, 0.0);
+    assert_eq!(bookmark.rect.y, 0.0);
+    assert_eq!(bookmark.z, 0.0);
+
+    // Line defaults
+    let line = find_node("Line", 0);
+    assert_eq!(line.properties.get("thickness"), Some(&Value::Distance(1.0)));
+    assert_eq!(line.properties.get("color"), Some(&Value::Color("#000000".to_string())));
+    assert_eq!(
+        line.properties.get("cap"),
+        Some(&Value::Enum { enum_name: "LineCap".to_string(), variant: "Butt".to_string() })
+    );
+    assert_eq!(line.z, 0.0);
+
+    // Image default dpi == window.dpi == 96.0
+    let img = find_node("Image", 0);
+    assert_eq!(img.properties.get("dpi"), Some(&Value::Float(96.0)));
+
+    // Text defaults: x=0, y=0, and pagination.breakable == true (vs Rect's false)
+    let text_node = find_node("Text", 0);
+    assert_eq!(text_node.rect.x, 0.0);
+    assert_eq!(text_node.rect.y, 0.0);
+    let expanded_text = expanded.nodes.iter().find(|n| n.name == "Text").unwrap();
+    assert!(expanded_text.pagination.breakable, "Text default pagination must be breakable: true");
+    let expanded_rect = expanded.nodes.iter().find(|n| n.name == "Rect").unwrap();
+    assert!(!expanded_rect.pagination.breakable, "Rect default pagination must be breakable: false");
+
+    // PagedFlow defaults inside a shifted (40, 60) parent with a 320x480 page template
+    let pf_src = r#"
+        \Component MyPage(x: Distance = 0px, y: Distance = 0px, width: Distance = 320px, height: Distance = 480px) {
+            \FlowBody(width: 280px, height: 400px)
+        }
+        \Rect(x: 40px, y: 60px, width: 500px, height: 500px, color: #ffffff) {
+            \PagedFlow(page: \MyPage()) {
+                \Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000000)
+            }
+        }
+    "#;
+    let pf_doc = parse_document(pf_src).expect("Parse PagedFlow probe ok");
+    let pf_layout = evaluate_document_with_window(&pf_doc, 800.0, 600.0).expect("Eval PagedFlow ok");
+    let pf = pf_layout.nodes.iter().find(|n| n.name == "PagedFlow").unwrap();
+    assert_eq!(pf.properties.get("orphans"), Some(&Value::Integer(2)));
+    assert_eq!(pf.properties.get("widows"), Some(&Value::Integer(2)));
+    assert_eq!(pf.properties.get("gap"), Some(&Value::Distance(0.0)));
+    assert_eq!(pf.properties.get("start_page"), Some(&Value::Integer(1)));
+    assert_eq!(pf.rect.x, 40.0);
+    assert_eq!(pf.rect.y, 60.0);
+    assert_eq!(pf.rect.width, 320.0);
+    assert_eq!(pf.rect.height, 480.0);
+
+    // Window defaults: dpi == 96.0, vscroll == true, hscroll == true
+    assert_eq!(layout.values.get(&VarId::new(NodeId::WINDOW, "dpi")), Some(&Value::Float(96.0)));
+    let app = ViewerApp::new(layout, ViewerConfig::default());
+    assert!(app.is_vscroll_enabled(), "Window vscroll must default to true");
+    assert!(app.is_hscroll_enabled(), "Window hscroll must default to true");
 }

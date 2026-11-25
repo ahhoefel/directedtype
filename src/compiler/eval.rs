@@ -1792,15 +1792,6 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
         Expr::Paren(inner, _) => eval_expr_with_env(inner, env),
         Expr::Node(n) => match n.name.as_str() {
             "Timer" => {
-                for &req in crate::compiler::expand::builtins::timer::TIMER_SPEC.required_ports {
-                    if !n.ports.iter().any(|p| p.name.as_str() == req) {
-                        return Err(CompileError::MissingPort {
-                            node: "Timer".to_string(),
-                            port: req.to_string(),
-                            span: n.span,
-                        });
-                    }
-                }
                 let mut duration_us: Option<i64> = None;
                 for port in &n.ports {
                     if !crate::compiler::expand::builtins::timer::TIMER_SPEC
@@ -1822,6 +1813,15 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
                             span: port.expr.span(),
                         })?;
                         duration_us = Some(us);
+                    }
+                }
+                for &req in crate::compiler::expand::builtins::timer::TIMER_SPEC.required_ports {
+                    if !n.ports.iter().any(|p| p.name.as_str() == req) {
+                        return Err(CompileError::MissingPort {
+                            node: "Timer".to_string(),
+                            port: req.to_string(),
+                            span: n.span,
+                        });
                     }
                 }
                 match duration_us {

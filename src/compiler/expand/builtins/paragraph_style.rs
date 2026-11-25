@@ -1,9 +1,10 @@
 use crate::ast::{
-    ComponentDef, DistanceUnit, EnumDef, Expr, Ident, Literal, MemberAccessExpr,
+    ComponentDef, EnumDef, Expr, Ident, Literal, MemberAccessExpr,
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinDefault, BuiltinPrimitive,
+    PrimitiveExpandState,
 };
 use crate::compiler::expand::typecheck::StaticType;
 use crate::span::Span;
@@ -28,32 +29,44 @@ pub const PARAGRAPH_STYLE_PORTS: &[&str] = &[
     "looseness",
 ];
 
+const PARAGRAPH_STYLE_BASE_DEFAULTS: &[(&str, BuiltinDefault)] = &[
+    ("align", BuiltinDefault::Enum("Align", "Left")),
+    ("indent", BuiltinDefault::Px(0.0)),
+    ("line_break", BuiltinDefault::Enum("LineBreak", "Greedy")),
+    ("word_spacing", BuiltinDefault::Px(0.0)),
+    ("space_stretch", BuiltinDefault::Float(0.5)),
+    ("space_shrink", BuiltinDefault::Float(1.0 / 3.0)),
+    ("tolerance", BuiltinDefault::Float(2.0)),
+    ("hyphen_penalty", BuiltinDefault::Float(50.0)),
+    ("line_penalty", BuiltinDefault::Float(10.0)),
+    ("flagged_demerits", BuiltinDefault::Float(3000.0)),
+    ("fitness_demerits", BuiltinDefault::Float(3000.0)),
+    ("sentence_space", BuiltinDefault::Float(0.0)),
+    ("looseness", BuiltinDefault::Integer(0)),
+];
+
+const PARAGRAPH_STYLE_DERIVED_DEFAULTS: &[(&str, BuiltinDefault)] = &[
+    ("align", BuiltinDefault::Expr("paragraph_style.align")),
+    ("indent", BuiltinDefault::Expr("paragraph_style.indent")),
+    ("line_break", BuiltinDefault::Expr("paragraph_style.line_break")),
+    ("word_spacing", BuiltinDefault::Expr("paragraph_style.word_spacing")),
+    ("space_stretch", BuiltinDefault::Expr("paragraph_style.space_stretch")),
+    ("space_shrink", BuiltinDefault::Expr("paragraph_style.space_shrink")),
+    ("tolerance", BuiltinDefault::Expr("paragraph_style.tolerance")),
+    ("hyphen_penalty", BuiltinDefault::Expr("paragraph_style.hyphen_penalty")),
+    ("line_penalty", BuiltinDefault::Expr("paragraph_style.line_penalty")),
+    ("flagged_demerits", BuiltinDefault::Expr("paragraph_style.flagged_demerits")),
+    ("fitness_demerits", BuiltinDefault::Expr("paragraph_style.fitness_demerits")),
+    ("sentence_space", BuiltinDefault::Expr("paragraph_style.sentence_space")),
+    ("looseness", BuiltinDefault::Expr("paragraph_style.looseness")),
+];
+
 pub fn default_paragraph_style_port_expr(port_name: &str, span: Span) -> Expr {
-    match port_name {
-        "align" => Expr::Literal(Literal::Enum(
-            "Align".to_string(),
-            "Left".to_string(),
-            span,
-        )),
-        "indent" | "word_spacing" => {
-            Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span))
-        }
-        "line_break" => Expr::Literal(Literal::Enum(
-            "LineBreak".to_string(),
-            "Greedy".to_string(),
-            span,
-        )),
-        "space_stretch" => Expr::Literal(Literal::Float(0.5, span)),
-        "space_shrink" => Expr::Literal(Literal::Float(1.0 / 3.0, span)),
-        "tolerance" => Expr::Literal(Literal::Float(2.0, span)),
-        "hyphen_penalty" => Expr::Literal(Literal::Float(50.0, span)),
-        "line_penalty" => Expr::Literal(Literal::Float(10.0, span)),
-        "flagged_demerits" => Expr::Literal(Literal::Float(3000.0, span)),
-        "fitness_demerits" => Expr::Literal(Literal::Float(3000.0, span)),
-        "sentence_space" => Expr::Literal(Literal::Float(0.0, span)),
-        "looseness" => Expr::Literal(Literal::Integer(0, span)),
-        _ => Expr::Literal(Literal::Float(0.0, span)),
-    }
+    PARAGRAPH_STYLE_BASE_DEFAULTS
+        .iter()
+        .find(|(name, _)| *name == port_name)
+        .and_then(|(_, def)| def.to_literal_expr(span))
+        .unwrap_or_else(|| Expr::Literal(Literal::Float(0.0, span)))
 }
 
 impl BuiltinPrimitive for ParagraphStylePrimitive {
@@ -101,6 +114,10 @@ impl BuiltinPrimitive for ParagraphStylePrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&[], &["paragraph_style"]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[PARAGRAPH_STYLE_BASE_DEFAULTS, PARAGRAPH_STYLE_DERIVED_DEFAULTS]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {

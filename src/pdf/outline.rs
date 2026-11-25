@@ -51,7 +51,7 @@ pub fn build_document_outline(pages: &[PageScene], anchors: &AnchorIndex) -> Opt
                 .get("outline_level")
                 .or_else(|| node.properties.get("level"))
                 .and_then(|v| v.as_i64())
-                .unwrap_or(1)
+                .unwrap_or(crate::compiler::expand::builtins::DEFAULT_OUTLINE_LEVEL)
                 .clamp(1, 16) as u32;
 
             let (target_page, x, y) = if let Some(anchor_url) = node

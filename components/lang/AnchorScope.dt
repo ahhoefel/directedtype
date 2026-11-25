@@ -3,8 +3,8 @@
 
 \BuiltIn AnchorScope(
     name: String,
-    x: Distance = parent.left,
-    y: Distance = parent.top,
+    x: Distance = 0px,
+    y: Distance = 0px,
     width: Distance = unset,
     height: Distance = unset,
     z: Integer = 0,

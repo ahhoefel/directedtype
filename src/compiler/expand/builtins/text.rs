@@ -4,8 +4,8 @@ use crate::ast::{
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
-    apply_inline_origin_defaults, default_builtin_port_type, BuiltinChildren, BuiltinPrimitive,
-    PrimitiveExpandState,
+    apply_inline_origin_defaults, default_builtin_port_type, BuiltinChildren, BuiltinDefault,
+    BuiltinPrimitive, PrimitiveExpandState, DEFAULT_OPACITY,
 };
 use crate::compiler::expand::context::{EnvEntry, ScopeContext};
 use crate::compiler::expand::rewrite::rewrite_expr;
@@ -104,6 +104,39 @@ impl BuiltinPrimitive for TextPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&[], &["baseline"]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        const TEXT_Y_DEFAULTS: &[(&str, BuiltinDefault)] = &[
+            ("x", BuiltinDefault::Px(0.0)),
+            ("y", BuiltinDefault::Px(0.0)),
+            ("width", BuiltinDefault::Unset),
+            ("height", BuiltinDefault::Unset),
+            ("text", BuiltinDefault::String("")),
+            ("underline", BuiltinDefault::Bool(false)),
+            ("z", BuiltinDefault::Integer(0)),
+            ("pagination", BuiltinDefault::Expr("\\Pagination(breakable: true)")),
+            ("cursor", BuiltinDefault::String("Default")),
+            ("opacity", BuiltinDefault::Float(DEFAULT_OPACITY)),
+            ("name", BuiltinDefault::String("")),
+            ("path", BuiltinDefault::String("")),
+            ("id", BuiltinDefault::String("")),
+        ];
+        const TEXT_BASELINE_DEFAULTS: &[(&str, BuiltinDefault)] = &[
+            ("x", BuiltinDefault::Px(0.0)),
+            ("width", BuiltinDefault::Unset),
+            ("height", BuiltinDefault::Unset),
+            ("text", BuiltinDefault::String("")),
+            ("underline", BuiltinDefault::Bool(false)),
+            ("z", BuiltinDefault::Integer(0)),
+            ("pagination", BuiltinDefault::Expr("\\Pagination(breakable: true)")),
+            ("cursor", BuiltinDefault::String("Default")),
+            ("opacity", BuiltinDefault::Float(DEFAULT_OPACITY)),
+            ("name", BuiltinDefault::String("")),
+            ("path", BuiltinDefault::String("")),
+            ("id", BuiltinDefault::String("")),
+        ];
+        &[TEXT_Y_DEFAULTS, TEXT_BASELINE_DEFAULTS]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {

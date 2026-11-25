@@ -4,7 +4,8 @@ use crate::ast::{
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinDefault, BuiltinPrimitive,
+    PrimitiveExpandState, DEFAULT_BORDER_COLOR, DEFAULT_OPACITY,
 };
 use crate::compiler::expand::typecheck::StaticType;
 use crate::span::Span;
@@ -55,6 +56,32 @@ impl BuiltinPrimitive for RectPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&["x", "y", "width", "height", "color"]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[&[
+            ("z", BuiltinDefault::Integer(0)),
+            ("border_color", BuiltinDefault::Color(DEFAULT_BORDER_COLOR)),
+            ("border_width", BuiltinDefault::Px(0.0)),
+            ("radius", BuiltinDefault::Px(0.0)),
+            ("radius_left", BuiltinDefault::Unset),
+            ("radius_right", BuiltinDefault::Unset),
+            ("radius_top", BuiltinDefault::Unset),
+            ("radius_bottom", BuiltinDefault::Unset),
+            ("radius_top_left", BuiltinDefault::Unset),
+            ("radius_top_right", BuiltinDefault::Unset),
+            ("radius_bottom_right", BuiltinDefault::Unset),
+            ("radius_bottom_left", BuiltinDefault::Unset),
+            ("shadow", BuiltinDefault::Expr("\\Shadow()")),
+            ("scroll_x", BuiltinDefault::Px(0.0)),
+            ("scroll_y", BuiltinDefault::Px(0.0)),
+            ("pagination", BuiltinDefault::Expr("\\Pagination()")),
+            ("cursor", BuiltinDefault::String("Default")),
+            ("opacity", BuiltinDefault::Float(DEFAULT_OPACITY)),
+            ("name", BuiltinDefault::String("")),
+            ("path", BuiltinDefault::String("")),
+            ("id", BuiltinDefault::String("")),
+        ]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {

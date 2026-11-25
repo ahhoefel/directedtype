@@ -1,7 +1,8 @@
 use crate::ast::{Expr, Ident, MemberAccessExpr};
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinDefault, BuiltinPrimitive,
+    PrimitiveExpandState,
 };
 use crate::compiler::expand::context::EnvEntry;
 use crate::compiler::expand::typecheck::StaticType;
@@ -74,6 +75,20 @@ impl BuiltinPrimitive for ClipPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&["box"]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[&[
+            ("up", BuiltinDefault::Expr("parent.clip")),
+            ("x", BuiltinDefault::Expr("box.x")),
+            ("y", BuiltinDefault::Expr("box.y")),
+            ("width", BuiltinDefault::Expr("box.width")),
+            ("height", BuiltinDefault::Expr("box.height")),
+            ("z", BuiltinDefault::Integer(0)),
+            ("scroll_x", BuiltinDefault::Px(0.0)),
+            ("scroll_y", BuiltinDefault::Px(0.0)),
+            ("id", BuiltinDefault::String("")),
+        ]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {

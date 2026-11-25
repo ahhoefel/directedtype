@@ -2,7 +2,9 @@ use crate::ast::{
     ComponentDef, DistanceUnit, ElementNode, Expr, Ident, Literal, MemberAccessExpr, PortBinding,
 };
 use crate::compiler::error::CompileError;
-use crate::compiler::expand::builtins::{BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState};
+use crate::compiler::expand::builtins::{
+    BuiltinChildren, BuiltinDefault, BuiltinPrimitive, PrimitiveExpandState, DEFAULT_OUTLINE_LEVEL,
+};
 use crate::compiler::expand::context::ElementContext;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::scope::ScopeId;
@@ -226,6 +228,20 @@ impl BuiltinPrimitive for AnchorPrimitive {
         &[&["name"]]
     }
 
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[&[
+            ("x", BuiltinDefault::Px(0.0)),
+            ("y", BuiltinDefault::Px(0.0)),
+            ("width", BuiltinDefault::Unset),
+            ("height", BuiltinDefault::Unset),
+            ("z", BuiltinDefault::Integer(0)),
+            ("outline_title", BuiltinDefault::String("")),
+            ("outline_level", BuiltinDefault::Integer(DEFAULT_OUTLINE_LEVEL)),
+            ("pagination", BuiltinDefault::Expr("\\Pagination()")),
+            ("id", BuiltinDefault::String("")),
+        ]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::Multiple
     }
@@ -323,6 +339,18 @@ impl BuiltinPrimitive for AnchorScopePrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&["name"]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[&[
+            ("x", BuiltinDefault::Px(0.0)),
+            ("y", BuiltinDefault::Px(0.0)),
+            ("width", BuiltinDefault::Unset),
+            ("height", BuiltinDefault::Unset),
+            ("z", BuiltinDefault::Integer(0)),
+            ("pagination", BuiltinDefault::Expr("\\Pagination()")),
+            ("id", BuiltinDefault::String("")),
+        ]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -428,6 +456,20 @@ impl BuiltinPrimitive for BookmarkPrimitive {
         &[&["title"]]
     }
 
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[&[
+            ("level", BuiltinDefault::Integer(DEFAULT_OUTLINE_LEVEL)),
+            ("target", BuiltinDefault::String("")),
+            ("x", BuiltinDefault::Px(0.0)),
+            ("y", BuiltinDefault::Px(0.0)),
+            ("width", BuiltinDefault::Unset),
+            ("height", BuiltinDefault::Unset),
+            ("z", BuiltinDefault::Integer(0)),
+            ("pagination", BuiltinDefault::Expr("\\Pagination()")),
+            ("id", BuiltinDefault::String("")),
+        ]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::Multiple
     }
@@ -448,7 +490,7 @@ impl BuiltinPrimitive for BookmarkPrimitive {
         state
             .ports
             .entry("level".to_string())
-            .or_insert_with(|| Expr::Literal(Literal::Integer(1, state.elem.span)));
+            .or_insert_with(|| Expr::Literal(Literal::Integer(DEFAULT_OUTLINE_LEVEL, state.elem.span)));
         finalize_anchor_like_geometry(state);
         Ok(())
     }

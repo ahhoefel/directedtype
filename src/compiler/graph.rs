@@ -278,7 +278,12 @@ pub fn build_variable_graph_with_window(
     window_width: f64,
     window_height: f64,
 ) -> Result<VariableGraph, CompileError> {
-    build_variable_graph_with_window_and_dpi(doc, window_width, window_height, 96.0)
+    build_variable_graph_with_window_and_dpi(
+        doc,
+        window_width,
+        window_height,
+        crate::compiler::expand::builtins::DEFAULT_WINDOW_DPI,
+    )
 }
 
 /// Builds a `VariableGraph` from an `ExpandedDocument` with explicit viewport dimensions and default DPI.

@@ -6,7 +6,7 @@ use crate::compiler::error::CompileError;
 use crate::compiler::eval::eval_expr_for_node;
 use crate::compiler::expand::builtins::{
     default_builtin_port_type, lookup_builtin, static_type_from_canonical_name, BuiltinChildren,
-    BuiltinPrimitive, PrimitiveExpandState, SpecialBuiltinSpec,
+    BuiltinDefault, BuiltinPrimitive, PrimitiveExpandState, SpecialBuiltinSpec,
 };
 use crate::compiler::expand::context::{ElementContext, LexicalBinding, ScopeContext};
 use crate::compiler::expand::expand_element;
@@ -331,6 +331,7 @@ pub const PAGE_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
     name: "Page",
     accepted_ports: &[],
     required_ports: &[],
+    default_ports: &[],
     output_ports: &[
         ("number", "Integer"),
         ("count", "Integer"),
@@ -520,6 +521,12 @@ pub(crate) fn populate_page_ports(
     );
 }
 
+const PAGINATION_DEFAULTS: &[(&str, BuiltinDefault)] = &[
+    ("breakable", BuiltinDefault::Bool(false)),
+    ("keep_with_next", BuiltinDefault::Bool(false)),
+    ("break_before", BuiltinDefault::Enum("Break", "Auto")),
+];
+
 impl BuiltinPrimitive for PaginationPrimitive {
     fn name(&self) -> &'static str {
         "Pagination"
@@ -535,6 +542,10 @@ impl BuiltinPrimitive for PaginationPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&[]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[PAGINATION_DEFAULTS]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -569,21 +580,11 @@ impl BuiltinPrimitive for PaginationPrimitive {
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         let span = state.elem.span;
-        state
-            .ports
-            .entry("breakable".to_string())
-            .or_insert_with(|| Expr::Literal(Literal::Bool(false, span)));
-        state
-            .ports
-            .entry("keep_with_next".to_string())
-            .or_insert_with(|| Expr::Literal(Literal::Bool(false, span)));
-        state.ports.entry("break_before".to_string()).or_insert_with(|| {
-            Expr::Literal(Literal::Enum(
-                "Break".to_string(),
-                "Auto".to_string(),
-                span,
-            ))
-        });
+        for &(port_name, default_val) in PAGINATION_DEFAULTS {
+            if let Some(expr) = default_val.to_literal_expr(span) {
+                state.ports.entry(port_name.to_string()).or_insert(expr);
+            }
+        }
         Ok(())
     }
 
@@ -591,6 +592,9 @@ impl BuiltinPrimitive for PaginationPrimitive {
         Vec::new()
     }
 }
+
+const PAGE_BREAK_DEFAULTS: &[(&str, BuiltinDefault)] =
+    &[("to", BuiltinDefault::Enum("Break", "Page"))];
 
 impl BuiltinPrimitive for PageBreakPrimitive {
     fn name(&self) -> &'static str {
@@ -607,6 +611,10 @@ impl BuiltinPrimitive for PageBreakPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&[]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[PAGE_BREAK_DEFAULTS]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -640,13 +648,11 @@ impl BuiltinPrimitive for PageBreakPrimitive {
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         let span = state.elem.span;
-        state.ports.entry("to".to_string()).or_insert_with(|| {
-            Expr::Literal(Literal::Enum(
-                "Break".to_string(),
-                "Page".to_string(),
-                span,
-            ))
-        });
+        for &(port_name, default_val) in PAGE_BREAK_DEFAULTS {
+            if let Some(expr) = default_val.to_literal_expr(span) {
+                state.ports.entry(port_name.to_string()).or_insert(expr);
+            }
+        }
         Ok(())
     }
 
@@ -666,6 +672,15 @@ impl BuiltinPrimitive for FlowBodyPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&["width", "height"]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[&[
+            ("x", BuiltinDefault::Expr("parent.left")),
+            ("y", BuiltinDefault::Expr("parent.top")),
+            ("z", BuiltinDefault::Integer(0)),
+            ("id", BuiltinDefault::String("")),
+        ]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -695,6 +710,20 @@ impl BuiltinPrimitive for FlowBodyPrimitive {
     }
 }
 
+const PAGED_FLOW_DEFAULTS: &[(&str, BuiltinDefault)] = &[
+    ("orphans", BuiltinDefault::Integer(2)),
+    ("widows", BuiltinDefault::Integer(2)),
+    ("gap", BuiltinDefault::Px(0.0)),
+    ("start_page", BuiltinDefault::Integer(1)),
+    ("x", BuiltinDefault::Expr("parent.left")),
+    ("y", BuiltinDefault::Expr("parent.top")),
+    ("width", BuiltinDefault::Expr("page.width")),
+    ("height", BuiltinDefault::Expr("page.height")),
+    ("z", BuiltinDefault::Integer(0)),
+    ("pagination", BuiltinDefault::Expr("\\Pagination()")),
+    ("id", BuiltinDefault::String("")),
+];
+
 impl BuiltinPrimitive for PagedFlowPrimitive {
     fn name(&self) -> &'static str {
         "PagedFlow"
@@ -706,6 +735,10 @@ impl BuiltinPrimitive for PagedFlowPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&["page"]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[PAGED_FLOW_DEFAULTS]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -1116,22 +1149,13 @@ impl BuiltinPrimitive for PagedFlowPrimitive {
         // the captured AST template lives in `PagedFlowRecord.page_template_elem`.
         state.ports.remove("page");
 
-        state
-            .ports
-            .entry("orphans".to_string())
-            .or_insert_with(|| Expr::Literal(Literal::Integer(2, span)));
-        state
-            .ports
-            .entry("widows".to_string())
-            .or_insert_with(|| Expr::Literal(Literal::Integer(2, span)));
-        state
-            .ports
-            .entry("gap".to_string())
-            .or_insert_with(|| Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, span)));
-        state
-            .ports
-            .entry("start_page".to_string())
-            .or_insert_with(|| Expr::Literal(Literal::Integer(1, span)));
+        for &(port_name, default_val) in PAGED_FLOW_DEFAULTS {
+            if matches!(port_name, "orphans" | "widows" | "gap" | "start_page") {
+                if let Some(expr) = default_val.to_literal_expr(span) {
+                    state.ports.entry(port_name.to_string()).or_insert(expr);
+                }
+            }
+        }
         state
             .ports
             .entry("end_page".to_string())
@@ -1349,6 +1373,10 @@ impl BuiltinPrimitive for PageValuePrimitive {
         &[&[]]
     }
 
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[&[]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::None
     }
@@ -1380,6 +1408,10 @@ impl BuiltinPrimitive for PageListPrimitive {
     }
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&[]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
         &[&[]]
     }
 
@@ -1415,6 +1447,10 @@ impl BuiltinPrimitive for DepositPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&["into"]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[&[]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -1603,6 +1639,10 @@ impl BuiltinPrimitive for CollectPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&["from"]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[&[]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {

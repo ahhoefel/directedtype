@@ -1062,20 +1062,22 @@ impl ViewerApp {
     /// Returns whether vertical scrolling is enabled on the ambient window.
     #[inline]
     pub fn is_vscroll_enabled(&self) -> bool {
+        let default = crate::compiler::expand::builtins::DEFAULT_WINDOW_VSCROLL;
         if let Some(val) = self.layout().values.get(&VarId::new(NodeId::WINDOW, "vscroll")) {
-            val.as_bool().unwrap_or(true)
+            val.as_bool().unwrap_or(default)
         } else {
-            true
+            default
         }
     }
 
     /// Returns whether horizontal scrolling is enabled on the ambient window.
     #[inline]
     pub fn is_hscroll_enabled(&self) -> bool {
+        let default = crate::compiler::expand::builtins::DEFAULT_WINDOW_HSCROLL;
         if let Some(val) = self.layout().values.get(&VarId::new(NodeId::WINDOW, "hscroll")) {
-            val.as_bool().unwrap_or(true)
+            val.as_bool().unwrap_or(default)
         } else {
-            true
+            default
         }
     }
 
@@ -2339,7 +2341,7 @@ impl ViewerApp {
             .values
             .get(&VarId::new(NodeId::WINDOW, "vscroll"))
             .and_then(|v| v.as_bool())
-            .unwrap_or(true);
+            .unwrap_or(crate::compiler::expand::builtins::DEFAULT_WINDOW_VSCROLL);
 
         let raw_content_w = layout
             .nodes
@@ -2350,7 +2352,7 @@ impl ViewerApp {
             .values
             .get(&VarId::new(NodeId::WINDOW, "hscroll"))
             .and_then(|v| v.as_bool())
-            .unwrap_or(true);
+            .unwrap_or(crate::compiler::expand::builtins::DEFAULT_WINDOW_HSCROLL);
 
         let z = self.zoom.max(0.01);
         let eff_canvas_h = canvas_h / z;

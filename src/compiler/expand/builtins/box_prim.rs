@@ -1,6 +1,8 @@
 use crate::ast::{DistanceUnit, Expr, Literal};
 use crate::compiler::error::CompileError;
-use crate::compiler::expand::builtins::{BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState};
+use crate::compiler::expand::builtins::{
+    BuiltinChildren, BuiltinDefault, BuiltinPrimitive, PrimitiveExpandState, DEFAULT_OPACITY,
+};
 
 pub struct BoxPrimitive;
 pub struct LinkPrimitive;
@@ -34,6 +36,21 @@ impl BuiltinPrimitive for BoxPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&["width", "height"]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[&[
+            ("x", BuiltinDefault::Px(0.0)),
+            ("y", BuiltinDefault::Px(0.0)),
+            ("z", BuiltinDefault::Integer(0)),
+            ("radius", BuiltinDefault::Px(0.0)),
+            ("pagination", BuiltinDefault::Expr("\\Pagination()")),
+            ("cursor", BuiltinDefault::String("Default")),
+            ("opacity", BuiltinDefault::Float(DEFAULT_OPACITY)),
+            ("name", BuiltinDefault::String("")),
+            ("path", BuiltinDefault::String("")),
+            ("id", BuiltinDefault::String("")),
+        ]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -75,6 +92,23 @@ impl BuiltinPrimitive for LinkPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&[]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[&[
+            ("url", BuiltinDefault::String("")),
+            ("color", BuiltinDefault::Unset),
+            ("underline", BuiltinDefault::Bool(false)),
+            ("x", BuiltinDefault::Px(0.0)),
+            ("y", BuiltinDefault::Px(0.0)),
+            ("width", BuiltinDefault::Px(0.0)),
+            ("height", BuiltinDefault::Px(0.0)),
+            ("z", BuiltinDefault::Integer(0)),
+            ("pagination", BuiltinDefault::Expr("\\Pagination()")),
+            ("cursor", BuiltinDefault::String("Default")),
+            ("opacity", BuiltinDefault::Float(DEFAULT_OPACITY)),
+            ("id", BuiltinDefault::String("")),
+        ]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {

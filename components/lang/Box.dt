@@ -4,8 +4,8 @@
 \BuiltIn Box(
     width: Distance,
     height: Distance,
-    x: Distance = parent.left,
-    y: Distance = parent.top,
+    x: Distance = 0px,
+    y: Distance = 0px,
     z: Integer = 0,
     radius: Distance = 0px,
     env clip: Clip,

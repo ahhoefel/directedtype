@@ -3,8 +3,8 @@
 
 \BuiltIn Window(
     title: String = "",
-    vscroll: Boolean = false,
-    hscroll: Boolean = false,
+    vscroll: Boolean = true,
+    hscroll: Boolean = true,
     dpi: Float = 96.0
 ) {
     \alias x: Distance;

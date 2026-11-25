@@ -3,13 +3,13 @@
 
 \BuiltIn Anchor(
     name: String,
-    x: Distance = parent.left,
-    y: Distance = parent.top,
+    x: Distance = 0px,
+    y: Distance = 0px,
     width: Distance = unset,
     height: Distance = unset,
     z: Integer = 0,
     outline_title: String = "",
-    outline_level: Integer = 0,
+    outline_level: Integer = 1,
     env clip: Clip,
     pagination: Pagination = \Pagination(),
     id: String = "",

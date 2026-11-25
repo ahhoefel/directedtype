@@ -1,10 +1,11 @@
 use crate::ast::{
-    BinaryExpr, BinaryOp, CallExpr, ComponentDef, DistanceUnit, ElementNode, Expr, Ident, Literal,
+    BinaryExpr, BinaryOp, CallExpr, ComponentDef, ElementNode, Expr, Ident, Literal,
     MemberAccessExpr,
 };
 use crate::compiler::error::{CompileError, NoMatchingOverloadDetails};
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinDefault, BuiltinPrimitive,
+    PrimitiveExpandState,
 };
 use crate::compiler::expand::context::{ElementContext, EnvEntry, ScopeContext};
 use crate::compiler::expand::expand_element;
@@ -25,6 +26,27 @@ pub(super) const FONT_PUBLIC_PORTS: &[&str] = &[
     "small_caps",
     "letter_spacing",
     "color",
+];
+
+const FONT_BASE_DEFAULTS: &[(&str, BuiltinDefault)] = &[
+    ("weight", BuiltinDefault::Integer(400)),
+    ("family", BuiltinDefault::String("")),
+    ("line_height", BuiltinDefault::Unset),
+    ("italic", BuiltinDefault::Bool(false)),
+    ("small_caps", BuiltinDefault::Bool(false)),
+    ("letter_spacing", BuiltinDefault::Px(0.0)),
+    ("color", BuiltinDefault::Color("#000000")),
+];
+
+const FONT_DERIVED_DEFAULTS: &[(&str, BuiltinDefault)] = &[
+    ("size", BuiltinDefault::Expr("font.size")),
+    ("weight", BuiltinDefault::Expr("font.weight")),
+    ("family", BuiltinDefault::Expr("font.family")),
+    ("line_height", BuiltinDefault::Expr("font.line_height")),
+    ("italic", BuiltinDefault::Expr("font.italic")),
+    ("small_caps", BuiltinDefault::Expr("font.small_caps")),
+    ("letter_spacing", BuiltinDefault::Expr("font.letter_spacing")),
+    ("color", BuiltinDefault::Expr("font.color")),
 ];
 
 pub(super) struct PreResolvedFont {
@@ -204,6 +226,10 @@ impl BuiltinPrimitive for FontPrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&["size"], &[]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[FONT_BASE_DEFAULTS, FONT_DERIVED_DEFAULTS]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -421,47 +447,10 @@ impl BuiltinPrimitive for FontPrimitive {
                     span: elem.span,
                 });
             }
-            // Default weight to 400 if not specified
-            if !state.ports.contains_key("weight") {
-                state.ports.insert(
-                    "weight".to_string(),
-                    Expr::Literal(Literal::Integer(400, elem.span)),
-                );
-            }
-            // Default family to empty string if not specified
-            if !state.ports.contains_key("family") {
-                state.ports.insert(
-                    "family".to_string(),
-                    Expr::Literal(Literal::String(String::new(), elem.span)),
-                );
-            }
-            // Default italic to false if not specified
-            if !state.ports.contains_key("italic") {
-                state.ports.insert(
-                    "italic".to_string(),
-                    Expr::Literal(Literal::Bool(false, elem.span)),
-                );
-            }
-            // Default small_caps to false if not specified
-            if !state.ports.contains_key("small_caps") {
-                state.ports.insert(
-                    "small_caps".to_string(),
-                    Expr::Literal(Literal::Bool(false, elem.span)),
-                );
-            }
-            // Default letter_spacing to 0px if not specified
-            if !state.ports.contains_key("letter_spacing") {
-                state.ports.insert(
-                    "letter_spacing".to_string(),
-                    Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)),
-                );
-            }
-            // Default color to #000000 if not specified
-            if !state.ports.contains_key("color") {
-                state.ports.insert(
-                    "color".to_string(),
-                    Expr::Literal(Literal::Color("#000000".to_string(), elem.span)),
-                );
+            for &(port_name, default_val) in FONT_BASE_DEFAULTS {
+                if let Some(expr) = default_val.to_literal_expr(elem.span) {
+                    state.ports.entry(port_name.to_string()).or_insert(expr);
+                }
             }
         }
 

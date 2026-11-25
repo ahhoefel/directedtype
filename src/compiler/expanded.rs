@@ -481,7 +481,7 @@ impl ExpandedDocument {
             dom_handles: HashMap::new(),
             local_bindings: Vec::new(),
             scope_tree: ScopeTree::new(),
-            default_dpi: 96.0,
+            default_dpi: crate::compiler::expand::builtins::DEFAULT_WINDOW_DPI,
             image_assets: Arc::new(crate::compiler::image::ImageAssetStore::new()),
         }
     }

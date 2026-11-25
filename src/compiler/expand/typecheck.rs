@@ -3213,15 +3213,6 @@ fn infer_node_expr_type(
                     span: elem.span,
                 });
             }
-            for &req in super::builtins::timer::TIMER_SPEC.required_ports {
-                if !elem.ports.iter().any(|p| p.name.as_str() == req) {
-                    return Err(CompileError::MissingPort {
-                        node: "Timer".to_string(),
-                        port: req.to_string(),
-                        span: elem.span,
-                    });
-                }
-            }
             for port in &elem.ports {
                 let Some(expected_ty_name) =
                     super::builtins::timer::TIMER_SPEC.accepted_port_type(port.name.as_str())
@@ -3243,6 +3234,15 @@ fn infer_node_expr_type(
                         expected: expected_ty_name.to_string(),
                         actual: port_ty.type_name(),
                         span: port.expr.span(),
+                    });
+                }
+            }
+            for &req in super::builtins::timer::TIMER_SPEC.required_ports {
+                if !elem.ports.iter().any(|p| p.name.as_str() == req) {
+                    return Err(CompileError::MissingPort {
+                        node: "Timer".to_string(),
+                        port: req.to_string(),
+                        span: elem.span,
                     });
                 }
             }

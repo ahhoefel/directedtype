@@ -1,7 +1,8 @@
 use crate::ast::{ElementNode, EnumDef, Expr, Ident, Item, MemberAccessExpr, Symbol};
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
-    static_type_from_canonical_name, BuiltinChildren, SpecialBuiltinSpec,
+    static_type_from_canonical_name, BuiltinChildren, BuiltinDefault, SpecialBuiltinSpec,
+    DEFAULT_WINDOW_DPI, DEFAULT_WINDOW_HSCROLL, DEFAULT_WINDOW_VSCROLL,
 };
 use crate::compiler::expand::context::{EnvEntry, LexicalBinding};
 use crate::compiler::expand::rewrite::default_expr_for_state_with_enums;
@@ -19,6 +20,12 @@ pub const WINDOW_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
         ("dpi", "Float"),
     ],
     required_ports: &[],
+    default_ports: &[
+        ("title", BuiltinDefault::String("")),
+        ("vscroll", BuiltinDefault::Bool(DEFAULT_WINDOW_VSCROLL)),
+        ("hscroll", BuiltinDefault::Bool(DEFAULT_WINDOW_HSCROLL)),
+        ("dpi", BuiltinDefault::Float(DEFAULT_WINDOW_DPI)),
+    ],
     output_ports: &[
         ("x", "Distance"),
         ("y", "Distance"),

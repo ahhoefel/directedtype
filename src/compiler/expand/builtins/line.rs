@@ -1,16 +1,27 @@
 use crate::ast::{
-    BinaryExpr, BinaryOp, CallExpr, ComponentDef, DistanceUnit, EnumDef, Expr, Ident, Literal,
-    MemberAccessExpr,
+    BinaryExpr, BinaryOp, CallExpr, ComponentDef, EnumDef, Expr, Ident, MemberAccessExpr,
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinDefault, BuiltinPrimitive,
+    PrimitiveExpandState, DEFAULT_OPACITY,
 };
 use crate::compiler::expand::typecheck::StaticType;
 use crate::span::Span;
 use std::collections::HashMap;
 
 pub struct LinePrimitive;
+
+const LINE_DEFAULTS: &[(&str, BuiltinDefault)] = &[
+    ("thickness", BuiltinDefault::Px(1.0)),
+    ("color", BuiltinDefault::Color("#000000")),
+    ("cap", BuiltinDefault::Enum("LineCap", "Butt")),
+    ("z", BuiltinDefault::Integer(0)),
+    ("pagination", BuiltinDefault::Expr("\\Pagination()")),
+    ("cursor", BuiltinDefault::String("Default")),
+    ("opacity", BuiltinDefault::Float(DEFAULT_OPACITY)),
+    ("id", BuiltinDefault::String("")),
+];
 
 impl BuiltinPrimitive for LinePrimitive {
     fn name(&self) -> &'static str {
@@ -23,6 +34,10 @@ impl BuiltinPrimitive for LinePrimitive {
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
         &[&["x1", "y1", "x2", "y2"]]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        &[LINE_DEFAULTS]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -80,21 +95,13 @@ impl BuiltinPrimitive for LinePrimitive {
         let elem = state.elem;
         let node_id = state.node_id;
 
-        state.ports.entry("thickness".to_string()).or_insert_with(|| {
-            Expr::Literal(Literal::Distance(1.0, DistanceUnit::Px, elem.span))
-        });
-
-        state.ports.entry("color".to_string()).or_insert_with(|| {
-            Expr::Literal(Literal::Color("#000000".to_string(), elem.span))
-        });
-
-        state.ports.entry("cap".to_string()).or_insert_with(|| {
-            Expr::Literal(Literal::Enum(
-                "LineCap".to_string(),
-                "Butt".to_string(),
-                elem.span,
-            ))
-        });
+        for &(port_name, default_val) in LINE_DEFAULTS {
+            if matches!(port_name, "thickness" | "color" | "cap") {
+                if let Some(expr) = default_val.to_literal_expr(elem.span) {
+                    state.ports.entry(port_name.to_string()).or_insert(expr);
+                }
+            }
+        }
 
         let self_ident = Expr::Ident(Ident::from_node(node_id, elem.span));
         let x1_ref = Expr::MemberAccess(MemberAccessExpr {

@@ -3,7 +3,8 @@ use crate::ast::{
 };
 use crate::compiler::error::{CompileError, NoMatchingOverloadDetails};
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinDefault, BuiltinPrimitive,
+    PrimitiveExpandState, DEFAULT_BORDER_COLOR, DEFAULT_OPACITY,
 };
 use crate::compiler::expand::typecheck::StaticType;
 
@@ -24,6 +25,55 @@ impl BuiltinPrimitive for ImagePrimitive {
             &["src", "x", "y", "width"],
             &["src", "x", "y", "height"],
         ]
+    }
+
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
+        const IMAGE_DPI_DEFAULTS: &[(&str, BuiltinDefault)] = &[
+            ("dpi", BuiltinDefault::Expr("window.dpi")),
+            ("z", BuiltinDefault::Integer(0)),
+            ("border_color", BuiltinDefault::Color(DEFAULT_BORDER_COLOR)),
+            ("border_width", BuiltinDefault::Px(0.0)),
+            ("radius", BuiltinDefault::Px(0.0)),
+            ("radius_left", BuiltinDefault::Unset),
+            ("radius_right", BuiltinDefault::Unset),
+            ("radius_top", BuiltinDefault::Unset),
+            ("radius_bottom", BuiltinDefault::Unset),
+            ("radius_top_left", BuiltinDefault::Unset),
+            ("radius_top_right", BuiltinDefault::Unset),
+            ("radius_bottom_right", BuiltinDefault::Unset),
+            ("radius_bottom_left", BuiltinDefault::Unset),
+            ("shadow", BuiltinDefault::Expr("\\Shadow()")),
+            ("pagination", BuiltinDefault::Expr("\\Pagination()")),
+            ("cursor", BuiltinDefault::String("Default")),
+            ("opacity", BuiltinDefault::Float(DEFAULT_OPACITY)),
+            ("alt", BuiltinDefault::String("")),
+            ("name", BuiltinDefault::String("")),
+            ("path", BuiltinDefault::String("")),
+            ("id", BuiltinDefault::String("")),
+        ];
+        const IMAGE_SIZED_DEFAULTS: &[(&str, BuiltinDefault)] = &[
+            ("z", BuiltinDefault::Integer(0)),
+            ("border_color", BuiltinDefault::Color(DEFAULT_BORDER_COLOR)),
+            ("border_width", BuiltinDefault::Px(0.0)),
+            ("radius", BuiltinDefault::Px(0.0)),
+            ("radius_left", BuiltinDefault::Unset),
+            ("radius_right", BuiltinDefault::Unset),
+            ("radius_top", BuiltinDefault::Unset),
+            ("radius_bottom", BuiltinDefault::Unset),
+            ("radius_top_left", BuiltinDefault::Unset),
+            ("radius_top_right", BuiltinDefault::Unset),
+            ("radius_bottom_right", BuiltinDefault::Unset),
+            ("radius_bottom_left", BuiltinDefault::Unset),
+            ("shadow", BuiltinDefault::Expr("\\Shadow()")),
+            ("pagination", BuiltinDefault::Expr("\\Pagination()")),
+            ("cursor", BuiltinDefault::String("Default")),
+            ("opacity", BuiltinDefault::Float(DEFAULT_OPACITY)),
+            ("alt", BuiltinDefault::String("")),
+            ("name", BuiltinDefault::String("")),
+            ("path", BuiltinDefault::String("")),
+            ("id", BuiltinDefault::String("")),
+        ];
+        &[IMAGE_DPI_DEFAULTS, IMAGE_SIZED_DEFAULTS, IMAGE_SIZED_DEFAULTS]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {

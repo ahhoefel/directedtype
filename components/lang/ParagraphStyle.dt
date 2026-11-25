@@ -12,7 +12,7 @@
     line_break: LineBreak = LineBreak.Greedy,
     word_spacing: Distance = 0px,
     space_stretch: Float = 0.5,
-    space_shrink: Float = 0.333333,
+    space_shrink: Float = 1.0 / 3.0,
     tolerance: Float = 2.0,
     hyphen_penalty: Float = 50.0,
     line_penalty: Float = 10.0,

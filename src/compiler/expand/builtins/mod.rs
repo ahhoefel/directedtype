@@ -68,6 +68,52 @@ pub enum BuiltinChildren {
     Multiple,
 }
 
+/// Authoritative default value for an optional non-`env` port on a built-in primitive
+/// or special built-in.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BuiltinDefault {
+    Px(f64),
+    Integer(i64),
+    Float(f64),
+    Bool(bool),
+    String(&'static str),
+    Color(&'static str),
+    Enum(&'static str, &'static str),
+    Unset,
+    /// Symbolic or constructor expression (e.g. `"parent.left"`, `"box.x"`, `"window.dpi"`,
+    /// `"font.size"`, `"\\Shadow()"`, `"\\Pagination()"`, `"\\Pagination(breakable: true)"`).
+    Expr(&'static str),
+}
+
+impl BuiltinDefault {
+    /// Converts a literal `BuiltinDefault` into an AST `Expr` for direct use during expansion.
+    /// Returns `None` for `Unset` and symbolic `Expr(...)` defaults.
+    pub fn to_literal_expr(self, span: Span) -> Option<Expr> {
+        match self {
+            BuiltinDefault::Px(v) => Some(Expr::Literal(Literal::Distance(v, DistanceUnit::Px, span))),
+            BuiltinDefault::Integer(v) => Some(Expr::Literal(Literal::Integer(v, span))),
+            BuiltinDefault::Float(v) => Some(Expr::Literal(Literal::Float(v, span))),
+            BuiltinDefault::Bool(v) => Some(Expr::Literal(Literal::Bool(v, span))),
+            BuiltinDefault::String(s) => Some(Expr::Literal(Literal::String(s.to_string(), span))),
+            BuiltinDefault::Color(c) => Some(Expr::Literal(Literal::Color(c.to_string(), span))),
+            BuiltinDefault::Enum(en, var) => Some(Expr::Literal(Literal::Enum(
+                en.to_string(),
+                var.to_string(),
+                span,
+            ))),
+            BuiltinDefault::Unset | BuiltinDefault::Expr(_) => None,
+        }
+    }
+}
+
+/// Shared consumer-side default constants referenced by both built-in schemas and runtime/renderer code.
+pub const DEFAULT_WINDOW_DPI: f64 = 96.0;
+pub const DEFAULT_WINDOW_VSCROLL: bool = true;
+pub const DEFAULT_WINDOW_HSCROLL: bool = true;
+pub const DEFAULT_BORDER_COLOR: &str = "#000000";
+pub const DEFAULT_OUTLINE_LEVEL: i64 = 1;
+pub const DEFAULT_OPACITY: f64 = 1.0;
+
 /// Encapsulates the schema, scope behavior, content-slot hooks, and port finalization of a built-in primitive element.
 pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
     /// Canonical primitive name (e.g. `"Rect"`, `"Line"`, `"Text"`).
@@ -93,6 +139,11 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
     /// For single-overload primitives (`len() == 1`), `PrimitiveExpander` enforces these required
     /// ports centrally before `finalize_ports`.
     fn required_port_sets(&self) -> &'static [&'static [&'static str]];
+
+    /// Default values for every optional non-`env` port, indexed by overload (matching
+    /// `required_port_sets()`). Standard interactive `on_*` handler ports implicitly default
+    /// to `BuiltinDefault::Unset` when `accepts_event_handlers()` is `true`.
+    fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]];
 
     /// Declares how many children this primitive accepts inside `{ ... }`.
     /// `PrimitiveExpander` enforces `BuiltinChildren::None` centrally.
@@ -390,11 +441,12 @@ pub(in crate::compiler::expand) fn eval_assert_directive(
 ///
 /// Both the compiler (`window.rs`, `pagination.rs`, `typecheck.rs`, `eval.rs`) and the
 /// `components/lang/` drift tests read from these tables directly.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SpecialBuiltinSpec {
     pub name: &'static str,
     pub accepted_ports: &'static [(&'static str, &'static str)],
     pub required_ports: &'static [&'static str],
+    pub default_ports: &'static [(&'static str, BuiltinDefault)],
     pub output_ports: &'static [(&'static str, &'static str)],
     pub children: BuiltinChildren,
 }
@@ -563,6 +615,14 @@ pub fn builtin_primitive_required_port_sets(
 ) -> Option<&'static [&'static [&'static str]]> {
     let prim = lookup_builtin(name, false)?;
     Some(prim.required_port_sets())
+}
+
+/// Returns the default values for every optional non-env port per overload of the named built-in primitive.
+pub fn builtin_primitive_default_port_sets(
+    name: &str,
+) -> Option<&'static [&'static [(&'static str, BuiltinDefault)]]> {
+    let prim = lookup_builtin(name, false)?;
+    Some(prim.default_port_sets())
 }
 
 /// Returns the canonical static type name for `port_name` on the named built-in primitive, if known.
