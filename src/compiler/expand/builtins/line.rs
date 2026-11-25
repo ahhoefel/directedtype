@@ -24,22 +24,26 @@ impl BuiltinPrimitive for LinePrimitive {
         )
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "x1" | "y1"
-                | "x2"
-                | "y2"
-                | "z"
-                | "thickness"
-                | "color"
-                | "cap"
-                | "clip"
-                | "pagination"
-                | "cursor"
-                | "opacity"
-                | "id"
-        ) || port_name.starts_with("on_")
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &[
+            "x1",
+            "y1",
+            "x2",
+            "y2",
+            "z",
+            "thickness",
+            "color",
+            "cap",
+            "clip",
+            "pagination",
+            "cursor",
+            "opacity",
+            "id",
+        ]
+    }
+
+    fn accepts_event_handlers(&self) -> bool {
+        true
     }
 
     fn register_types(

@@ -71,9 +71,15 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
         matches!(port_name, "left" | "top" | "right" | "bottom")
     }
 
-    /// Returns true if `port_name` is an accepted input port on this primitive.
-    /// Every built-in primitive must declare an explicit allowlist rather than accepting arbitrary ports.
-    fn accepts_port(&self, port_name: &str) -> bool;
+    /// Exact static allowlist of non-event input ports accepted by this primitive.
+    /// Every built-in primitive must enumerate its ports here so both expansion and drift tests
+    /// share a single source of truth.
+    fn accepted_ports(&self) -> &'static [&'static str];
+
+    /// Returns true if this primitive also accepts `on_*` event handler ports.
+    fn accepts_event_handlers(&self) -> bool {
+        false
+    }
 
     /// Constructs the compile error emitted when `port_name` is rejected by `accepts_port`.
     fn rejected_port_error(&self, elem: &ElementNode, port_name: &str, span: Span) -> CompileError {
@@ -215,6 +221,15 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
             "width".to_string(),
             "height".to_string(),
         ]
+    }
+}
+
+impl dyn BuiltinPrimitive {
+    /// Non-overridable port acceptance check backed strictly by `accepted_ports()` and
+    /// `accepts_event_handlers()`.
+    pub(in crate::compiler::expand) fn accepts_port(&self, port_name: &str) -> bool {
+        self.accepted_ports().contains(&port_name)
+            || (self.accepts_event_handlers() && port_name.starts_with("on_"))
     }
 }
 
@@ -421,6 +436,18 @@ pub fn public_builtin_primitive_names() -> Vec<&'static str> {
 pub fn builtin_primitive_accepts_port(name: &str, port_name: &str) -> Option<bool> {
     let prim = lookup_builtin(name, false)?;
     Some(prim.accepts_port(port_name))
+}
+
+/// Returns the exact static slice of non-event input ports accepted by the named built-in primitive.
+pub fn builtin_primitive_accepted_ports(name: &str) -> Option<&'static [&'static str]> {
+    let prim = lookup_builtin(name, false)?;
+    Some(prim.accepted_ports())
+}
+
+/// Returns whether the named built-in primitive accepts `on_*` event handler ports.
+pub fn builtin_primitive_accepts_event_handlers(name: &str) -> Option<bool> {
+    let prim = lookup_builtin(name, false)?;
+    Some(prim.accepts_event_handlers())
 }
 
 /// Returns the canonical static type name for `port_name` on the named built-in primitive, if known.

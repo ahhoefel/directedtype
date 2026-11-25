@@ -17,36 +17,40 @@ impl BuiltinPrimitive for RectPrimitive {
         "Rect"
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "x" | "y"
-                | "width"
-                | "height"
-                | "z"
-                | "color"
-                | "border_color"
-                | "border_width"
-                | "radius"
-                | "radius_left"
-                | "radius_right"
-                | "radius_top"
-                | "radius_bottom"
-                | "radius_top_left"
-                | "radius_top_right"
-                | "radius_bottom_right"
-                | "radius_bottom_left"
-                | "shadow"
-                | "scroll_x"
-                | "scroll_y"
-                | "clip"
-                | "pagination"
-                | "cursor"
-                | "opacity"
-                | "name"
-                | "path"
-                | "id"
-        ) || port_name.starts_with("on_")
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &[
+            "x",
+            "y",
+            "width",
+            "height",
+            "z",
+            "color",
+            "border_color",
+            "border_width",
+            "radius",
+            "radius_left",
+            "radius_right",
+            "radius_top",
+            "radius_bottom",
+            "radius_top_left",
+            "radius_top_right",
+            "radius_bottom_right",
+            "radius_bottom_left",
+            "shadow",
+            "scroll_x",
+            "scroll_y",
+            "clip",
+            "pagination",
+            "cursor",
+            "opacity",
+            "name",
+            "path",
+            "id",
+        ]
+    }
+
+    fn accepts_event_handlers(&self) -> bool {
+        true
     }
 
     fn register_types(

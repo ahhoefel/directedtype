@@ -10,22 +10,26 @@ impl BuiltinPrimitive for BoxPrimitive {
         "Box"
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "x" | "y"
-                | "width"
-                | "height"
-                | "z"
-                | "radius"
-                | "clip"
-                | "pagination"
-                | "cursor"
-                | "opacity"
-                | "name"
-                | "path"
-                | "id"
-        ) || port_name.starts_with("on_")
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &[
+            "x",
+            "y",
+            "width",
+            "height",
+            "z",
+            "radius",
+            "clip",
+            "pagination",
+            "cursor",
+            "opacity",
+            "name",
+            "path",
+            "id",
+        ]
+    }
+
+    fn accepts_event_handlers(&self) -> bool {
+        true
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
@@ -47,24 +51,27 @@ impl BuiltinPrimitive for LinkPrimitive {
         "Link"
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "url"
-                | "color"
-                | "underline"
-                | "x"
-                | "y"
-                | "width"
-                | "height"
-                | "z"
-                | "font"
-                | "clip"
-                | "pagination"
-                | "cursor"
-                | "opacity"
-                | "id"
-        ) || port_name.starts_with("on_")
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &[
+            "url",
+            "color",
+            "underline",
+            "x",
+            "y",
+            "width",
+            "height",
+            "z",
+            "font",
+            "clip",
+            "pagination",
+            "cursor",
+            "opacity",
+            "id",
+        ]
+    }
+
+    fn accepts_event_handlers(&self) -> bool {
+        true
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use directedtype::ast::{ComponentDef, ComponentKind, ContentItem, EnumDef, Item};
 use directedtype::compiler::error::CompileError;
 use directedtype::compiler::expand::builtins::{
+    builtin_primitive_accepted_ports, builtin_primitive_accepts_event_handlers,
     builtin_primitive_accepts_port, builtin_primitive_is_immutable_alias,
     builtin_primitive_port_type_name, public_builtin_primitive_names,
     register_builtin_enums_and_components,
@@ -15,100 +16,6 @@ use directedtype::parser::{parse_document, parse_document_with_file};
 use directedtype::span::Span;
 
 const STANDARD_EVENT_PORTS: &[&str] = &[
-    "on_click",
-    "on_pointer_down",
-    "on_pointer_up",
-    "on_pointer_move",
-    "on_pointer_enter",
-    "on_pointer_leave",
-    "on_scroll",
-    "on_focus",
-    "on_blur",
-];
-
-/// Every known non-internal port across all built-in primitives, used to detect when a compiler
-/// primitive accepts a new port that has not yet been documented in `components/lang/*.dt`.
-const ALL_KNOWN_BUILTIN_PORTS: &[&str] = &[
-    "x",
-    "y",
-    "x1",
-    "y1",
-    "x2",
-    "y2",
-    "width",
-    "height",
-    "z",
-    "color",
-    "border_color",
-    "border_width",
-    "radius",
-    "radius_left",
-    "radius_right",
-    "radius_top",
-    "radius_bottom",
-    "radius_top_left",
-    "radius_top_right",
-    "radius_bottom_right",
-    "radius_bottom_left",
-    "shadow",
-    "scroll_x",
-    "scroll_y",
-    "clip",
-    "up",
-    "box",
-    "pagination",
-    "cursor",
-    "opacity",
-    "name",
-    "path",
-    "id",
-    "thickness",
-    "cap",
-    "baseline",
-    "text",
-    "font",
-    "paragraph_style",
-    "underline",
-    "text_bounds",
-    "src",
-    "dpi",
-    "alt",
-    "family",
-    "size",
-    "weight",
-    "line_height",
-    "italic",
-    "small_caps",
-    "letter_spacing",
-    "align",
-    "indent",
-    "line_break",
-    "word_spacing",
-    "space_stretch",
-    "space_shrink",
-    "tolerance",
-    "hyphen_penalty",
-    "line_penalty",
-    "flagged_demerits",
-    "fitness_demerits",
-    "sentence_space",
-    "looseness",
-    "outline_title",
-    "outline_level",
-    "title",
-    "target",
-    "level",
-    "page",
-    "orphans",
-    "widows",
-    "gap",
-    "start_page",
-    "breakable",
-    "keep_with_next",
-    "break_before",
-    "to",
-    "into",
-    "from",
     "on_click",
     "on_pointer_down",
     "on_pointer_up",
@@ -377,8 +284,10 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
     //    - No primitive may accept arbitrary unknown ports.
     //    - Every parameter declared in components/lang/ must be accepted by the compiler primitive
     //      and match its compiler static type.
-    //    - Every accepted port in ALL_KNOWN_BUILTIN_PORTS must be documented in at least one
-    //      overload in components/lang/.
+    //    - Every port in the compiler's own `accepted_ports()` slice must be documented in
+    //      components/lang/ (zero hardcoded port list — adding ANY new port to a primitive
+    //      without updating its .dt file immediately fails this test).
+    //    - Event handler acceptance (`accepts_event_handlers()`) must match `on_*` params in .dt.
     //    - Every declared alias on a primitive must match its compiler port_type (when known).
     for prim_name in public_builtin_primitive_names() {
         assert_eq!(
@@ -387,8 +296,19 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             "Compiler primitive '{prim_name}' must not accept arbitrary unknown ports"
         );
 
+        let compiler_ports = builtin_primitive_accepted_ports(prim_name)
+            .unwrap_or_else(|| panic!("Missing accepted_ports for '{prim_name}'"));
+        let mut seen_compiler_ports = HashSet::new();
+        for &p in compiler_ports {
+            assert!(
+                seen_compiler_ports.insert(p),
+                "Duplicate port '{p}' in {prim_name}::accepted_ports()"
+            );
+        }
+
         let overloads = &lang_comps[prim_name];
         let mut documented_params: HashSet<String> = HashSet::new();
+        let mut documented_aliases: HashSet<String> = HashSet::new();
 
         for ov in overloads {
             for param in &ov.params {
@@ -424,6 +344,7 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             for item in &ov.body {
                 if let ContentItem::Alias(a) = item {
                     let aname = a.name.as_str();
+                    documented_aliases.insert(aname.to_string());
                     let doc_ty = a
                         .type_annotation
                         .as_ref()
@@ -441,27 +362,41 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             }
         }
 
-        for &known_port in ALL_KNOWN_BUILTIN_PORTS {
-            if builtin_primitive_accepts_port(prim_name, known_port) == Some(true) {
-                // `Clip.clip` is a read-only self-reference alias (`\alias clip: Clip;`).
-                if prim_name == "Clip" && known_port == "clip" {
-                    continue;
-                }
+        // Compiler -> .dt: every port in the primitive's exact `accepted_ports()` slice must be documented.
+        for &compiler_port in compiler_ports {
+            if prim_name == "Clip" && compiler_port == "clip" {
                 assert!(
-                    documented_params.contains(known_port),
-                    "Compiler primitive '{prim_name}' accepts port '{known_port}', but it is missing from components/lang/{prim_name}.dt"
+                    documented_aliases.contains("clip"),
+                    "Clip.clip should be documented as an \\alias in components/lang/Clip.dt"
                 );
+                continue;
             }
+            assert!(
+                documented_params.contains(compiler_port),
+                "Compiler primitive '{prim_name}' accepts port '{compiler_port}' in accepted_ports(), but it is missing from components/lang/{prim_name}.dt"
+            );
         }
 
-        // Interactive primitives that accept `on_click` must document all standard UI event handlers.
-        if builtin_primitive_accepts_port(prim_name, "on_click") == Some(true) {
+        // Event handler parity: interactive primitives must document all standard UI event handlers;
+        // non-interactive primitives must not declare any `on_*` parameters.
+        let accepts_events = builtin_primitive_accepts_event_handlers(prim_name)
+            .unwrap_or_else(|| panic!("Missing accepts_event_handlers for '{prim_name}'"));
+        if accepts_events {
             for &ev in STANDARD_EVENT_PORTS {
                 assert!(
                     documented_params.contains(ev),
                     "Interactive primitive '{prim_name}' should document event handler '{ev}'"
                 );
             }
+        } else {
+            let stray_events: Vec<&String> = documented_params
+                .iter()
+                .filter(|p| p.starts_with("on_"))
+                .collect();
+            assert!(
+                stray_events.is_empty(),
+                "Non-interactive primitive '{prim_name}' must not declare event handlers in components/lang/{prim_name}.dt: {stray_events:?}"
+            );
         }
     }
 }

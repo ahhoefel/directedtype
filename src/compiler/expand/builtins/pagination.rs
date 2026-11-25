@@ -497,8 +497,8 @@ impl BuiltinPrimitive for PaginationPrimitive {
         true
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        matches!(port_name, "breakable" | "keep_with_next" | "break_before")
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &["breakable", "keep_with_next", "break_before"]
     }
 
     fn register_types(
@@ -574,8 +574,8 @@ impl BuiltinPrimitive for PageBreakPrimitive {
         true
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        port_name == "to"
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &["to"]
     }
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
@@ -626,11 +626,8 @@ impl BuiltinPrimitive for FlowBodyPrimitive {
         "FlowBody"
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "x" | "y" | "width" | "height" | "z" | "clip" | "id"
-        )
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &["x", "y", "width", "height", "z", "clip", "id"]
     }
 
     fn pre_expand_children(
@@ -690,23 +687,26 @@ impl BuiltinPrimitive for PagedFlowPrimitive {
         )
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "page"
-                | "orphans"
-                | "widows"
-                | "gap"
-                | "start_page"
-                | "x"
-                | "y"
-                | "width"
-                | "height"
-                | "z"
-                | "clip"
-                | "pagination"
-                | "id"
-        ) || port_name.starts_with("on_")
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &[
+            "page",
+            "orphans",
+            "widows",
+            "gap",
+            "start_page",
+            "x",
+            "y",
+            "width",
+            "height",
+            "z",
+            "clip",
+            "pagination",
+            "id",
+        ]
+    }
+
+    fn accepts_event_handlers(&self) -> bool {
+        true
     }
 
     fn coalesces_block_content(&self) -> bool {
@@ -1316,8 +1316,8 @@ impl BuiltinPrimitive for PageValuePrimitive {
         true
     }
 
-    fn accepts_port(&self, _port_name: &str) -> bool {
-        false
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &[]
     }
 
     fn pre_expand_children(
@@ -1355,8 +1355,8 @@ impl BuiltinPrimitive for PageListPrimitive {
         true
     }
 
-    fn accepts_port(&self, _port_name: &str) -> bool {
-        false
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &[]
     }
 
     fn pre_expand_children(
@@ -1394,8 +1394,8 @@ impl BuiltinPrimitive for DepositPrimitive {
         true
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        port_name == "into"
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &["into"]
     }
 
     fn defers_content_slot(&self) -> bool {
@@ -1574,8 +1574,8 @@ impl BuiltinPrimitive for CollectPrimitive {
         true
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        port_name == "from"
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &["from"]
     }
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {

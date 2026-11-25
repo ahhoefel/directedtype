@@ -53,11 +53,20 @@ impl BuiltinPrimitive for ClipPrimitive {
         "Clip"
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "box" | "up" | "clip" | "x" | "y" | "width" | "height" | "z" | "scroll_x" | "scroll_y" | "id"
-        )
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &[
+            "box",
+            "up",
+            "clip",
+            "x",
+            "y",
+            "width",
+            "height",
+            "z",
+            "scroll_x",
+            "scroll_y",
+            "id",
+        ]
     }
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {

@@ -186,8 +186,8 @@ impl BuiltinPrimitive for FontPrimitive {
         true
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        FONT_PUBLIC_PORTS.contains(&port_name)
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        FONT_PUBLIC_PORTS
     }
 
     fn rejected_port_error(

@@ -26,37 +26,40 @@ impl BuiltinPrimitive for ImagePrimitive {
         )
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "src"
-                | "x"
-                | "y"
-                | "width"
-                | "height"
-                | "dpi"
-                | "z"
-                | "border_color"
-                | "border_width"
-                | "radius"
-                | "radius_left"
-                | "radius_right"
-                | "radius_top"
-                | "radius_bottom"
-                | "radius_top_left"
-                | "radius_top_right"
-                | "radius_bottom_right"
-                | "radius_bottom_left"
-                | "shadow"
-                | "clip"
-                | "pagination"
-                | "cursor"
-                | "opacity"
-                | "alt"
-                | "name"
-                | "path"
-                | "id"
-        ) || port_name.starts_with("on_")
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &[
+            "src",
+            "x",
+            "y",
+            "width",
+            "height",
+            "dpi",
+            "z",
+            "border_color",
+            "border_width",
+            "radius",
+            "radius_left",
+            "radius_right",
+            "radius_top",
+            "radius_bottom",
+            "radius_top_left",
+            "radius_top_right",
+            "radius_bottom_right",
+            "radius_bottom_left",
+            "shadow",
+            "clip",
+            "pagination",
+            "cursor",
+            "opacity",
+            "alt",
+            "name",
+            "path",
+            "id",
+        ]
+    }
+
+    fn accepts_event_handlers(&self) -> bool {
+        true
     }
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {

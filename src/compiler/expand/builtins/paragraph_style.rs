@@ -83,8 +83,23 @@ impl BuiltinPrimitive for ParagraphStylePrimitive {
             });
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        port_name == "paragraph_style" || PARAGRAPH_STYLE_PORTS.contains(&port_name)
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &[
+            "paragraph_style",
+            "align",
+            "indent",
+            "line_break",
+            "word_spacing",
+            "space_stretch",
+            "space_shrink",
+            "tolerance",
+            "hyphen_penalty",
+            "line_penalty",
+            "flagged_demerits",
+            "fitness_demerits",
+            "sentence_space",
+            "looseness",
+        ]
     }
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {

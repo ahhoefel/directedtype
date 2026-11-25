@@ -101,27 +101,31 @@ impl BuiltinPrimitive for TextPrimitive {
         matches!(port_name, "left" | "top" | "right" | "bottom" | "baseline_offset")
     }
 
-    fn accepts_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "x" | "y"
-                | "width"
-                | "height"
-                | "z"
-                | "baseline"
-                | "text"
-                | "font"
-                | "paragraph_style"
-                | "underline"
-                | "text_bounds"
-                | "clip"
-                | "pagination"
-                | "cursor"
-                | "opacity"
-                | "name"
-                | "path"
-                | "id"
-        ) || port_name.starts_with("on_")
+    fn accepted_ports(&self) -> &'static [&'static str] {
+        &[
+            "x",
+            "y",
+            "width",
+            "height",
+            "z",
+            "baseline",
+            "text",
+            "font",
+            "paragraph_style",
+            "underline",
+            "text_bounds",
+            "clip",
+            "pagination",
+            "cursor",
+            "opacity",
+            "name",
+            "path",
+            "id",
+        ]
+    }
+
+    fn accepts_event_handlers(&self) -> bool {
+        true
     }
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
