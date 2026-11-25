@@ -10,6 +10,24 @@ impl BuiltinPrimitive for BoxPrimitive {
         "Box"
     }
 
+    fn accepts_port(&self, port_name: &str) -> bool {
+        matches!(
+            port_name,
+            "x" | "y"
+                | "width"
+                | "height"
+                | "z"
+                | "radius"
+                | "clip"
+                | "pagination"
+                | "cursor"
+                | "opacity"
+                | "name"
+                | "path"
+                | "id"
+        ) || port_name.starts_with("on_")
+    }
+
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         for port in ["height", "width"] {
             if !state.ports.contains_key(port) {
@@ -27,6 +45,26 @@ impl BuiltinPrimitive for BoxPrimitive {
 impl BuiltinPrimitive for LinkPrimitive {
     fn name(&self) -> &'static str {
         "Link"
+    }
+
+    fn accepts_port(&self, port_name: &str) -> bool {
+        matches!(
+            port_name,
+            "url"
+                | "color"
+                | "underline"
+                | "x"
+                | "y"
+                | "width"
+                | "height"
+                | "z"
+                | "font"
+                | "clip"
+                | "pagination"
+                | "cursor"
+                | "opacity"
+                | "id"
+        ) || port_name.starts_with("on_")
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {

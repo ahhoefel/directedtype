@@ -202,6 +202,23 @@ impl BuiltinPrimitive for AnchorPrimitive {
         "Anchor"
     }
 
+    fn accepts_port(&self, port_name: &str) -> bool {
+        matches!(
+            port_name,
+            "name"
+                | "x"
+                | "y"
+                | "width"
+                | "height"
+                | "z"
+                | "outline_title"
+                | "outline_level"
+                | "clip"
+                | "pagination"
+                | "id"
+        ) || port_name.starts_with("on_")
+    }
+
     fn port_type(&self, port_name: &str) -> Option<crate::compiler::expand::typecheck::StaticType> {
         match port_name {
             "outline_title" => Some(crate::compiler::expand::typecheck::StaticType::String),
@@ -269,6 +286,17 @@ impl BuiltinPrimitive for AnchorPrimitive {
 impl BuiltinPrimitive for AnchorScopePrimitive {
     fn name(&self) -> &'static str {
         "AnchorScope"
+    }
+
+    fn is_immutable_alias_port(&self, port_name: &str) -> bool {
+        matches!(port_name, "left" | "top" | "right" | "bottom" | "path")
+    }
+
+    fn accepts_port(&self, port_name: &str) -> bool {
+        matches!(
+            port_name,
+            "name" | "x" | "y" | "width" | "height" | "z" | "clip" | "pagination" | "id"
+        ) || port_name.starts_with("on_")
     }
 
     fn wires_child_origin_to_self(&self) -> bool {
@@ -344,6 +372,23 @@ impl BuiltinPrimitive for AnchorScopePrimitive {
 impl BuiltinPrimitive for BookmarkPrimitive {
     fn name(&self) -> &'static str {
         "Bookmark"
+    }
+
+    fn accepts_port(&self, port_name: &str) -> bool {
+        matches!(
+            port_name,
+            "title"
+                | "level"
+                | "target"
+                | "x"
+                | "y"
+                | "width"
+                | "height"
+                | "z"
+                | "clip"
+                | "pagination"
+                | "id"
+        ) || port_name.starts_with("on_")
     }
 
     fn port_type(&self, port_name: &str) -> Option<crate::compiler::expand::typecheck::StaticType> {

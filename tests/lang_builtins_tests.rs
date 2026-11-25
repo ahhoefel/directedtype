@@ -374,32 +374,19 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
     }
 
     // 4. For every BuiltinPrimitive:
+    //    - No primitive may accept arbitrary unknown ports.
     //    - Every parameter declared in components/lang/ must be accepted by the compiler primitive
     //      and match its compiler static type.
-    //    - For primitives with explicit port allowlists, every accepted port in ALL_KNOWN_BUILTIN_PORTS
-    //      must be documented in at least one overload in components/lang/.
+    //    - Every accepted port in ALL_KNOWN_BUILTIN_PORTS must be documented in at least one
+    //      overload in components/lang/.
     //    - Every declared alias on a primitive must match its compiler port_type (when known).
-    let explicit_allowlist_prims: HashSet<&str> = [
-        "Rect",
-        "Line",
-        "Text",
-        "Image",
-        "Font",
-        "ParagraphStyle",
-        "Clip",
-        "PagedFlow",
-        "FlowBody",
-        "Pagination",
-        "PageBreak",
-        "PageValue",
-        "PageList",
-        "Deposit",
-        "Collect",
-    ]
-    .into_iter()
-    .collect();
-
     for prim_name in public_builtin_primitive_names() {
+        assert_eq!(
+            builtin_primitive_accepts_port(prim_name, "__arbitrary_unknown_port__"),
+            Some(false),
+            "Compiler primitive '{prim_name}' must not accept arbitrary unknown ports"
+        );
+
         let overloads = &lang_comps[prim_name];
         let mut documented_params: HashSet<String> = HashSet::new();
 
@@ -454,25 +441,21 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             }
         }
 
-        if explicit_allowlist_prims.contains(prim_name) {
-            for &known_port in ALL_KNOWN_BUILTIN_PORTS {
-                if builtin_primitive_accepts_port(prim_name, known_port) == Some(true) {
-                    // `Clip.clip` is a read-only self-reference alias (`\alias clip: Clip;`).
-                    if prim_name == "Clip" && known_port == "clip" {
-                        continue;
-                    }
-                    assert!(
-                        documented_params.contains(known_port),
-                        "Compiler primitive '{prim_name}' accepts port '{known_port}', but it is missing from components/lang/{prim_name}.dt"
-                    );
+        for &known_port in ALL_KNOWN_BUILTIN_PORTS {
+            if builtin_primitive_accepts_port(prim_name, known_port) == Some(true) {
+                // `Clip.clip` is a read-only self-reference alias (`\alias clip: Clip;`).
+                if prim_name == "Clip" && known_port == "clip" {
+                    continue;
                 }
+                assert!(
+                    documented_params.contains(known_port),
+                    "Compiler primitive '{prim_name}' accepts port '{known_port}', but it is missing from components/lang/{prim_name}.dt"
+                );
             }
         }
 
         // Interactive primitives that accept `on_click` must document all standard UI event handlers.
-        if builtin_primitive_accepts_port(prim_name, "on_click") == Some(true)
-            && prim_name != "Font"
-        {
+        if builtin_primitive_accepts_port(prim_name, "on_click") == Some(true) {
             for &ev in STANDARD_EVENT_PORTS {
                 assert!(
                     documented_params.contains(ev),
@@ -480,5 +463,29 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn test_box_anchor_anchor_scope_and_bookmark_reject_disallowed_ports() {
+    let cases = [
+        (r#"\Box(width: 100px, height: 50px, color: #ff0000)"#, "color"),
+        (r#"\Box(width: 100px, height: 50px, bogus: 1px)"#, "bogus"),
+        (r#"\Anchor(name: "a", color: #ff0000)"#, "color"),
+        (r#"\Anchor(name: "a", thickness: 2px)"#, "thickness"),
+        (r#"\AnchorScope(name: "s", color: #ff0000)"#, "color"),
+        (r#"\AnchorScope(name: "s", path: "/custom")"#, "path"),
+        (r#"\Bookmark(title: "Ch 1", color: #ff0000)"#, "color"),
+        (r#"\Bookmark(title: "Ch 1", radius: 4px)"#, "radius"),
+    ];
+
+    for (src, bad_port) in cases {
+        let doc = parse_document(src).expect("Source should parse");
+        let err = expand_document(&doc)
+            .expect_err(&format!("Expected port '{bad_port}' to be rejected in: {src}"));
+        assert!(
+            err.to_string().contains(bad_port),
+            "Expected error mentioning '{bad_port}' for '{src}', got: {err}"
+        );
     }
 }

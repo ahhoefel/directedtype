@@ -72,9 +72,19 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
     }
 
     /// Returns true if `port_name` is an accepted input port on this primitive.
-    fn accepts_port(&self, port_name: &str) -> bool {
-        !self.is_immutable_alias_port(port_name)
-            && (self.port_type(port_name).is_some() || port_name.starts_with("on_"))
+    /// Every built-in primitive must declare an explicit allowlist rather than accepting arbitrary ports.
+    fn accepts_port(&self, port_name: &str) -> bool;
+
+    /// Constructs the compile error emitted when `port_name` is rejected by `accepts_port`.
+    fn rejected_port_error(&self, elem: &ElementNode, port_name: &str, span: Span) -> CompileError {
+        CompileError::Custom {
+            message: format!(
+                "Node '{}' does not accept property '{}'",
+                elem.name.as_str(),
+                port_name
+            ),
+            span,
+        }
     }
 
     /// Returns true if child elements inside this primitive's content slot default `x`/`y` to `self.left`/`self.top` (`\Anchor`, `\AnchorScope`).
@@ -410,9 +420,6 @@ pub fn public_builtin_primitive_names() -> Vec<&'static str> {
 /// Returns `None` if `name` is not a registered `BuiltinPrimitive`.
 pub fn builtin_primitive_accepts_port(name: &str, port_name: &str) -> Option<bool> {
     let prim = lookup_builtin(name, false)?;
-    if name == "Font" {
-        return Some(font::FONT_PUBLIC_PORTS.contains(&port_name));
-    }
     Some(prim.accepts_port(port_name))
 }
 
@@ -624,14 +631,11 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                 });
             }
             if !primitive.accepts_port(port.name.as_str()) {
-                return Err(CompileError::Custom {
-                    message: format!(
-                        "Node '{}' does not accept property '{}'",
-                        elem.name.as_str(),
-                        port.name.as_str()
-                    ),
-                    span: port.name.span,
-                });
+                return Err(primitive.rejected_port_error(
+                    elem,
+                    port.name.as_str(),
+                    port.name.span,
+                ));
             }
         }
 

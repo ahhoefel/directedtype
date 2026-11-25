@@ -7,6 +7,7 @@
     x: Distance = parent.left,
     y: Distance = parent.top,
     z: Integer = 0,
+    radius: Distance = 0px,
     env clip: Clip,
     pagination: Pagination = \Pagination(),
     cursor: String = "Default",

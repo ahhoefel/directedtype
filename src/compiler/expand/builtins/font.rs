@@ -186,8 +186,51 @@ impl BuiltinPrimitive for FontPrimitive {
         true
     }
 
-    fn accepts_port(&self, _port_name: &str) -> bool {
-        true
+    fn accepts_port(&self, port_name: &str) -> bool {
+        FONT_PUBLIC_PORTS.contains(&port_name)
+    }
+
+    fn rejected_port_error(
+        &self,
+        elem: &ElementNode,
+        _port_name: &str,
+        span: crate::span::Span,
+    ) -> CompileError {
+        let mut provided: Vec<String> = elem
+            .ports
+            .iter()
+            .map(|p| p.name.as_str().to_string())
+            .collect();
+        provided.sort();
+        let available_signatures = vec![
+            vec![
+                "size".to_string(),
+                "weight".to_string(),
+                "family".to_string(),
+                "line_height".to_string(),
+                "italic".to_string(),
+                "small_caps".to_string(),
+                "letter_spacing".to_string(),
+                "color".to_string(),
+            ],
+            vec![
+                "font".to_string(),
+                "size".to_string(),
+                "weight".to_string(),
+                "family".to_string(),
+                "line_height".to_string(),
+                "italic".to_string(),
+                "small_caps".to_string(),
+                "letter_spacing".to_string(),
+                "color".to_string(),
+            ],
+        ];
+        CompileError::NoMatchingOverload(Box::new(NoMatchingOverloadDetails {
+            name: "Font".to_string(),
+            provided_ports: provided,
+            available_signatures,
+            span,
+        }))
     }
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
@@ -226,46 +269,6 @@ impl BuiltinPrimitive for FontPrimitive {
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         let elem = state.elem;
         let node_id = state.node_id;
-
-        for port in &elem.ports {
-            let name = port.name.as_str();
-            if !FONT_PUBLIC_PORTS.contains(&name) {
-                let mut provided: Vec<String> =
-                    elem.ports.iter().map(|p| p.name.as_str().to_string()).collect();
-                provided.sort();
-                let available_signatures = vec![
-                    vec![
-                        "size".to_string(),
-                        "weight".to_string(),
-                        "family".to_string(),
-                        "line_height".to_string(),
-                        "italic".to_string(),
-                        "small_caps".to_string(),
-                        "letter_spacing".to_string(),
-                        "color".to_string(),
-                    ],
-                    vec![
-                        "font".to_string(),
-                        "size".to_string(),
-                        "weight".to_string(),
-                        "family".to_string(),
-                        "line_height".to_string(),
-                        "italic".to_string(),
-                        "small_caps".to_string(),
-                        "letter_spacing".to_string(),
-                        "color".to_string(),
-                    ],
-                ];
-                return Err(CompileError::NoMatchingOverload(Box::new(
-                    NoMatchingOverloadDetails {
-                        name: "Font".to_string(),
-                        provided_ports: provided,
-                        available_signatures,
-                        span: port.name.span,
-                    },
-                )));
-            }
-        }
 
         if let Some(Expr::Literal(lit)) = state.ports.get("font") {
             return Err(CompileError::TypeMismatch {
