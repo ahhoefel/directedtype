@@ -1,4 +1,6 @@
-use crate::compiler::expand::builtins::{static_type_from_canonical_name, SpecialBuiltinSpec};
+use crate::compiler::expand::builtins::{
+    static_type_from_canonical_name, BuiltinChildren, SpecialBuiltinSpec,
+};
 use crate::compiler::expand::typecheck::StaticType;
 
 /// Authoritative port & property schema for `\Timer(duration: Duration)`.
@@ -12,6 +14,7 @@ pub const TIMER_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
         ("dt", "Duration"),
         ("frames", "Integer"),
     ],
+    children: BuiltinChildren::None,
 };
 
 /// Authoritative port & property schema for `\IndefiniteTimer()`.
@@ -23,6 +26,7 @@ pub const INDEFINITE_TIMER_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
         ("dt", "Duration"),
         ("frames", "Integer"),
     ],
+    children: BuiltinChildren::None,
 };
 
 /// Returns the static type of a readable property on `Timer`, backed strictly by `TIMER_SPEC`.

@@ -1,6 +1,8 @@
 use crate::ast::{ElementNode, EnumDef, Expr, Ident, Item, MemberAccessExpr, Symbol};
 use crate::compiler::error::CompileError;
-use crate::compiler::expand::builtins::{static_type_from_canonical_name, SpecialBuiltinSpec};
+use crate::compiler::expand::builtins::{
+    static_type_from_canonical_name, BuiltinChildren, SpecialBuiltinSpec,
+};
 use crate::compiler::expand::context::{EnvEntry, LexicalBinding};
 use crate::compiler::expand::rewrite::default_expr_for_state_with_enums;
 use crate::compiler::expand::schema::collect_all_document_lets;
@@ -30,6 +32,7 @@ pub const WINDOW_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
         ("scroll_x", "Distance"),
         ("scroll_y", "Distance"),
     ],
+    children: BuiltinChildren::None,
 };
 
 /// Initializes default window port types, scope ports, and `env clip` binding, then processes

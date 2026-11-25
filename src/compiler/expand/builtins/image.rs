@@ -1,16 +1,11 @@
 use crate::ast::{
-    BinaryExpr, BinaryOp, CallExpr, ComponentDef, ElementNode, Expr, Ident, MemberAccessExpr,
-    Symbol,
+    BinaryExpr, BinaryOp, CallExpr, Expr, Ident, MemberAccessExpr, Symbol,
 };
 use crate::compiler::error::{CompileError, NoMatchingOverloadDetails};
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
 };
-use crate::compiler::expand::context::ElementContext;
 use crate::compiler::expand::typecheck::StaticType;
-use crate::compiler::expanded::{ExpandedDocument, NodeId};
-use crate::compiler::scope::ScopeId;
-use std::collections::HashMap;
 
 pub struct ImagePrimitive;
 
@@ -19,11 +14,12 @@ impl BuiltinPrimitive for ImagePrimitive {
         "Image"
     }
 
-    fn is_immutable_alias_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "left" | "top" | "right" | "bottom" | "aspect_ratio" | "file_dpi"
-        )
+    fn output_aliases(&self) -> &'static [&'static str] {
+        &["aspect_ratio", "file_dpi"]
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::None
     }
 
     fn accepted_ports(&self) -> &'static [&'static str] {
@@ -105,24 +101,6 @@ impl BuiltinPrimitive for ImagePrimitive {
             "name".to_string(),
             "path".to_string(),
         ]
-    }
-
-    fn pre_expand_children(
-        &self,
-        _node_id: NodeId,
-        elem: &ElementNode,
-        ctx: &ElementContext<'_>,
-        _doc: &mut ExpandedDocument,
-        _registry: &HashMap<String, Vec<ComponentDef>>,
-        _node_fonts: &HashMap<NodeId, NodeId>,
-    ) -> Result<ScopeId, CompileError> {
-        if elem.content.as_ref().is_some_and(|slot| !slot.items.is_empty()) {
-            return Err(CompileError::Custom {
-                message: "Node 'Image' does not accept child content inside '{ ... }'".to_string(),
-                span: elem.span,
-            });
-        }
-        Ok(ctx.active_scope_id)
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {

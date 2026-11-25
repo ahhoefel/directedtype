@@ -4,7 +4,8 @@ use crate::ast::{
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
-    apply_inline_origin_defaults, default_builtin_port_type, BuiltinPrimitive, PrimitiveExpandState,
+    apply_inline_origin_defaults, default_builtin_port_type, BuiltinChildren, BuiltinPrimitive,
+    PrimitiveExpandState,
 };
 use crate::compiler::expand::context::{EnvEntry, ScopeContext};
 use crate::compiler::expand::rewrite::rewrite_expr;
@@ -97,8 +98,12 @@ impl BuiltinPrimitive for TextPrimitive {
             });
     }
 
-    fn is_immutable_alias_port(&self, port_name: &str) -> bool {
-        matches!(port_name, "left" | "top" | "right" | "bottom" | "baseline_offset")
+    fn output_aliases(&self) -> &'static [&'static str] {
+        &["baseline_offset"]
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::Multiple
     }
 
     fn accepted_ports(&self) -> &'static [&'static str] {

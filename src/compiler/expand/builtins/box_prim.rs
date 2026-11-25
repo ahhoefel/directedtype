@@ -1,6 +1,6 @@
 use crate::ast::{DistanceUnit, Expr, Literal};
 use crate::compiler::error::CompileError;
-use crate::compiler::expand::builtins::{BuiltinPrimitive, PrimitiveExpandState};
+use crate::compiler::expand::builtins::{BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState};
 
 pub struct BoxPrimitive;
 pub struct LinkPrimitive;
@@ -30,6 +30,10 @@ impl BuiltinPrimitive for BoxPrimitive {
 
     fn accepts_event_handlers(&self) -> bool {
         true
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::Multiple
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
@@ -72,6 +76,10 @@ impl BuiltinPrimitive for LinkPrimitive {
 
     fn accepts_event_handlers(&self) -> bool {
         true
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::Multiple
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {

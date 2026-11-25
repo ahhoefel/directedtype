@@ -5,15 +5,17 @@ use std::path::{Path, PathBuf};
 use directedtype::ast::{
     ComponentDef, ComponentKind, ContentItem, EnumDef, Expr, Ident, Item, MemberAccessExpr,
 };
+use directedtype::compdoc::{extract_catalog, ChildrenCardinality, DocGenOptions};
 use directedtype::compiler::error::CompileError;
 use directedtype::compiler::eval::eval_expr;
 use directedtype::compiler::expand::builtins::{
     builtin_primitive_accepted_ports, builtin_primitive_accepts_event_handlers,
-    builtin_primitive_accepts_port, builtin_primitive_is_immutable_alias,
+    builtin_primitive_accepts_port, builtin_primitive_children_cardinality,
+    builtin_primitive_is_immutable_alias, builtin_primitive_output_aliases,
     builtin_primitive_port_type_name, pagination::populated_page_port_names,
     public_builtin_primitive_names, register_builtin_enums_and_components,
     timer::{INDEFINITE_TIMER_SPEC, TIMER_SPEC},
-    ALL_SPECIAL_BUILTINS,
+    BuiltinChildren, ALL_SPECIAL_BUILTINS,
 };
 use directedtype::compiler::expand::expand_document;
 use directedtype::compiler::expanded::NodeId;
@@ -231,6 +233,24 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
         );
     }
 
+    // Extract compdoc catalog for components/lang/ so we can also verify exact children cardinality.
+    let lang_catalog =
+        extract_catalog(&[PathBuf::from("components/lang")], &DocGenOptions::default())
+            .expect("Failed to extract compdoc catalog for components/lang");
+    let catalog_comps: HashMap<&str, &directedtype::compdoc::ComponentDoc> = lang_catalog
+        .packages
+        .iter()
+        .flat_map(|p| &p.modules)
+        .flat_map(|m| &m.components)
+        .map(|c| (c.name.as_str(), c))
+        .collect();
+
+    let to_doc_cardinality = |c: BuiltinChildren| match c {
+        BuiltinChildren::None => ChildrenCardinality::None,
+        BuiltinChildren::Single => ChildrenCardinality::Single,
+        BuiltinChildren::Multiple => ChildrenCardinality::Multiple,
+    };
+
     // 2. Special non-primitive built-ins (Window, Page, Timer, IndefiniteTimer):
     //    Check exact bidirectional parity between each SpecialBuiltinSpec and components/lang/<Name>.dt.
     const IMPLICIT_SPATIAL_ALIASES: &[&str] = &["left", "top", "right", "bottom"];
@@ -248,6 +268,18 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             spec.name
         );
         let ov = &overloads[0];
+
+        // Children cardinality parity for special built-ins
+        let doc_comp = catalog_comps[spec.name];
+        for (oi, doc_ov) in doc_comp.overloads.iter().enumerate() {
+            assert_eq!(
+                doc_ov.children_cardinality,
+                to_doc_cardinality(spec.children),
+                "Children cardinality drifted for special built-in '{}'[{}]",
+                spec.name,
+                oi
+            );
+        }
 
         // Accepted input ports: exact 1-to-1 match (name + type)
         let compiler_params: HashMap<&str, &str> = spec.accepted_ports.iter().copied().collect();
@@ -395,13 +427,45 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             );
         }
 
+        let compiler_aliases = builtin_primitive_output_aliases(prim_name)
+            .unwrap_or_else(|| panic!("Missing output_aliases for '{prim_name}'"));
+        let mut seen_compiler_aliases = HashSet::new();
+        for &a in compiler_aliases {
+            assert!(
+                seen_compiler_aliases.insert(a),
+                "Duplicate alias '{a}' in {prim_name}::output_aliases()"
+            );
+            assert!(
+                !seen_compiler_ports.contains(a),
+                "Port '{a}' cannot be in both accepted_ports() and output_aliases() on '{prim_name}'"
+            );
+        }
+
+        // Children cardinality parity: every overload in components/lang/<Prim>.dt must match
+        // the compiler's `children_cardinality()`.
+        let expected_cardinality = builtin_primitive_children_cardinality(prim_name)
+            .unwrap_or_else(|| panic!("Missing children_cardinality for '{prim_name}'"));
+        let doc_comp = catalog_comps[prim_name];
+        for (oi, doc_ov) in doc_comp.overloads.iter().enumerate() {
+            assert_eq!(
+                doc_ov.children_cardinality,
+                to_doc_cardinality(expected_cardinality),
+                "Children cardinality drifted for '{prim_name}' overload {oi}: .dt has {:?}, compiler has {:?}",
+                doc_ov.children_cardinality,
+                expected_cardinality
+            );
+        }
+
         let overloads = &lang_comps[prim_name];
         let mut documented_params: HashSet<String> = HashSet::new();
-        let mut documented_aliases: HashSet<String> = HashSet::new();
 
-        for ov in overloads {
+        for (oi, ov) in overloads.iter().enumerate() {
+            let mut ov_params: HashSet<&str> = HashSet::new();
+            let mut ov_aliases: HashSet<&str> = HashSet::new();
+
             for param in &ov.params {
                 let pname = param.name.as_str();
+                ov_params.insert(pname);
                 documented_params.insert(pname.to_string());
 
                 assert_eq!(
@@ -433,7 +497,7 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             for item in &ov.body {
                 if let ContentItem::Alias(a) = item {
                     let aname = a.name.as_str();
-                    documented_aliases.insert(aname.to_string());
+                    ov_aliases.insert(aname);
                     let doc_ty = a
                         .type_annotation
                         .as_ref()
@@ -447,19 +511,28 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
                             "Type mismatch for alias {prim_name}.{aname}: lang stub has '{doc_ty}', compiler has '{compiler_ty}'"
                         );
                     }
+                    // Every .dt \alias must either be in `output_aliases()` OR be an overload-derived
+                    // accepted port omitted from this overload (e.g. Text(x, y) -> baseline; Image(width) -> height).
+                    let is_overload_derived =
+                        seen_compiler_ports.contains(aname) && !ov_params.contains(aname);
+                    assert!(
+                        seen_compiler_aliases.contains(aname) || is_overload_derived,
+                        "components/lang/{prim_name}.dt overload {oi} declares \\alias '{aname}', which is neither in {prim_name}::output_aliases() nor an omitted accepted port"
+                    );
                 }
+            }
+
+            // Compiler -> .dt: every port in `output_aliases()` must be declared as an \alias on every overload.
+            for &compiler_alias in compiler_aliases {
+                assert!(
+                    ov_aliases.contains(compiler_alias),
+                    "Compiler primitive '{prim_name}' declares output alias '{compiler_alias}' in output_aliases(), but it is missing from overload {oi} of components/lang/{prim_name}.dt"
+                );
             }
         }
 
         // Compiler -> .dt: every port in the primitive's exact `accepted_ports()` slice must be documented.
         for &compiler_port in compiler_ports {
-            if prim_name == "Clip" && compiler_port == "clip" {
-                assert!(
-                    documented_aliases.contains("clip"),
-                    "Clip.clip should be documented as an \\alias in components/lang/Clip.dt"
-                );
-                continue;
-            }
             assert!(
                 documented_params.contains(compiler_port),
                 "Compiler primitive '{prim_name}' accepts port '{compiler_port}' in accepted_ports(), but it is missing from components/lang/{prim_name}.dt"
@@ -588,6 +661,45 @@ fn test_special_builtins_runtime_and_typecheck_strictness() {
     let doc = parse_document(bad_window_access).expect("Parse ok");
     expand_document(&doc)
         .expect_err("window.cap_height must be rejected now that Window uses WINDOW_SPEC strictly");
+}
+
+#[test]
+fn test_leaf_primitives_reject_content_slots_and_output_aliases_are_immutable() {
+    let leaf_cases = [
+        r#"\Line(x1: 0, y1: 0, x2: 10px, y2: 10px) { \Rect(x: 0, y: 0, width: 1px, height: 1px, color: #000) }"#,
+        r#"\Font(size: 12px) { \Rect(x: 0, y: 0, width: 1px, height: 1px, color: #000) }"#,
+        r#"\ParagraphStyle() { }"#,
+        r#"\let b = \Box(x: 0, y: 0, width: 10px, height: 10px); \let c = \Clip(box: b) { }"#,
+        r#"\Pagination() { }"#,
+        r#"\PageBreak() { }"#,
+        r#"\let v = \PageValue() { };"#,
+        r#"\let l = \PageList() { };"#,
+    ];
+    for src in leaf_cases {
+        let doc = parse_document(src).expect("Parse ok");
+        let err = expand_document(&doc)
+            .expect_err(&format!("Leaf primitive must reject content slot: {src}"));
+        assert!(
+            err.to_string().contains("content slot"),
+            "Expected content slot error for '{src}', got: {err}"
+        );
+    }
+
+    let immutable_alias_cases = [
+        (r#"\let f = \Font(size: 12px, cap_height: 8px);"#, "cap_height"),
+        (r#"\let b = \Box(x: 0, y: 0, width: 10px, height: 10px); \let c = \Clip(box: b, clip: window.clip);"#, "clip"),
+        (r#"\Line(x1: 0, y1: 0, x2: 10px, y2: 10px, length: 14px)"#, "length"),
+        (r#"\AnchorScope(name: "s", path: "/x")"#, "path"),
+    ];
+    for (src, alias_name) in immutable_alias_cases {
+        let doc = parse_document(src).expect("Parse ok");
+        let err = expand_document(&doc)
+            .expect_err(&format!("Output alias '{alias_name}' must be immutable in: {src}"));
+        assert!(
+            matches!(err, CompileError::ImmutableAliasPort { ref port, .. } if port == alias_name),
+            "Expected ImmutableAliasPort('{alias_name}') for '{src}', got: {err:?}"
+        );
+    }
 }
 
 #[test]

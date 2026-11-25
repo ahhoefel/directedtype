@@ -5,8 +5,8 @@ use crate::ast::{
 use crate::compiler::error::CompileError;
 use crate::compiler::eval::eval_expr_for_node;
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, lookup_builtin, static_type_from_canonical_name, BuiltinPrimitive,
-    PrimitiveExpandState, SpecialBuiltinSpec,
+    default_builtin_port_type, lookup_builtin, static_type_from_canonical_name, BuiltinChildren,
+    BuiltinPrimitive, PrimitiveExpandState, SpecialBuiltinSpec,
 };
 use crate::compiler::expand::context::{ElementContext, LexicalBinding, ScopeContext};
 use crate::compiler::expand::expand_element;
@@ -45,20 +45,6 @@ impl Drop for RewriteTrackingGuard {
             restore_rewrite_tracking(snap);
         }
     }
-}
-
-/// Disallows non-empty `{ ... }` content slots on empty pagination primitives.
-fn disallow_content_slot(elem: &ElementNode) -> Result<(), CompileError> {
-    if let Some(slot) = &elem.content {
-        return Err(CompileError::Custom {
-            message: format!(
-                "'\\{}' does not accept a {{ ... }} content slot",
-                elem.name.as_str()
-            ),
-            span: slot.span,
-        });
-    }
-    Ok(())
 }
 
 /// Resolves simple `Paren` / `MemberAccess(Ident(node_id), port)` chains within `doc`.
@@ -362,6 +348,7 @@ pub const PAGE_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
         ("right", "Distance"),
         ("bottom", "Distance"),
     ],
+    children: BuiltinChildren::None,
 };
 
 /// Returns the static type of an ambient `page.*` property, backed strictly by `PAGE_SPEC`.
@@ -545,6 +532,10 @@ impl BuiltinPrimitive for PaginationPrimitive {
         &["breakable", "keep_with_next", "break_before"]
     }
 
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::None
+    }
+
     fn register_types(
         &self,
         enums: &mut HashMap<String, EnumDef>,
@@ -569,19 +560,6 @@ impl BuiltinPrimitive for PaginationPrimitive {
             "break_before" => Some(StaticType::Enum("Break".to_string())),
             _ => default_builtin_port_type(port_name),
         }
-    }
-
-    fn pre_expand_children(
-        &self,
-        _node_id: NodeId,
-        elem: &ElementNode,
-        ctx: &ElementContext<'_>,
-        _doc: &mut ExpandedDocument,
-        _registry: &HashMap<String, Vec<ComponentDef>>,
-        _node_fonts: &HashMap<NodeId, NodeId>,
-    ) -> Result<ScopeId, CompileError> {
-        disallow_content_slot(elem)?;
-        Ok(ctx.active_scope_id)
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
@@ -622,6 +600,10 @@ impl BuiltinPrimitive for PageBreakPrimitive {
         &["to"]
     }
 
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::None
+    }
+
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
             "to" => Some(StaticType::Enum("Break".to_string())),
@@ -638,7 +620,6 @@ impl BuiltinPrimitive for PageBreakPrimitive {
         _registry: &HashMap<String, Vec<ComponentDef>>,
         _node_fonts: &HashMap<NodeId, NodeId>,
     ) -> Result<ScopeId, CompileError> {
-        disallow_content_slot(elem)?;
         if let Some(comp_name) = ctx.in_unbreakable_flow_container {
             return Err(CompileError::PageBreakInUnbreakableContainer {
                 component: comp_name.to_string(),
@@ -674,17 +655,8 @@ impl BuiltinPrimitive for FlowBodyPrimitive {
         &["x", "y", "width", "height", "z", "clip", "id"]
     }
 
-    fn pre_expand_children(
-        &self,
-        _node_id: NodeId,
-        elem: &ElementNode,
-        ctx: &ElementContext<'_>,
-        _doc: &mut ExpandedDocument,
-        _registry: &HashMap<String, Vec<ComponentDef>>,
-        _node_fonts: &HashMap<NodeId, NodeId>,
-    ) -> Result<ScopeId, CompileError> {
-        disallow_content_slot(elem)?;
-        Ok(ctx.active_scope_id)
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::None
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
@@ -724,11 +696,12 @@ impl BuiltinPrimitive for PagedFlowPrimitive {
         "PagedFlow"
     }
 
-    fn is_immutable_alias_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "left" | "top" | "right" | "bottom" | "end_page" | "page_count"
-        )
+    fn output_aliases(&self) -> &'static [&'static str] {
+        &["end_page", "page_count"]
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::Multiple
     }
 
     fn accepted_ports(&self) -> &'static [&'static str] {
@@ -1364,17 +1337,8 @@ impl BuiltinPrimitive for PageValuePrimitive {
         &[]
     }
 
-    fn pre_expand_children(
-        &self,
-        _node_id: NodeId,
-        elem: &ElementNode,
-        ctx: &ElementContext<'_>,
-        _doc: &mut ExpandedDocument,
-        _registry: &HashMap<String, Vec<ComponentDef>>,
-        _node_fonts: &HashMap<NodeId, NodeId>,
-    ) -> Result<ScopeId, CompileError> {
-        disallow_content_slot(elem)?;
-        Ok(ctx.active_scope_id)
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::None
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
@@ -1403,17 +1367,8 @@ impl BuiltinPrimitive for PageListPrimitive {
         &[]
     }
 
-    fn pre_expand_children(
-        &self,
-        _node_id: NodeId,
-        elem: &ElementNode,
-        ctx: &ElementContext<'_>,
-        _doc: &mut ExpandedDocument,
-        _registry: &HashMap<String, Vec<ComponentDef>>,
-        _node_fonts: &HashMap<NodeId, NodeId>,
-    ) -> Result<ScopeId, CompileError> {
-        disallow_content_slot(elem)?;
-        Ok(ctx.active_scope_id)
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::None
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
@@ -1440,6 +1395,10 @@ impl BuiltinPrimitive for DepositPrimitive {
 
     fn accepted_ports(&self) -> &'static [&'static str] {
         &["into"]
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::Single
     }
 
     fn defers_content_slot(&self) -> bool {
@@ -1622,24 +1581,15 @@ impl BuiltinPrimitive for CollectPrimitive {
         &["from"]
     }
 
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::None
+    }
+
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
             "from" => Some(StaticType::PageListSlice(None)),
             _ => default_builtin_port_type(port_name),
         }
-    }
-
-    fn pre_expand_children(
-        &self,
-        _node_id: NodeId,
-        elem: &ElementNode,
-        ctx: &ElementContext<'_>,
-        _doc: &mut ExpandedDocument,
-        _registry: &HashMap<String, Vec<ComponentDef>>,
-        _node_fonts: &HashMap<NodeId, NodeId>,
-    ) -> Result<ScopeId, CompileError> {
-        disallow_content_slot(elem)?;
-        Ok(ctx.active_scope_id)
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {

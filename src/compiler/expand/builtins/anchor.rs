@@ -2,7 +2,7 @@ use crate::ast::{
     ComponentDef, DistanceUnit, ElementNode, Expr, Ident, Literal, MemberAccessExpr, PortBinding,
 };
 use crate::compiler::error::CompileError;
-use crate::compiler::expand::builtins::{BuiltinPrimitive, PrimitiveExpandState};
+use crate::compiler::expand::builtins::{BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState};
 use crate::compiler::expand::context::ElementContext;
 use crate::compiler::expanded::{ExpandedDocument, NodeId};
 use crate::compiler::scope::ScopeId;
@@ -222,6 +222,10 @@ impl BuiltinPrimitive for AnchorPrimitive {
         true
     }
 
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::Multiple
+    }
+
     fn port_type(&self, port_name: &str) -> Option<crate::compiler::expand::typecheck::StaticType> {
         match port_name {
             "outline_title" => Some(crate::compiler::expand::typecheck::StaticType::String),
@@ -291,8 +295,8 @@ impl BuiltinPrimitive for AnchorScopePrimitive {
         "AnchorScope"
     }
 
-    fn is_immutable_alias_port(&self, port_name: &str) -> bool {
-        matches!(port_name, "left" | "top" | "right" | "bottom" | "path")
+    fn output_aliases(&self) -> &'static [&'static str] {
+        &["path"]
     }
 
     fn accepted_ports(&self) -> &'static [&'static str] {
@@ -311,6 +315,10 @@ impl BuiltinPrimitive for AnchorScopePrimitive {
 
     fn accepts_event_handlers(&self) -> bool {
         true
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::Multiple
     }
 
     fn wires_child_origin_to_self(&self) -> bool {
@@ -406,6 +414,10 @@ impl BuiltinPrimitive for BookmarkPrimitive {
 
     fn accepts_event_handlers(&self) -> bool {
         true
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::Multiple
     }
 
     fn port_type(&self, port_name: &str) -> Option<crate::compiler::expand::typecheck::StaticType> {

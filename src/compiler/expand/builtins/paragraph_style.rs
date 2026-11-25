@@ -1,14 +1,11 @@
 use crate::ast::{
-    ComponentDef, DistanceUnit, ElementNode, EnumDef, Expr, Ident, Literal, MemberAccessExpr,
+    ComponentDef, DistanceUnit, EnumDef, Expr, Ident, Literal, MemberAccessExpr,
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
 };
-use crate::compiler::expand::context::ElementContext;
 use crate::compiler::expand::typecheck::StaticType;
-use crate::compiler::expanded::{ExpandedDocument, NodeId};
-use crate::compiler::scope::ScopeId;
 use crate::span::Span;
 use std::collections::HashMap;
 
@@ -102,6 +99,10 @@ impl BuiltinPrimitive for ParagraphStylePrimitive {
         ]
     }
 
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::None
+    }
+
     fn port_type(&self, port_name: &str) -> Option<StaticType> {
         match port_name {
             "paragraph_style" => Some(StaticType::Node("ParagraphStyle".to_string())),
@@ -123,24 +124,6 @@ impl BuiltinPrimitive for ParagraphStylePrimitive {
 
     fn scope_ports(&self) -> Vec<String> {
         PARAGRAPH_STYLE_PORTS.iter().map(|s| s.to_string()).collect()
-    }
-
-    fn pre_expand_children(
-        &self,
-        _node_id: NodeId,
-        elem: &ElementNode,
-        ctx: &ElementContext<'_>,
-        _doc: &mut ExpandedDocument,
-        _registry: &HashMap<String, Vec<ComponentDef>>,
-        _node_fonts: &HashMap<NodeId, NodeId>,
-    ) -> Result<ScopeId, CompileError> {
-        if let Some(slot) = &elem.content {
-            return Err(CompileError::Custom {
-                message: "'\\ParagraphStyle' does not accept a { ... } content slot".to_string(),
-                span: slot.span,
-            });
-        }
-        Ok(ctx.active_scope_id)
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {

@@ -4,7 +4,7 @@ use crate::ast::{
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
 };
 use crate::compiler::expand::typecheck::StaticType;
 use crate::span::Span;
@@ -17,11 +17,12 @@ impl BuiltinPrimitive for LinePrimitive {
         "Line"
     }
 
-    fn is_immutable_alias_port(&self, port_name: &str) -> bool {
-        matches!(
-            port_name,
-            "left" | "top" | "right" | "bottom" | "x" | "y" | "width" | "height" | "length"
-        )
+    fn output_aliases(&self) -> &'static [&'static str] {
+        &["x", "y", "width", "height", "length"]
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::None
     }
 
     fn accepted_ports(&self) -> &'static [&'static str] {

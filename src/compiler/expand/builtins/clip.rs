@@ -1,7 +1,7 @@
 use crate::ast::{Expr, Ident, MemberAccessExpr};
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
 };
 use crate::compiler::expand::context::EnvEntry;
 use crate::compiler::expand::typecheck::StaticType;
@@ -57,7 +57,6 @@ impl BuiltinPrimitive for ClipPrimitive {
         &[
             "box",
             "up",
-            "clip",
             "x",
             "y",
             "width",
@@ -67,6 +66,14 @@ impl BuiltinPrimitive for ClipPrimitive {
             "scroll_y",
             "id",
         ]
+    }
+
+    fn output_aliases(&self) -> &'static [&'static str] {
+        &["clip"]
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::None
     }
 
     fn port_type(&self, port_name: &str) -> Option<StaticType> {

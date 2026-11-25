@@ -4,7 +4,7 @@ use crate::ast::{
 };
 use crate::compiler::error::{CompileError, NoMatchingOverloadDetails};
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
 };
 use crate::compiler::expand::context::{ElementContext, EnvEntry, ScopeContext};
 use crate::compiler::expand::expand_element;
@@ -188,6 +188,22 @@ impl BuiltinPrimitive for FontPrimitive {
 
     fn accepted_ports(&self) -> &'static [&'static str] {
         FONT_PUBLIC_PORTS
+    }
+
+    fn output_aliases(&self) -> &'static [&'static str] {
+        &[
+            "cap_height",
+            "x_height",
+            "ascent",
+            "descent",
+            "em_top",
+            "line_gap",
+            "gap_bottom",
+        ]
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::None
     }
 
     fn rejected_port_error(

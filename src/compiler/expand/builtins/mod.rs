@@ -57,6 +57,17 @@ pub(in crate::compiler::expand) struct PrimitiveExpandState<'a, 'ctx> {
     pub event_handlers: HashMap<String, EventHandlerBinding>,
 }
 
+/// How many children a built-in primitive or special built-in accepts inside `{ ... }`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltinChildren {
+    /// Leaf built-in: `{ ... }` content slot is rejected.
+    None,
+    /// Requires a single child payload (e.g. `\Deposit`).
+    Single,
+    /// Accepts zero or more children inside `{ ... }`.
+    Multiple,
+}
+
 /// Encapsulates the schema, scope behavior, content-slot hooks, and port finalization of a built-in primitive element.
 pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
     /// Canonical primitive name (e.g. `"Rect"`, `"Line"`, `"Text"`).
@@ -67,15 +78,20 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
         false
     }
 
-    /// Returns true if `port_name` is a read-only derived spatial alias on this primitive.
-    fn is_immutable_alias_port(&self, port_name: &str) -> bool {
-        matches!(port_name, "left" | "top" | "right" | "bottom")
-    }
-
     /// Exact static allowlist of non-event input ports accepted by this primitive.
     /// Every built-in primitive must enumerate its ports here so both expansion and drift tests
     /// share a single source of truth.
     fn accepted_ports(&self) -> &'static [&'static str];
+
+    /// Exact static list of read-only computed alias ports exported by this primitive
+    /// (beyond the implicit spatial aliases `left`, `top`, `right`, `bottom` on spatial primitives).
+    fn output_aliases(&self) -> &'static [&'static str] {
+        &[]
+    }
+
+    /// Declares how many children this primitive accepts inside `{ ... }`.
+    /// `PrimitiveExpander` enforces `BuiltinChildren::None` centrally.
+    fn children_cardinality(&self) -> BuiltinChildren;
 
     /// Returns true if this primitive also accepts `on_*` event handler ports.
     fn accepts_event_handlers(&self) -> bool {
@@ -226,6 +242,13 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
 }
 
 impl dyn BuiltinPrimitive {
+    /// Non-overridable immutable-alias check backed strictly by `output_aliases()`
+    /// (plus implicit spatial aliases `left`, `top`, `right`, `bottom` on spatial primitives).
+    pub(in crate::compiler::expand) fn is_immutable_alias_port(&self, port_name: &str) -> bool {
+        (!self.is_non_spatial() && matches!(port_name, "left" | "top" | "right" | "bottom"))
+            || self.output_aliases().contains(&port_name)
+    }
+
     /// Non-overridable port acceptance check backed strictly by `accepted_ports()` and
     /// `accepts_event_handlers()`.
     pub(in crate::compiler::expand) fn accepts_port(&self, port_name: &str) -> bool {
@@ -367,6 +390,7 @@ pub struct SpecialBuiltinSpec {
     pub name: &'static str,
     pub accepted_ports: &'static [(&'static str, &'static str)],
     pub output_ports: &'static [(&'static str, &'static str)],
+    pub children: BuiltinChildren,
 }
 
 impl SpecialBuiltinSpec {
@@ -513,6 +537,18 @@ pub fn builtin_primitive_accepted_ports(name: &str) -> Option<&'static [&'static
 pub fn builtin_primitive_accepts_event_handlers(name: &str) -> Option<bool> {
     let prim = lookup_builtin(name, false)?;
     Some(prim.accepts_event_handlers())
+}
+
+/// Returns the exact static slice of explicit read-only output aliases exported by the named primitive.
+pub fn builtin_primitive_output_aliases(name: &str) -> Option<&'static [&'static str]> {
+    let prim = lookup_builtin(name, false)?;
+    Some(prim.output_aliases())
+}
+
+/// Returns the children cardinality accepted by the named built-in primitive.
+pub fn builtin_primitive_children_cardinality(name: &str) -> Option<BuiltinChildren> {
+    let prim = lookup_builtin(name, false)?;
+    Some(prim.children_cardinality())
 }
 
 /// Returns the canonical static type name for `port_name` on the named built-in primitive, if known.
@@ -728,6 +764,19 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
                     port.name.as_str(),
                     port.name.span,
                 ));
+            }
+        }
+
+        // Centrally enforce content-slot prohibition for leaf primitives.
+        if primitive.children_cardinality() == BuiltinChildren::None {
+            if let Some(slot) = &elem.content {
+                return Err(CompileError::Custom {
+                    message: format!(
+                        "'\\{}' does not accept a {{ ... }} content slot",
+                        elem.name.as_str()
+                    ),
+                    span: slot.span,
+                });
             }
         }
 

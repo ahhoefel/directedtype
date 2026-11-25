@@ -4,7 +4,7 @@ use crate::ast::{
 };
 use crate::compiler::error::CompileError;
 use crate::compiler::expand::builtins::{
-    default_builtin_port_type, BuiltinPrimitive, PrimitiveExpandState,
+    default_builtin_port_type, BuiltinChildren, BuiltinPrimitive, PrimitiveExpandState,
 };
 use crate::compiler::expand::typecheck::StaticType;
 use crate::span::Span;
@@ -51,6 +51,10 @@ impl BuiltinPrimitive for RectPrimitive {
 
     fn accepts_event_handlers(&self) -> bool {
         true
+    }
+
+    fn children_cardinality(&self) -> BuiltinChildren {
+        BuiltinChildren::Multiple
     }
 
     fn register_types(
