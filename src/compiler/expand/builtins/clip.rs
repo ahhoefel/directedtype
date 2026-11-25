@@ -72,6 +72,10 @@ impl BuiltinPrimitive for ClipPrimitive {
         &["clip"]
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["box"]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::None
     }
@@ -88,13 +92,6 @@ impl BuiltinPrimitive for ClipPrimitive {
         let node_id = state.node_id;
         let ctx = state.ctx;
 
-        if !state.ports.contains_key("box") {
-            return Err(CompileError::MissingPort {
-                node: "Clip".to_string(),
-                port: "box".to_string(),
-                span: elem.span,
-            });
-        }
         if !state.ports.contains_key("up") {
             let default_up =
                 default_inherited_clip_expr(node_id, ctx.parent_id, ctx.env_scope, elem.span);

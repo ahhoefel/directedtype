@@ -99,6 +99,10 @@ impl BuiltinPrimitive for ParagraphStylePrimitive {
         ]
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&[], &["paragraph_style"]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::None
     }

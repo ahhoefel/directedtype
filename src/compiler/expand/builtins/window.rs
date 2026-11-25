@@ -18,6 +18,7 @@ pub const WINDOW_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
         ("hscroll", "Boolean"),
         ("dpi", "Float"),
     ],
+    required_ports: &[],
     output_ports: &[
         ("x", "Distance"),
         ("y", "Distance"),

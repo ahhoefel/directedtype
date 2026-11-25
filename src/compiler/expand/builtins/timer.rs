@@ -7,6 +7,7 @@ use crate::compiler::expand::typecheck::StaticType;
 pub const TIMER_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
     name: "Timer",
     accepted_ports: &[("duration", "Duration")],
+    required_ports: &["duration"],
     output_ports: &[
         ("time", "Duration"),
         ("duration", "Duration"),
@@ -21,6 +22,7 @@ pub const TIMER_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
 pub const INDEFINITE_TIMER_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
     name: "IndefiniteTimer",
     accepted_ports: &[],
+    required_ports: &[],
     output_ports: &[
         ("time", "Duration"),
         ("dt", "Duration"),

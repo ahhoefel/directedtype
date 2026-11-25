@@ -21,6 +21,10 @@ impl BuiltinPrimitive for LinePrimitive {
         &["x", "y", "width", "height", "length"]
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["x1", "y1", "x2", "y2"]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::None
     }
@@ -75,16 +79,6 @@ impl BuiltinPrimitive for LinePrimitive {
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         let elem = state.elem;
         let node_id = state.node_id;
-
-        for port in ["x1", "y1", "x2", "y2"] {
-            if !state.ports.contains_key(port) {
-                return Err(CompileError::MissingPort {
-                    node: "Line".to_string(),
-                    port: port.to_string(),
-                    span: elem.span,
-                });
-            }
-        }
 
         state.ports.entry("thickness".to_string()).or_insert_with(|| {
             Expr::Literal(Literal::Distance(1.0, DistanceUnit::Px, elem.span))

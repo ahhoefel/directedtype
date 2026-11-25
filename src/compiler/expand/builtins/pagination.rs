@@ -330,6 +330,7 @@ fn collect_transitive_upstream_vars(graph: &VariableGraph, target: VarId) -> Vec
 pub const PAGE_SPEC: SpecialBuiltinSpec = SpecialBuiltinSpec {
     name: "Page",
     accepted_ports: &[],
+    required_ports: &[],
     output_ports: &[
         ("number", "Integer"),
         ("count", "Integer"),
@@ -532,6 +533,10 @@ impl BuiltinPrimitive for PaginationPrimitive {
         &["breakable", "keep_with_next", "break_before"]
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&[]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::None
     }
@@ -600,6 +605,10 @@ impl BuiltinPrimitive for PageBreakPrimitive {
         &["to"]
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&[]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::None
     }
@@ -655,21 +664,16 @@ impl BuiltinPrimitive for FlowBodyPrimitive {
         &["x", "y", "width", "height", "z", "clip", "id"]
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["width", "height"]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::None
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         let span = state.elem.span;
-        for req in ["width", "height"] {
-            if !state.ports.contains_key(req) {
-                return Err(CompileError::MissingPort {
-                    node: "FlowBody".to_string(),
-                    port: req.to_string(),
-                    span,
-                });
-            }
-        }
         if let Some(pid) = state.ctx.parent_id {
             let p_ident = Expr::Ident(Ident::from_node(pid, span));
             state.ports.entry("x".to_string()).or_insert_with(|| {
@@ -698,6 +702,10 @@ impl BuiltinPrimitive for PagedFlowPrimitive {
 
     fn output_aliases(&self) -> &'static [&'static str] {
         &["end_page", "page_count"]
+    }
+
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["page"]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -1337,6 +1345,10 @@ impl BuiltinPrimitive for PageValuePrimitive {
         &[]
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&[]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::None
     }
@@ -1367,6 +1379,10 @@ impl BuiltinPrimitive for PageListPrimitive {
         &[]
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&[]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::None
     }
@@ -1395,6 +1411,10 @@ impl BuiltinPrimitive for DepositPrimitive {
 
     fn accepted_ports(&self) -> &'static [&'static str] {
         &["into"]
+    }
+
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["into"]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -1579,6 +1599,10 @@ impl BuiltinPrimitive for CollectPrimitive {
 
     fn accepted_ports(&self) -> &'static [&'static str] {
         &["from"]
+    }
+
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["from"]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {

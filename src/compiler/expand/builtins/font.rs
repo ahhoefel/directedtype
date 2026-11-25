@@ -202,6 +202,10 @@ impl BuiltinPrimitive for FontPrimitive {
         ]
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["size"], &[]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::None
     }

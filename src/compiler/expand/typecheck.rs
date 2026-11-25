@@ -3213,12 +3213,14 @@ fn infer_node_expr_type(
                     span: elem.span,
                 });
             }
-            if elem.ports.is_empty() {
-                return Err(CompileError::MissingPort {
-                    node: "Timer".to_string(),
-                    port: "duration".to_string(),
-                    span: elem.span,
-                });
+            for &req in super::builtins::timer::TIMER_SPEC.required_ports {
+                if !elem.ports.iter().any(|p| p.name.as_str() == req) {
+                    return Err(CompileError::MissingPort {
+                        node: "Timer".to_string(),
+                        port: req.to_string(),
+                        span: elem.span,
+                    });
+                }
             }
             for port in &elem.ports {
                 let Some(expected_ty_name) =

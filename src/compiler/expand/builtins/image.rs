@@ -18,6 +18,14 @@ impl BuiltinPrimitive for ImagePrimitive {
         &["aspect_ratio", "file_dpi"]
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[
+            &["src", "x", "y"],
+            &["src", "x", "y", "width"],
+            &["src", "x", "y", "height"],
+        ]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::None
     }

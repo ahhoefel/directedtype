@@ -222,6 +222,10 @@ impl BuiltinPrimitive for AnchorPrimitive {
         true
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["name"]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::Multiple
     }
@@ -315,6 +319,10 @@ impl BuiltinPrimitive for AnchorScopePrimitive {
 
     fn accepts_event_handlers(&self) -> bool {
         true
+    }
+
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["name"]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -416,6 +424,10 @@ impl BuiltinPrimitive for BookmarkPrimitive {
         true
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["title"]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::Multiple
     }
@@ -433,13 +445,6 @@ impl BuiltinPrimitive for BookmarkPrimitive {
     }
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
-        if !state.ports.contains_key("title") {
-            return Err(CompileError::MissingPort {
-                node: "Bookmark".to_string(),
-                port: "title".to_string(),
-                span: state.elem.span,
-            });
-        }
         state
             .ports
             .entry("level".to_string())

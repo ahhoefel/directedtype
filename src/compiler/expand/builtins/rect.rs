@@ -53,6 +53,10 @@ impl BuiltinPrimitive for RectPrimitive {
         true
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["x", "y", "width", "height", "color"]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::Multiple
     }
@@ -171,16 +175,6 @@ impl BuiltinPrimitive for RectPrimitive {
 
     fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         let elem = state.elem;
-
-        for port in ["x", "y", "width", "height", "color"] {
-            if !state.ports.contains_key(port) {
-                return Err(CompileError::MissingPort {
-                    node: "Rect".to_string(),
-                    port: port.to_string(),
-                    span: elem.span,
-                });
-            }
-        }
 
         if let Some(sh_target) = state.ports.get("shadow").cloned() {
             for field in ["offset_x", "offset_y", "blur", "spread", "color"] {

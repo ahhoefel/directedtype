@@ -102,6 +102,10 @@ impl BuiltinPrimitive for TextPrimitive {
         &["baseline_offset"]
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&[], &["baseline"]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::Multiple
     }

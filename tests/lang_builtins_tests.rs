@@ -12,8 +12,9 @@ use directedtype::compiler::expand::builtins::{
     builtin_primitive_accepted_ports, builtin_primitive_accepts_event_handlers,
     builtin_primitive_accepts_port, builtin_primitive_children_cardinality,
     builtin_primitive_is_immutable_alias, builtin_primitive_output_aliases,
-    builtin_primitive_port_type_name, pagination::populated_page_port_names,
-    public_builtin_primitive_names, register_builtin_enums_and_components,
+    builtin_primitive_port_type_name, builtin_primitive_required_port_sets,
+    pagination::populated_page_port_names, public_builtin_primitive_names,
+    register_builtin_enums_and_components,
     timer::{INDEFINITE_TIMER_SPEC, TIMER_SPEC},
     BuiltinChildren, ALL_SPECIAL_BUILTINS,
 };
@@ -304,6 +305,20 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             spec.name
         );
 
+        // Required parameters parity for special built-ins
+        let compiler_req: HashSet<&str> = spec.required_ports.iter().copied().collect();
+        let doc_req: HashSet<&str> = ov
+            .params
+            .iter()
+            .filter(|p| !p.is_env && p.default_edge.is_none())
+            .map(|p| p.name.as_str())
+            .collect();
+        assert_eq!(
+            doc_req, compiler_req,
+            "Required parameters drifted for special built-in '{}'",
+            spec.name
+        );
+
         // Read-only output ports: exact 1-to-1 match against \alias declarations
         // (excluding implicit spatial aliases left/top/right/bottom and ports already in accepted_ports).
         let compiler_outputs: HashMap<&str, &str> = spec
@@ -456,7 +471,38 @@ fn test_components_lang_matches_compiler_builtins_without_drift() {
             );
         }
 
+        // Overload count & required-port-set parity: every overload's required non-env parameters
+        // in components/lang/<Prim>.dt must match `required_port_sets()` 1-to-1.
+        let compiler_req_sets = builtin_primitive_required_port_sets(prim_name)
+            .unwrap_or_else(|| panic!("Missing required_port_sets for '{prim_name}'"));
         let overloads = &lang_comps[prim_name];
+        assert_eq!(
+            overloads.len(),
+            compiler_req_sets.len(),
+            "Overload count drifted for '{prim_name}': .dt has {}, compiler has {}",
+            overloads.len(),
+            compiler_req_sets.len()
+        );
+        for (oi, (ov, &req_slice)) in overloads.iter().zip(compiler_req_sets.iter()).enumerate() {
+            let compiler_req: HashSet<&str> = req_slice.iter().copied().collect();
+            for &r in req_slice {
+                assert!(
+                    seen_compiler_ports.contains(r),
+                    "Required port '{r}' in {prim_name}::required_port_sets()[{oi}] is not in accepted_ports()"
+                );
+            }
+            let doc_req: HashSet<&str> = ov
+                .params
+                .iter()
+                .filter(|p| !p.is_env && p.default_edge.is_none())
+                .map(|p| p.name.as_str())
+                .collect();
+            assert_eq!(
+                doc_req, compiler_req,
+                "Required parameters drifted for '{prim_name}' overload {oi}"
+            );
+        }
+
         let mut documented_params: HashSet<String> = HashSet::new();
 
         for (oi, ov) in overloads.iter().enumerate() {
@@ -699,6 +745,140 @@ fn test_leaf_primitives_reject_content_slots_and_output_aliases_are_immutable() 
             matches!(err, CompileError::ImmutableAliasPort { ref port, .. } if port == alias_name),
             "Expected ImmutableAliasPort('{alias_name}') for '{src}', got: {err:?}"
         );
+    }
+}
+
+/// Behavioral compile-probe drift test:
+/// For EVERY overload of EVERY built-in primitive (plus Timer/IndefiniteTimer/Window) declared
+/// in `components/lang/`, verifies that:
+/// 1. Invoking the built-in with ONLY that overload's required non-env parameters compiles cleanly.
+/// 2. Omitting ANY single required parameter from an overload fails compilation (unless another
+///    overload matches the smaller subset, such as Image(src,x,y,width) -> Image(src,x,y),
+///    Text(baseline) -> Text(), or ParagraphStyle(paragraph_style) -> ParagraphStyle()).
+#[test]
+fn test_components_lang_overload_required_ports_match_compiler_behavior() {
+    let (lang_comps, _) = load_lang_declarations();
+
+    let sample_arg = |prim: &str, param: &str| -> &'static str {
+        match (prim, param) {
+            (_, "x" | "y" | "x1" | "y1" | "x2" | "y2" | "width" | "height" | "baseline" | "size") => "10px",
+            (_, "color") => "#000000",
+            (_, "src") => "\"tests/goldens/demo.png\"",
+            (_, "name") => "\"anchor_name\"",
+            (_, "title") => "\"Bookmark Title\"",
+            (_, "box") => "clip_box",
+            (_, "page") => "\\ProbePage()",
+            (_, "into") => "bucket_list",
+            (_, "from") => "bucket_list[page]",
+            (_, "paragraph_style") => "base_ps",
+            (_, "duration") => "1s",
+            other => panic!("Add sample value for built-in required param {other:?}"),
+        }
+    };
+
+    let build_probe_doc = |prim: &str, overload_idx: usize, args: &[(&str, &str)]| -> String {
+        let args_str = args
+            .iter()
+            .map(|(k, v)| format!("{k}: {v}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let call = match prim {
+            "Deposit" => format!("\\Deposit({args_str}) {{ \\Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000) }}"),
+            "Text" => format!("\\Text({args_str}) {{ Hello }}"),
+            "PagedFlow" => format!("\\PagedFlow({args_str}) {{ \\Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000) }}"),
+            _ => format!("\\{prim}({args_str})"),
+        };
+
+        match prim {
+            "Window" => format!("{call}\n\\Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)"),
+            "Timer" | "IndefiniteTimer" => format!("\\let t = {call};\n\\Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000)"),
+            "Font" if overload_idx == 1 => format!("\\env font = \\Font(size: 12px);\n\\let f = {call};"),
+            "Font" => format!("\\let f = {call};"),
+            "Text" => format!("\\env font = \\Font(size: 12px);\n{call}"),
+            "ParagraphStyle" => format!("\\let base_ps = \\ParagraphStyle();\n\\let ps = {call};"),
+            "Clip" => format!("\\let clip_box = \\Box(x: 0, y: 0, width: 10px, height: 10px);\n\\let c = {call};"),
+            "PagedFlow" => format!(
+                "\\Component ProbePage(x: Distance = 0px, y: Distance = 0px, width: Distance = 300px, height: Distance = 300px) {{ \\FlowBody(width: 200px, height: 200px) }}\n{call}"
+            ),
+            "FlowBody" => format!(
+                "\\Component ProbePage(x: Distance = 0px, y: Distance = 0px, width: Distance = 300px, height: Distance = 300px) {{ {call} }}\n\\PagedFlow(page: \\ProbePage()) {{ \\Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000) }}"
+            ),
+            "Deposit" => format!(
+                "\\let bucket_list = \\PageList();\n\\Component ProbePage(x: Distance = 0px, y: Distance = 0px, width: Distance = 300px, height: Distance = 300px) {{ \\FlowBody(width: 200px, height: 200px) }}\n\\PagedFlow(page: \\ProbePage()) {{ {call} }}"
+            ),
+            "Collect" => format!(
+                "\\let bucket_list = \\PageList();\n\\Component ProbePage(x: Distance = 0px, y: Distance = 0px, width: Distance = 300px, height: Distance = 300px) {{ \\FlowBody(width: 200px, height: 200px) {call} }}\n\\PagedFlow(page: \\ProbePage()) {{ \\Rect(x: 0, y: 0, width: 10px, height: 10px, color: #000) }}"
+            ),
+            "Pagination" | "PageBreak" | "PageValue" | "PageList" => format!("\\let p = {call};"),
+            _ => call,
+        }
+    };
+
+    let mut probed: Vec<&str> = public_builtin_primitive_names();
+    probed.extend(["Window", "Timer", "IndefiniteTimer"]);
+
+    for name in probed {
+        let overloads = &lang_comps[name];
+        let all_req_sets: Vec<HashSet<&str>> = overloads
+            .iter()
+            .map(|ov| {
+                ov.params
+                    .iter()
+                    .filter(|p| !p.is_env && p.default_edge.is_none())
+                    .map(|p| p.name.as_str())
+                    .collect()
+            })
+            .collect();
+
+        for (oi, req_set) in all_req_sets.iter().enumerate() {
+            let mut req_list: Vec<&str> = req_set.iter().copied().collect();
+            req_list.sort();
+
+            // 1. Minimal invocation with ONLY this overload's required params must compile cleanly.
+            let args: Vec<(&str, &str)> = req_list
+                .iter()
+                .map(|&p| (p, sample_arg(name, p)))
+                .collect();
+            let src = build_probe_doc(name, oi, &args);
+            let doc = parse_document(&src)
+                .unwrap_or_else(|e| panic!("Probe parse failed for {name}[{oi}]: {e}\n{src}"));
+            expand_document(&doc).unwrap_or_else(|e| {
+                panic!(
+                    "Minimal required-only invocation failed for {name}[{oi}] (req={req_list:?}): {e}\n{src}"
+                )
+            });
+
+            // 2. Omitting ANY single required param must fail compilation, unless another overload's
+            //    required set is a subset of the remaining params (e.g. Image(src,x,y,width) -> Image(src,x,y)).
+            for &drop_param in &req_list {
+                let remaining_set: HashSet<&str> = req_list
+                    .iter()
+                    .copied()
+                    .filter(|&p| p != drop_param)
+                    .collect();
+                let covered_by_other_overload = all_req_sets
+                    .iter()
+                    .enumerate()
+                    .any(|(oj, other)| oj != oi && other.is_subset(&remaining_set));
+                if covered_by_other_overload {
+                    continue;
+                }
+
+                let reduced_args: Vec<(&str, &str)> = req_list
+                    .iter()
+                    .copied()
+                    .filter(|&p| p != drop_param)
+                    .map(|p| (p, sample_arg(name, p)))
+                    .collect();
+                let reduced_src = build_probe_doc(name, oi, &reduced_args);
+                let reduced_doc = parse_document(&reduced_src).unwrap_or_else(|e| {
+                    panic!("Reduced probe parse failed for {name}[{oi}] without '{drop_param}': {e}\n{reduced_src}")
+                });
+                expand_document(&reduced_doc).expect_err(&format!(
+                    "Omitting required param '{drop_param}' from {name}[{oi}] unexpectedly succeeded!\n{reduced_src}"
+                ));
+            }
+        }
     }
 }
 

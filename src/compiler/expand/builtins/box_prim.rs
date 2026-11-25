@@ -32,20 +32,15 @@ impl BuiltinPrimitive for BoxPrimitive {
         true
     }
 
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&["width", "height"]]
+    }
+
     fn children_cardinality(&self) -> BuiltinChildren {
         BuiltinChildren::Multiple
     }
 
-    fn finalize_ports(&self, state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
-        for port in ["height", "width"] {
-            if !state.ports.contains_key(port) {
-                return Err(CompileError::MissingPort {
-                    node: "Box".to_string(),
-                    port: port.to_string(),
-                    span: state.elem.span,
-                });
-            }
-        }
+    fn finalize_ports(&self, _state: &mut PrimitiveExpandState<'_, '_>) -> Result<(), CompileError> {
         Ok(())
     }
 }
@@ -76,6 +71,10 @@ impl BuiltinPrimitive for LinkPrimitive {
 
     fn accepts_event_handlers(&self) -> bool {
         true
+    }
+
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
+        &[&[]]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {

@@ -1792,12 +1792,14 @@ pub fn eval_expr_with_env<E: EvalEnv>(expr: &Expr, env: &E) -> Result<Value, Com
         Expr::Paren(inner, _) => eval_expr_with_env(inner, env),
         Expr::Node(n) => match n.name.as_str() {
             "Timer" => {
-                if n.ports.is_empty() {
-                    return Err(CompileError::MissingPort {
-                        node: "Timer".to_string(),
-                        port: "duration".to_string(),
-                        span: n.span,
-                    });
+                for &req in crate::compiler::expand::builtins::timer::TIMER_SPEC.required_ports {
+                    if !n.ports.iter().any(|p| p.name.as_str() == req) {
+                        return Err(CompileError::MissingPort {
+                            node: "Timer".to_string(),
+                            port: req.to_string(),
+                            span: n.span,
+                        });
+                    }
                 }
                 let mut duration_us: Option<i64> = None;
                 for port in &n.ports {

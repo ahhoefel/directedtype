@@ -89,6 +89,11 @@ pub(in crate::compiler::expand) trait BuiltinPrimitive: Sync {
         &[]
     }
 
+    /// Required non-env port sets for each overload of this primitive (in canonical overload order).
+    /// For single-overload primitives (`len() == 1`), `PrimitiveExpander` enforces these required
+    /// ports centrally before `finalize_ports`.
+    fn required_port_sets(&self) -> &'static [&'static [&'static str]];
+
     /// Declares how many children this primitive accepts inside `{ ... }`.
     /// `PrimitiveExpander` enforces `BuiltinChildren::None` centrally.
     fn children_cardinality(&self) -> BuiltinChildren;
@@ -389,6 +394,7 @@ pub(in crate::compiler::expand) fn eval_assert_directive(
 pub struct SpecialBuiltinSpec {
     pub name: &'static str,
     pub accepted_ports: &'static [(&'static str, &'static str)],
+    pub required_ports: &'static [&'static str],
     pub output_ports: &'static [(&'static str, &'static str)],
     pub children: BuiltinChildren,
 }
@@ -549,6 +555,14 @@ pub fn builtin_primitive_output_aliases(name: &str) -> Option<&'static [&'static
 pub fn builtin_primitive_children_cardinality(name: &str) -> Option<BuiltinChildren> {
     let prim = lookup_builtin(name, false)?;
     Some(prim.children_cardinality())
+}
+
+/// Returns the required non-env port sets for each overload of the named built-in primitive.
+pub fn builtin_primitive_required_port_sets(
+    name: &str,
+) -> Option<&'static [&'static [&'static str]]> {
+    let prim = lookup_builtin(name, false)?;
+    Some(prim.required_port_sets())
 }
 
 /// Returns the canonical static type name for `port_name` on the named built-in primitive, if known.
@@ -1726,6 +1740,26 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
             authored_ports,
             event_handlers,
         };
+
+        // Centrally enforce required ports for single-overload primitives.
+        // (`PagedFlow.page` is intentionally skipped from `state.ports` because it is
+        // captured as a raw AST template in `pre_expand_children`, so check `elem.ports`.)
+        let req_sets = self.primitive.required_port_sets();
+        if req_sets.len() == 1 {
+            for &req in req_sets[0] {
+                let is_present = state.ports.contains_key(req)
+                    || (self.primitive.name() == "PagedFlow"
+                        && req == "page"
+                        && self.elem.ports.iter().any(|p| p.name.as_str() == "page"));
+                if !is_present {
+                    return Err(CompileError::MissingPort {
+                        node: self.primitive.name().to_string(),
+                        port: req.to_string(),
+                        span: self.elem.span,
+                    });
+                }
+            }
+        }
 
         if self.primitive.is_non_spatial() {
             self.primitive.finalize_ports(&mut state)?;

@@ -2,9 +2,9 @@
 // Shaped typographic block or rich inline text run supporting \Span and \InlineBox children.
 
 \BuiltIn Text(
-    x: Distance,
-    y: Distance,
     env font: Font,
+    x: Distance = 0px,
+    y: Distance = 0px,
     width: Distance = unset,
     height: Distance = unset,
     text: String = "",
@@ -36,9 +36,9 @@
 }
 
 \BuiltIn Text(
-    x: Distance,
     baseline: Distance,
     env font: Font,
+    x: Distance = 0px,
     width: Distance = unset,
     height: Distance = unset,
     text: String = "",
