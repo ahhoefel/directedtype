@@ -103,13 +103,11 @@ impl BuiltinPrimitive for TextPrimitive {
     }
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
-        &[&[], &["baseline"]]
+        &[&["x", "y"], &["x", "baseline"]]
     }
 
     fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
-        const TEXT_Y_DEFAULTS: &[(&str, BuiltinDefault)] = &[
-            ("x", BuiltinDefault::Px(0.0)),
-            ("y", BuiltinDefault::Px(0.0)),
+        const TEXT_DEFAULTS: &[(&str, BuiltinDefault)] = &[
             ("width", BuiltinDefault::Unset),
             ("height", BuiltinDefault::Unset),
             ("text", BuiltinDefault::String("")),
@@ -122,21 +120,7 @@ impl BuiltinPrimitive for TextPrimitive {
             ("path", BuiltinDefault::String("")),
             ("id", BuiltinDefault::String("")),
         ];
-        const TEXT_BASELINE_DEFAULTS: &[(&str, BuiltinDefault)] = &[
-            ("x", BuiltinDefault::Px(0.0)),
-            ("width", BuiltinDefault::Unset),
-            ("height", BuiltinDefault::Unset),
-            ("text", BuiltinDefault::String("")),
-            ("underline", BuiltinDefault::Bool(false)),
-            ("z", BuiltinDefault::Integer(0)),
-            ("pagination", BuiltinDefault::Expr("\\Pagination(breakable: true)")),
-            ("cursor", BuiltinDefault::String("Default")),
-            ("opacity", BuiltinDefault::Float(DEFAULT_OPACITY)),
-            ("name", BuiltinDefault::String("")),
-            ("path", BuiltinDefault::String("")),
-            ("id", BuiltinDefault::String("")),
-        ];
-        &[TEXT_Y_DEFAULTS, TEXT_BASELINE_DEFAULTS]
+        &[TEXT_DEFAULTS, TEXT_DEFAULTS]
     }
 
     fn children_cardinality(&self) -> BuiltinChildren {
@@ -315,6 +299,21 @@ impl BuiltinPrimitive for TextPrimitive {
             &start_at_expr,
         );
         apply_inline_origin_defaults(state);
+
+        if !state.ports.contains_key("x") {
+            return Err(CompileError::MissingPort {
+                node: "Text".to_string(),
+                port: "x".to_string(),
+                span: elem.span,
+            });
+        }
+        if !state.ports.contains_key("y") {
+            return Err(CompileError::MissingPort {
+                node: "Text".to_string(),
+                port: "y".to_string(),
+                span: elem.span,
+            });
+        }
 
         if !state.ports.contains_key("text") {
             if let Some(synth_expr) = synthesize_dynamic_inline_text_expr(state.doc, node_id, elem.span) {

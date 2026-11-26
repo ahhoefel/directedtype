@@ -1101,7 +1101,7 @@ fn test_components_lang_defaults_match_evaluated_runtime_values() {
             \Bookmark(title: "Ch 1")
             \Line(x1: 10px, y1: 20px, x2: 50px, y2: 60px)
             \Image(src: "tests/goldens/demo.png", x: 0, y: 0)
-            \Text() { Hello }
+            \Text(x: 0, y: 0) { Hello }
         }
     "#;
 

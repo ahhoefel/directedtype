@@ -271,7 +271,7 @@ fn test_expand_shaded_box_intrinsic_children_width() {
 #[test]
 fn test_text_wrapping_default_height() {
     let input = r#"
-    \Text(width: 200px, font: \Font(size: 16px)) { This is a long sentence for text wrapping test. }
+    \Text(x: 0, y: 0, width: 200px, font: \Font(size: 16px)) { This is a long sentence for text wrapping test. }
     "#;
 
     let doc = parse(input).expect("Failed to parse Text");
@@ -706,7 +706,7 @@ fn test_responsive_flow_clamped_formula() {
     }
 
     \Flow {
-        \Text(font: \Font(size: 16px)) { Responsive DirectedType }
+        \Text(x: 0, y: 0, font: \Font(size: 16px)) { Responsive DirectedType }
     }
     "#;
 
@@ -781,7 +781,7 @@ fn test_parley_text_height_wrapping_multiline() {
 #[test]
 fn test_parley_intrinsic_text_width_unconstrained() {
     let input = r#"
-    \Text(font: \Font(size: 20px)) { Hello World }
+    \Text(x: 0, y: 0, font: \Font(size: 20px)) { Hello World }
     "#;
 
     let doc = parse(input).expect("Failed to parse");
@@ -2179,8 +2179,8 @@ fn test_bare_env_expression_error() {
 fn test_font_primitive_metrics_and_sharing() {
     let input = r#"
     \let f = \Font(size: 20px, weight: 700);
-    \let t1 = \Text(font: f) { First };
-    \let t2 = \Text(font: f) { Second };
+    \let t1 = \Text(x: 0, y: 0, font: f) { First };
+    \let t2 = \Text(x: 0, y: 0, font: f) { Second };
     \let r1 = \Rect(x: 0, y: 0, width: 100px, height: t1.font.cap_height + 10px, color: #000000);
     \let r2 = \Rect(x: 0, y: 50px, width: 100px, height: t2.font.cap_height + 10px, color: #000000);
     "#;
@@ -2223,7 +2223,7 @@ fn test_text_ambient_font_inheritance() {
     let input = r#"
     \let my_font = \Font(size: 24px, weight: 600);
     \env font = my_font;
-    \let label = \Text { Ambient text };
+    \let label = \Text(x: 0, y: 0) { Ambient text };
     \let box = \Rect(x: 0, y: 0, width: 200px, height: label.font.cap_height + 16px, color: #111111);
     "#;
     let doc = parse(input).expect("Failed to parse");
@@ -2265,7 +2265,7 @@ fn test_font_backward_compatible_string_family() {
 fn test_font_metrics_algebraic_calculations() {
     let input = r#"
     \let f = \Font(size: 20px);
-    \let t = \Text(font: f) { Metrics Test };
+    \let t = \Text(x: 0, y: 0, font: f) { Metrics Test };
     \let r = \Rect(x: 0, y: 0, width: f.line_height, height: t.font.ascent + t.font.descent, color: #ffffff);
     "#;
     let doc = parse(input).expect("Failed to parse");
@@ -3008,7 +3008,7 @@ fn test_overload_card_in_hstack_no_cycle() {
 #[test]
 fn test_text_with_inline_link_spans() {
     let input = r#"
-    \Text(width: 400px, font: \Font(size: 16px)) {
+    \Text(x: 0, y: 0, width: 400px, font: \Font(size: 16px)) {
         Visit \Link(url: "https://www.google.com"){Google} today
     }
     "#;
@@ -3053,7 +3053,7 @@ fn test_text_with_inline_link_spans() {
 #[test]
 fn test_text_with_custom_styled_link_span() {
     let input = r#"
-    \Text(font: \Font(size: 16px)) {
+    \Text(x: 0, y: 0, font: \Font(size: 16px)) {
         Check \Link(url: "https://github.com", color: #2563eb, underline: false){GitHub}
     }
     "#;
@@ -3074,7 +3074,7 @@ fn test_text_with_custom_styled_link_span() {
 
 #[test]
 fn test_plain_text_has_default_span() {
-    let input = r#"\Text(font: \Font(size: 16px)) { Plain text here }"#;
+    let input = r#"\Text(x: 0, y: 0, font: \Font(size: 16px)) { Plain text here }"#;
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate");
 
@@ -3107,7 +3107,7 @@ fn test_rect_bounding_union() {
 
 #[test]
 fn test_single_line_link_fragments_projection() {
-    let input = r#"\Text(width: 500px, font: \Font(size: 16px)) { Visit \Link(url: "https://google.com"){Google} now }"#;
+    let input = r#"\Text(x: 0, y: 0, width: 500px, font: \Font(size: 16px)) { Visit \Link(url: "https://google.com"){Google} now }"#;
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate");
 
@@ -3131,7 +3131,7 @@ fn test_single_line_link_fragments_projection() {
 #[test]
 fn test_multiline_wrapped_link_fragments_projection() {
     // Narrow width forces the link phrase to wrap across line boundaries
-    let input = r#"\Text(width: 160px, font: \Font(size: 16px)) { Welcome and visit our \Link(url: "https://example.com"){comprehensive guide to documentation} today }"#;
+    let input = r#"\Text(x: 0, y: 0, width: 160px, font: \Font(size: 16px)) { Welcome and visit our \Link(url: "https://example.com"){comprehensive guide to documentation} today }"#;
     let doc = parse(input).expect("Failed to parse");
     let layout = directedtype::evaluate_document(&doc).expect("Failed to evaluate");
 
@@ -3293,7 +3293,7 @@ fn test_span_font_color_and_link_with_italic() {
         \alias current_color = link_color;
         \Children
     }
-    \Text(width: 400px, font: \Font(size: 16px, color: #111111)) {
+    \Text(x: 0, y: 0, width: 400px, font: \Font(size: 16px, color: #111111)) {
         Base \Red { red \Italic { red-italic } } \StyledLink { \Italic { link-italic } }
     }
     "#;
@@ -3349,7 +3349,7 @@ fn test_font_accepts_line_height_port() {
 fn test_font_line_height_forwarded_from_text() {
     let input = r#"
     \env font = \Font(family: "Arial", size: 32px, line_height: 52px);
-    \let t = \Text { Hello };
+    \let t = \Text(x: 0, y: 0) { Hello };
     \let r = \Rect(x: 0, y: 0, width: 100px, height: t.font.line_height, color: #ffffff);
     "#;
     let doc = parse(input).expect("parse ok");
@@ -3472,7 +3472,7 @@ fn test_font_family_generic_and_valid_fonts_succeed() {
     \Font(family: "monospace", size: 16px)
     \Font(family: "Arial", size: 16px)
     \Font(size: 16px)
-    \Text(font: \Font(family: "sans-serif", size: 16px)) { Test }
+    \Text(x: 0, y: 0, font: \Font(family: "sans-serif", size: 16px)) { Test }
     "#;
     let doc = parse(input).expect("parse ok");
     assert!(directedtype::evaluate_document(&doc).is_ok());
@@ -3605,26 +3605,32 @@ fn test_number_to_string_builtins() {
     \let whole = 42;
 
     \Text(
+        x: 0, y: 0,
         text: to_fixed(pi, 2),
         font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )
     \Text(
+        x: 0, y: 0,
         text: pi.to_fixed(4),
         font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )
     \Text(
+        x: 0, y: 0,
         text: whole.to_fixed(0),
         font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )
     \Text(
+        x: 0, y: 0,
         text: to_precision(n1, 4),
         font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )
     \Text(
+        x: 0, y: 0,
         text: small.to_precision(2),
         font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )
     \Text(
+        x: 0, y: 0,
         text: n1.to_precision(2),
         font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
     )

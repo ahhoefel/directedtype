@@ -303,7 +303,7 @@ fn test_build_tree_items_from_layout_and_ancestor_expansion() {
     let source = r#"
         \Component Card(id: String = "c1") {
             \Rect(id: id, x: 0, y: 0, width: 200px, height: 100px, color: #38bdf8) {
-                \Text(font: \Font(size: 14px)) { "Card Title" }
+                \Text(x: 0, y: 0, font: \Font(size: 14px)) { "Card Title" }
             }
         }
         \Card(id: "main_card")
@@ -346,7 +346,7 @@ fn test_build_tree_items_from_layout_and_ancestor_expansion() {
 fn test_inspect_panel_component_rendering_and_hit_testing() {
     let source = r#"
         \Rect(id: "hero_box", x: 0, y: 0, width: 400px, height: 200px, color: #0284c7) {
-            \Text(font: \Font(size: 24px)) { "Hero Headline" }
+            \Text(x: 0, y: 0, font: \Font(size: 24px)) { "Hero Headline" }
         }
     "#;
     let doc = directedtype::parse(source).expect("Must parse");
@@ -521,7 +521,7 @@ fn test_inspector_bottom_panel_dimensions_and_formulas() {
     let source = r#"
         \Component Card(id: String = "card1") {
             \Rect(id: id, x: 20px + 5px, y: 10px * 2, width: min(400px, 300px), height: 180px, color: #6366f1) {
-                \Text(font: \Font(size: 14px)) { "Card Content" }
+                \Text(x: 0, y: 0, font: \Font(size: 14px)) { "Card Content" }
             }
         }
         \Card(id: "my_card")
@@ -785,7 +785,7 @@ fn test_property_bullet_vertical_centering() {
 fn test_let_bound_var_name_in_dom_tree() {
     let source = r#"
         \let heading_font = \Font(size: 24px, weight: 700, family: "Arial")
-        \Text(font: heading_font, text: "Hello World")
+        \Text(x: 0, y: 0, font: heading_font, text: "Hello World")
     "#;
     let doc = directedtype::parse(source).expect("Parse ok");
     let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout ok");
@@ -804,7 +804,7 @@ fn test_let_bound_var_name_in_dom_tree() {
 fn test_expandable_reference_properties() {
     let source = r#"
         \let heading_font = \Font(size: 24px, weight: 700, family: "Arial")
-        \Text(id: "my_text", font: heading_font, text: "Hello World")
+        \Text(id: "my_text", x: 0, y: 0, font: heading_font, text: "Hello World")
     "#;
     let doc = directedtype::parse(source).expect("Parse ok");
     let layout = directedtype::evaluate_document_with_window(&doc, 800.0, 600.0).expect("Layout ok");

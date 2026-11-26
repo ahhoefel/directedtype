@@ -191,3 +191,28 @@ fn test_forced_justified_line_break_escape() {
     );
 }
 
+#[test]
+fn test_text_requires_x_and_y_or_baseline() {
+    use directedtype::compiler::error::CompileError;
+
+    let cases = [
+        (r#"\Text(font: \Font(size: 14px)) { Hello }"#, "x"),
+        (r#"\Text(y: 10px, font: \Font(size: 14px)) { Hello }"#, "x"),
+        (r#"\Text(baseline: 40px, font: \Font(size: 14px)) { Hello }"#, "x"),
+        (r#"\Text(x: 10px, font: \Font(size: 14px)) { Hello }"#, "y"),
+    ];
+
+    for (src, expected_port) in cases {
+        let doc = parse_document(src).expect("parse ok");
+        let err = CompiledDocument::compile(&doc)
+            .expect_err(&format!("Expected MissingPort('{expected_port}') for: {src}"));
+        match err {
+            CompileError::MissingPort { node, port, .. } => {
+                assert_eq!(node, "Text");
+                assert_eq!(port, expected_port, "Wrong missing port for: {src}");
+            }
+            other => panic!("Expected MissingPort('{expected_port}') for '{src}', got: {other:?}"),
+        }
+    }
+}
+

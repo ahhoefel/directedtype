@@ -1782,7 +1782,7 @@ impl<'a, 'ctx> PrimitiveExpander<'a, 'ctx> {
         let is_inline_span = self
             .ctx
             .parent_id
-            .is_some_and(|p| self.doc.get_node(p).is_some_and(|n| n.name == "Text"));
+            .is_some_and(|p| self.doc.get_node(p).is_some_and(|n| n.name == "Text" || n.is_span));
         let child_ids = std::mem::take(&mut self.child_ids);
 
         let mut state = PrimitiveExpandState {
