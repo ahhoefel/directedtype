@@ -6,7 +6,6 @@
     y: Distance,
     env font: Font,
     width: Distance = unset,
-    height: Distance = unset,
     text: String = "",
     env paragraph_style: ParagraphStyle,
     env text_bounds: TextBounds,
@@ -29,6 +28,7 @@
     on_focus: Handler = unset,
     on_blur: Handler = unset
 ) {
+    \alias height: Distance;
     \alias baseline: Distance;
     \alias baseline_offset: Distance;
     \env font: Font = font;
@@ -40,7 +40,6 @@
     baseline: Distance,
     env font: Font,
     width: Distance = unset,
-    height: Distance = unset,
     text: String = "",
     env paragraph_style: ParagraphStyle,
     env text_bounds: TextBounds,
@@ -64,6 +63,7 @@
     on_blur: Handler = unset
 ) {
     \alias y: Distance;
+    \alias height: Distance;
     \alias baseline_offset: Distance;
     \env font: Font = font;
     \Children

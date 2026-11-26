@@ -905,6 +905,7 @@ fn test_leaf_primitives_reject_content_slots_and_output_aliases_are_immutable() 
         (r#"\let b = \Box(x: 0, y: 0, width: 10px, height: 10px); \let c = \Clip(box: b, clip: window.clip);"#, "clip"),
         (r#"\Line(x1: 0, y1: 0, x2: 10px, y2: 10px, length: 14px)"#, "length"),
         (r#"\AnchorScope(name: "s", path: "/x")"#, "path"),
+        (r#"\Text(x: 0, y: 0, height: 20px, font: \Font(size: 14px)) { Hi }"#, "height"),
     ];
     for (src, alias_name) in immutable_alias_cases {
         let doc = parse_document(src).expect("Parse ok");

@@ -3607,32 +3607,32 @@ fn test_number_to_string_builtins() {
     \Text(
         x: 0, y: 0,
         text: to_fixed(pi, 2),
-        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
+        font: \Font(size: 14px, color: #fff), width: 100px
     )
     \Text(
         x: 0, y: 0,
         text: pi.to_fixed(4),
-        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
+        font: \Font(size: 14px, color: #fff), width: 100px
     )
     \Text(
         x: 0, y: 0,
         text: whole.to_fixed(0),
-        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
+        font: \Font(size: 14px, color: #fff), width: 100px
     )
     \Text(
         x: 0, y: 0,
         text: to_precision(n1, 4),
-        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
+        font: \Font(size: 14px, color: #fff), width: 100px
     )
     \Text(
         x: 0, y: 0,
         text: small.to_precision(2),
-        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
+        font: \Font(size: 14px, color: #fff), width: 100px
     )
     \Text(
         x: 0, y: 0,
         text: n1.to_precision(2),
-        font: \Font(size: 14px, color: #fff), width: 100px, height: 20px
+        font: \Font(size: 14px, color: #fff), width: 100px
     )
     "#;
 

@@ -99,7 +99,7 @@ impl BuiltinPrimitive for TextPrimitive {
     }
 
     fn output_aliases(&self) -> &'static [&'static str] {
-        &["baseline_offset"]
+        &["height", "baseline_offset"]
     }
 
     fn required_port_sets(&self) -> &'static [&'static [&'static str]] {
@@ -109,7 +109,6 @@ impl BuiltinPrimitive for TextPrimitive {
     fn default_port_sets(&self) -> &'static [&'static [(&'static str, BuiltinDefault)]] {
         const TEXT_DEFAULTS: &[(&str, BuiltinDefault)] = &[
             ("width", BuiltinDefault::Unset),
-            ("height", BuiltinDefault::Unset),
             ("text", BuiltinDefault::String("")),
             ("underline", BuiltinDefault::Bool(false)),
             ("z", BuiltinDefault::Integer(0)),
@@ -132,7 +131,6 @@ impl BuiltinPrimitive for TextPrimitive {
             "x",
             "y",
             "width",
-            "height",
             "z",
             "baseline",
             "text",
@@ -1398,17 +1396,11 @@ fn resolve_text_dimensions(
                 span: elem.span,
             });
             state.ports.insert("height".to_string(), height_call);
-        } else if state.is_inline_span {
+        } else {
             state.ports.insert(
                 "height".to_string(),
                 Expr::Literal(Literal::Distance(0.0, DistanceUnit::Px, elem.span)),
             );
-        } else {
-            return Err(CompileError::MissingPort {
-                node: "Text".to_string(),
-                port: "height".to_string(),
-                span: elem.span,
-            });
         }
     }
 
